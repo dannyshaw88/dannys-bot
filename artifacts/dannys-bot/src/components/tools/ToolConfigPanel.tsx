@@ -25,10 +25,12 @@ interface ToolConfigPanelProps {
   hideEnableToggle?: boolean;
   skipChanceMin?: number;
   skipChanceMax?: number;
+  executeEveryMin?: number;
+  executeEveryMax?: number;
 }
 
 
-export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax }: ToolConfigPanelProps) {
+export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax, executeEveryMin, executeEveryMax }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
@@ -809,14 +811,15 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 )}
                 {tool.enabled && (() => {
                   const s = (tool.settings as any) ?? {};
-                  const avgDelay      = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
-                  const avgProcess    = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
-                  const avgMaxPerDay  = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
-                  const avgSkip       = ((skipChanceMin ?? 0) + (skipChanceMax ?? 0)) / 2;
-                  const skipFactor    = Math.max(0, 1 - avgSkip / 100);
-                  const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60 * skipFactor) : 0;
-                  const perDayRaw     = perHour * 24;
-                  const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
+                  const avgExecuteEvery   = ((executeEveryMin ?? 30) + (executeEveryMax ?? 60)) / 2;
+                  const avgUsersPerSession = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+                  const avgMaxPerDay      = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
+                  const avgSkip           = ((skipChanceMin ?? 0) + (skipChanceMax ?? 0)) / 2;
+                  const executionChance   = Math.max(0, 1 - avgSkip / 100);
+                  const sessionsPerHour   = avgExecuteEvery > 0 ? 60 / avgExecuteEvery : 0;
+                  const perHour           = Math.round(sessionsPerHour * avgUsersPerSession * executionChance);
+                  const perDayRaw         = perHour * 24;
+                  const perDay            = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
                   return perHour > 0 ? (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                       {perHour}/hr · {perDay}/day

@@ -74,10 +74,11 @@ const STATUS_META: Record<AccountStatus, {
 function AccountStatusBadge({ status, statusMessage }: { status: string; statusMessage?: string | null }) {
   const meta = STATUS_META[status as AccountStatus] ?? STATUS_META.pending;
   const Icon = meta.icon;
+  const tooltip = status === "valid" ? undefined : (statusMessage || undefined);
   return (
     <span
-      title={statusMessage || undefined}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${statusMessage ? " cursor-help" : ""}`}
+      title={tooltip}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${tooltip ? " cursor-help" : ""}`}
     >
       <Icon className="w-2.5 h-2.5" />
       <span className="uppercase">{meta.label}</span>

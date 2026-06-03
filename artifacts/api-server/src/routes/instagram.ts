@@ -3550,7 +3550,16 @@ export async function registerInstagramRoutes(
       try { buf = Buffer.from(fileBase64, "base64"); }
       catch { return res.status(400).json({ error: "Invalid base64 data" }); }
 
-      const { parseJarveeBinary } = await import("../instagram/jarveeParser.js");
+      const { parseJarveeBinary, diagnoseJarveeBinary } = await import("../instagram/jarveeParser.js");
+
+      // Always log diagnostic rows — check the API server console to see candidates.
+      try {
+        const diagRows = diagnoseJarveeBinary(buf);
+        console.log("\n=== JARVEE DIAGNOSE ===");
+        for (const r of diagRows) console.log(`  offset=${r.offset.toString().padStart(6)}  ${r.value}`);
+        console.log("=== END DIAGNOSE ===\n");
+      } catch { /* non-fatal */ }
+
       let jarveeAccounts: Awaited<ReturnType<typeof parseJarveeBinary>>;
       try {
         jarveeAccounts = parseJarveeBinary(buf);
@@ -3595,6 +3604,22 @@ export async function registerInstagramRoutes(
     } catch (e: any) {
       req.log.error({ err: e }, "parse-jarvee failed");
       return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ── Jarvee binary file DIAGNOSE (debug — returns raw string records) ──────
+  app.post("/api/profiles/diagnose-jarvee", async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: "fileBase64 is required" });
+      let buf: Buffer;
+      try { buf = Buffer.from(fileBase64, "base64"); }
+      catch { return res.status(400).json({ error: "Invalid base64 data" }); }
+      const { diagnoseJarveeBinary } = await import("../instagram/jarveeParser.js");
+      const rows = diagnoseJarveeBinary(buf);
+      return res.json({ rows });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Diagnose failed" });
     }
   });
 

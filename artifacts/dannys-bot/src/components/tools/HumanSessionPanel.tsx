@@ -1498,7 +1498,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             {followTool.enabled && <div className="p-4">
-              <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle skipChanceMin={(settings as any).followSkipMin ?? 0} skipChanceMax={(settings as any).followSkipMax ?? 0} />
+              <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle skipChanceMin={(settings as any).followSkipMin ?? 0} skipChanceMax={(settings as any).followSkipMax ?? 0} executeEveryMin={settings.delayMin ?? 30} executeEveryMax={settings.delayMax ?? 60} />
             </div>}
           </div>
         </div>

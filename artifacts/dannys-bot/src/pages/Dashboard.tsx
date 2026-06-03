@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.751",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Jarvee binary import: passwords that are base64-encoded in the file now decode correctly instead of importing as raw garbled text." },
+      { category: "Fix", text: "Jarvee binary import: 2FA secret now reliably extracted even when it appears after the proxy block." },
+      { category: "Fix", text: "Jarvee binary import: duplicate account no longer created for files with a single account entry." },
+      { category: "Fix", text: "Valid account status badge no longer shows a misleading 'Login Required' tooltip." },
+      { category: "Fix", text: "Follow rate estimate now correctly reflects your Execute Every interval and Users Per Session settings." },
+    ],
+  },
+  {
     version: "1.0.750",
     date: "3 Jun 2026",
     items: [

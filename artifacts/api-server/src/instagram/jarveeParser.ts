@@ -111,6 +111,27 @@ function decodeB64Username(s: string): string | null {
   }
 }
 
+/** Attempt to base64-decode a string into a plaintext password.
+ *  Jarvee sometimes base64-encodes the password the same way it encodes
+ *  the username.  Only attempt if the raw string ends with '=' (real padding),
+ *  and require the decoded value to be pure printable ASCII (0x20–0x7e). */
+function decodeB64Password(s: string): string | null {
+  // Only attempt if the raw string has base64 padding — this discriminates
+  // actual base64-encoded values from coincidentally alphanumeric plaintext
+  // passwords (e.g. "Fitness123" passes B64_RE but is plaintext, not base64).
+  if (!s.endsWith("=")) return null;
+  if (!B64_RE.test(s) || s.length < 8 || s.length > 120) return null;
+  try {
+    const dec = Buffer.from(s, "base64").toString("latin1");
+    // Must be pure printable ASCII — reject anything with non-printable or
+    // non-ASCII bytes (catches binary garbage and extended unicode).
+    if (!/^[\x20-\x7e]+$/.test(dec)) return null;
+    return isLikelyPassword(dec) ? dec : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseProxyStr(s: string): { host: string; port: number } | null {
   if (!PROXY_RE.test(s)) return null;
   const colon = s.lastIndexOf(":");
@@ -201,6 +222,37 @@ function extractDmRecipients(sortedById: StringRecord[]): string[] {
   return [...recipients];
 }
 
+/** Returns the raw string records around the first detected b64-username anchor —
+ *  useful for debugging which record contains the password. */
+export function diagnoseJarveeBinary(buffer: Buffer): { offset: number; id: number; value: string }[] {
+  if (buffer.length < 20) return [];
+  const decoded = Buffer.from(buffer.map(b => b ^ 0xff));
+  const allRecords = extractAllStrings(decoded);
+  const sortedByOffset = [...allRecords].sort((a, b) => a.offset - b.offset);
+
+  for (let i = 0; i < sortedByOffset.length; i++) {
+    const s = sortedByOffset[i];
+    if (TOTP_RE.test(normaliseTOTP(s.value))) continue;
+    const username = decodeB64Username(s.value);
+    if (!username) continue;
+    const window = sortedByOffset.slice(i + 1, i + 80);
+    const proxyIdx = window.findIndex(w => parseProxyStr(w.value) !== null);
+    if (proxyIdx < 0) continue;
+    // Return 10 records before anchor + anchor + first 30 records after anchor
+    const before = sortedByOffset.slice(Math.max(0, i - 10), i);
+    const after  = sortedByOffset.slice(i + 1, i + 31);
+    return [
+      ...before.map(r => ({ ...r, value: `[PRE]  ${r.value}` })),
+      { ...s, value: `[ANCHOR→username="${username}"]  raw="${s.value}"` },
+      ...after.map((r, idx) => ({
+        ...r,
+        value: `[+${String(idx + 1).padStart(2, "0")}] ${r.value}`,
+      })),
+    ];
+  }
+  return [];
+}
+
 export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
   if (buffer.length < 20) throw new Error("File too small to be a Jarvee binary export");
 
@@ -235,12 +287,23 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
 
   // ── Per-account extraction ────────────────────────────────────────────────
   const accounts: JarveeAccount[] = [];
-  const usedOffsets = new Set<number>();
+  const usedOffsets  = new Set<number>();
+  const knownPasswords = new Set<string>(); // raw binary values confirmed as passwords
 
   for (let i = 0; i < sortedByOffset.length; i++) {
     const s = sortedByOffset[i];
+    // Skip records already consumed as part of a previous account's window.
+    if (usedOffsets.has(s.offset)) continue;
+    // Skip records whose raw value was already claimed as a password — Jarvee
+    // sometimes base64-encodes the password the same way it encodes the username,
+    // so decodeB64Username(passwordRecord) would otherwise yield the plaintext
+    // password and be mistaken for a second account's username anchor.
+    if (knownPasswords.has(s.value)) continue;
+    // Skip TOTP secrets — they use base32 (A-Z, 2-7) which is a subset of base64.
+    // Decoding them occasionally produces a short string matching IG_UN_RE.
+    if (TOTP_RE.test(normaliseTOTP(s.value))) continue;
     const username = decodeB64Username(s.value);
-    if (!username || usedOffsets.has(s.offset)) continue;
+    if (!username) continue;
 
     // Primary window: 80 records after the b64 username anchor
     const window = sortedByOffset.slice(i + 1, i + 80);
@@ -328,6 +391,29 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       }
     }
 
+    // Quaternary: some Jarvee versions base64-encode the password just like the
+    // username.  Scan the entire pre-proxy window for a b64 string whose decoded
+    // value passes isLikelyPassword().  Skip the anchor record itself and any
+    // record already decoded as the username.
+    if (!password) {
+      const fullPreProxy = sortedByOffset.slice(i + 1, i + 1 + proxyIdx);
+      for (const pw of fullPreProxy) {
+        if (pw.value === s.value) continue; // skip anchor
+        const decoded = decodeB64Password(pw.value);
+        if (decoded && decoded !== username) { password = decoded; break; }
+      }
+    }
+
+    // Post-search b64 decode check: if the password found by primary/secondary/tertiary
+    // steps is itself a base64-encoded string that decodes to a valid plaintext password,
+    // replace it with the decoded version.  This handles the case where the primary search
+    // finds the raw b64 blob (which passes isLikelyPassword on the raw value) before the
+    // quaternary step has a chance to run.
+    if (password && password !== username) {
+      const decodedPw = decodeB64Password(password);
+      if (decodedPw && decodedPw !== username) password = decodedPw;
+    }
+
     // If the backward proxy-password search landed on the IG password, discard it —
     // the string between smtp and proxy is the IG password, not the proxy password.
     if (proxyPassword && proxyPassword === password) proxyPassword = "";
@@ -360,11 +446,16 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const emailItem = window.slice(0, proxyIdx).find(w => EMAIL_RE.test(w.value));
     const email = emailItem?.value ?? "";
 
-    // 2FA TOTP secret: appears before the b64 username anchor in the binary cluster.
-    // Look at the 15 records immediately preceding the anchor (reversed = nearest first).
+    // 2FA TOTP secret: Jarvee may place it either before the b64 username anchor
+    // OR after the proxy host (in the same area as the label/device fields).
+    // Search both locations; pre-anchor first (nearest to anchor), then post-proxy.
     // Jarvee may export them space-grouped ("RGG2 7WSL LXC3 …") — normalise before testing.
     const priorWindow15 = sortedByOffset.slice(Math.max(0, i - 15), i).reverse();
-    const twoFAItem = priorWindow15.find(w => TOTP_RE.test(normaliseTOTP(w.value)));
+    const twoFAPreAnchor = priorWindow15.find(w => TOTP_RE.test(normaliseTOTP(w.value)));
+    const twoFAPostProxy = !twoFAPreAnchor
+      ? window.slice(proxyIdx + 1).find(w => TOTP_RE.test(normaliseTOTP(w.value)))
+      : undefined;
+    const twoFAItem = twoFAPreAnchor ?? twoFAPostProxy;
     const twoFASecret = twoFAItem ? normaliseTOTP(twoFAItem.value) : "";
 
     const searchWindow = [...window, ...sortedByOffset.slice(i + 80, i + 200)];
@@ -383,7 +474,8 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const afterProxyCandidates = window.slice(proxyIdx + 1).filter(w =>
       w.value.length >= 2 && w.value.length <= 120 &&
       !EMAIL_RE.test(w.value) && !URL_RE.test(w.value) &&
-      !PROXY_RE.test(w.value) && !DEVICE_RE.test(w.value) && !TOTP_RE.test(w.value) &&
+      !PROXY_RE.test(w.value) && !DEVICE_RE.test(w.value) &&
+      !TOTP_RE.test(w.value) && !TOTP_RE.test(normaliseTOTP(w.value)) &&
       w.value !== proxyUsername && w.value !== proxyPassword &&
       !/Mozilla/.test(w.value) && !SMTP_RE.test(w.value)
     );
@@ -415,7 +507,25 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       dmRecipients,
     });
 
+    // Mark the anchor offset as used.
     usedOffsets.add(s.offset);
+
+    // Register the password's raw binary value so it can't be mistaken for a
+    // base64 username anchor later in the same file.
+    if (password) {
+      const pwRecord = window.find(w => w.value === password) ??
+        sortedByOffset.slice(Math.max(0, i - 40), i).find(w => w.value === password);
+      if (pwRecord) {
+        knownPasswords.add(pwRecord.value);
+        usedOffsets.add(pwRecord.offset);
+      }
+    }
+
+    // Mark all records within the parsed window as used so no field from this
+    // account can accidentally trigger a false second-account anchor.
+    for (const w of window) {
+      usedOffsets.add(w.offset);
+    }
   }
 
   return accounts;
