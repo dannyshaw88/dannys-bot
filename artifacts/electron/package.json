@@ -1,6 +1,6 @@
 {
   "name": "@workspace/electron",
-  "version": "1.0.767",
+  "version": "1.0.768",
   "private": true,
   "main": "dist/main.js",
   "repository": {

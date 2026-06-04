@@ -4117,15 +4117,32 @@ function startHousekeepLoop(profileId: number): void {
               }).catch(() => null);
             }
           }
-        } else if (url && !s.challengeUrl) {
-          // Scan for challenge pages that were reached without a redirect
-          // (e.g. confirm_email arriving as a 200, or the user pasting a URL).
-          const detectedStatus = classifyEbChallengeUrl(url);
-          if (detectedStatus) {
-            s.challengeUrl = url;
-            log(`[housekeep:${profileId}] challenge page detected via URL scan (${detectedStatus}): ${url.slice(0, 100)}`, "browser");
-            sendStatus(profileId, `⚠ Instagram security check required on this account.`);
-            storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {});
+        } else if (url) {
+          // ── Consent challenge error page — navigate back to instagram.com ─────
+          // When browserAutoLogin completed but left the EB parked on the consent
+          // challenge error page, navigate away so the window isn't stuck there.
+          // This mirrors what happens on mobile when "Try another way" navigates
+          // away from the device-approval screen.
+          const isConsentChallengeParked =
+            url.includes("/consent/") &&
+            (url.includes("user_cookie_choice") || url.includes("_ocig_challenge"));
+          if (isConsentChallengeParked) {
+            log(`[housekeep:${profileId}] EB parked on consent challenge error page — recovering to instagram.com`, "browser");
+            sendStatus(profileId, "Browser is on a consent challenge page — navigating to instagram.com…");
+            s.navProtectedUntil = Date.now() + 20000;
+            s.page.goto("https://www.instagram.com/", {
+              waitUntil: "domcontentloaded", timeout: 20000,
+            }).catch(() => null);
+          } else if (!s.challengeUrl) {
+            // Scan for challenge pages that were reached without a redirect
+            // (e.g. confirm_email arriving as a 200, or the user pasting a URL).
+            const detectedStatus = classifyEbChallengeUrl(url);
+            if (detectedStatus) {
+              s.challengeUrl = url;
+              log(`[housekeep:${profileId}] challenge page detected via URL scan (${detectedStatus}): ${url.slice(0, 100)}`, "browser");
+              sendStatus(profileId, `⚠ Instagram security check required on this account.`);
+              storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {});
+            }
           }
         }
       }
@@ -5625,6 +5642,42 @@ export async function browserAutoLogin(
       await dismissInstagramPopups(s.page);
     }
 
+    // ── Step 5.5: Cookie-consent challenge redirect → navigate to 2FA page ──────
+    // When Instagram's login triggers device-approval it sometimes routes Chrome
+    // through consent/?flow=user_cookie_choice_v2&..._ocig_challenge_redirected
+    // which shows "Sorry, something went wrong" in headless Chrome.  On mobile
+    // the user can tap "Try another way" → Authenticator App → enter TOTP code.
+    // We replicate that by navigating directly to the two-factor login page so
+    // the existing TOTP auto-fill in Step 7 can handle it automatically.
+    // Safe to call even if the consent page doesn't show an error — the two_factor
+    // URL will just redirect back to instagram.com if there is no pending 2FA session.
+    {
+      const consentCheckUrl = s.page.url();
+      const isConsentChallengeRedirect =
+        consentCheckUrl.includes("/consent/") &&
+        (consentCheckUrl.includes("user_cookie_choice") || consentCheckUrl.includes("_ocig_challenge"));
+      if (isConsentChallengeRedirect) {
+        const consentBodyText = await s.page.evaluate(
+          () => (document.body?.innerText || "").toLowerCase()
+        ).catch(() => "");
+        const isConsentError =
+          consentBodyText.includes("sorry") ||
+          consentBodyText.includes("something went wrong") ||
+          consentBodyText.trim().length < 80;
+        if (isConsentError) {
+          sendStatus(profileId, `⚠ Cookie-consent challenge error detected (URL: ${consentCheckUrl.slice(0, 80)}) — navigating to 2FA entry page (equivalent to "Try another way" → TOTP on mobile)…`);
+          log(`[autoLogin:${profileId}] Consent challenge redirect error — navigating to two_factor page`, "browser");
+          await s.page.goto("https://www.instagram.com/accounts/login/two_factor/", {
+            waitUntil: "domcontentloaded",
+            timeout: 15000,
+          }).catch(() => null);
+          await delay(2500);
+          await dismissCookieBanner(s.page);
+          await dismissInstagramPopups(s.page);
+        }
+      }
+    }
+
     // ── Step 6: Detect what's on screen by content, not URL ──────────────────
     // The 2FA hash-route URL still contains "/accounts/login" — can't use URL alone.
     // Also check dialogs/modals separately — Instagram renders "Incorrect password"
@@ -5723,7 +5776,19 @@ export async function browserAutoLogin(
       // No sessionid — chrome-error without a session means a genuine proxy/network
       // or rate-limit error.  Fall through so isLoggedIn remains false.
     }
+    // Consent challenge error page — Instagram redirects through
+    // consent/?flow=user_cookie_choice_v2&..._ocig_challenge_redirected after a
+    // device-approval trigger.  The page shows "Sorry, something went wrong" and
+    // must NOT be treated as a successful login (no sessionid is set at this point).
+    const isConsentChallengeErrorPage =
+      pageUrl.includes("/consent/") &&
+      (pageUrl.includes("user_cookie_choice") || pageUrl.includes("_ocig_challenge")) &&
+      (fullBodyText.toLowerCase().includes("sorry") ||
+       fullBodyText.toLowerCase().includes("something went wrong") ||
+       fullBodyText.trim().length < 80);
+
     const isLoggedIn = !isErrorPage &&
+                       !isConsentChallengeErrorPage &&
                        !pageText.includes("Username, email or mobile number") &&
                        !pageText.includes("Create new account") &&
                        !pageUrl.includes("/accounts/login");
@@ -6013,6 +6078,20 @@ export async function browserAutoLogin(
     // where the challenge was already known before submit. This branch covers the
     // case where the first-ever login just triggered the challenge (challengeUrl
     // was set by the response interceptor during this very submit attempt).
+    // ── Consent challenge error — step 5.5 navigation did not resolve it ─────
+    // Step 5.5 navigated to the two_factor page.  If we're STILL on the consent
+    // page (e.g. the pending 2FA session had already expired), return a clear
+    // message so the user knows to add their TOTP key and retry.
+    if (isConsentChallengeErrorPage) {
+      const keyClean = twoFAKey.replace(/\s+/g, "");
+      if (keyClean) {
+        sendStatus(profileId, "⚠ Cookie-consent challenge bypass could not complete — the 2FA session may have expired. Click Fill Credentials again to retry, or open the browser and log in manually.");
+        return { ok: false, message: "Cookie-consent challenge — 2FA session expired. Click Fill Credentials again to retry." };
+      }
+      sendStatus(profileId, "⚠ Instagram showed a cookie-consent challenge. Add your TOTP secret key in Account Details (the 16-character code from your authenticator app), then click Fill Credentials again.");
+      return { ok: false, message: "Cookie-consent challenge — add your TOTP secret key in Account Details and retry." };
+    }
+
     if (isErrorPage) {
       const knownChallenge = sessions.get(profileId)?.challengeUrl;
       if (knownChallenge) {

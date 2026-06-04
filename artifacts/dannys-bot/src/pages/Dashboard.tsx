@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.768",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login: when Instagram redirects through a cookie-consent error page after login, the app now automatically navigates to the 2FA entry screen — same as tapping 'Try another way' → Authenticator App on mobile." },
+      { category: "Fix", text: "Login: the cookie-consent challenge page is no longer incorrectly treated as a successful login." },
+      { category: "Fix", text: "Browser: if the embedded browser is left parked on the consent challenge error page, it now automatically navigates back to instagram.com." },
+    ],
+  },
+  {
     version: "1.0.767",
     date: "4 Jun 2026",
     items: [
