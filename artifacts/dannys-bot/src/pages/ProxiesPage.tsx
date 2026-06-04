@@ -183,11 +183,17 @@ function ProxyRow({
           if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
           if (col === "accounts") return (
             <div key={col} className="shrink-0 flex items-center" style={{ width: colWidths.accounts }}>
-              {assigned.length > 0 ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
-                  <User className="w-3 h-3" />{assigned.length}
-                </span>
-              ) : (
+              {assigned.length > 0 ? (() => {
+                const validCount = assigned.filter(p => p.accountStatus === "valid").length;
+                return (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
+                    <User className="w-3 h-3" />
+                    <span className="text-emerald-600">{validCount}</span>
+                    <span className="text-muted-foreground/60">/</span>
+                    <span>{assigned.length}</span>
+                  </span>
+                );
+              })() : (
                 <span className="text-[11px] text-muted-foreground/40">—</span>
               )}
             </div>
@@ -317,11 +323,11 @@ export function ProxiesPage() {
   const [search, setSearch] = useState("");
   const [splitGroup, setSplitGroup] = useState<string>("");
 
-  type SortKey = "proxy" | "username" | "status" | null;
+  type SortKey = "proxy" | "username" | "status" | "accounts" | null;
   type SortDir = "asc" | "desc";
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     const v = localStorage.getItem("proxies:sortKey");
-    return (v === "proxy" || v === "username" || v === "status") ? v : null;
+    return (v === "proxy" || v === "username" || v === "status" || v === "accounts") ? v : null;
   });
   const [sortDir, setSortDir] = useState<SortDir>(() =>
     (localStorage.getItem("proxies:sortDir") as SortDir) === "desc" ? "desc" : "asc"
@@ -436,6 +442,10 @@ export function ProxiesPage() {
         const aMs = ar ? (ar.alive ? ar.latencyMs : 999999) : 9999999;
         const bMs = br ? (br.alive ? br.latencyMs : 999999) : 9999999;
         cmp = aMs - bMs;
+      } else if (sortKey === "accounts") {
+        const aAssigned = allProfiles.filter(p => p.proxyId === a.id);
+        const bAssigned = allProfiles.filter(p => p.proxyId === b.id);
+        cmp = aAssigned.length - bAssigned.length;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });

@@ -3,13 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus, Crown, LogOut, UserCircle } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus, Crown, LogOut, UserCircle, Instagram, Eye, EyeOff, ClipboardPaste, Camera } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
+import { useCreateProfile } from "@/hooks/use-profiles";
+import { userAgents } from "@/shared/userAgents";
 import {
   getTrustLevels, type TrustLevelEntry, reorderTrustLevels,
   deleteTrustLevel, addCustomTrustLevel, getAllProfilesWithTrustScore,
@@ -593,7 +596,7 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
-        {(["General", "Scraping", "Automation", "Security", "Data", "TrustScores", "My Account"] as const).map(tab => (
+        {(["General", "Scraping", "Automation", "Security", "Data", "Import", "TrustScores", "My Account"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -616,7 +619,9 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" || settingsTab === "my account" ? "hidden" : ""}`}>
+      {settingsTab === "import" && <BulkImportTabContent />}
+
+      <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" || settingsTab === "my account" || settingsTab === "import" ? "hidden" : ""}`}>
 
         {/* README & FAQ shortcut */}
         <Link href="/readme" className="block" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
@@ -1736,17 +1741,23 @@ function AdminUsersSection() {
               <Label className="text-[10px] mb-1 block">Password</Label>
               <Input type="password" value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="password" className="h-7 text-xs" />
             </div>
-            <div>
-              <Label className="text-[10px] mb-1 block">Plan</Label>
-              <select value={addForm.tier} onChange={e => { const t = PLAN_TIERS.find(t => t.id === e.target.value); setAddForm(f => ({ ...f, tier: e.target.value, accountLimit: t?.limit ?? f.accountLimit })); }} className="h-7 w-full text-xs border border-border rounded px-2 bg-background">
-                {PLAN_TIERS.map(t => <option key={t.id} value={t.id}>{t.label} – {t.price}</option>)}
-              </select>
+            <div className="col-span-2">
+              <Label className="text-[10px] mb-1.5 block">Plan</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {PLAN_TIERS.map(t => (
+                  <label key={t.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${addForm.tier === t.id ? "border-primary/50 bg-primary/5" : "border-border/50 hover:border-border"}`}>
+                    <input type="radio" name="add-plan-tier" value={t.id} checked={addForm.tier === t.id} onChange={() => setAddForm(f => ({ ...f, tier: t.id, accountLimit: PLAN_TIERS.find(p => p.id === t.id)?.limit ?? f.accountLimit }))} className="accent-primary shrink-0" />
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{t.price}</span>
+                  </label>
+                ))}
+              </div>
             </div>
             <div>
               <Label className="text-[10px] mb-1 block">Account Slots</Label>
               <Input type="number" value={addForm.accountLimit} onChange={e => setAddForm(f => ({ ...f, accountLimit: Number(e.target.value) }))} className="h-7 text-xs" />
             </div>
-            <div className="col-span-2">
+            <div>
               <Label className="text-[10px] mb-1 block">Expires (leave blank = never)</Label>
               <Input type="date" value={addForm.expiresAt} onChange={e => setAddForm(f => ({ ...f, expiresAt: e.target.value }))} className="h-7 text-xs" />
             </div>
@@ -1768,11 +1779,17 @@ function AdminUsersSection() {
               {editingId === u.id && editForm ? (
                 <div className="p-3 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[10px] mb-1 block">Plan</Label>
-                      <select value={editForm.tier} onChange={e => { const t = PLAN_TIERS.find(t => t.id === e.target.value); setEditForm(f => f ? { ...f, tier: e.target.value, accountLimit: t?.limit ?? f.accountLimit } : f); }} className="h-7 w-full text-xs border border-border rounded px-2 bg-background">
-                        {PLAN_TIERS.map(t => <option key={t.id} value={t.id}>{t.label} – {t.price}</option>)}
-                      </select>
+                    <div className="col-span-2">
+                      <Label className="text-[10px] mb-1.5 block">Plan</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {PLAN_TIERS.map(t => (
+                          <label key={t.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${editForm.tier === t.id ? "border-primary/50 bg-primary/5" : "border-border/50 hover:border-border"}`}>
+                            <input type="radio" name="edit-plan-tier" value={t.id} checked={editForm.tier === t.id} onChange={() => setEditForm(f => f ? { ...f, tier: t.id, accountLimit: PLAN_TIERS.find(p => p.id === t.id)?.limit ?? f.accountLimit } : f)} className="accent-primary shrink-0" />
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                            <span className="text-[10px] text-muted-foreground ml-auto">{t.price}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                     <div>
                       <Label className="text-[10px] mb-1 block">Slots</Label>
@@ -1782,7 +1799,7 @@ function AdminUsersSection() {
                       <Label className="text-[10px] mb-1 block">Expires</Label>
                       <Input type="date" value={editForm.expiresAt} onChange={e => setEditForm(f => f ? { ...f, expiresAt: e.target.value } : f)} className="h-7 text-xs" />
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <Label className="text-[10px] mb-1 block">New Password (optional)</Label>
                       <Input type="password" value={editForm.password} onChange={e => setEditForm(f => f ? { ...f, password: e.target.value } : f)} placeholder="leave blank to keep" className="h-7 text-xs" />
                     </div>
@@ -1829,6 +1846,25 @@ function AdminUsersSection() {
 function MyAccountTabContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
+    try { return localStorage.getItem("equinox:avatar"); } catch { return null; }
+  });
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" }); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const url = ev.target?.result as string;
+      try { localStorage.setItem("equinox:avatar", url); } catch {}
+      setAvatarUrl(url);
+      toast({ title: "Profile picture updated" });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   const { data: me, isLoading: meLoading } = useQuery<{ ok: boolean; username?: string; tier?: string; accountLimit?: number; isAdmin?: boolean; expiresAt?: string | null }>({
     queryKey: ["/api/license/me"],
@@ -1863,7 +1899,17 @@ function MyAccountTabContent() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10"><UserCircle className="w-5 h-5 text-primary" /></div>
+          <div className="relative cursor-pointer group shrink-0" onClick={() => avatarInputRef.current?.click()} title="Click to change profile picture">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-border" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><UserCircle className="w-6 h-6 text-primary" /></div>
+            )}
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+              <Camera className="w-3.5 h-3.5 text-white" />
+            </div>
+          </div>
+          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
           <div>
             <p className="text-sm font-semibold">{me.username}</p>
             {me.isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
@@ -1945,6 +1991,232 @@ function MyAccountTabContent() {
       <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground w-fit">
         <LogOut className="w-3.5 h-3.5" /> Sign out
       </Button>
+    </div>
+  );
+}
+
+// ─── Bulk Account Import Tab ───────────────────────────────────────────────────
+
+type ImportRowStatus = "pending" | "adding" | "added" | "error";
+type ImportParsedRow = {
+  id: string;
+  username: string;
+  password: string;
+  twoFASecret: string;
+  email: string;
+  emailPassword: string;
+  status: ImportRowStatus;
+  errorMsg?: string;
+};
+
+function parseImportRaw(raw: string): ImportParsedRow[] {
+  return raw
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && !l.startsWith("#"))
+    .map((line, i) => {
+      const parts = line.split(":");
+      const username = parts[0]?.trim() ?? "";
+      const password = parts[1]?.trim() ?? "";
+      const twoFASecret = parts[2]?.trim() ?? "";
+      let email = "";
+      let emailPassword = "";
+      if (parts.length >= 5) {
+        email = parts[3]?.trim() ?? "";
+        emailPassword = parts.slice(4).join(":").trim();
+      } else if (parts.length === 4) {
+        const p3 = parts[3]?.trim() ?? "";
+        if (p3.includes("@")) { email = p3; } else { emailPassword = p3; }
+      }
+      return { id: `${i}-${username}-${Date.now()}`, username, password, twoFASecret, email, emailPassword, status: "pending" as ImportRowStatus };
+    })
+    .filter(r => r.username.length > 0);
+}
+
+function ImportStatusBadge({ row }: { row: ImportParsedRow }) {
+  if (row.status === "adding") return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600"><Loader2 className="w-3 h-3 animate-spin" /> Adding…</span>;
+  if (row.status === "added") return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600"><CheckCircle2 className="w-3 h-3" /> Added</span>;
+  if (row.status === "error") return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600" title={row.errorMsg}><AlertCircle className="w-3 h-3" /> Error</span>;
+  return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">Pending</span>;
+}
+
+function ImportMaskedCell({ value, placeholder }: { value: string; placeholder?: string }) {
+  const [show, setShow] = useState(false);
+  if (!value) return <span className="text-muted-foreground/40 text-xs italic">{placeholder ?? "—"}</span>;
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className="text-xs font-mono truncate max-w-[120px]">{show ? value : "•".repeat(Math.min(value.length, 12))}</span>
+      <button onClick={() => setShow(v => !v)} className="text-muted-foreground hover:text-foreground shrink-0" title={show ? "Hide" : "Show"}>
+        {show ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+      </button>
+    </span>
+  );
+}
+
+function BulkImportTabContent() {
+  const { toast } = useToast();
+  const [rawText, setRawText] = useState("");
+  const [rows, setRows] = useState<ImportParsedRow[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
+  const createProfileMutation = useCreateProfile();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleParse = useCallback(() => {
+    if (!rawText.trim()) { toast({ title: "Nothing to parse", description: "Paste account data first.", variant: "destructive" }); return; }
+    const parsed = parseImportRaw(rawText);
+    if (parsed.length === 0) { toast({ title: "No accounts found", description: "Check format: username:password:2fasecret", variant: "destructive" }); return; }
+    setRows(parsed);
+    setSelectedIds(new Set(parsed.map(r => r.id)));
+    toast({ title: `Parsed ${parsed.length} account${parsed.length !== 1 ? "s" : ""}`, description: "Review and add to Accounts." });
+  }, [rawText, toast]);
+
+  const pendingRows = rows.filter(r => r.status === "pending");
+  const allPendingSelected = pendingRows.length > 0 && pendingRows.every(r => selectedIds.has(r.id));
+  const toggleAll = () => {
+    if (allPendingSelected) { setSelectedIds(prev => { const n = new Set(prev); pendingRows.forEach(r => n.delete(r.id)); return n; }); }
+    else { setSelectedIds(prev => { const n = new Set(prev); pendingRows.forEach(r => n.add(r.id)); return n; }); }
+  };
+  const toggleRow = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const addRows = useCallback(async (idsToAdd: string[]) => {
+    if (idsToAdd.length === 0) return;
+    setAdding(true);
+    let ok = 0, fail = 0;
+    for (const id of idsToAdd) {
+      const row = rows.find(r => r.id === id);
+      if (!row || row.status !== "pending") continue;
+      setRows(prev => prev.map(r => r.id === id ? { ...r, status: "adding" } : r));
+      try {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
+        await createProfileMutation.mutateAsync({
+          username: row.username, password: row.password, accountLabel: row.username,
+          twoFASecretKey: row.twoFASecret || null,
+          emailValidationUsername: row.email || null,
+          emailValidationPassword: row.emailPassword || null,
+          proxyHost: "", proxyPort: null, proxyUsername: "", proxyPassword: "",
+          userAgentApi: ua.api, userAgentEmbedded: ua.embedded,
+        });
+        setRows(prev => prev.map(r => r.id === id ? { ...r, status: "added" } : r));
+        setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+        ok++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to create";
+        setRows(prev => prev.map(r => r.id === id ? { ...r, status: "error", errorMsg: msg } : r));
+        fail++;
+      }
+    }
+    setAdding(false);
+    if (ok > 0 && fail === 0) toast({ title: `${ok} account${ok !== 1 ? "s" : ""} added`, description: "Now visible on the Accounts page." });
+    else if (ok > 0) toast({ title: `${ok} added, ${fail} failed`, variant: "destructive" });
+    else toast({ title: "All failed", description: "Check error rows for details.", variant: "destructive" });
+  }, [rows, createProfileMutation, toast]);
+
+  const handleAddSelected = () => {
+    const pending = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending");
+    if (pending.length === 0) { toast({ title: "Nothing to add", description: "Select at least one pending account.", variant: "destructive" }); return; }
+    addRows(pending);
+  };
+  const removeRow = (id: string) => { setRows(prev => prev.filter(r => r.id !== id)); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); };
+  const handleClear = () => { setRawText(""); setRows([]); setSelectedIds(new Set()); };
+  const selectedPendingCount = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending").length;
+
+  return (
+    <div className="w-full pb-8">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-lg font-bold">Bulk Account Import</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Paste credentials to parse and add accounts in bulk. No proxies are assigned automatically.</p>
+        </div>
+        {rows.length > 0 && <Button variant="ghost" size="sm" onClick={handleClear} className="text-muted-foreground">Clear all</Button>}
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Raw Account Data</label>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret</span>
+            <span>or</span>
+            <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret:email:emailpass</span>
+          </div>
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={rawText}
+          onChange={e => setRawText(e.target.value)}
+          placeholder={"username:password:2FASecret\nusername2:password2:2FASecret2:email@example.com:emailpass"}
+          rows={6}
+          className="w-full font-mono text-xs bg-background border border-border rounded-md px-3 py-2 resize-y outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
+          spellCheck={false}
+        />
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-[11px] text-muted-foreground">One account per line. Fields auto-detected by field count.</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={async () => {
+              try { const text = await navigator.clipboard.readText(); setRawText(text); }
+              catch { toast({ title: "Clipboard unavailable", description: "Paste manually into the text box.", variant: "destructive" }); }
+            }} className="h-8 text-xs gap-1.5">
+              <ClipboardPaste className="w-3.5 h-3.5" /> Paste
+            </Button>
+            <Button size="sm" onClick={handleParse} disabled={!rawText.trim()} className="h-8 text-xs gap-1.5">
+              <Upload className="w-3.5 h-3.5" /> Sort Accounts
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Checkbox checked={allPendingSelected} onCheckedChange={toggleAll} disabled={pendingRows.length === 0} />
+              <span className="text-xs text-muted-foreground">
+                {rows.length} account{rows.length !== 1 ? "s" : ""} parsed
+                {selectedPendingCount > 0 && ` · ${selectedPendingCount} selected`}
+              </span>
+            </div>
+            <Button size="sm" className="h-7 text-xs gap-1.5" disabled={selectedPendingCount === 0 || adding} onClick={handleAddSelected}>
+              {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Add {selectedPendingCount > 0 ? `${selectedPendingCount} ` : ""}to Accounts
+            </Button>
+          </div>
+          <div className="grid grid-cols-[20px_180px_140px_180px_200px_130px_90px_60px] gap-x-3 px-4 py-2 border-b border-border bg-muted/20 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <div /><div>Username</div><div>Password</div><div>2FA Secret</div><div>Email</div><div>Email Pass</div><div>Status</div><div />
+          </div>
+          <div className="divide-y divide-border/30 max-h-[520px] overflow-y-auto">
+            {rows.map((row, idx) => {
+              const isSelected = selectedIds.has(row.id);
+              const isPending = row.status === "pending";
+              return (
+                <div key={row.id} className={`grid grid-cols-[20px_180px_140px_180px_200px_130px_90px_60px] gap-x-3 px-4 py-1.5 items-center transition-colors ${isSelected && isPending ? "bg-primary/8" : row.status === "added" ? "opacity-50" : idx % 2 === 1 ? "bg-slate-50/60" : "bg-white"}`}>
+                  <div><Checkbox checked={isSelected && isPending} disabled={!isPending} onCheckedChange={() => isPending && toggleRow(row.id)} /></div>
+                  <div className="min-w-0"><span className="inline-flex items-center gap-1 text-xs font-semibold truncate"><Instagram className="w-3 h-3 text-muted-foreground shrink-0" />{row.username || <span className="text-red-500 italic">missing</span>}</span></div>
+                  <div className="min-w-0"><ImportMaskedCell value={row.password} placeholder="no password" /></div>
+                  <div className="min-w-0"><ImportMaskedCell value={row.twoFASecret} placeholder="no 2FA" /></div>
+                  <div className="min-w-0">{row.email ? <span className="text-xs truncate block max-w-[190px]">{row.email}</span> : <span className="text-muted-foreground/40 text-xs italic">no email</span>}</div>
+                  <div className="min-w-0"><ImportMaskedCell value={row.emailPassword} placeholder="no email pass" /></div>
+                  <div><ImportStatusBadge row={row} /></div>
+                  <div className="flex items-center gap-2 justify-end">
+                    {isPending && <button onClick={() => addRows([row.id])} disabled={adding} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors whitespace-nowrap">Add</button>}
+                    {isPending && <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-4 py-2 border-t border-border bg-muted/20 flex items-center gap-4 text-[11px] text-muted-foreground">
+            {(() => { const a = rows.filter(r => r.status === "added").length; const e = rows.filter(r => r.status === "error").length; const p = rows.filter(r => r.status === "pending").length; return <>{p > 0 && <span>{p} pending</span>}{a > 0 && <span className="text-green-600 font-medium">{a} added</span>}{e > 0 && <span className="text-red-600 font-medium">{e} error{e !== 1 ? "s" : ""}</span>}</>; })()}
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-card/50 flex flex-col items-center justify-center py-20 text-center">
+          <Instagram className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">No accounts sorted yet</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Paste credential lines above and click "Sort Accounts"</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.767",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Feature", text: "My Account: you can now upload a profile picture — click your avatar to pick an image, stored locally on your device." },
+      { category: "Improvement", text: "User Management: plan selection now uses radio buttons showing all tiers with slots and pricing at a glance — in both Add User and Edit User forms." },
+      { category: "Improvement", text: "Bulk Account Import moved into Settings under a dedicated Import tab — removed from the sidebar." },
+      { category: "Improvement", text: "Proxy Manager accounts column now shows valid/total counts (green for valid, grey for total)." },
+    ],
+  },
+  {
     version: "1.0.766",
     date: "4 Jun 2026",
     items: [

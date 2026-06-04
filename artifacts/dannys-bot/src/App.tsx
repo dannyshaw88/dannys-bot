@@ -42,7 +42,7 @@ function Router() {
       <Route path="/proxies" component={ProxiesPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
-      <Route path="/bulk-import" component={BulkImportPage} />
+      <Route path="/bulk-import"><Redirect to="/settings" /></Route>
       <Route path="/mobile" component={MobilePage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />

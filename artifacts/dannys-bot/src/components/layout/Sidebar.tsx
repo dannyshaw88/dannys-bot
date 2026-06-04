@@ -91,7 +91,6 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",  icon: FilledGhostIcon       },
-    { name: "Account Import",  shortLabel: "ACCOUNT IMPORT", path: "/bulk-import",   icon: FilledBulkImportIcon  },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
   ];
 
