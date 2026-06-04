@@ -2910,6 +2910,15 @@ function setupToolbarIpc(): void {
             await _ms(100);
             await typeTextCDP(_d, _lgPwd);
 
+            // Tab out of the password field — triggers React's onBlur/onChange
+            // validation cycle which enables the "Log in" button. Without this,
+            // Instagram's React form keeps the button disabled because it hasn't
+            // seen a blur event, and the poll loop below always gets null.
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(50);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(500 + Math.floor(Math.random() * 400));
+
             // Poll for submit button, click via CDP
             for (let _bi = 0; _bi < 20; _bi++) {
               const _bp = await targetWc.executeJavaScript(`
@@ -3107,7 +3116,13 @@ function setupToolbarIpc(): void {
               await _ms(120);
 
               // Step 3: type each digit via typeTextCDP (isTrusted=true, human timing)
-              await typeTextCDP(_d, code, { minDelay: 40, maxDelay: 100 });
+              // Wider 50–230ms range with occasional longer pauses — humans glance
+              // back at the authenticator app between digits, so timing is uneven.
+              await typeTextCDP(_d, code, { minDelay: 50, maxDelay: 230 });
+
+              // Natural pause: a real person reads the code, checks it looks right,
+              // then moves to click Submit. 700–1500ms is the realistic human range.
+              await _ms(700 + Math.floor(Math.random() * 800));
 
               // Step 4: find + click the submit/confirm/continue button via CDP
               for (let _bi = 0; _bi < 16; _bi++) {

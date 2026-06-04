@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.776",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login toolbar button: after filling the password, a Tab key is now sent to blur the field and trigger Instagram's form validation — this enables the blue Log In button so it can be clicked automatically. Previously the button stayed disabled and had to be pressed manually." },
+      { category: "Fix", text: "2FA toolbar button: typing speed now varies between 50–230 ms per digit (was a narrow 40–100 ms that sounded robotic). A 700–1500 ms natural pause is added after the last digit before the Submit button is clicked, matching the realistic human behaviour of checking the code before confirming." },
+    ],
+  },
+  {
     version: "1.0.775",
     date: "4 Jun 2026",
     items: [
