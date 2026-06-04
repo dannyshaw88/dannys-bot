@@ -3506,14 +3506,16 @@ class AutomationEngine {
             } catch { /* non-critical */ }
           }
         }
+      }
 
-        // Inject Profile Browsing (between follows) — visit, scroll, open posts on the TARGET user's profile
-        if (injectProfileBrowsingEnabled) {
-          const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
-          if (Math.random() * 100 < threshold) {
-            engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
-            await browseTargetProfile("between-follows inject", user);
-          }
+      // Inject Profile Browsing — applies to EVERY candidate including the first follow.
+      // Previously this was gated inside `followed > 0` which meant follow #1 was never
+      // browsed, and sessions configured for 1 follow per run never browsed at all.
+      if (injectProfileBrowsingEnabled) {
+        const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+        if (Math.random() * 100 < threshold) {
+          engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
+          await browseTargetProfile("profile browse inject", user);
         }
       }
 

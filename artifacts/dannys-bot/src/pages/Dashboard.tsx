@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.765",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Inject Profile Browsing now fires before every follow including the first — previously it was skipped for follow #1, so sessions configured to do 1 follow per run never browsed at all." },
+    ],
+  },
+  {
     version: "1.0.764",
     date: "3 Jun 2026",
     items: [
