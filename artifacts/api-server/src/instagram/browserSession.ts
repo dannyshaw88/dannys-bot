@@ -6075,6 +6075,41 @@ export async function browserAutoLogin(
             return { ok: false, message: "Account requires human verification on Instagram" };
           }
           if (twoFaAccepted) {
+            // ── Post-TOTP consent challenge redirect ─────────────────────────
+            // After 2FA is accepted Instagram sometimes redirects through
+            // consent/?flow=user_cookie_choice_v2&...__coig_challenge_redirected
+            // which shows "Sorry, something went wrong" in headless Chrome.
+            // Navigate to instagram.com — if Instagram issued a sessionid before
+            // the consent redirect the browser will load the feed and we save the
+            // cookies normally.  This is the programmatic equivalent of the user
+            // clicking away from the consent page on mobile.
+            const isPostTotpConsentRedirect =
+              afterUrl.includes("/consent/") &&
+              afterUrl.includes("user_cookie_choice");
+            if (isPostTotpConsentRedirect) {
+              sendStatus(profileId, "⚠ Post-2FA consent redirect detected — navigating to instagram.com to confirm session…");
+              log(`[autoLogin:${profileId}] Post-TOTP consent redirect — navigating to instagram.com`, "browser");
+              await s.page.goto("https://www.instagram.com/", {
+                waitUntil: "domcontentloaded",
+                timeout: 20000,
+              }).catch(() => null);
+              await delay(2000);
+              await dismissCookieBanner(s.page);
+              await dismissInstagramPopups(s.page);
+              // Re-check sessionid after navigating away from the consent error page
+              const postConsentSessionCookies = await s.page.cookies(
+                "https://www.instagram.com",
+                "https://i.instagram.com",
+                "https://instagram.com",
+              ).catch(() => [] as { name: string; value: string }[]);
+              const hasSessionAfterConsent = postConsentSessionCookies.some(c => c.name === "sessionid" && c.value.length > 5);
+              if (!hasSessionAfterConsent) {
+                const msg = "Instagram showed a cookie-consent page after 2FA but did not issue a session. Click Fill Credentials again to retry — Instagram may need another attempt to accept the TOTP code.";
+                sendStatus(profileId, `⚠ ${msg}`);
+                return { ok: false, message: msg };
+              }
+              sendStatus(profileId, "✓ Session confirmed after consent page — sessionid present.");
+            }
             await saveCookies(profileId, s.page);
             s.lastLoginSuccessAt = Date.now();
             if (sessions.get(profileId)?.sessionToken !== mySessionToken) {

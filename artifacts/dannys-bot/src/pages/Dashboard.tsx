@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.770",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login: after 2FA is accepted, Instagram now redirects through a cookie-consent error page — the app detects this, navigates to instagram.com, confirms the session cookie is present, and completes the login. The browser window no longer gets stuck showing 'Sorry, something went wrong'." },
+    ],
+  },
+  {
     version: "1.0.769",
     date: "4 Jun 2026",
     items: [
