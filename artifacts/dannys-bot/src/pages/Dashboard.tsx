@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.777",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Phone number toolbar button now auto-detects the phone field on the page via CDP (clicking it, selecting all, deleting, then typing digit by digit with human timing), rather than requiring you to click the field yourself first. Falls back to the previously-focused field if no phone input is found." },
+      { category: "Fix", text: "2FA toolbar button: detection now uses a much wider set of selectors and a smart fallback — if exactly one visible text input exists on the page it uses that, removing the need to manually click the field first." },
+      { category: "Fix", text: "Typing speed variance widened: base delay is now 80–280 ms per character (was 60–160 ms) with an 8% chance of a 400–1000 ms thinking pause between characters (was 3% / 300–800 ms)." },
+      { category: "Fix", text: "Proxy Manager: clicking the ACCOUNTS column header now sorts proxies by number of accounts attached (fewest first, click again for most first). The column header was missing from the sortable set." },
+      { category: "Fix", text: "Account settings group dropdown: removed the 'Clear (no group)' option. Clearing the text field directly unassigns the group. All group options now use the same bold font as the input placeholder." },
+      { category: "Fix", text: "Embedded browser window no longer overlaps the Windows taskbar. It now uses the display work area to set its bounds instead of calling maximize(), which could cover the taskbar in some Windows configurations." },
+    ],
+  },
+  {
     version: "1.0.776",
     date: "4 Jun 2026",
     items: [

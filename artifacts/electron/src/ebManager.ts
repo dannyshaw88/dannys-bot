@@ -10,7 +10,7 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents, dialog, shell } from "electron";
+import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents, dialog, shell, screen as eScreen } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -400,8 +400,8 @@ async function typeTextCDP(
   text: string,
   opts?: { minDelay?: number; maxDelay?: number },
 ): Promise<void> {
-  const min = opts?.minDelay ?? 60;
-  const max = opts?.maxDelay ?? 160;
+  const min = opts?.minDelay ?? 80;
+  const max = opts?.maxDelay ?? 280;
   for (const char of text) {
     const code = char.codePointAt(0) ?? 0;
     const vk   = code >= 32 && code <= 126 ? code : 0;
@@ -422,9 +422,9 @@ async function typeTextCDP(
         text: char,
       });
     } catch {}
-    // Human inter-key delay: base 60–160 ms + rare 300–800 ms thinking pause
+    // Human inter-key delay: base 80–280 ms + 8% chance of 400–1000 ms thinking pause
     const base  = min + Math.random() * (max - min);
-    const pause = Math.random() < 0.03 ? 300 + Math.random() * 500 : 0;
+    const pause = Math.random() < 0.08 ? 400 + Math.random() * 600 : 0;
     await new Promise<void>(r => setTimeout(r, Math.round(base + pause)));
   }
 }
@@ -1608,7 +1608,13 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
-  win.once("ready-to-show", () => { win.maximize(); win.show(); });
+  win.once("ready-to-show", () => {
+    // Use the display work area (excludes taskbar) instead of maximize() which
+    // can overlap the Windows taskbar in some Electron 33 configurations.
+    const { workArea } = eScreen.getPrimaryDisplay();
+    win.setBounds(workArea);
+    win.show();
+  });
 
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its
@@ -3094,15 +3100,34 @@ function setupToolbarIpc(): void {
               'input[name="security_code"]',
               'input[name="totp_code"]',
               'input[name="code"]',
+              'input[inputmode="numeric"]',
               'input[inputmode="numeric"][maxlength="6"]',
+              'input[maxlength="6"]',
               'input[aria-label*="security" i]',
               'input[aria-label*="code" i]',
+              'input[aria-label*="verif" i]',
+              'input[aria-label*="authenticat" i]',
               'input[type="tel"][maxlength="6"]',
+              'input[data-testid*="verification" i]',
+              'input[data-testid*="code" i]',
             ].join(",");
             const totpPos = await wc.executeJavaScript(`(function(){
               var SELS=${JSON.stringify(_OTP_SELS)};
-              var el=document.querySelector(SELS)||window.__eq_lastInput||null;
-              if(!el||el.tagName!=="INPUT")return null;
+              var el=document.querySelector(SELS)||null;
+              if(!el){
+                // Broad fallback: any visible numeric/tel input that isn't username/password/email,
+                // or the page's only visible input if there is exactly one.
+                var all=Array.from(document.querySelectorAll('input'));
+                var visible=all.filter(function(i){
+                  if(i.type==='password'||i.type==='email'||i.name==='username'||i.name==='password')return false;
+                  var r=i.getBoundingClientRect();
+                  return r.width>0&&r.height>0;
+                });
+                if(visible.length===1)el=visible[0];
+                else el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+i.id+i.placeholder);});
+                if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
+              }
+              if(!el||el.tagName!=='INPUT')return null;
               var r=el.getBoundingClientRect();
               if(r.width<=0||r.height<=0)return null;
               return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
@@ -3153,11 +3178,70 @@ function setupToolbarIpc(): void {
       }
 
       case "phone": {
+        // Fill the phone number into the visible phone field via CDP.
+        // Falls back to the last-focused field (typeIntoFocused) if the
+        // specific selectors don't match the current page layout.
         try {
           const r = await fetch(`http://127.0.0.1:${_serverPort}/api/settings`);
           const s = await r.json() as any;
           const num = (s.preFilledPhoneNumber ?? "").trim();
-          if (num) await typeIntoFocused(num);
+          if (!num) break;
+          try { wc.debugger.attach("1.3"); } catch {}
+          const _ms2 = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
+          const _d2 = wc.debugger;
+          // Find the phone input centre via JS (read-only — no events fired here)
+          const _PHONE_SELS = [
+            'input[name="mobile_number"]',
+            'input[name="phone"]',
+            'input[name="phone_number"]',
+            'input[autocomplete="tel"]',
+            'input[type="tel"]',
+            'input[inputmode="tel"]',
+            'input[aria-label*="phone" i]',
+            'input[aria-label*="mobile" i]',
+            'input[placeholder*="phone" i]',
+            'input[placeholder*="mobile" i]',
+          ].join(",");
+          const phonePos = await wc.executeJavaScript(`(function(){
+            var SELS=${JSON.stringify(_PHONE_SELS)};
+            var el=document.querySelector(SELS)||null;
+            if(!el){
+              // Broader fallback: any visible text/tel input that isn't username/password
+              var inputs=Array.from(document.querySelectorAll('input[type="text"],input[type="tel"],input:not([type])'));
+              el=inputs.find(function(i){
+                if(i.name==='username'||i.name==='password'||i.type==='password')return false;
+                var r=i.getBoundingClientRect();
+                return r.width>0&&r.height>0;
+              })||null;
+            }
+            if(!el)return null;
+            var r=el.getBoundingClientRect();
+            if(r.width<=0||r.height<=0)return null;
+            return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+          })()`).catch(() => null) as { x: number; y: number } | null;
+
+          if (phonePos) {
+            // CDP click to focus
+            await _d2.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: phonePos.x, y: phonePos.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms2(60);
+            await _d2.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: phonePos.x, y: phonePos.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms2(120);
+            // Select-all + delete to clear existing value
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _ms2(80);
+            // Type digits with human timing
+            await typeTextCDP(_d2, num);
+            // Tab-blur to trigger form validation
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms2(50);
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          } else {
+            // Fallback: type into whatever field the user last had focus on
+            await typeIntoFocused(num);
+          }
         } catch {}
         break;
       }

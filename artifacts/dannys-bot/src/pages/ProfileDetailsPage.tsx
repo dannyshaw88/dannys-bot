@@ -199,20 +199,11 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
             <div className="px-3 py-2 text-xs text-muted-foreground">No groups yet — type to create one</div>
           ) : (
             <>
-              {value && (
-                <button
-                  type="button"
-                  className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 italic"
-                  onMouseDown={e => { e.preventDefault(); onChange(""); setFilterText(""); setOpen(false); }}
-                >
-                  Clear (no group)
-                </button>
-              )}
               {filtered.map(group => (
                 <button
                   key={group}
                   type="button"
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${group === value ? "font-semibold" : ""} text-foreground`}
+                  className={`w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-muted/60 ${group === value ? "text-primary" : "text-foreground"}`}
                   onMouseDown={e => { e.preventDefault(); onChange(group); setFilterText(""); setOpen(false); }}
                 >
                   {group}

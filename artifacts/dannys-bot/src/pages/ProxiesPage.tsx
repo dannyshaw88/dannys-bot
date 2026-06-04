@@ -773,7 +773,7 @@ export function ProxiesPage() {
               onDragEnd: () => { proxyDragColRef.current = null; setProxyDragOverCol(null); },
             };
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
-            const sortable = col === "proxy" || col === "username" || col === "status";
+            const sortable = col === "proxy" || col === "username" || col === "status" || col === "accounts";
             if (sortable) return (
               <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
