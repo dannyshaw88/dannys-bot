@@ -5329,25 +5329,53 @@ export async function browserAutoLogin(
           // Fall through to the login form detection below — credentials will be
           // filled automatically, no manual button click required.
         } else {
-          // Clear any stale challenge flag — the account is visibly logged in so
-          // whatever challenge existed has been resolved in the browser.
-          s.challengeUrl = undefined;
-          // Ground-truth: verify a real sessionid cookie exists before declaring success.
-          // The page may be on a challenge/error URL that has no login form but also
-          // has no session (e.g. instagram.com/challenge/).
-          const earlyCheck = await s.page.cookies(
-            "https://www.instagram.com",
-            "https://i.instagram.com",
-            "https://instagram.com",
-          ).catch(() => [] as { name: string; value: string }[]);
-          if (!earlyCheck.some(c => c.name === "sessionid" && c.value.length > 5)) {
-            const msg = `Browser is on ${currentUrl.slice(0, 80)} but no sessionid cookie found — Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
-            sendStatus(profileId, `⚠ ${msg}`);
-            return { ok: false, message: msg };
+          // ── Consent challenge redirect (step-1 interception) ─────────────────
+          // Instagram routes Chrome through consent/?flow=user_cookie_choice_v2&
+          // ...__coig_challenge_redirected when it wants device approval / cookie
+          // consent before continuing.  The page shows "Sorry, something went wrong"
+          // in headless Chrome, and there is no sessionid yet.
+          //
+          // Fix: navigate to the login page WITHOUT clearing device cookies
+          // (mid, ig_did, ig_nrcb).  Preserving device cookies means Instagram
+          // recognises the device and will present TOTP entry (step 7 auto-fills it)
+          // rather than a fresh new-device challenge.  Fall through to step 2 so
+          // credentials are submitted normally — same path as mobile "Try another
+          // way" → Authenticator App.
+          const isConsentChallengePage =
+            currentUrl.includes("/consent/") &&
+            currentUrl.includes("user_cookie_choice");
+          if (isConsentChallengePage) {
+            sendStatus(profileId, `⚠ Consent challenge page detected (${currentUrl.slice(0, 100)}) — navigating to login to trigger TOTP entry…`);
+            log(`[autoLogin:${profileId}] Consent challenge at step 1 — navigating to login page`, "browser");
+            s.navProtectedUntil = Date.now() + 25000;
+            await s.page.goto("https://www.instagram.com/accounts/login/", {
+              waitUntil: "domcontentloaded",
+              timeout: 25000,
+            }).catch(() => null);
+            await delay(2000);
+            await dismissCookieBanner(s.page);
+            // ↓ fall through to step 2 (login form detection) — do NOT return here
+          } else {
+            // Clear any stale challenge flag — the account is visibly logged in so
+            // whatever challenge existed has been resolved in the browser.
+            s.challengeUrl = undefined;
+            // Ground-truth: verify a real sessionid cookie exists before declaring success.
+            // The page may be on a challenge/error URL that has no login form but also
+            // has no session (e.g. instagram.com/challenge/).
+            const earlyCheck = await s.page.cookies(
+              "https://www.instagram.com",
+              "https://i.instagram.com",
+              "https://instagram.com",
+            ).catch(() => [] as { name: string; value: string }[]);
+            if (!earlyCheck.some(c => c.name === "sessionid" && c.value.length > 5)) {
+              const msg = `Browser is on ${currentUrl.slice(0, 80)} but no sessionid cookie found — Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
+              sendStatus(profileId, `⚠ ${msg}`);
+              return { ok: false, message: msg };
+            }
+            await saveCookies(profileId, s.page);
+            sendStatus(profileId, "✓ Already logged in — browser shows your account.");
+            return { ok: true, message: "Already logged in" };
           }
-          await saveCookies(profileId, s.page);
-          sendStatus(profileId, "✓ Already logged in — browser shows your account.");
-          return { ok: true, message: "Already logged in" };
         }
       }
       // Login form is visible at the home URL — treat as not logged in, fall through to fill it.

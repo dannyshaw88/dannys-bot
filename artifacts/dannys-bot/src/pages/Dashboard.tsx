@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.769",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login: when the browser opens already on the consent challenge page (consent/?flow=user_cookie_choice_v2), it now navigates to the login form and re-submits credentials so Instagram can show the 2FA/TOTP entry screen." },
+    ],
+  },
+  {
     version: "1.0.768",
     date: "4 Jun 2026",
     items: [
