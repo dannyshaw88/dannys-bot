@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.772",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Browser fingerprinting: the app now sends the real Chrome build number (e.g. 131.0.6778.260) in Client Hints headers and the JS fingerprint API instead of the fake '131.0.0.0' that no real Chrome ever produces. Instagram checks this value and the fake patch number was an immediate bot signal." },
+      { category: "Fix", text: "Browser fingerprinting: the Client Hints GREASE brand token is now version-aware — Chrome 128 and later correctly sends ' Not A;Brand' (with leading space) instead of 'Not/A)Brand'. Sending the same wrong brand across every account was a cross-account correlation Instagram could detect." },
+      { category: "Fix", text: "Browser fingerprinting: the Android OS version in Client Hints now matches the version declared in the User-Agent string. The hidden verify window was always sending Android 10 even for accounts using Android 14 or 15 User-Agents, creating a mismatch Instagram fingerprints." },
+      { category: "Fix", text: "Browser fingerprinting: the device model field in Client Hints is now extracted from the User-Agent string and included in the Sec-CH-UA-Model header, matching what a real device would send." },
+    ],
+  },
+  {
     version: "1.0.771",
     date: "4 Jun 2026",
     items: [

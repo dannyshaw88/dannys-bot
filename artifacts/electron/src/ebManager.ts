@@ -241,6 +241,46 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
   };
 }
 
+// ── Chrome Client Hints build info ─────────────────────────────────────────────
+//
+// The UA string format "Chrome/131.0.0.0" is correct — Chrome on Android
+// deliberately hides the patch version in the UA string since v101.
+// BUT the Client Hints headers (Sec-CH-UA-Full-Version-List) and the JS API
+// (navigator.userAgentData.getHighEntropyValues(['fullVersionList'])) DO expose
+// the real build number.  Sending "131.0.0.0" there is an immediate bot signal —
+// no real Chrome build has a zero patch version.
+//
+// GREASE brand algorithm: greaseBrands[floor(major/8) % 8]
+//   greaseBrands = [" Not A;Brand"," Not;A Brand","Not A)Brand","Not)A;Brand",
+//                   "Not;A)Brand","Not-A(Brand","Not A(Brand","Not/A)Brand"]
+//   Chrome 120–127: floor(v/8)=15, 15%8=7  → "Not/A)Brand"
+//   Chrome 128–135: floor(v/8)=16, 16%8=0  → " Not A;Brand"  (leading space)
+//   Chrome 136–143: floor(v/8)=17, 17%8=1  → " Not;A Brand"  (leading space)
+//
+// Both the CDP Emulation.setUserAgentOverride call AND the injected JS fingerprint
+// script must use these values, otherwise Sec-CH-UA-Full-Version-List and
+// navigator.userAgentData.getHighEntropyValues() return different values.
+const CHROME_BUILD_INFO: Record<string, { full: string; grease: string; greaseVer: string }> = {
+  "124": { full: "124.0.6367.82",  grease: "Not/A)Brand",  greaseVer: "8" },
+  "125": { full: "125.0.6422.165", grease: "Not/A)Brand",  greaseVer: "8" },
+  "126": { full: "126.0.6478.202", grease: "Not/A)Brand",  greaseVer: "8" },
+  "127": { full: "127.0.6533.119", grease: "Not/A)Brand",  greaseVer: "8" },
+  "128": { full: "128.0.6613.137", grease: " Not A;Brand", greaseVer: "8" },
+  "129": { full: "129.0.6668.103", grease: " Not A;Brand", greaseVer: "8" },
+  "130": { full: "130.0.6723.107", grease: " Not A;Brand", greaseVer: "8" },
+  "131": { full: "131.0.6778.260", grease: " Not A;Brand", greaseVer: "8" },
+  "132": { full: "132.0.6834.163", grease: " Not A;Brand", greaseVer: "8" },
+  "133": { full: "133.0.6943.137", grease: " Not A;Brand", greaseVer: "8" },
+  "134": { full: "134.0.6998.135", grease: " Not A;Brand", greaseVer: "8" },
+  "135": { full: "135.0.7049.114", grease: " Not A;Brand", greaseVer: "8" },
+  "136": { full: "136.0.7103.125", grease: " Not;A Brand", greaseVer: "8" },
+  "137": { full: "137.0.7151.55",  grease: " Not;A Brand", greaseVer: "8" },
+};
+
+function getChromeBuildInfo(majorVersion: string): { full: string; grease: string; greaseVer: string } {
+  return CHROME_BUILD_INFO[majorVersion] ?? { full: `${majorVersion}.0.6778.260`, grease: " Not A;Brand", greaseVer: "8" };
+}
+
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
 // Applied via CDP Page.addScriptToEvaluateOnNewDocument (runs before any page script)
 // AND via dom-ready executeJavaScript (belt-and-suspenders if CDP is unavailable).
@@ -335,9 +375,14 @@ async function humanMouseClick(
   if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseUp", x: tx, y: ty, button: "left", clickCount: 1 });
 }
 
-function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null): string {
+function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
+  // Bake real Client Hints values as literals so the injected script can use them
+  // without needing access to the CHROME_BUILD_INFO table at runtime.
+  const _cfv  = JSON.stringify(chromeFullVer  ?? null);  // e.g. "131.0.6778.260" or null
+  const _gbr  = JSON.stringify(greaseBrand    ?? null);  // e.g. " Not A;Brand"   or null
+  const _gbv  = JSON.stringify(greaseBrandVer ?? null);  // e.g. "8"              or null
 
   // Per-account fingerprint values — baked in as literals when available so every
   // account has unique WebGL/canvas/audio/media-device data in the leak test.
@@ -537,20 +582,28 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     var _chv=_chm?_chm[1]:"131";
     var _chp=_ua.indexOf("Android")>=0?"Android":"Windows";
     var _chmo=_ua.indexOf("Android")>=0&&_ua.indexOf("Mobile")>=0;
-    var _chb=[{brand:"Not/A)Brand",version:"8"},{brand:"Chromium",version:_chv},{brand:"Google Chrome",version:_chv}];
+    // Real greased brand + version baked in from CHROME_BUILD_INFO at injection time.
+    // Falls back to UA-derived values so old profiles without the info still work.
+    var _GB=${_gbr}||(parseInt(_chv,10)>=128?" Not A;Brand":"Not/A)Brand");
+    var _GBV=${_gbv}||"8";
+    // Real full build version (e.g. "131.0.6778.260") — never ".0.0.0"
+    var _CFV=${_cfv}||(_chv+".0.6778.260");
+    var _chb=[{brand:_GB,version:_GBV},{brand:"Chromium",version:_chv},{brand:"Google Chrome",version:_chv}];
     var _chmdl=(function(){var mm=_ua.match(/Android [0-9]+;\\s*([^)]+)\\)/);return mm?mm[1].trim():"";})();
+    // Android platform version derived from UA string — must match Sec-CH-UA-Platform-Version header.
+    var _chav=(function(){var m=_ua.match(/Android[\\s/]+([0-9]+)/i);return m?(m[1]+".0.0"):"15.0.0";})();
     Object.defineProperty(navigator,"userAgentData",{
       get:function(){
         return{
           brands:_chb,mobile:_chmo,platform:_chp,
           getHighEntropyValues:function(h){
             var rv={brands:_chb,mobile:_chmo,platform:_chp};
-            if(h.indexOf("platformVersion")>=0)rv.platformVersion="15.0.0";
+            if(h.indexOf("platformVersion")>=0)rv.platformVersion=_chav;
             if(h.indexOf("architecture")>=0)rv.architecture="arm";
             if(h.indexOf("bitness")>=0)rv.bitness="64";
             if(h.indexOf("model")>=0)rv.model=_chmdl;
-            if(h.indexOf("uaFullVersion")>=0)rv.uaFullVersion=_chv+".0.0.0";
-            if(h.indexOf("fullVersionList")>=0)rv.fullVersionList=_chb.map(function(b){return{brand:b.brand,version:b.brand==="Not/A)Brand"?"8.0.0.0":_chv+".0.0.0"};});
+            if(h.indexOf("uaFullVersion")>=0)rv.uaFullVersion=_CFV;
+            if(h.indexOf("fullVersionList")>=0)rv.fullVersionList=_chb.map(function(b){return{brand:b.brand,version:b===_chb[0]?(_GBV+".0.0.0"):_CFV};});
             return Promise.resolve(rv);
           },
           toJSON:function(){return{brands:_chb,mobile:_chmo,platform:_chp};}
@@ -893,28 +946,33 @@ async function doAutoLogin(
       try { wc.debugger.attach("1.3"); } catch {}
       const _chromeMajor = (userAgent.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
       const _isMob = userAgent.includes("Mobile") || userAgent.includes("Android");
+      const _buildInfo = getChromeBuildInfo(_chromeMajor);
+      // Extract Android version from UA string — must match Sec-CH-UA-Platform-Version.
+      const _androidVer = userAgent.match(/Android\s+(\d+)/i)?.[1] ?? "15";
+      // Extract device model from UA string for Sec-CH-UA-Model.
+      const _model = userAgent.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? "";
       await wc.debugger.sendCommand("Emulation.setUserAgentOverride", {
         userAgent,
         acceptLanguage: "en-US,en;q=0.9",
         platform: _isMob ? "Linux armv8l" : "Win32",
         userAgentMetadata: {
           brands: [
-            { brand: "Not/A)Brand",   version: "8" },
-            { brand: "Chromium",      version: _chromeMajor },
-            { brand: "Google Chrome", version: _chromeMajor },
+            { brand: _buildInfo.grease,  version: _buildInfo.greaseVer },
+            { brand: "Chromium",         version: _chromeMajor },
+            { brand: "Google Chrome",    version: _chromeMajor },
           ],
           fullVersionList: [
-            { brand: "Not/A)Brand",   version: "8.0.0.0" },
-            { brand: "Chromium",      version: `${_chromeMajor}.0.0.0` },
-            { brand: "Google Chrome", version: `${_chromeMajor}.0.0.0` },
+            { brand: _buildInfo.grease,  version: _buildInfo.greaseVer + ".0.0.0" },
+            { brand: "Chromium",         version: _buildInfo.full },
+            { brand: "Google Chrome",    version: _buildInfo.full },
           ],
-          fullVersion: `${_chromeMajor}.0.0.0`,
+          fullVersion: _buildInfo.full,
           platform: _isMob ? "Android" : "Windows",
-          platformVersion: _isMob ? "10" : "10.0.0",
+          platformVersion: _isMob ? _androidVer : "10.0.0",
           architecture: _isMob ? "arm" : "x86",
-          model: "",
+          model: _isMob ? _model : "",
           mobile: _isMob,
-          bitness: "",
+          bitness: _isMob ? "64" : "",
           wow64: false,
         },
       });
@@ -1553,7 +1611,9 @@ export async function openEbWindow(opts: {
   }
 
   const _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
-  const _fpScript   = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null);
+  const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+  const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
+  const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
   void (async () => {
     try {
       // debugger already attached before this block
@@ -1569,8 +1629,8 @@ export async function openEbWindow(opts: {
       // fixing the "Platform: Windows / Mobile: No" leak that Instagram detects.
       if (_browserUA) {
         try {
-          const _chromeMajor = (_browserUA.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
-          const _chromeFull  = (_browserUA.match(/Chrome\/([\d.]+)/)?.[1]) ?? "131.0.6778.204";
+          // Use the real full build version and correct GREASE brand from the lookup table.
+          // _fpBuildInfo is already resolved above from the UA's Chrome major version.
           await win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
             userAgent: _browserUA,
             acceptLanguage: "en-US,en;q=0.9",
@@ -1578,26 +1638,26 @@ export async function openEbWindow(opts: {
             ...(_fpIsMobile ? {
               userAgentMetadata: {
                 brands: [
-                  { brand: "Not/A)Brand",    version: "8" },
-                  { brand: "Chromium",        version: _chromeMajor },
-                  { brand: "Google Chrome",   version: _chromeMajor },
+                  { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
+                  { brand: "Chromium",            version: _fpChromeMajor },
+                  { brand: "Google Chrome",       version: _fpChromeMajor },
                 ],
                 fullVersionList: [
-                  { brand: "Not/A)Brand",    version: "8.0.0.0" },
-                  { brand: "Chromium",        version: _chromeFull },
-                  { brand: "Google Chrome",   version: _chromeFull },
+                  { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },
+                  { brand: "Chromium",            version: _fpBuildInfo.full },
+                  { brand: "Google Chrome",       version: _fpBuildInfo.full },
                 ],
                 platform:        "Android",
                 platformVersion: _androidVer,
-                architecture:    "",
+                architecture:    "arm",
                 model:           _deviceModel,
                 mobile:          true,
-                bitness:         "",
+                bitness:         "64",
                 wow64:           false,
               },
             } : {}),
           });
-          console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile} platform=${_fpIsMobile ? "Android" : "Win32"}`);
+          console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile} grease="${_fpBuildInfo.grease}" full="${_fpBuildInfo.full}"`);
         } catch (uaErr) {
           console.warn(`[ebManager:${profileId}] Emulation.setUserAgentOverride failed:`, uaErr);
         }
