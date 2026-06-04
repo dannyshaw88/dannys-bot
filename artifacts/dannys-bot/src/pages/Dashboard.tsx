@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.775",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login flagging: the 2FA toolbar button now fills the TOTP code using CDP mouse + keyboard events (isTrusted = true) instead of JavaScript value injection (isTrusted = false). The old approach set the field value and fired synthetic events from JS — Instagram detects these as bot input. The button now clicks the field via CDP, types each digit individually with human timing, then clicks the Submit button via CDP." },
+    ],
+  },
+  {
+    version: "1.0.774",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login flagging: all form filling now types character-by-character with randomised 60–160 ms inter-key delays and occasional natural pauses, instead of delivering the entire username or password as one instant paste event. Instagram's keystroke-timing analyser could distinguish a single bulk insert from real typing regardless of isTrusted — this removes that signal from every login path (auto-fill on navigate, verify flow, and the Login toolbar button)." },
+      { category: "Fix", text: "2FA code entry now types each digit individually at 40–100 ms per digit, matching the speed a real person taps a 6-digit code on a phone keyboard." },
+    ],
+  },
+  {
     version: "1.0.773",
     date: "4 Jun 2026",
     items: [

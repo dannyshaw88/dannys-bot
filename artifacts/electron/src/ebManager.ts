@@ -375,6 +375,60 @@ async function humanMouseClick(
   if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseUp", x: tx, y: ty, button: "left", clickCount: 1 });
 }
 
+// ── Human-like character-by-character CDP typing ───────────────────────────────
+//
+// WHY NOT Input.insertText for a full string:
+//   Input.insertText delivers all characters as a single event — equivalent to
+//   a clipboard paste.  Instagram's keystroke-timing analyser sees the entire
+//   username/password arrive with 0 ms between characters, which is impossible
+//   for a human typist.  This is a reliable bot signal regardless of isTrusted.
+//
+// HOW THIS WORKS:
+//   For each character we fire:
+//     rawKeyDown  (carries the char in `text` — required for React's synthetic
+//                  onKeyDown to see the right key)
+//     Input.insertText with ONE character  (triggers React onChange / nativeEvent
+//                  input, updates controlled-input state)
+//     keyUp       (completes the key lifecycle)
+//   Then we wait a random 60–160 ms before the next character, with a 3 % chance
+//   of a longer 300–800 ms "thinking" pause — matching the distribution of real
+//   human typing on a mobile keyboard.
+//
+//   For 6-digit TOTP codes the min/max can be tightened (people type those faster).
+async function typeTextCDP(
+  dbg: Electron.Debugger,
+  text: string,
+  opts?: { minDelay?: number; maxDelay?: number },
+): Promise<void> {
+  const min = opts?.minDelay ?? 60;
+  const max = opts?.maxDelay ?? 160;
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    const vk   = code >= 32 && code <= 126 ? code : 0;
+    try {
+      await dbg.sendCommand("Input.dispatchKeyEvent", {
+        type: "rawKeyDown",
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode:  vk,
+        unmodifiedText: char,
+        text: char,
+      });
+      await dbg.sendCommand("Input.insertText", { text: char });
+      await dbg.sendCommand("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode:  vk,
+        unmodifiedText: char,
+        text: char,
+      });
+    } catch {}
+    // Human inter-key delay: base 60–160 ms + rare 300–800 ms thinking pause
+    const base  = min + Math.random() * (max - min);
+    const pause = Math.random() < 0.03 ? 300 + Math.random() * 500 : 0;
+    await new Promise<void>(r => setTimeout(r, Math.round(base + pause)));
+  }
+}
+
 function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
@@ -1084,8 +1138,7 @@ async function doAutoLogin(
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await delay(100);
-    await wc.debugger.sendCommand("Input.insertText", { text: username });
-    await delay(400);
+    await typeTextCDP(wc.debugger, username);
 
     // Step 3: click password field + type via CDP
     await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: fields.p.x, y: fields.p.y, button: "left", clickCount: 1, modifiers: 0 });
@@ -1097,8 +1150,7 @@ async function doAutoLogin(
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await delay(100);
-    await wc.debugger.sendCommand("Input.insertText", { text: password });
-    await delay(800);
+    await typeTextCDP(wc.debugger, password);
   } catch (cdpErr: any) {
     console.warn(`[doAutoLogin:${profileId}] CDP form fill failed: ${cdpErr?.message}`);
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
@@ -1194,8 +1246,7 @@ async function doAutoLogin(
         await delay(60);
         await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: tfPos.x, y: tfPos.y, button: "left", clickCount: 1, modifiers: 0 });
         await delay(150);
-        await wc.debugger.sendCommand("Input.insertText", { text: code });
-        await delay(800);
+        await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
       } catch {}
     }
 
@@ -2567,8 +2618,7 @@ export async function openEbWindow(opts: {
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _ms(100);
-              await _d.sendCommand("Input.insertText", { text: username });
-              await _ms(400);
+              await typeTextCDP(_d, username);
               await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
               await _ms(60);
               await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
@@ -2578,8 +2628,7 @@ export async function openEbWindow(opts: {
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _ms(100);
-              await _d.sendCommand("Input.insertText", { text: password });
-              await _ms(500);
+              await typeTextCDP(_d, password);
               for (let _bi = 0; _bi < 20; _bi++) {
                 const _bp = await win.webContents.executeJavaScript(`
                   (() => {
@@ -2636,8 +2685,7 @@ export async function openEbWindow(opts: {
               await _ms(60);
               await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _af2Pos.x, y: _af2Pos.y, button: "left", clickCount: 1, modifiers: 0 });
               await _ms(150);
-              await _d.sendCommand("Input.insertText", { text: code });
-              await _ms(500);
+              await typeTextCDP(_d, code, { minDelay: 40, maxDelay: 100 });
               for (let _bi = 0; _bi < 16; _bi++) {
                 const _bp = await win.webContents.executeJavaScript(`
                   (() => {
@@ -2733,7 +2781,7 @@ function setupToolbarIpc(): void {
           await new Promise<void>(r => setTimeout(r, 40));
           await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: focusPos.x, y: focusPos.y, button: "left", clickCount: 1, modifiers: 0 });
           await new Promise<void>(r => setTimeout(r, 60));
-          await wc.debugger.sendCommand("Input.insertText", { text });
+          await typeTextCDP(wc.debugger, text);
         } catch {}
       }
     };
@@ -2848,8 +2896,7 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
             await _ms(100);
-            await _d.sendCommand("Input.insertText", { text: _lgUsr });
-            await _ms(400);
+            await typeTextCDP(_d, _lgUsr);
 
             // Fill password via CDP
             await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _flds.p.x, y: _flds.p.y, button: "left", clickCount: 1, modifiers: 0 });
@@ -2861,8 +2908,7 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
             await _ms(100);
-            await _d.sendCommand("Input.insertText", { text: _lgPwd });
-            await _ms(500);
+            await typeTextCDP(_d, _lgPwd);
 
             // Poll for submit button, click via CDP
             for (let _bi = 0; _bi < 20; _bi++) {
@@ -3018,64 +3064,74 @@ function setupToolbarIpc(): void {
       }
 
       case "totp": {
+        // Fill the TOTP code into the OTP input via CDP (isTrusted = true).
+        // The old approach used JS setter.call + dispatchEvent — all isTrusted=false,
+        // identical to the bot signal the login form fix addressed.
         try {
           const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
           const p = await r.json() as any;
           const key = (p.twoFASecretKey ?? "").trim();
           if (key) {
             const code = generateTotp(key);
-            const codeJson = JSON.stringify(code);
-            // Actively find the OTP input, fill it, then click Continue/Submit.
-            // Falls back to the last-focused field if no standard OTP selector matches.
-            await wc.executeJavaScript(`(async function(){
-              var delay=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
-              var code=${codeJson};
-              var OTP=[
-                'input[autocomplete="one-time-code"]',
-                'input[name="verificationCode"]',
-                'input[name="verification_code"]',
-                'input[name="security_code"]',
-                'input[name="totp_code"]',
-                'input[name="code"]',
-                'input[inputmode="numeric"]'
-              ];
-              var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-              var filled=false;
-              for(var i=0;i<OTP.length;i++){
-                var el=document.querySelector(OTP[i]);
-                if(!el)continue;
-                var rc=el.getBoundingClientRect();
-                if(rc.width===0||rc.height===0)continue;
-                el.focus();
-                setter.call(el,'');
-                el.dispatchEvent(new Event('input',{bubbles:true}));
-                await delay(80);
-                setter.call(el,code);
-                el.dispatchEvent(new Event('input',{bubbles:true}));
-                el.dispatchEvent(new Event('change',{bubbles:true}));
-                filled=true;
-                break;
-              }
-              if(!filled){
-                var fe=window.__eq_lastInput||document.activeElement;
-                if(fe&&fe.tagName==='INPUT'){
-                  setter.call(fe,code);
-                  fe.dispatchEvent(new Event('input',{bubbles:true}));
-                  fe.dispatchEvent(new Event('change',{bubbles:true}));
-                }
-              }
-              await delay(350);
-              var SUBMIT=['confirm','continue','submit','verify','next','done','ok'];
-              var btns=Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"]'));
-              for(var j=0;j<btns.length;j++){
-                var txt=(btns[j].innerText||btns[j].textContent||'').trim().toLowerCase();
-                var rc2=btns[j].getBoundingClientRect();
-                if(SUBMIT.some(function(t){return txt.indexOf(t)!==-1;})&&rc2.width>0&&rc2.height>0){
-                  btns[j].click();
+            try { wc.debugger.attach("1.3"); } catch {}
+            const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
+            const _d = wc.debugger;
+
+            // Step 1: find the OTP input centre via JS (read-only — no events fired here)
+            const _OTP_SELS = [
+              'input[autocomplete="one-time-code"]',
+              'input[name="verificationCode"]',
+              'input[name="verification_code"]',
+              'input[name="security_code"]',
+              'input[name="totp_code"]',
+              'input[name="code"]',
+              'input[inputmode="numeric"][maxlength="6"]',
+              'input[aria-label*="security" i]',
+              'input[aria-label*="code" i]',
+              'input[type="tel"][maxlength="6"]',
+            ].join(",");
+            const totpPos = await wc.executeJavaScript(`(function(){
+              var SELS=${JSON.stringify(_OTP_SELS)};
+              var el=document.querySelector(SELS)||window.__eq_lastInput||null;
+              if(!el||el.tagName!=="INPUT")return null;
+              var r=el.getBoundingClientRect();
+              if(r.width<=0||r.height<=0)return null;
+              return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+            })()`).catch(() => null) as { x: number; y: number } | null;
+
+            if (totpPos) {
+              // Step 2: CDP click to focus the field
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: totpPos.x, y: totpPos.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: totpPos.x, y: totpPos.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(120);
+
+              // Step 3: type each digit via typeTextCDP (isTrusted=true, human timing)
+              await typeTextCDP(_d, code, { minDelay: 40, maxDelay: 100 });
+
+              // Step 4: find + click the submit/confirm/continue button via CDP
+              for (let _bi = 0; _bi < 16; _bi++) {
+                const _bp = await wc.executeJavaScript(`(function(){
+                  var SUBMIT=['confirm','continue','submit','verify','next','done','ok'];
+                  var btns=Array.from(document.querySelectorAll('button[type="submit"],button,[role="button"]'));
+                  for(var i=0;i<btns.length;i++){
+                    var t=(btns[i].innerText||btns[i].textContent||'').trim().toLowerCase();
+                    var rc=btns[i].getBoundingClientRect();
+                    if(rc.width>0&&rc.height>0&&SUBMIT.some(function(s){return t.indexOf(s)!==-1;})){
+                      return{x:Math.round(rc.left+rc.width/2),y:Math.round(rc.top+rc.height/2)};
+                    }
+                  }
+                  return null;
+                })()`).catch(() => null) as { x: number; y: number } | null;
+                if (_bp) {
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await _ms(60);
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
                   break;
                 }
+                await _ms(200);
               }
-            })()`).catch(()=>{});
+            }
           }
         } catch {}
         break;
