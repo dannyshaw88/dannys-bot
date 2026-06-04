@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.771",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Browser fingerprinting: corrected the Client Hints brand token to 'Not/A)Brand' (the format real Chrome 108+ sends) in all three locations — the main browser window, the hidden verify window, and the injected fingerprint script. The old tokens ('Not_A Brand', 'Not-A.Brand' with version 99) were detectable as non-genuine Chrome and could contribute to Instagram flagging logins." },
+    ],
+  },
+  {
     version: "1.0.770",
     date: "4 Jun 2026",
     items: [

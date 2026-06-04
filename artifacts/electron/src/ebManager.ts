@@ -537,7 +537,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     var _chv=_chm?_chm[1]:"131";
     var _chp=_ua.indexOf("Android")>=0?"Android":"Windows";
     var _chmo=_ua.indexOf("Android")>=0&&_ua.indexOf("Mobile")>=0;
-    var _chb=[{brand:"Chromium",version:_chv},{brand:"Google Chrome",version:_chv},{brand:"Not_A Brand",version:"99"}];
+    var _chb=[{brand:"Not/A)Brand",version:"8"},{brand:"Chromium",version:_chv},{brand:"Google Chrome",version:_chv}];
     var _chmdl=(function(){var mm=_ua.match(/Android [0-9]+;\\s*([^)]+)\\)/);return mm?mm[1].trim():"";})();
     Object.defineProperty(navigator,"userAgentData",{
       get:function(){
@@ -550,7 +550,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
             if(h.indexOf("bitness")>=0)rv.bitness="64";
             if(h.indexOf("model")>=0)rv.model=_chmdl;
             if(h.indexOf("uaFullVersion")>=0)rv.uaFullVersion=_chv+".0.0.0";
-            if(h.indexOf("fullVersionList")>=0)rv.fullVersionList=_chb.map(function(b){return{brand:b.brand,version:_chv+".0.0.0"};});
+            if(h.indexOf("fullVersionList")>=0)rv.fullVersionList=_chb.map(function(b){return{brand:b.brand,version:b.brand==="Not/A)Brand"?"8.0.0.0":_chv+".0.0.0"};});
             return Promise.resolve(rv);
           },
           toJSON:function(){return{brands:_chb,mobile:_chmo,platform:_chp};}
@@ -899,9 +899,14 @@ async function doAutoLogin(
         platform: _isMob ? "Linux armv8l" : "Win32",
         userAgentMetadata: {
           brands: [
+            { brand: "Not/A)Brand",   version: "8" },
             { brand: "Chromium",      version: _chromeMajor },
             { brand: "Google Chrome", version: _chromeMajor },
-            { brand: "Not-A.Brand",   version: "99" },
+          ],
+          fullVersionList: [
+            { brand: "Not/A)Brand",   version: "8.0.0.0" },
+            { brand: "Chromium",      version: `${_chromeMajor}.0.0.0` },
+            { brand: "Google Chrome", version: `${_chromeMajor}.0.0.0` },
           ],
           fullVersion: `${_chromeMajor}.0.0.0`,
           platform: _isMob ? "Android" : "Windows",
@@ -909,6 +914,8 @@ async function doAutoLogin(
           architecture: _isMob ? "arm" : "x86",
           model: "",
           mobile: _isMob,
+          bitness: "",
+          wow64: false,
         },
       });
     } catch {}
@@ -1571,14 +1578,14 @@ export async function openEbWindow(opts: {
             ...(_fpIsMobile ? {
               userAgentMetadata: {
                 brands: [
-                  { brand: "Not_A Brand",   version: "8" },
-                  { brand: "Chromium",       version: _chromeMajor },
-                  { brand: "Google Chrome",  version: _chromeMajor },
+                  { brand: "Not/A)Brand",    version: "8" },
+                  { brand: "Chromium",        version: _chromeMajor },
+                  { brand: "Google Chrome",   version: _chromeMajor },
                 ],
                 fullVersionList: [
-                  { brand: "Not_A Brand",   version: "8.0.0.0" },
-                  { brand: "Chromium",       version: _chromeFull },
-                  { brand: "Google Chrome",  version: _chromeFull },
+                  { brand: "Not/A)Brand",    version: "8.0.0.0" },
+                  { brand: "Chromium",        version: _chromeFull },
+                  { brand: "Google Chrome",   version: _chromeFull },
                 ],
                 platform:        "Android",
                 platformVersion: _androidVer,
