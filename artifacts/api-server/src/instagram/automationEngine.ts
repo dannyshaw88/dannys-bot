@@ -3508,19 +3508,7 @@ class AutomationEngine {
         }
       }
 
-      // Inject Profile Browsing — applies to EVERY candidate including the first follow.
-      // Previously this was gated inside `followed > 0` which meant follow #1 was never
-      // browsed, and sessions configured for 1 follow per run never browsed at all.
-      if (injectProfileBrowsingEnabled) {
-        const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
-        if (Math.random() * 100 < threshold) {
-          engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
-          await browseTargetProfile("profile browse inject", user);
-        }
-      }
-
-      // Browse before follow — uses dedicated before-follow percentage (falls back to the
-      // general browsing chance when the dedicated fields are not configured).
+      // Browse before follow — uses dedicated before-follow percentage.
       if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
         const threshold = randInt(injectProfileBrowsingBeforeFollowPctMin, injectProfileBrowsingBeforeFollowPctMax);
         if (Math.random() * 100 < threshold) {
@@ -3664,6 +3652,17 @@ class AutomationEngine {
       followed++;
 
       console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
+
+      // Post-follow profile browsing — browse the target's profile after successfully following them.
+      // This is the primary injection point: the pre-follow browse (above) handles the "before" case;
+      // this handles the expected "after follow" behaviour where the bot visits the profile it just followed.
+      if (injectProfileBrowsingEnabled) {
+        const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+        if (Math.random() * 100 < threshold) {
+          engineLog("INFO", `@${profile.username}: post-follow profile browsing for @${user.username}`);
+          await browseTargetProfile("post-follow browse", user);
+        }
+      }
 
       // Inter-follow delay after every successful follow
       await sleep(randInt(followMin, followMax));

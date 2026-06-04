@@ -1768,7 +1768,7 @@ export async function registerInstagramRoutes(
         if (source === "HikerAPI")  return "HikerAPI";
         if (source === "Browser")   return "Browser Session";
         if (source === "ProfileSync") return "Profile Sync";
-        if (source === "Human Session Emulation") return "Human Session Emulation";
+        if (source === "Human Session Emulation") return "Emulation";
         if (source === "Follow Tool")   return "Follow Tool";
         if (source === "Unfollow Tool") return "Unfollow Tool";
         if (source === "Contact Tool")  return "Contact Tool";

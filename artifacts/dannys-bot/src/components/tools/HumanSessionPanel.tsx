@@ -625,7 +625,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       </div>
 
       {/* ── EMULATION GROUP ──────────────────────────────────────────── */}
-      <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
+      <div className="mt-[50px]">
         <div className="border border-border rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-muted/20 border-b border-border">
             <Zap className="w-5 h-5 text-cyan-500 shrink-0" />
@@ -660,7 +660,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── View Timeline Feed ── */}
-            <div className="px-4 py-3 space-y-2">
+            <div className="px-4 py-3 space-y-1.5">
+              {/* ROW 1: [✓] View Timeline Feed | Posts Min/Max | If 0 Posts→Follow Suggested | Reel View%  ——  Exec Order / Skip Chance on right */}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-wrap">
                   <input type="checkbox" id="viewTimelineFeedEnabled"
@@ -687,9 +688,25 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       />
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
-                      {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
+                      <UserPlus className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">If 0 Posts → Follow Suggested</span>
+                      <input type="checkbox" id="followSuggestedUsersIfEmptyEnabled"
+                        checked={!!settings.followSuggestedUsersIfEmptyEnabled}
+                        onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyEnabled: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                      />
+                      <div className={`flex items-center gap-1.5 transition-opacity ${!settings.followSuggestedUsersIfEmptyEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Label className="text-xs text-muted-foreground">Min</Label>
+                        <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                          value={settings.followSuggestedUsersIfEmptyMin ?? 1}
+                          onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: Math.max(1, Number(e.target.value)) })}
+                        />
+                        <Label className="text-xs text-muted-foreground">Max</Label>
+                        <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                          value={settings.followSuggestedUsersIfEmptyMax ?? 3}
+                          onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: Math.max(1, Number(e.target.value)) })}
+                        />
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
@@ -725,84 +742,59 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   </div>
                 </div>
               </div>
-        {/* Follow Suggested Users if timeline returns 0 posts */}
-        {!!settings.viewTimelineFeedEnabled && (
-          <div className={`flex items-center gap-2 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <UserPlus className="w-3.5 h-3.5 text-green-500 shrink-0" />
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">If 0 Posts → Follow Suggested</span>
-            <input type="checkbox" id="followSuggestedUsersIfEmptyEnabled"
-              checked={!!settings.followSuggestedUsersIfEmptyEnabled}
-              onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <div className={`flex items-center gap-1.5 transition-opacity ${!settings.followSuggestedUsersIfEmptyEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
-                value={settings.followSuggestedUsersIfEmptyMin ?? 1}
-                onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: Math.max(1, Number(e.target.value)) })}
-              />
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
-                value={settings.followSuggestedUsersIfEmptyMax ?? 3}
-                onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-            <span className="text-[10px] text-muted-foreground">users from the Suggested Users page</span>
-          </div>
-        )}
-        {/* Like delay + save media — only shown when like % is configured */}
-        {!!(settings.viewTimelineFeedEnabled && (settings.likeTimelinePostsPercentMax ?? 0) > 0) && (
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like Delay</span>
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <div className="relative">
-                <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
-                  value={settings.likeTimelinePostsDelayMin ?? 3}
-                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
-                />
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
-              </div>
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <div className="relative">
-                <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
-                  value={settings.likeTimelinePostsDelayMax ?? 8}
-                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
-                />
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Save Liked</span>
-              <input type="checkbox" id="saveMediaEnabled"
-                checked={!!settings.saveMediaEnabled}
-                onChange={(e) => setSettings({ ...settings, saveMediaEnabled: e.target.checked })}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-              />
-              <div className={`flex items-center gap-2 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <div className="relative">
-                  <Input type="number" min={1} max={100} className="w-14 h-7 text-xs pr-5"
-                    value={settings.saveMediaPercent ?? 20}
-                    onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
-                  />
-                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+              {/* ROW 2: Like% | Like Delay | Save Liked — left-aligned */}
+              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
+                  {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
                 </div>
-                <Label className="text-xs text-muted-foreground">of liked saved</Label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like Delay</span>
+                  <Label className="text-xs text-muted-foreground">Min</Label>
+                  <div className="relative">
+                    <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
+                      value={settings.likeTimelinePostsDelayMin ?? 3}
+                      onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+                  </div>
+                  <Label className="text-xs text-muted-foreground">Max</Label>
+                  <div className="relative">
+                    <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
+                      value={settings.likeTimelinePostsDelayMax ?? 8}
+                      onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Save Liked</span>
+                  <input type="checkbox" id="saveMediaEnabled"
+                    checked={!!settings.saveMediaEnabled}
+                    onChange={(e) => setSettings({ ...settings, saveMediaEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <div className={`flex items-center gap-1.5 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className="relative">
+                      <Input type="number" min={1} max={100} className="w-14 h-7 text-xs pr-5"
+                        value={settings.saveMediaPercent ?? 20}
+                        onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
+                      />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">of liked saved</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-
+              {/* ROW 3: Click on Post% */}
+              <div className={`flex items-center gap-1.5 pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post% — chance to open a post from the feed</span>
+              </div>
         {/* ── Click Post → Visit Profile → View Feed → View Posts cascade ── */}
         {!!settings.viewTimelineFeedEnabled && (
           <div className="border-l-2 border-muted ml-1 pl-3 space-y-2 pt-1">
-
-            {/* Click on Post % */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CLICK ON POST%</span>
-              {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO OPEN A POST FROM THE FEED</span>
-            </div>
 
             {/* Visit Profile % — shown when click% is set */}
             {(settings.clickPostPercentMax ?? 0) > 0 && (
@@ -831,8 +823,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       value={settings.viewProfilePostsCountMax ?? 3}
                       onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMax: Math.max(1, Number(e.target.value)) })}
                     />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AT%</span>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">at</span>
                     {pctInputs("viewProfilePostsPercentMin", "viewProfilePostsPercentMax")}
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance</span>
                   </>
                 )}
               </div>
@@ -1537,7 +1530,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Follow Tool (embedded) ────────────────────────────── */}
       {followTool && (
-        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
+        <div className="mt-[50px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">
@@ -1590,7 +1583,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
       {unfollowTool && (
-        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
+        <div className="mt-[50px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">
@@ -1643,7 +1636,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Contact Tool (embedded) ───────────────────────────── */}
       {contactTool && (
-        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
+        <div className="mt-[50px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">

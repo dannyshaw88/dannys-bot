@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.766",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Inject Profile Browsing no longer visits the same profile twice — the pre-follow general browse has been removed; the feature now fires once after a successful follow." },
+      { category: "Fix", text: "Emulation API calls now export with the label 'Emulation' instead of 'Human Session Emulation' in the API calls CSV." },
+      { category: "Fix", text: "Account Settings: API User Agent picker now shows the full user agent string without truncation — removed the duplicate small string below the picker." },
+      { category: "Improvement", text: "View Timeline Feed layout: title and main settings on Row 1, Like settings on Row 2, Click on Post% on Row 3." },
+    ],
+  },
+  {
     version: "1.0.765",
     date: "4 Jun 2026",
     items: [

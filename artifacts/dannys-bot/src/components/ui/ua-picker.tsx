@@ -74,20 +74,18 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
   };
 
   const isKnown = !!value && userAgents.some(ua => ua.api === value);
-  const currentLabel = value
-    ? value.length > 55 ? value.slice(0, 55) + "…" : value
-    : "Pick a device…";
+  const currentLabel = value || "Pick a device…";
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex min-h-9 h-auto w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <span className="flex items-center gap-2 min-w-0">
-          <Smartphone className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-left">{currentLabel}</span>
+        <span className="flex items-start gap-2 min-w-0">
+          <Smartphone className="w-3.5 h-3.5 shrink-0 text-muted-foreground mt-0.5" />
+          <span className="text-left break-all font-mono text-xs leading-relaxed">{currentLabel}</span>
         </span>
         <ChevronDown className={`ml-2 w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>

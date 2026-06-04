@@ -1162,11 +1162,6 @@ export function ProfileDetailsPage() {
                         value={formData.userAgentApi ?? ""}
                         onSelect={handleUaDeviceSelect}
                       />
-                      {formData.userAgentApi && (
-                        <p className="text-[10px] font-mono text-muted-foreground break-all select-all leading-relaxed px-1 pt-0.5">
-                          {formData.userAgentApi}
-                        </p>
-                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
