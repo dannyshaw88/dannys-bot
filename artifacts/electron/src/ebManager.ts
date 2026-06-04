@@ -1035,24 +1035,22 @@ async function doAutoLogin(
     }
   }
 
-  // ── Fill credentials with React-compatible events + submit-button polling ──
-  // Critical: React's submit button has a `disabled` prop driven by component
-  // state. Setting the value via the native setter does NOT update React's
-  // internal fiber state — only dispatching synthetic events does. We fire
-  // input + change + keyup on each field, then POLL for the button to become
-  // enabled (up to 5 s) before clicking. Previously the code checked once at
-  // 400 ms and silently skipped the click if the button was still disabled,
-  // causing the 30 s waitForNav to time out with no navigation.
-  const fillResult: boolean = await wc.executeJavaScript(`
+  // ── Ensure debugger is attached for all CDP calls below ──────────────────
+  // The if (userAgent) block above may have already attached it; attach() is
+  // a no-op if already connected, so this is always safe.
+  try { wc.debugger.attach("1.3"); } catch {}
+
+  // ── Fill credentials via CDP Input events (isTrusted = true) ─────────────
+  // CRITICAL: Instagram checks event.isTrusted on every input/click event.
+  // JS-dispatched events (new Event(), new KeyboardEvent(), btn.click()) always
+  // produce isTrusted = false — Instagram recognises this as bot input and flags
+  // the account. CDP Input.dispatchMouseEvent and Input.insertText produce
+  // OS-level events with isTrusted = true, indistinguishable from a real user.
+
+  // Step 1: find the field centre-points via JS (we only need coordinates)
+  const fields = await wc.executeJavaScript(`
     (async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      const fireAll = (el, extraKey) => {
-        el.dispatchEvent(new Event("input",  { bubbles: true, cancelable: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
-        el.dispatchEvent(new KeyboardEvent("keyup",   { key: extraKey || "a", bubbles: true }));
-        el.dispatchEvent(new KeyboardEvent("keydown", { key: extraKey || "a", bubbles: true }));
-      };
       let uInp, pInp, tries = 0;
       while (tries++ < 20) {
         uInp = document.querySelector('input[name="username"]');
@@ -1060,52 +1058,81 @@ async function doAutoLogin(
         if (uInp && pInp) break;
         await wait(500);
       }
-      if (!uInp || !pInp) return false;
-
-      uInp.focus();
-      setter.call(uInp, ${JSON.stringify(username)});
-      fireAll(uInp);
-      await wait(400);
-
-      pInp.focus();
-      setter.call(pInp, ${JSON.stringify(password)});
-      fireAll(pInp);
-      await wait(800);
-
-      // Poll for submit button to become enabled — React re-renders asynchronously
-      // after processing the synthetic events above. 5 s / 250 ms = 20 attempts.
-      // Try multiple selectors: type=submit, then text-match "Log in", then any form button.
-      let btn = null;
-      for (let i = 0; i < 20; i++) {
-        const b = document.querySelector('button[type="submit"]')
-          || Array.from(document.querySelectorAll('button')).find(b => {
-               const t = (b.innerText || b.textContent || '').trim();
-               return /log[\s-]*in|sign[\s-]*in/i.test(t);
-             })
-          || document.querySelector('form button:not([type="button"])');
-        if (b && !b.disabled) { btn = b; break; }
-        await wait(250);
-      }
-
-      if (btn) {
-        btn.click();
-        return true;
-      }
-
-      // Fallback: press Enter on password field (works even if button stays disabled)
-      pInp.focus();
-      pInp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
-      pInp.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
-      pInp.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
-      // Also try form.submit() as a last resort
-      const form = pInp.closest("form");
-      if (form) { try { form.submit(); } catch(e) {} }
-      return true;
+      if (!uInp || !pInp) return null;
+      const ur = uInp.getBoundingClientRect();
+      const pr = pInp.getBoundingClientRect();
+      return {
+        u: { x: Math.round(ur.left + ur.width / 2), y: Math.round(ur.top + ur.height / 2) },
+        p: { x: Math.round(pr.left + pr.width / 2), y: Math.round(pr.top + pr.height / 2) },
+      };
     })()
-  `).catch(() => false);
+  `).catch(() => null) as { u: { x: number; y: number }; p: { x: number; y: number } } | null;
 
-  if (!fillResult) {
+  if (!fields) {
     return { ok: false, message: "Could not find login form on Instagram login page" };
+  }
+
+  // Step 2: click username field + type via CDP (isTrusted = true throughout)
+  try {
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: fields.u.x, y: fields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+    await delay(60);
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: fields.u.x, y: fields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+    await delay(150);
+    // Select-all + delete any pre-filled content before typing
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await delay(100);
+    await wc.debugger.sendCommand("Input.insertText", { text: username });
+    await delay(400);
+
+    // Step 3: click password field + type via CDP
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: fields.p.x, y: fields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+    await delay(60);
+    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: fields.p.x, y: fields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+    await delay(150);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await delay(100);
+    await wc.debugger.sendCommand("Input.insertText", { text: password });
+    await delay(800);
+  } catch (cdpErr: any) {
+    console.warn(`[doAutoLogin:${profileId}] CDP form fill failed: ${cdpErr?.message}`);
+    return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
+  }
+
+  // Step 4: poll for submit button position, click via CDP
+  {
+    let btnPos: { x: number; y: number } | null = null;
+    for (let i = 0; i < 20; i++) {
+      btnPos = await wc.executeJavaScript(`
+        (() => {
+          const b = document.querySelector('button[type="submit"]')
+            || Array.from(document.querySelectorAll('button')).find(b => /log[\\s-]*in|sign[\\s-]*in/i.test((b.innerText || b.textContent || '').trim()))
+            || document.querySelector('form button:not([type="button"])');
+          if (!b || b.disabled) return null;
+          const r = b.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return null;
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        })()
+      `).catch(() => null) as { x: number; y: number } | null;
+      if (btnPos) break;
+      await delay(250);
+    }
+    if (btnPos) {
+      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: btnPos.x, y: btnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+      await delay(60);
+      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: btnPos.x, y: btnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+    } else {
+      // Fallback: Enter via CDP (still isTrusted = true)
+      console.warn(`[doAutoLogin:${profileId}] submit button not found — sending Enter via CDP`);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await delay(60);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    }
   }
 
   // Wait up to 30s for navigation away from the bare login page.
@@ -1147,33 +1174,58 @@ async function doAutoLogin(
       return { ok: false, message: "2FA required but no 2FA key configured for this account" };
     }
     const code = generateTotp(twoFAKey);
-    console.log(`[doAutoLogin:${profileId}] @${username} — 2FA page detected, filling TOTP code`);
-    await wc.executeJavaScript(`
-      (async () => {
-        const wait = ms => new Promise(r => setTimeout(r, ms));
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    console.log(`[doAutoLogin:${profileId}] @${username} — 2FA page detected, filling TOTP code via CDP`);
+
+    // Find the TOTP input centre-point via JS, then fill + submit via CDP
+    const tfPos = await wc.executeJavaScript(`
+      (() => {
         const SELS = ${JSON.stringify(_2FA_SELECTORS)};
-        let inp = document.querySelector(SELS);
-        if (!inp) return;
-        inp.focus();
-        setter.call(inp, ${JSON.stringify(code)});
-        inp.dispatchEvent(new Event("input",  { bubbles: true, cancelable: true }));
-        inp.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
-        inp.dispatchEvent(new KeyboardEvent("keyup", { key: "6", bubbles: true }));
-        await wait(800);
-        // Poll for submit button to become enabled
-        let btn = null;
-        for (let i = 0; i < 16; i++) {
-          const b = document.querySelector('button[type="submit"]');
-          if (b && !b.disabled) { btn = b; break; }
-          await wait(250);
-        }
-        if (btn) { btn.click(); return; }
-        // Fallback: Enter key on the TOTP input
-        inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-        inp.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+        const inp = document.querySelector(SELS);
+        if (!inp) return null;
+        const r = inp.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
       })()
-    `).catch(() => {});
+    `).catch(() => null) as { x: number; y: number } | null;
+
+    if (tfPos) {
+      try {
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: tfPos.x, y: tfPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: tfPos.x, y: tfPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await delay(150);
+        await wc.debugger.sendCommand("Input.insertText", { text: code });
+        await delay(800);
+      } catch {}
+    }
+
+    // Poll for 2FA submit button, click via CDP
+    {
+      let tf2BtnPos: { x: number; y: number } | null = null;
+      for (let i = 0; i < 16; i++) {
+        tf2BtnPos = await wc.executeJavaScript(`
+          (() => {
+            const b = document.querySelector('button[type="submit"]');
+            if (!b || b.disabled) return null;
+            const r = b.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) return null;
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+          })()
+        `).catch(() => null) as { x: number; y: number } | null;
+        if (tf2BtnPos) break;
+        await delay(250);
+      }
+      if (tf2BtnPos) {
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: tf2BtnPos.x, y: tf2BtnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: tf2BtnPos.x, y: tf2BtnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+      } else {
+        // Fallback: Enter via CDP
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      }
+    }
     await waitForNav(
       wc,
       url => url.includes("instagram.com") && !url.includes("two_factor"),
@@ -1874,8 +1926,10 @@ export async function openEbWindow(opts: {
   // Tracks the last focused input field, auto-dismisses cookie banners, and
   // (when credentials are available) polls for the login form and fills it.
   const injectPageUtils = () => {
-    const af = password ? { username, password } : undefined;
-    win.webContents.executeJavaScript(buildPageUtilsJs(af)).catch(() => {});
+    // Do NOT pass autoFill here — JS-injected form events have isTrusted = false,
+    // which Instagram detects as bot input. The did-navigate handler below fills
+    // the form via CDP Input events (isTrusted = true) instead.
+    win.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {});
   };
   win.webContents.on("dom-ready",       () => injectPageUtils());
   win.webContents.on("did-finish-load", () => injectPageUtils());
@@ -2475,11 +2529,14 @@ export async function openEbWindow(opts: {
             if (win.isDestroyed()) { _autoFillBusy = false; return; }
           }
 
-          // ── Phase 2: fill login form ─────────────────────────────────────────
-          await win.webContents.executeJavaScript(`
+          // ── Phase 2: fill login form via CDP (isTrusted = true) ──────────────
+          // JS-injected events (new Event, btn.click) produce isTrusted = false —
+          // Instagram detects these as bot input. CDP Input events are OS-level
+          // and produce isTrusted = true, identical to a real user typing.
+          try { win.webContents.debugger.attach("1.3"); } catch {}
+          const _afFields = await win.webContents.executeJavaScript(`
             (async () => {
               const wait = ms => new Promise(r => setTimeout(r, ms));
-              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
               let uInp, pInp, tries = 0;
               while (tries++ < 20) {
                 uInp = document.querySelector('input[name="username"]');
@@ -2487,24 +2544,74 @@ export async function openEbWindow(opts: {
                 if (uInp && pInp) break;
                 await wait(500);
               }
-              if (!uInp || !pInp) return;
-              setter.call(uInp, ${JSON.stringify(username)});
-              uInp.dispatchEvent(new Event("input", { bubbles: true }));
-              await wait(300);
-              setter.call(pInp, ${JSON.stringify(password)});
-              pInp.dispatchEvent(new Event("input", { bubbles: true }));
-              await wait(500);
-              const btn = document.querySelector('button[type="submit"]');
-              if (btn && !btn.disabled) btn.click();
+              if (!uInp || !pInp) return null;
+              const ur = uInp.getBoundingClientRect();
+              const pr = pInp.getBoundingClientRect();
+              return {
+                u: { x: Math.round(ur.left + ur.width / 2), y: Math.round(ur.top + ur.height / 2) },
+                p: { x: Math.round(pr.left + pr.width / 2), y: Math.round(pr.top + pr.height / 2) },
+              };
             })()
-          `).catch((e: any) => console.warn(`[ebManager] @${username} login fill failed:`, e?.message));
+          `).catch(() => null) as { u: { x: number; y: number }; p: { x: number; y: number } } | null;
+
+          if (_afFields) {
+            try {
+              const _d = win.webContents.debugger;
+              const _ms = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _afFields.u.x, y: _afFields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _afFields.u.x, y: _afFields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(150);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+              await _ms(100);
+              await _d.sendCommand("Input.insertText", { text: username });
+              await _ms(400);
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(150);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+              await _ms(100);
+              await _d.sendCommand("Input.insertText", { text: password });
+              await _ms(500);
+              for (let _bi = 0; _bi < 20; _bi++) {
+                const _bp = await win.webContents.executeJavaScript(`
+                  (() => {
+                    const b = document.querySelector('button[type="submit"]')
+                      || Array.from(document.querySelectorAll('button')).find(b => /log[\\s-]*in|sign[\\s-]*in/i.test((b.innerText||b.textContent||'').trim()))
+                      || document.querySelector('form button:not([type="button"])');
+                    if (!b || b.disabled) return null;
+                    const r = b.getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) return null;
+                    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+                  })()
+                `).catch(() => null) as { x: number; y: number } | null;
+                if (_bp) {
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await _ms(60);
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  break;
+                }
+                await _ms(250);
+              }
+            } catch (e: any) {
+              console.warn(`[ebManager] @${username} CDP login fill failed:`, e?.message);
+            }
+          }
 
         } else if (on2FA && twoFAKey) {
           const code = generateTotp(twoFAKey);
-          await win.webContents.executeJavaScript(`
+          // 2FA fill via CDP (isTrusted = true)
+          try { win.webContents.debugger.attach("1.3"); } catch {}
+          const _af2Pos = await win.webContents.executeJavaScript(`
             (async () => {
               const wait = ms => new Promise(r => setTimeout(r, ms));
-              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
               let inp, tries = 0;
               while (tries++ < 20) {
                 inp = document.querySelector(
@@ -2514,14 +2621,45 @@ export async function openEbWindow(opts: {
                 if (inp) break;
                 await wait(500);
               }
-              if (!inp) return;
-              setter.call(inp, ${JSON.stringify(code)});
-              inp.dispatchEvent(new Event("input", { bubbles: true }));
-              await wait(400);
-              const btn = document.querySelector('button[type="submit"]');
-              if (btn) btn.click();
+              if (!inp) return null;
+              const r = inp.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) return null;
+              return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
             })()
-          `).catch((e: any) => console.warn(`[ebManager] @${username} 2FA fill failed:`, e?.message));
+          `).catch(() => null) as { x: number; y: number } | null;
+
+          if (_af2Pos) {
+            try {
+              const _d = win.webContents.debugger;
+              const _ms = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _af2Pos.x, y: _af2Pos.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _af2Pos.x, y: _af2Pos.y, button: "left", clickCount: 1, modifiers: 0 });
+              await _ms(150);
+              await _d.sendCommand("Input.insertText", { text: code });
+              await _ms(500);
+              for (let _bi = 0; _bi < 16; _bi++) {
+                const _bp = await win.webContents.executeJavaScript(`
+                  (() => {
+                    const b = document.querySelector('button[type="submit"]');
+                    if (!b || b.disabled) return null;
+                    const r = b.getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) return null;
+                    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+                  })()
+                `).catch(() => null) as { x: number; y: number } | null;
+                if (_bp) {
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await _ms(60);
+                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  break;
+                }
+                await _ms(250);
+              }
+            } catch (e: any) {
+              console.warn(`[ebManager] @${username} CDP 2FA fill failed:`, e?.message);
+            }
+          }
 
         } else if (on2FA && !twoFAKey) {
           console.warn(`[ebManager] @${username} — 2FA page detected but no 2FA key stored`);
@@ -2574,23 +2712,30 @@ function setupToolbarIpc(): void {
 
     const wc = getActiveWc(foundPid) ?? foundWin.webContents;
 
-    // Helper: type text into the renderer's currently-focused input (same script
-    // used by /eb/input so behaviour is identical to BrowserPanel typing)
+    // Helper: type text into the renderer's currently-focused input via CDP
+    // (isTrusted = true — JS-injected events are isTrusted = false).
+    // CDP Input.insertText routes to whatever element currently has focus,
+    // so we first restore focus to __eq_lastInput via CDP mouse click, then insert.
     const typeIntoFocused = async (text: string) => {
-      const chars = JSON.stringify(text);
-      // Use __eq_lastInput (set by focusin listener in the toolbar) so paste
-      // works even though clicking the button shifts focus away from the field.
-      await wc.executeJavaScript(`(function(){
-        var el=window.__eq_lastInput||document.activeElement;
-        if(!el||el.tagName==='BUTTON'||el===document.body)return;
-        var proto=Object.getPrototypeOf(el);
-        var desc=Object.getOwnPropertyDescriptor(proto,'value')||Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
-        var setter=desc&&desc.set;
-        var cur=el.value||'';
-        if(setter){setter.call(el,cur+${chars});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-        else{el.value=cur+${chars};el.dispatchEvent(new Event('input',{bubbles:true}));}
-        el.focus();
-      })()`).catch(() => {});
+      try { wc.debugger.attach("1.3"); } catch {}
+      // Re-focus the last input the user was in (clicking the toolbar button
+      // shifted browser focus to the toolbar BrowserView).
+      const focusPos = await wc.executeJavaScript(`(function(){
+        var el=window.__eq_lastInput||null;
+        if(!el||el.tagName==='BUTTON'||el===document.body)return null;
+        var r=el.getBoundingClientRect();
+        if(r.width<=0||r.height<=0)return null;
+        return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+      })()`).catch(() => null) as { x: number; y: number } | null;
+      if (focusPos) {
+        try {
+          await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: focusPos.x, y: focusPos.y, button: "left", clickCount: 1, modifiers: 0 });
+          await new Promise<void>(r => setTimeout(r, 40));
+          await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: focusPos.x, y: focusPos.y, button: "left", clickCount: 1, modifiers: 0 });
+          await new Promise<void>(r => setTimeout(r, 60));
+          await wc.debugger.sendCommand("Input.insertText", { text });
+        } catch {}
+      }
     };
 
     switch (cmd) {
@@ -2630,113 +2775,138 @@ function setupToolbarIpc(): void {
       }
 
       case "login": {
-        // Fill username + password into the visible Instagram login form.
-        // Searches the current page for the fields first; navigates to the
-        // login page only if they aren't present yet.
+        // Fill username + password into the visible Instagram login form via CDP
+        // (isTrusted = true). All JS-injected events (new Event, btn.click()) produce
+        // isTrusted = false — Instagram detects this as bot input. CDP Input events
+        // are OS-level and are indistinguishable from a real user typing.
         try {
           const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
           const p = await r.json() as any;
-          const usr = JSON.stringify(p.username ?? "");
-          const pwd = JSON.stringify(p.password ?? "");
-          const _needsNav = await wc.executeJavaScript(`(async () => {
-            const wait = ms => new Promise(res => setTimeout(res, ms));
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            const fill = (el, val) => {
-              setter.call(el, val);
-              el.dispatchEvent(new Event('input',  { bubbles: true }));
-              el.dispatchEvent(new Event('change', { bubbles: true }));
-            };
-            // Dismiss cookie consent banner first (up to 5 s)
-            // Safe: matches any button containing "cookie" but not "decline/reject/refuse"
-            function _ckOk(b){if(!b||!b.getBoundingClientRect)return false;if(b.getBoundingClientRect().width<=0)return false;var t=(b.innerText||b.textContent||'').trim().toLowerCase();return t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t);}
-            for (let cb = 0; cb < 10; cb++) {
-              const ckBtn = (
-                document.querySelector('[data-cookiebanner="accept_button"]') ||
-                document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
-                (()=>{const c=document.querySelector('[data-cookiebanner]')||document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');return c?Array.from(c.querySelectorAll('button,[role="button"]')).find(_ckOk)||null:null;})() ||
-                Array.from(document.querySelectorAll('button,[role="button"]')).find(_ckOk)
-              );
-              if (ckBtn) {
-                try{ckBtn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                try{ckBtn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-                try{ckBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                try{ckBtn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-                try{ckBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                try{ckBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                ckBtn.click();
-                await wait(800);
+          const _lgUsr: string = p.username ?? "";
+          const _lgPwd: string = p.password ?? "";
+          try { wc.debugger.attach("1.3"); } catch {}
+
+          // Shared CDP fill helper — used for both the inline and post-navigate cases
+          const _cdpFillLogin = async (targetWc: typeof wc) => {
+            const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
+            const _d = targetWc.debugger;
+
+            // Cookie banner: detect position via JS (read-only), click via CDP
+            const _ckDetect = `(() => {
+              function _ckOk(b){if(!b||!b.getBoundingClientRect)return false;if(b.getBoundingClientRect().width<=0)return false;var t=(b.innerText||b.textContent||'').trim().toLowerCase();return t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t);}
+              let b=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+              if(!b){const c=document.querySelector('[data-cookiebanner]')||document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');if(c)b=Array.from(c.querySelectorAll('button,[role="button"]')).find(_ckOk)||null;}
+              if(!b)b=Array.from(document.querySelectorAll('button,[role="button"]')).find(_ckOk)||null;
+              if(!b)return null;
+              const r=b.getBoundingClientRect();
+              if(r.width<=0||r.height<=0)return null;
+              return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+            })()`;
+            for (let _ck = 0; _ck < 10; _ck++) {
+              const _ckPos = await targetWc.executeJavaScript(_ckDetect).catch(() => null) as { x: number; y: number } | null;
+              if (_ckPos) {
+                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _ckPos.x, y: _ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                await _ms(60);
+                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _ckPos.x, y: _ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                await _ms(2000);
                 break;
               }
-              await wait(500);
+              await _ms(500);
             }
-            // Poll up to 10 × 300 ms for React to mount the login form
-            let uInp, pInp, t = 0;
-            while (t++ < 10) {
-              uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
-              pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
-              if (uInp || pInp) break;
-              await wait(300);
-            }
-            if (!uInp && !pInp) return 'navigate';
-            if (uInp) { fill(uInp, ${usr}); uInp.focus(); }
-            await wait(250);
-            if (pInp) { fill(pInp, ${pwd}); pInp.focus(); }
-            await wait(400);
-            let btn = null;
-            for (let i = 0; i < 20; i++) {
-              const b = document.querySelector('button[type="submit"]');
-              if (b && !b.disabled) { btn = b; break; }
-              await wait(250);
-            }
-            if (btn) { btn.click(); } else {
-              pInp && pInp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-              pInp && pInp.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-            }
-          })()`).catch(() => 'navigate');
-        if (_needsNav === 'navigate') {
-          // Not on the login page — navigate there and fill after load using the
-          // freshly-fetched credentials (avoids relying on stale did-navigate creds).
-          const _fillAfterLoad = async () => {
-            if (wc.isDestroyed()) return;
-            await new Promise(r => setTimeout(r, 1500));
-            if (wc.isDestroyed()) return;
-            await wc.executeJavaScript(`(async () => {
-              const wait = ms => new Promise(r => setTimeout(r, ms));
-              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-              const fill = (el, val) => {
-                setter.call(el, val);
-                el.dispatchEvent(new Event('input',  { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-              };
-              let uInp, pInp, t = 0;
-              while (t++ < 20) {
-                uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
-                pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
-                if (uInp && pInp) break;
-                await wait(500);
+
+            // Find field positions via JS
+            const _flds = await targetWc.executeJavaScript(`
+              (async () => {
+                const wait = ms => new Promise(r => setTimeout(r, ms));
+                let uInp, pInp, t = 0;
+                while (t++ < 20) {
+                  uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
+                  pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+                  if (uInp && pInp) break;
+                  await wait(300);
+                }
+                if (!uInp && !pInp) return 'navigate';
+                if (!uInp || !pInp) return 'navigate';
+                const ur = uInp.getBoundingClientRect();
+                const pr = pInp.getBoundingClientRect();
+                return {
+                  u: { x: Math.round(ur.left + ur.width / 2), y: Math.round(ur.top + ur.height / 2) },
+                  p: { x: Math.round(pr.left + pr.width / 2), y: Math.round(pr.top + pr.height / 2) },
+                };
+              })()
+            `).catch(() => 'navigate') as { u: { x: number; y: number }; p: { x: number; y: number } } | 'navigate';
+
+            if (_flds === 'navigate') return 'navigate';
+
+            // Fill username via CDP
+            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _flds.u.x, y: _flds.u.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _flds.u.x, y: _flds.u.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms(150);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _ms(100);
+            await _d.sendCommand("Input.insertText", { text: _lgUsr });
+            await _ms(400);
+
+            // Fill password via CDP
+            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _flds.p.x, y: _flds.p.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _flds.p.x, y: _flds.p.y, button: "left", clickCount: 1, modifiers: 0 });
+            await _ms(150);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _ms(100);
+            await _d.sendCommand("Input.insertText", { text: _lgPwd });
+            await _ms(500);
+
+            // Poll for submit button, click via CDP
+            for (let _bi = 0; _bi < 20; _bi++) {
+              const _bp = await targetWc.executeJavaScript(`
+                (() => {
+                  const b = document.querySelector('button[type="submit"]')
+                    || Array.from(document.querySelectorAll('button')).find(b => /log[\\s-]*in|sign[\\s-]*in/i.test((b.innerText||b.textContent||'').trim()))
+                    || document.querySelector('form button:not([type="button"])');
+                  if (!b || b.disabled) return null;
+                  const r = b.getBoundingClientRect();
+                  if (r.width <= 0 || r.height <= 0) return null;
+                  return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+                })()
+              `).catch(() => null) as { x: number; y: number } | null;
+              if (_bp) {
+                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                await _ms(60);
+                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                return 'ok';
               }
-              if (!uInp || !pInp) return;
-              fill(uInp, ${usr}); uInp.focus();
-              await wait(300);
-              fill(pInp, ${pwd}); pInp.focus();
-              await wait(400);
-              let btn = null;
-              for (let i = 0; i < 20; i++) {
-                const b = document.querySelector('button[type="submit"]');
-                if (b && !b.disabled) { btn = b; break; }
-                await wait(250);
-              }
-              if (btn) { btn.click(); } else {
-                pInp && pInp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-                pInp && pInp.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-              }
-            })()`).catch(() => {});
+              await _ms(250);
+            }
+            // Fallback: Enter via CDP
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            return 'ok';
           };
-          wc.once('did-finish-load', _fillAfterLoad);
-          wc.loadURL('https://www.instagram.com/accounts/login/').catch(() => {
-            wc.removeListener('did-finish-load', _fillAfterLoad);
-          });
-        }
+
+          const _inline = await _cdpFillLogin(wc).catch(() => 'navigate');
+          if (_inline === 'navigate') {
+            // Not on the login page — navigate there and fill after load
+            const _fillAfterLoad = async () => {
+              if (wc.isDestroyed()) return;
+              await new Promise<void>(res => setTimeout(res, 1500));
+              if (wc.isDestroyed()) return;
+              try { wc.debugger.attach("1.3"); } catch {}
+              await _cdpFillLogin(wc).catch(() => {});
+            };
+            wc.once('did-finish-load', _fillAfterLoad);
+            wc.loadURL('https://www.instagram.com/accounts/login/').catch(() => {
+              wc.removeListener('did-finish-load', _fillAfterLoad);
+            });
+          }
         } catch {}
         break;
       }

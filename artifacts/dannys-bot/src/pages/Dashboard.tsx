@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.773",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login flagging: all form filling in the embedded browser now uses OS-level CDP input events (isTrusted = true) instead of JavaScript-injected events (isTrusted = false). This applies to the verify flow, the EB auto-fill on navigation, and the Login toolbar button." },
+      { category: "Fix", text: "Login flagging: 2FA code entry across all fill paths (verify, auto-fill on navigation, toolbar button) now uses CDP trusted events. JS-injected events are always isTrusted = false — Instagram treats them as bot input regardless of typing speed." },
+      { category: "Fix", text: "Login flagging: the Phone, Email, and Email Pass toolbar buttons now type into fields using CDP Input.insertText (isTrusted = true) instead of JavaScript value injection." },
+      { category: "Fix", text: "Login flagging: added the --disable-blink-features=AutomationControlled Chromium flag. Without this, Electron sets navigator.webdriver = true at the browser engine level before any page loads — JavaScript overrides cannot fully mask it. This flag prevents it from being set in the first place." },
+      { category: "Fix", text: "Login flagging: the page-level auto-fill script that fires on every navigation no longer injects form values via JavaScript (isTrusted = false). The CDP-based fill now handles all auto-fill, with the page script retained only for focus tracking and cookie banner detection." },
+    ],
+  },
+  {
     version: "1.0.772",
     date: "4 Jun 2026",
     items: [

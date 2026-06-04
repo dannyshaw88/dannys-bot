@@ -1130,6 +1130,16 @@ app.commandLine.appendSwitch("disable-quic");
 // fix (Chrome sends hostname to proxy via CONNECT; proxy resolves DNS, so IPv6
 // never appears on the client side).  These flags are an additional layer.
 app.commandLine.appendSwitch("disable-features", "HappyEyeballsV3,IPv6Reachability");
+// ── Anti-bot: suppress Chromium's automation flag ─────────────────────────────
+// Electron sets navigator.webdriver = true at the Blink native level before any
+// page script runs. JS Object.defineProperty overrides cannot fully mask this
+// because the property's configurable descriptor is set to false by Blink first.
+// --disable-blink-features=AutomationControlled prevents Blink from setting the
+// flag in the first place, making the browser indistinguishable from a normal
+// Chrome instance at the native level. This is a critical stealth requirement —
+// Instagram checks navigator.webdriver (and its isTrusted event signals) to
+// detect automation and flag accounts on first login.
+app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,
