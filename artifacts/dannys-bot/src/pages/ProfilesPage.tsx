@@ -900,6 +900,7 @@ export function ProfilesPage() {
       for (const id of selectedProfileIds) {
         await updateProfileMutation.mutateAsync({
           id,
+          proxyId: null,
           proxyHost: "",
           proxyPort: null,
           proxyUsername: "",
@@ -908,7 +909,7 @@ export function ProfilesPage() {
           credentialsDirty: true,
         });
       }
-      toast({ title: "Proxies Removed", description: `${selectedProfileIds.length} account(s) set to Pending.` });
+      toast({ title: "Proxies Removed", description: `${selectedProfileIds.length} account(s) unlinked from their proxy.` });
     } catch {
       toast({ title: "Error", description: "Failed to remove proxies.", variant: "destructive" });
     }
@@ -1451,7 +1452,7 @@ export function ProfilesPage() {
 
             if (groupMode && groupedProfiles) {
               return Array.from(groupedProfiles.entries()).map(([groupKey, groupProfiles]) => {
-                const displayName = groupKey === "__ungrouped__" ? "Ungrouped" : groupKey;
+                const displayName = groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey;
                 const isCollapsed = collapsedGroups.has(groupKey);
                 const groupIds = groupProfiles.map(p => p.id);
                 const allInGroupSelected = groupIds.every(id => selectedProfileIds.includes(id));
@@ -1463,7 +1464,7 @@ export function ProfilesPage() {
                           {isCollapsed
                             ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                          <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>{displayName}</span>
+                          <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground italic" : "text-foreground"}`}>{displayName}</span>
                         </button>
                         {groupKey !== "__ungrouped__" && (
                           <button

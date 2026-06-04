@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.778",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser window now opens at its default 1280×820 size instead of filling the screen. Removed the automatic maximise behaviour that was covering the whole display." },
+      { category: "Fix", text: "2FA toolbar button: digit typing slowed to 200–600 ms per digit (was 50–230 ms) to better match the speed of a real person reading and entering a 6-digit code." },
+      { category: "Fix", text: "2FA toolbar button: field detection now retries up to 10 times with 500 ms gaps so it finds the input even when Instagram's 2FA page is still rendering. Previously it tried once and gave up silently if the input wasn't ready." },
+      { category: "Fix", text: "Accounts → Actions → Remove Proxies now correctly unlinks the proxy by clearing the proxy ID, not just clearing the host/port fields. Previously the account remained linked to the proxy in the database." },
+      { category: "Fix", text: "Accounts → Actions → Ungroup Accounts now shows accounts under 'No Group Assigned' (was 'Ungrouped') to match the rest of the app terminology." },
+    ],
+  },
+  {
     version: "1.0.777",
     date: "4 Jun 2026",
     items: [

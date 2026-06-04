@@ -1608,13 +1608,7 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
-  win.once("ready-to-show", () => {
-    // Use the display work area (excludes taskbar) instead of maximize() which
-    // can overlap the Windows taskbar in some Electron 33 configurations.
-    const { workArea } = eScreen.getPrimaryDisplay();
-    win.setBounds(workArea);
-    win.show();
-  });
+  win.once("ready-to-show", () => { win.show(); });
 
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its
@@ -3111,27 +3105,32 @@ function setupToolbarIpc(): void {
               'input[data-testid*="verification" i]',
               'input[data-testid*="code" i]',
             ].join(",");
-            const totpPos = await wc.executeJavaScript(`(function(){
-              var SELS=${JSON.stringify(_OTP_SELS)};
-              var el=document.querySelector(SELS)||null;
-              if(!el){
-                // Broad fallback: any visible numeric/tel input that isn't username/password/email,
-                // or the page's only visible input if there is exactly one.
-                var all=Array.from(document.querySelectorAll('input'));
-                var visible=all.filter(function(i){
-                  if(i.type==='password'||i.type==='email'||i.name==='username'||i.name==='password')return false;
-                  var r=i.getBoundingClientRect();
-                  return r.width>0&&r.height>0;
-                });
-                if(visible.length===1)el=visible[0];
-                else el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+i.id+i.placeholder);});
-                if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
-              }
-              if(!el||el.tagName!=='INPUT')return null;
-              var r=el.getBoundingClientRect();
-              if(r.width<=0||r.height<=0)return null;
-              return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
-            })()`).catch(() => null) as { x: number; y: number } | null;
+            // Retry loop: Instagram's 2FA page may take a moment to render the input.
+            let totpPos: { x: number; y: number } | null = null;
+            for (let _ti = 0; _ti < 10 && !totpPos; _ti++) {
+              totpPos = await wc.executeJavaScript(`(function(){
+                var SELS=${JSON.stringify(_OTP_SELS)};
+                var el=document.querySelector(SELS)||null;
+                if(!el){
+                  // Broad fallback: any visible input that isn't username/password/email.
+                  // If exactly one such input exists on the page, that must be the code field.
+                  var all=Array.from(document.querySelectorAll('input'));
+                  var visible=all.filter(function(i){
+                    if(i.type==='password'||i.type==='email'||i.name==='username'||i.name==='password')return false;
+                    var r=i.getBoundingClientRect();
+                    return r.width>0&&r.height>0;
+                  });
+                  if(visible.length===1){el=visible[0];}
+                  else{el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+' '+i.id+' '+i.placeholder);});}
+                  if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
+                }
+                if(!el||el.tagName!=='INPUT')return null;
+                var r=el.getBoundingClientRect();
+                if(r.width<=0||r.height<=0)return null;
+                return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+              })()`).catch(() => null) as { x: number; y: number } | null;
+              if (!totpPos) await _ms(500);
+            }
 
             if (totpPos) {
               // Step 2: CDP click to focus the field
@@ -3143,7 +3142,7 @@ function setupToolbarIpc(): void {
               // Step 3: type each digit via typeTextCDP (isTrusted=true, human timing)
               // Wider 50–230ms range with occasional longer pauses — humans glance
               // back at the authenticator app between digits, so timing is uneven.
-              await typeTextCDP(_d, code, { minDelay: 50, maxDelay: 230 });
+              await typeTextCDP(_d, code, { minDelay: 200, maxDelay: 600 });
 
               // Natural pause: a real person reads the code, checks it looks right,
               // then moves to click Submit. 700–1500ms is the realistic human range.
