@@ -11,23 +11,27 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "What is Equinox?",
-        a: "Equinox is a Windows desktop Instagram automation dashboard. It manages multiple Instagram accounts at once and automates growth actions follows, unfollows, DMs, likes, story views, and human browsing sessions entirely through the Instagram Private Mobile API (the same API Instagram's own app uses). No browser scraping, no Puppeteer bots, just clean mobile API calls.",
+        a: "Equinox is a Windows desktop Instagram automation dashboard. It manages multiple Instagram accounts at once and automates follows, unfollows, DMs, likes, story views, and human browsing sessions — all through Instagram's own Private Mobile API (the same API the official Instagram app uses). Every request looks exactly like it came from a real phone. No browser scraping, no external automation frameworks.",
       },
       {
         q: "How do I add my first account?",
-        a: "Click Create an Account in the left sidebar. Enter a username and password at minimum. For best results, also add: a Proxy (host, port, credentials), an API User Agent from your device or Jarvee export, and your 2FA secret key if the account uses two-factor authentication. Click Save. The account appears in the Accounts page.",
+        a: "Click Create Account in the left sidebar. Enter a username and password. Also add a Proxy (host:port:username:password), an API User Agent (from your Jarvee export or device), and your 2FA secret key if the account uses two-factor authentication. Click Save. The account appears on the Accounts page.",
       },
       {
         q: "How do I import accounts from Jarvee?",
         a: "Go to the Accounts page and click the Import button in the top-right toolbar. Drag and drop your Jarvee .txt export file (UTF-16 LE tab-separated). Equinox reads all columns including Username, Password, Proxy, API User Agent, Device ID, UUID, Phone ID, ADID, 2FA Secret Key, and ApiCookies. A preview table shows what was found before you confirm. Click Import to create or update all profiles in one go.",
       },
       {
+        q: "How does the Verify flow work?",
+        a: "Verify is a two-stage process that mirrors the Jarvee model. Stage 1 — Embedded Browser Login: a hidden Chrome window opens and logs into Instagram using the account's username, password, and 2FA code. Chrome establishes the session exactly as a real phone would. Stage 2 — Mobile API Bootstrap: Equinox extracts the session cookies from Chrome and hands them to the mobile API client, which then runs the same startup sequence (LauncherSync, UserInfo) that the real Instagram app runs after login. Only if the mobile API confirms the session does the account move to Valid status. This two-stage approach means no automation call is ever made without a browser-originated cookie — the same protection Jarvee uses.",
+      },
+      {
         q: "How do I update Equinox?",
-        a: "Equinox checks for updates automatically each time it launches. When a new version is available it downloads silently in the background and installs on next restart. You will see a notification in the title bar when an update is ready. You can also download the latest installer manually from the GitHub Releases page.",
+        a: "Equinox checks for updates automatically each time it launches. When a new version is available it downloads silently in the background and installs on next restart. You can also download the latest installer from the GitHub Actions page for the repository — look for the Equinox-Windows-Installer artifact in the latest successful build run.",
       },
       {
         q: "Where is my data stored?",
-        a: "All data (accounts, settings, stats, action logs) is stored in a SQLite database inside your Windows user data folder typically C:\\Users\\YourName\\AppData\\Roaming\\Equinox\\database.db. Your data is never uploaded anywhere. The database persists across installs and updates.",
+        a: "All data — accounts, settings, stats, logs, device fingerprints, session cookies — is stored locally in a SQLite database at C:\\Users\\YourName\\AppData\\Roaming\\Equinox\\database.db. Browser session data (Chrome profiles) is stored alongside it. Nothing is ever uploaded anywhere. Everything persists across installs and updates.",
       },
     ],
   },
@@ -39,7 +43,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "What does Verify Account do?",
-        a: "Verify logs the account in through the embedded browser (Chrome) first — exactly like Jarvee does. The browser fills the username and password on the Instagram login page, handles 2FA automatically, then the app extracts the session cookies from Chrome and hands them to the API. No API call is ever made without this browser-originated cookie. This is the only safe way to establish a session — a direct API login looks like a new-device takeover to Instagram and risks an account lock.",
+        a: "Verify runs the two-stage Jarvee handshake. First the embedded browser (Chrome) logs in on instagram.com exactly as a real user would — including handling 2FA automatically. Then Equinox extracts the session cookies from Chrome and uses them to bootstrap the mobile API client (running the same LauncherSync / UserInfo startup the real app runs). No API call is ever made before this browser login. The account is only marked Valid after the mobile API confirms the session. If a CAPTCHA or checkpoint appears, complete it manually in the Open EB tab and click Verify again.",
       },
       {
         q: "Why is my account showing Invalid Session?",
@@ -74,8 +78,8 @@ const FAQ_SECTIONS = [
         a: "Unfollow Tool removes follows that are older than a configured number of days and optionally skips users who have followed back. You can also upload a whitelist of usernames that are never unfollowed. Unfollows are paced with configurable delays to look natural.",
       },
       {
-        q: "What is a Human Session?",
-        a: "A Human Session simulates natural mobile browsing behaviour: visiting the notification tray, liking timeline posts, watching stories, browsing the Explore page, and optionally reposting content. It runs on its own schedule and makes the account look like a real active user. This is important for account health purely follow/unfollow accounts look robotic to Instagram.",
+        q: "What is the Human Session Tool?",
+        a: "The Human Session Tool simulates natural mobile browsing: checking notifications, viewing timeline posts, watching stories, and browsing the Explore page. It runs on its own schedule alongside the Follow and Unfollow tools. The key difference from follow/unfollow is that it makes API calls that a real person using Instagram would make — not just growth actions. Accounts that only follow and unfollow without any organic browsing behaviour look robotic to Instagram. Human Sessions are important for long-term account health.",
       },
       {
         q: "What is the Contact Tool (DM Tool)?",

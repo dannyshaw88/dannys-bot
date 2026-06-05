@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.780",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Statistics page: Human Session Tool is now the only column with an on/off toggle. Follow, Unfollow, and DMs columns no longer show toggle buttons — they show counts only." },
+      { category: "Improvement", text: "Statistics page: Open EB and TrustScore columns are now draggable and reorderable just like all other columns. Use the Columns panel to move them anywhere in the table." },
+      { category: "Improvement", text: "Statistics page: TrustScore column width is now adjustable in the Columns panel alongside all other columns." },
+      { category: "Fix", text: "Export Profiles: accounts whose proxy is assigned via the Proxy Manager (using a proxyId link) now correctly export the proxy IP and port instead of leaving that field blank." },
+      { category: "Fix", text: "Dashboard startup log now reads 'Equinox started: 05 Jun 2026, 08:43:09' with a colon separator instead of a dash." },
+      { category: "Improvement", text: "README & FAQ updated to reflect the current two-stage Jarvee verify flow, Human Session Tool description, data storage details, and correct update instructions." },
+    ],
+  },
+  {
     version: "1.0.779",
     date: "4 Jun 2026",
     items: [

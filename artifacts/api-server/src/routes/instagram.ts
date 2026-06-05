@@ -182,7 +182,7 @@ export async function registerInstagramRoutes(
     sourceValue: "",
     sourceType: "",
     result: "ok",
-    detail: `Equinox started — ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
+    detail: `Equinox started: ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
     timestamp: SERVER_START,
   }).catch(() => {});
 

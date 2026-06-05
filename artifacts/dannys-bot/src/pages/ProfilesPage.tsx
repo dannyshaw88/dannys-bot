@@ -707,7 +707,7 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, updateProfileMutation, toast]);
 
-  const handleExportProfiles = useCallback(() => {
+  const handleExportProfiles = useCallback(async () => {
     const toExport = selectedProfileIds.length > 0
       ? profiles?.filter(p => selectedProfileIds.includes(p.id))
       : profiles;
@@ -715,6 +715,25 @@ export function ProfilesPage() {
       toast({ title: "No profiles to export", variant: "destructive" });
       return;
     }
+
+    // Fetch proxy list so we can resolve proxyId → host:port for Proxy Manager-linked accounts
+    let proxyMap = new Map<number, { host: string; port: number | null; username: string | null; password: string | null }>();
+    try {
+      const res = await fetch("/api/proxies");
+      if (res.ok) {
+        const proxies: any[] = await res.json();
+        for (const px of proxies) {
+          proxyMap.set(px.id, { host: px.proxyHost ?? "", port: px.proxyPort ?? null, username: px.proxyUsername ?? null, password: px.proxyPassword ?? null });
+        }
+      }
+    } catch { /* non-critical — export continues without resolved proxies */ }
+
+    const resolveProxy = (p: any) => {
+      if (p.proxyHost) return { host: p.proxyHost, port: p.proxyPort, username: p.proxyUsername, password: p.proxyPassword };
+      if (p.proxyId && proxyMap.has(p.proxyId)) return proxyMap.get(p.proxyId)!;
+      return { host: "", port: null, username: null, password: null };
+    };
+
     const csvCell = (v: string) => {
       const s = String(v ?? "");
       return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -729,27 +748,30 @@ export function ProfilesPage() {
       "Email Validation Pop3Server", "Email Validation Port",
       "TrustScore",
     ];
-    const rows = toExport.map(p => [
-      p.tags ?? "",
-      p.username ?? "",
-      p.password ?? "",
-      p.email ?? "",
-      p.proxyHost ? `${p.proxyHost}${p.proxyPort ? `:${p.proxyPort}` : ""}` : "",
-      p.proxyUsername ?? "",
-      p.proxyPassword ?? "",
-      p.dateOfBirth ?? "",
-      p.userAgentEmbedded ?? "",
-      p.userAgentApi ?? "",
-      p.notes ?? "",
-      p.phoneNumber ?? "",
-      p.twoFASecretKey ?? "",
-      p.backupCodes ?? "",
-      p.emailValidationUsername ?? "",
-      p.emailValidationPassword ?? "",
-      p.emailValidationPop3Server ?? "",
-      p.emailValidationPort ?? "",
-      getTrustScore(p.id) ?? "",
-    ]);
+    const rows = toExport.map(p => {
+      const proxy = resolveProxy(p);
+      return [
+        p.tags ?? "",
+        p.username ?? "",
+        p.password ?? "",
+        p.email ?? "",
+        proxy.host ? `${proxy.host}${proxy.port ? `:${proxy.port}` : ""}` : "",
+        proxy.username ?? "",
+        proxy.password ?? "",
+        p.dateOfBirth ?? "",
+        p.userAgentEmbedded ?? "",
+        p.userAgentApi ?? "",
+        p.notes ?? "",
+        p.phoneNumber ?? "",
+        p.twoFASecretKey ?? "",
+        p.backupCodes ?? "",
+        p.emailValidationUsername ?? "",
+        p.emailValidationPassword ?? "",
+        p.emailValidationPop3Server ?? "",
+        p.emailValidationPort ?? "",
+        getTrustScore(p.id) ?? "",
+      ];
+    });
     const csv = "\uFEFF" + [headers, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
     const filename = `profiles_export_${new Date().toISOString().slice(0, 10)}.csv`;
     const eApi = (window as any).electronAPI;
