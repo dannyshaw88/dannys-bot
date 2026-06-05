@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.781",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool: Inject GetSuggestedUsers now fires correctly. Injection count is pre-calculated at the start of each session as a percentage of Users Per Session — so if you set 30% and the session targets 10 users, exactly 3 of those 10 will have the injection fire." },
+      { category: "Fix", text: "Follow Tool: Same session-level percentage logic now applies to Inject Search and Browse Before Follow — all injections are pre-distributed across the session rather than rolling dice before every individual follow." },
+      { category: "Fix", text: "Follow Tool: getSuggestedUsers failures now log a warning in the activity log instead of being swallowed silently, so you can see if the call is failing." },
+      { category: "UI", text: "Follow Tool injection settings: Inject Profile Browsing checkbox and percentage are now on the same row as Inject Suggested Users. Feed Posts, Open Post%, Browse Before Follow, and Abandon Follow sub-settings stack vertically below." },
+      { category: "Fix", text: "Embedded browser toolbar: fixed a second scrollbar appearing next to the Instagram page scrollbar. The toolbar is now locked to its 92px height with overflow hidden." },
+    ],
+  },
+  {
     version: "1.0.780",
     date: "5 Jun 2026",
     items: [

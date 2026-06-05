@@ -1010,8 +1010,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       </div>
                     </div>
                     <div className="w-px h-5 bg-border/50 shrink-0" />
-                    {/* ── Inject Profile Browsing — inline, right of Inject Suggested ── */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Inject Profile Browsing — checkbox + % only (sub-settings stack below) */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <input
                         type="checkbox"
                         id="injectProfileBrowsingEnabled"
@@ -1022,19 +1022,26 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <label htmlFor="injectProfileBrowsingEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
                         Inject Profile Browsing
                       </label>
-                      <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="1" max="100" className="w-14 h-7 text-xs shrink-0"
+                      <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMin ?? 1}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMax ?? 100) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                        <Input type="number" min="1" max="100" className="w-14 h-7 text-xs shrink-0"
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMax ?? 1}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMin ?? 1) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
-                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">FEED POSTS</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Profile Browsing sub-settings — stacked vertically below the injection row */}
+                  {!!(settings as any).injectProfileBrowsingEnabled && (
+                    <div className="flex flex-col gap-y-2">
+                      {/* Feed Posts + Open Post% */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Feed Posts</span>
                         <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingFeedMin ?? 3}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingFeedMax ?? 30) } as any)}
@@ -1045,7 +1052,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingFeedMin ?? 1) } as any)}
                         />
                         <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">OPEN POST%</span>
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Open Post%</span>
                         <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingPostPctMin ?? 0}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingPostPctMax ?? 100) } as any)}
@@ -1056,7 +1063,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingPostPctMin ?? 0) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
-                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+                      </div>
+                      {/* Browse Before Follow */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <input
                           type="checkbox"
                           id="injectProfileBrowsingBeforeFollow"
@@ -1067,40 +1076,48 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
                           Browse Before Follow
                         </label>
-                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
-                          value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any)}
-                        />
-                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>–</span>
-                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
-                          value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)}
-                        />
-                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>%</span>
-                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-                        <input
-                          type="checkbox"
-                          id="injectProfileBrowsingAbandonFollow"
-                          checked={!!(settings as any).injectProfileBrowsingAbandonFollow}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollow: e.target.checked } as any)}
-                          className={`w-3.5 h-3.5 accent-primary cursor-pointer shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
-                        />
-                        <label htmlFor="injectProfileBrowsingAbandonFollow" className={`text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>
-                          Abandon Follow
-                        </label>
-                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${(!(settings as any).injectProfileBrowsingBeforeFollow || !(settings as any).injectProfileBrowsingAbandonFollow) ? 'opacity-40 pointer-events-none' : ''}`}
-                          value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)}
-                        />
-                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${(!(settings as any).injectProfileBrowsingBeforeFollow || !(settings as any).injectProfileBrowsingAbandonFollow) ? 'opacity-40' : ''}`}>–</span>
-                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${(!(settings as any).injectProfileBrowsingBeforeFollow || !(settings as any).injectProfileBrowsingAbandonFollow) ? 'opacity-40 pointer-events-none' : ''}`}
-                          value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)}
-                        />
-                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${(!(settings as any).injectProfileBrowsingBeforeFollow || !(settings as any).injectProfileBrowsingAbandonFollow) ? 'opacity-40' : ''}`}>%</span>
+                        <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}>
+                          <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                            value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0}
+                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any)}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                          <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                            value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100}
+                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">%</span>
+                        </div>
                       </div>
+                      {/* Abandon Follow — only shown when Browse Before Follow is enabled */}
+                      {!!(settings as any).injectProfileBrowsingBeforeFollow && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <input
+                            type="checkbox"
+                            id="injectProfileBrowsingAbandonFollow"
+                            checked={!!(settings as any).injectProfileBrowsingAbandonFollow}
+                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollow: e.target.checked } as any)}
+                            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                          />
+                          <label htmlFor="injectProfileBrowsingAbandonFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
+                            Abandon Follow
+                          </label>
+                          <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingAbandonFollow ? 'opacity-40 pointer-events-none' : ''}`}>
+                            <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                              value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10}
+                              onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)}
+                            />
+                            <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                            <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                              value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20}
+                              onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)}
+                            />
+                            <span className="text-[10px] text-muted-foreground shrink-0">%</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 

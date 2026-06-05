@@ -3360,6 +3360,47 @@ class AutomationEngine {
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
     const injectProfileBrowsingAbandonPctMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMax ?? 20));
 
+    // Helper: pick `n` random indices from [lo, hi] without repeats (partial Fisher-Yates).
+    // Returns a Set — elements are `followed` counter values at which the injection fires.
+    const sampleSlots = (n: number, lo: number, hi: number): Set<number> => {
+      const out = new Set<number>();
+      if (n <= 0 || hi < lo) return out;
+      const pool = hi - lo + 1;
+      const count = Math.min(n, pool);
+      const arr = Array.from({ length: pool }, (_, i) => lo + i);
+      for (let i = 0; i < count; i++) {
+        const j = i + Math.floor(Math.random() * (pool - i));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      for (let i = 0; i < count; i++) out.add(arr[i]);
+      return out;
+    };
+
+    // Pre-calculate injection slots for this session.
+    // Each injection fires for (pct % of processCount) follows — determined once at session
+    // start so the count is predictable and visible in the log rather than a per-follow dice roll.
+    const suggestedPct      = randInt(injectSuggestedMin, injectSuggestedMax);
+    const injectSuggestedSlots = injectSuggestedEnabled
+      ? sampleSlots(Math.round(processCount * suggestedPct / 100), 1, Math.max(1, processCount - 1))
+      : new Set<number>();
+
+    const searchMidPct      = randInt(injectSearchMin, injectSearchMax);
+    const injectSearchMidSlots = injectSearchEnabled
+      ? sampleSlots(Math.round(processCount * searchMidPct / 100), 1, Math.max(1, processCount - 1))
+      : new Set<number>();
+
+    const browsePct         = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+    const injectBrowseSlots = (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+      ? sampleSlots(Math.round(processCount * browsePct / 100), 0, Math.max(0, processCount - 1))
+      : new Set<number>();
+
+    if (injectSuggestedEnabled)
+      engineLog("INFO", `@${profile.username}: getSuggestedUsers scheduled for ${injectSuggestedSlots.size}/${processCount} follow slots (${suggestedPct}%)`);
+    if (injectSearchEnabled)
+      engineLog("INFO", `@${profile.username}: searchByUsername mid-session scheduled for ${injectSearchMidSlots.size}/${processCount} follow slots (${searchMidPct}%)`);
+    if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+      engineLog("INFO", `@${profile.username}: browse-before-follow scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
+
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
     // Simulates the user searching in the search bar before following — adds natural API signal.
@@ -3485,42 +3526,35 @@ class AutomationEngine {
       if (followed > 0) {
         let suggestedFired = false;
 
-        if (injectSuggestedEnabled) {
-          const threshold = randInt(injectSuggestedMin, injectSuggestedMax);
-          if (Math.random() * 100 < threshold) {
-            try {
-              await client.getSuggestedUsers();
-              engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
-              suggestedFired = true;
-            } catch { /* non-critical */ }
+        if (injectSuggestedEnabled && injectSuggestedSlots.has(followed)) {
+          try {
+            await client.getSuggestedUsers();
+            engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
+            suggestedFired = true;
+          } catch (e: any) {
+            engineLog("WARN", `@${profile.username}: getSuggestedUsers failed (non-critical): ${e?.message ?? e}`);
           }
         }
 
         // Only inject search if getSuggestedUsers did NOT fire this slot
-        if (!suggestedFired && injectSearchEnabled) {
-          const threshold = randInt(injectSearchMin, injectSearchMax);
-          if (Math.random() * 100 < threshold) {
-            try {
-              await client.searchUserByUsername(user.username);
-              engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
-            } catch { /* non-critical */ }
-          }
+        if (!suggestedFired && injectSearchEnabled && injectSearchMidSlots.has(followed)) {
+          try {
+            await client.searchUserByUsername(user.username);
+            engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
+          } catch { /* non-critical */ }
         }
       }
 
-      // Browse before follow — uses dedicated before-follow percentage.
-      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
-        const threshold = randInt(injectProfileBrowsingBeforeFollowPctMin, injectProfileBrowsingBeforeFollowPctMax);
-        if (Math.random() * 100 < threshold) {
-          await browseTargetProfile("pre-follow browse", user);
-          // Abandon follow after browsing — skip the follow call at the configured probability
-          if (injectProfileBrowsingAbandonFollow) {
-            const abandonThreshold = randInt(injectProfileBrowsingAbandonPctMin, injectProfileBrowsingAbandonPctMax);
-            if (Math.random() * 100 < abandonThreshold) {
-              engineLog("INFO", `@${profile.username}: abandoned follow @${user.username} after profile browse (abandon chance fired)`);
-              skipped++;
-              continue;
-            }
+      // Browse before follow — fires on pre-calculated slots (browsePct % of processCount).
+      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow && injectBrowseSlots.has(followed)) {
+        await browseTargetProfile("pre-follow browse", user);
+        // Abandon follow after browsing — still uses its own per-instance probability
+        if (injectProfileBrowsingAbandonFollow) {
+          const abandonThreshold = randInt(injectProfileBrowsingAbandonPctMin, injectProfileBrowsingAbandonPctMax);
+          if (Math.random() * 100 < abandonThreshold) {
+            engineLog("INFO", `@${profile.username}: abandoned follow @${user.username} after profile browse (abandon chance fired)`);
+            skipped++;
+            continue;
           }
         }
       }
