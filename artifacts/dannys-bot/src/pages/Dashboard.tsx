@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.788",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser: 5sim SMS integration added — enter your API token, pick a country, get a phone number, and receive the Instagram verification code directly in the panel." },
+      { category: "Feature", text: "Ghost Browser: Bio Spin field added — write a spintax bio template and paste it directly into the browser." },
+      { category: "Feature", text: "Ghost Browser: Add to Equinox button — after creating an account in the Ghost Browser, save the username and password to Equinox in one click." },
+      { category: "UI", text: "Ghost Browser: Start button renamed to Open Browser." },
+      { category: "UI", text: "Ghost Browser: Fingerprint section is now collapsed by default; click + to expand it." },
+      { category: "UI", text: "Ghost Browser: Proxy dropdown no longer repeats the host:port when a proxy name is already shown." },
+      { category: "UI", text: "Ghost Browser: Removed the 'No proxy — real IP exposed' warning banner." },
+      { category: "UI", text: "Accounts page: embedded browser icon is slightly larger for easier clicking." },
+      { category: "UI", text: "Embedded browser windows now open maximised." },
+    ],
+  },
+  {
     version: "1.0.787",
     date: "5 Jun 2026",
     items: [

@@ -8,8 +8,8 @@ import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
-  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
-  PlayCircle,
+  Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
+  PlayCircle, UserPlus, Phone, Smartphone, Key, CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -238,9 +238,7 @@ function ProxySelect({
             >
               <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="truncate text-left">
-                {p.name
-                  ? <><span className="font-medium">{p.name}</span> <span className="text-muted-foreground text-xs">{p.host}:{p.port}</span></>
-                  : `${p.host}:${p.port}`}
+                {p.name ? p.name : `${p.host}:${p.port}`}
               </span>
             </button>
           ))}
@@ -333,6 +331,31 @@ function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
   );
 }
 
+// ── 5sim countries ─────────────────────────────────────────────────────────────
+
+const FIVESIM_COUNTRIES = [
+  { value: "russia",      label: "Russia" },
+  { value: "ukraine",     label: "Ukraine" },
+  { value: "kazakhstan",  label: "Kazakhstan" },
+  { value: "indonesia",   label: "Indonesia" },
+  { value: "philippines", label: "Philippines" },
+  { value: "india",       label: "India" },
+  { value: "brazil",      label: "Brazil" },
+  { value: "vietnam",     label: "Vietnam" },
+  { value: "myanmar",     label: "Myanmar" },
+  { value: "cambodia",    label: "Cambodia" },
+  { value: "nigeria",     label: "Nigeria" },
+  { value: "pakistan",    label: "Pakistan" },
+  { value: "bangladesh",  label: "Bangladesh" },
+  { value: "ghana",       label: "Ghana" },
+  { value: "kenya",       label: "Kenya" },
+  { value: "egypt",       label: "Egypt" },
+  { value: "colombia",    label: "Colombia" },
+  { value: "mexico",      label: "Mexico" },
+  { value: "thailand",    label: "Thailand" },
+  { value: "malaysia",    label: "Malaysia" },
+];
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export function CreateGhostPage() {
@@ -356,11 +379,26 @@ export function CreateGhostPage() {
 
   // Account fields
   const [usernameSpin, setUsernameSpin] = useState("");
+  const [bioSpin, setBioSpin]           = useState("");
   const [password, setPassword]         = useState(() => generatePassword());
 
   // Ghost fingerprint — regenerated on every Nuke Environment
-  const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
+  const [fingerprint, setFingerprint]             = useState<GhostFingerprint>(() => generateGhostFingerprint());
+  const [fingerprintExpanded, setFingerprintExpanded] = useState(false);
 
+  // 5sim
+  const [fiveSimToken, setFiveSimToken]   = useState(() => localStorage.getItem("ghost_5sim_token") ?? "");
+  const [fiveSimCountry, setFiveSimCountry] = useState("russia");
+  const [fiveSimOrderId, setFiveSimOrderId] = useState<number | null>(null);
+  const [fiveSimPhone, setFiveSimPhone]   = useState("");
+  const [fiveSimCode, setFiveSimCode]     = useState("");
+  const [fiveSimStatus, setFiveSimStatus] = useState<"idle" | "buying" | "waiting" | "got_code" | "cancelled" | "error">("idle");
+  const [fiveSimError, setFiveSimError]   = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Add to Equinox
+  const [addedToEquinox, setAddedToEquinox] = useState(false);
+  const [addingToEquinox, setAddingToEquinox] = useState(false);
 
   const isOpen = browserState === "open";
 
@@ -376,6 +414,11 @@ export function CreateGhostPage() {
     });
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
@@ -435,6 +478,109 @@ export function CreateGhostPage() {
     setBrowserState("closed");
   };
 
+  // 5sim helpers
+  const save5SimToken = (val: string) => {
+    setFiveSimToken(val);
+    localStorage.setItem("ghost_5sim_token", val);
+  };
+
+  const stopPoll = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  const handleBuyNumber = async () => {
+    if (!fiveSimToken.trim()) { setFiveSimError("Enter your 5sim API token first"); return; }
+    setFiveSimStatus("buying");
+    setFiveSimError("");
+    setFiveSimPhone("");
+    setFiveSimCode("");
+    setFiveSimOrderId(null);
+    try {
+      const r = await fetch("/api/fivesim/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ country: fiveSimCountry, operator: "any", apiKey: fiveSimToken.trim() }),
+      });
+      const json = await r.json();
+      if (!json.ok) { setFiveSimStatus("error"); setFiveSimError(json.error ?? "Failed to buy number"); return; }
+      const order = json.data;
+      setFiveSimOrderId(order.id);
+      setFiveSimPhone(order.phone ?? "");
+      setFiveSimStatus("waiting");
+      pollRef.current = setInterval(async () => {
+        try {
+          const pr = await fetch(`/api/fivesim/check/${order.id}?apiKey=${encodeURIComponent(fiveSimToken.trim())}`);
+          const pj = await pr.json();
+          if (!pj.ok) return;
+          const d = pj.data;
+          if (d.status === "RECEIVED" || (d.sms && d.sms.length > 0)) {
+            const sms = d.sms?.[0];
+            if (sms?.code || sms?.text) {
+              stopPoll();
+              setFiveSimCode(sms.code ?? sms.text ?? "");
+              setFiveSimStatus("got_code");
+            }
+          } else if (d.status === "CANCEL" || d.status === "BANNED") {
+            stopPoll();
+            setFiveSimStatus("cancelled");
+          }
+        } catch {}
+      }, 5000);
+    } catch (err) {
+      setFiveSimStatus("error");
+      setFiveSimError(String(err));
+    }
+  };
+
+  const handleCancelNumber = async () => {
+    stopPoll();
+    if (fiveSimOrderId && fiveSimToken) {
+      fetch(`/api/fivesim/cancel/${fiveSimOrderId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: fiveSimToken.trim() }),
+      }).catch(() => {});
+    }
+    setFiveSimStatus("idle");
+    setFiveSimPhone("");
+    setFiveSimCode("");
+    setFiveSimOrderId(null);
+  };
+
+  const handleFinishNumber = async () => {
+    stopPoll();
+    if (fiveSimOrderId && fiveSimToken) {
+      fetch(`/api/fivesim/finish/${fiveSimOrderId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: fiveSimToken.trim() }),
+      }).catch(() => {});
+    }
+    setFiveSimStatus("idle");
+    setFiveSimPhone("");
+    setFiveSimCode("");
+    setFiveSimOrderId(null);
+  };
+
+  const handleAddToEquinox = async () => {
+    const uname = (generatedUsername || usernameSpin).trim();
+    if (!uname || !password.trim()) return;
+    setAddingToEquinox(true);
+    try {
+      const r = await fetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username: uname, password: password.trim() }),
+      });
+      if (r.ok || r.status === 201) {
+        setAddedToEquinox(true);
+        setTimeout(() => setAddedToEquinox(false), 3000);
+      }
+    } catch {}
+    setAddingToEquinox(false);
+  };
+
   const activeDeviceLabel = parseDeviceLabel(activeUA.api);
 
   return (
@@ -457,86 +603,33 @@ export function CreateGhostPage() {
       <div className="flex gap-3" style={{ height: "calc(100vh - 170px)" }}>
 
         {/* ── Left: Controls ── */}
-        <div className="w-[272px] shrink-0 flex flex-col gap-1.5 overflow-y-auto pb-2">
+        <div className="w-[280px] shrink-0 flex flex-col gap-2 overflow-y-auto">
 
-          {/* Proxy */}
+          {/* Proxy Card */}
           <div className="desktop-card p-2.5 space-y-1.5">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-cyan-500 shrink-0" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proxy</p>
             </div>
 
-            <ProxySelect
-              proxies={proxies}
-              value={proxySelection}
-              onChange={v => {
-                setProxySelection(v);
-                if (v.kind !== "manual") {
-                  setManualHost(""); setManualPort(""); setManualUser(""); setManualPass("");
-                }
-              }}
-            />
+            <ProxySelect proxies={proxies as SavedProxy[]} value={proxySelection} onChange={setProxySelection} />
 
             {proxySelection.kind === "manual" && (
-              <div className="space-y-1.5 pt-0.5">
-                <div className="flex gap-1.5">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-muted-foreground mb-1">IP / Host</p>
-                    <Input
-                      value={manualHost}
-                      onChange={e => setManualHost(e.target.value)}
-                      placeholder="192.168.1.1"
-                      className="h-8 text-xs font-mono"
-                      spellCheck={false}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="w-[68px] shrink-0">
-                    <p className="text-[10px] text-muted-foreground mb-1">Port</p>
-                    <Input
-                      value={manualPort}
-                      onChange={e => setManualPort(e.target.value.replace(/\D/g, ""))}
-                      placeholder="8080"
-                      className="h-8 text-xs font-mono"
-                      maxLength={5}
-                      autoComplete="off"
-                    />
-                  </div>
+              <div className="space-y-1 pt-0.5">
+                <div className="flex gap-1">
+                  <Input value={manualHost} onChange={e => setManualHost(e.target.value)} placeholder="host or IP" className="h-7 text-xs flex-1" />
+                  <Input value={manualPort} onChange={e => setManualPort(e.target.value)} placeholder="port" className="h-7 text-xs w-16" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Username <span className="text-muted-foreground/50">(optional)</span></p>
-                  <Input
-                    value={manualUser}
-                    onChange={e => setManualUser(e.target.value)}
-                    placeholder="username"
-                    className="h-8 text-xs"
-                    autoComplete="off"
-                  />
+                <div className="flex gap-1">
+                  <Input value={manualUser} onChange={e => setManualUser(e.target.value)} placeholder="username (opt)" className="h-7 text-xs flex-1" />
+                  <Input value={manualPass} onChange={e => setManualPass(e.target.value)} placeholder="password (opt)" className="h-7 text-xs flex-1" type="password" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Password <span className="text-muted-foreground/50">(optional)</span></p>
-                  <Input
-                    type="password"
-                    value={manualPass}
-                    onChange={e => setManualPass(e.target.value)}
-                    placeholder="password"
-                    className="h-8 text-xs"
-                    autoComplete="off"
-                  />
-                </div>
-                {manualHost.trim() !== "" && !manualValid && (
-                  <p className="text-[10px] text-red-500 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                    Enter a valid host and port (1–65535).
-                  </p>
-                )}
               </div>
             )}
 
-            {!hasProxy && proxySelection.kind === "none" && (
-              <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 shrink-0" />
-                No proxy — your real IP will be exposed.
+            {isOpen && (
+              <p className="text-[10px] text-muted-foreground">
+                Active: <span className="font-mono">{activeProxyLabel}</span>
               </p>
             )}
           </div>
@@ -544,13 +637,55 @@ export function CreateGhostPage() {
           {/* Device Identity */}
           <div className="desktop-card p-2.5 space-y-1.5">
             <div className="flex items-center gap-2">
-              <Monitor className="w-4 h-4 text-cyan-500 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
             </div>
             <UaPickerDropdown
               value={selectedUA.api}
-              onSelect={ua => setSelectedUA(ua)}
+              onSelect={setSelectedUA}
             />
+            {isOpen && (
+              <p className="text-[10px] text-muted-foreground">
+                Active: <span className="font-medium">{activeDeviceLabel}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Fingerprint — collapsed by default */}
+          <div className="desktop-card p-2.5">
+            <button
+              type="button"
+              onClick={() => setFingerprintExpanded(e => !e)}
+              className="flex items-center gap-2 w-full"
+            >
+              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
+              {fingerprintExpanded
+                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                : <Plus className="w-3.5 h-3.5 text-muted-foreground" />}
+            </button>
+            {fingerprintExpanded && (
+              <div className="space-y-1 pt-0.5 border-t border-border/50 mt-1.5">
+                {([
+                  ["WebGL GPU",     `${fingerprint.webglRenderer}`],
+                  ["Canvas Seed",   String(fingerprint.canvasNoise)],
+                  ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
+                  ["Font Seed",     `${fingerprint.fontSeed} / 99`],
+                  ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
+                  ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
+                  ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
+                  ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
+                ] as [string, string][]).map(([label, val]) => (
+                  <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
+                    <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground/60 pt-1">
+                  Regenerates automatically on Nuke Environment.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Actions + Account Fields */}
@@ -563,7 +698,7 @@ export function CreateGhostPage() {
               >
                 {browserState === "opening"
                   ? <><Loader2 className="w-4 h-4 animate-spin" />Starting…</>
-                  : <><Ghost className="w-4 h-4" />Start</>}
+                  : <><Ghost className="w-4 h-4" />Open Browser</>}
               </Button>
             ) : (
               <Button variant="outline" className="w-full gap-2" onClick={handleClose}>
@@ -600,6 +735,22 @@ export function CreateGhostPage() {
               </div>
             </div>
 
+            {/* Bio Spin */}
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
+              <div className="flex gap-1">
+                <Input
+                  value={bioSpin}
+                  onChange={e => setBioSpin(e.target.value)}
+                  placeholder="{Photographer|Artist|Creator} 📸"
+                  className="h-8 text-xs font-mono flex-1 min-w-0"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} />
+              </div>
+            </div>
+
             {/* Password */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
@@ -625,33 +776,136 @@ export function CreateGhostPage() {
                 <FieldActions value={password} isOpen={isOpen} />
               </div>
             </div>
-          </div>
 
-          {/* Fingerprint — always expanded at bottom of column */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
-            </div>
-            <div className="space-y-1 pt-0.5 border-t border-border/50">
-              {([
-                ["WebGL GPU",     `${fingerprint.webglRenderer}`],
-                ["Canvas Seed",   String(fingerprint.canvasNoise)],
-                ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
-                ["Font Seed",     `${fingerprint.fontSeed} / 99`],
-                ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
-                ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
-                ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
-                ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
-              ] as [string, string][]).map(([label, val]) => (
-                <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
-                  <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
-                  <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+            {/* 5sim */}
+            <div className="pt-1 space-y-1.5 border-t border-border/50">
+              <div className="flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">5sim SMS</p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">API Token</p>
+                <Input
+                  value={fiveSimToken}
+                  onChange={e => save5SimToken(e.target.value)}
+                  placeholder="5sim API token"
+                  className="h-7 text-xs font-mono"
+                  type="password"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Country</p>
+                <select
+                  value={fiveSimCountry}
+                  onChange={e => setFiveSimCountry(e.target.value)}
+                  className="h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {FIVESIM_COUNTRIES.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {fiveSimStatus === "idle" || fiveSimStatus === "error" || fiveSimStatus === "cancelled" ? (
+                <Button
+                  size="sm"
+                  className="w-full h-7 text-xs gap-1.5 bg-cyan-500 hover:bg-cyan-600 text-white border-0"
+                  onClick={handleBuyNumber}
+                  disabled={!fiveSimToken.trim()}
+                >
+                  <Phone className="w-3 h-3" />
+                  Get Number
+                </Button>
+              ) : null}
+
+              {fiveSimStatus === "buying" && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Purchasing number…
                 </div>
-              ))}
-              <p className="text-[10px] text-muted-foreground/60 pt-1">
-                Regenerates automatically on Nuke Environment.
-              </p>
+              )}
+
+              {(fiveSimStatus === "waiting" || fiveSimStatus === "got_code") && fiveSimPhone && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-muted-foreground font-medium">Phone Number</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="flex-1 h-7 rounded-md border border-input bg-muted/30 px-2 flex items-center">
+                      <span className="text-xs font-mono text-foreground">{fiveSimPhone}</span>
+                    </div>
+                    <FieldActions value={fiveSimPhone} isOpen={isOpen} />
+                  </div>
+                </div>
+              )}
+
+              {fiveSimStatus === "waiting" && (
+                <div className="flex items-center gap-2 text-xs text-amber-600">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Waiting for SMS…
+                  <button
+                    type="button"
+                    onClick={handleCancelNumber}
+                    className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {fiveSimStatus === "got_code" && fiveSimCode && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground font-medium">SMS Code</p>
+                  <div className="flex gap-1">
+                    <div className="flex-1 h-7 rounded-md border border-green-400 bg-green-50 dark:bg-green-950/30 px-2 flex items-center gap-1.5">
+                      <Key className="w-3 h-3 text-green-600 shrink-0" />
+                      <span className="text-xs font-mono font-semibold text-green-700 dark:text-green-400">{fiveSimCode}</span>
+                    </div>
+                    <FieldActions value={fiveSimCode} isOpen={isOpen} />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full h-7 text-xs gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={handleFinishNumber}
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    Finish &amp; Release Number
+                  </Button>
+                </div>
+              )}
+
+              {fiveSimError && (
+                <p className="text-[10px] text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {fiveSimError}
+                </p>
+              )}
+            </div>
+
+            {/* Add to Equinox */}
+            <div className="pt-1 border-t border-border/50">
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full gap-2 text-xs",
+                  addedToEquinox
+                    ? "border-green-400 text-green-700 bg-green-50 hover:bg-green-50"
+                    : "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
+                )}
+                onClick={handleAddToEquinox}
+                disabled={addingToEquinox || !usernameSpin.trim() || !password.trim()}
+                title="Save this username and password as a new Equinox account"
+              >
+                {addingToEquinox
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Adding…</>
+                  : addedToEquinox
+                  ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Equinox!</>
+                  : <><UserPlus className="w-3.5 h-3.5" />Add to Equinox</>}
+              </Button>
             </div>
           </div>
 
@@ -703,7 +957,7 @@ export function CreateGhostPage() {
               <div className="space-y-1.5 max-w-xs">
                 <p className="text-base font-semibold text-foreground">Browser not started</p>
                 <p className="text-sm text-muted-foreground">
-                  Configure your proxy and device identity, then click <span className="font-medium">Open Ghost Browser</span> to launch a clean, isolated session.
+                  Configure your proxy and device identity, then click <span className="font-medium">Open Browser</span> to launch a clean, isolated session.
                 </p>
               </div>
             </div>

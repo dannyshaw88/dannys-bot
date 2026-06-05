@@ -2291,19 +2291,6 @@ export async function registerInstagramRoutes(
       try {
         const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body as any;
 
-        // Fetch a trending reel URL via HikerAPI BEFORE the browser opens so it
-        // lands directly on the reel — never on the Instagram homepage or login page.
-        let initialUrl: string | undefined;
-        try {
-          const settings = await storage.getGlobalSettings();
-          if (settings.hikerApiEnabled === "true" && settings.hikerApiToken) {
-            const { HikerApiClient } = await import("../instagram/hikerApiClient");
-            const hiker = new HikerApiClient(settings.hikerApiToken);
-            const shortcodes = await hiker.getTrendingReelShortcodes(3);
-            if (shortcodes.length > 0) initialUrl = `https://www.instagram.com/reel/${shortcodes[0]}/`;
-          }
-        } catch { /* non-fatal — browser still opens, warmup navigates */ }
-
         const body = {
           profileId: -1,
           username: "Ghost",
@@ -2312,7 +2299,6 @@ export async function registerInstagramRoutes(
             : undefined,
           userAgent: userAgent ?? undefined,
           ebFingerprint: fingerprint ?? undefined,
-          initialUrl,
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method:  "POST",
@@ -4361,6 +4347,68 @@ export async function registerInstagramRoutes(
       if (!await requireAdmin(res)) return;
       storage.deleteLicense(Number(req.params.id));
       res.json({ ok: true });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  // ── 5sim proxy routes ─────────────────────────────────────────────────────────
+  // These proxy calls to the 5sim API so the browser never exposes the API key
+  // via a direct CORS request and all traffic goes through the app server.
+
+  app.post("/api/fivesim/buy", async (req, res) => {
+    try {
+      const { country = "russia", operator = "any", apiKey } = req.body ?? {};
+      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
+      const url = `https://5sim.net/v1/user/buy/activation/${encodeURIComponent(country)}/${encodeURIComponent(operator)}/instagram`;
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      const text = await r.text();
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
+      const data = JSON.parse(text);
+      res.json({ ok: true, data });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.get("/api/fivesim/check/:orderId", async (req, res) => {
+    try {
+      const apiKey = req.query.apiKey as string;
+      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
+      const url = `https://5sim.net/v1/user/check/${encodeURIComponent(req.params.orderId)}`;
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      const text = await r.text();
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
+      const data = JSON.parse(text);
+      res.json({ ok: true, data });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.post("/api/fivesim/cancel/:orderId", async (req, res) => {
+    try {
+      const { apiKey } = req.body ?? {};
+      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
+      const url = `https://5sim.net/v1/user/cancel/${encodeURIComponent(req.params.orderId)}`;
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      const text = await r.text();
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
+      res.json({ ok: true, data: JSON.parse(text) });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.post("/api/fivesim/finish/:orderId", async (req, res) => {
+    try {
+      const { apiKey } = req.body ?? {};
+      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
+      const url = `https://5sim.net/v1/user/finish/${encodeURIComponent(req.params.orderId)}`;
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      const text = await r.text();
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
+      res.json({ ok: true, data: JSON.parse(text) });
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
 }

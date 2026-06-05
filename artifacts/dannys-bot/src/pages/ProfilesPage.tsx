@@ -1418,7 +1418,7 @@ export function ProfilesPage() {
                     }
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
-                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Monitor className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Monitor className="w-[18px] h-[18px]" /></button>
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
                       </div>
                     );
