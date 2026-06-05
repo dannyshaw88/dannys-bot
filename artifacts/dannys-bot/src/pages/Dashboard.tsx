@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.784",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Profile Sync section is no longer hidden when 'Account Details, Security & Email Validation' is collapsed — it now lives in its own always-accessible section at the bottom of Account Settings." },
+    ],
+  },
+  {
     version: "1.0.783",
     date: "5 Jun 2026",
     items: [

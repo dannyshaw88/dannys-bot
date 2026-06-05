@@ -245,6 +245,7 @@ export function ProfileDetailsPage() {
   const [uaChangeConfirmOpen, setUaChangeConfirmOpen] = useState(false);
   const [showFingerprintPreview, setShowFingerprintPreview] = useState(false);
   const [showAccountDetails, setShowAccountDetails] = useState(false);
+  const [showProfileSync, setShowProfileSync] = useState(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
   const preStoppedStatusRef = useRef<string>("pending");
@@ -1690,98 +1691,106 @@ export function ProfileDetailsPage() {
                 </div>
               </CardContent>
             </Card>
-            {/* Profile Sync */}
-            <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0 pb-2">
-                <CardTitle className="flex items-center gap-2 text-base"><RefreshCw className="w-4 h-4 text-primary" /> Profile Sync</CardTitle>
-              </CardHeader>
-              <CardContent className="px-0 pb-0">
-                <div className="flex items-start gap-4">
-                  {/* Sync controls — left of stats */}
-                  <div className="flex flex-col gap-1.5 shrink-0 border-r border-border pr-4">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={!!formData?.syncEnabled}
-                        onCheckedChange={v => updateField({ syncEnabled: v })}
-                      />
-                      <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={formData?.syncIntervalMin ?? 60}
-                          onChange={e => updateField({ syncIntervalMin: Math.min(Number(e.target.value), formData?.syncIntervalMax ?? Infinity) })}
-                          className="h-6 text-xs w-11 px-1"
-                        />
-                        <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={formData?.syncIntervalMax ?? 120}
-                          onChange={e => updateField({ syncIntervalMax: Math.max(Number(e.target.value), formData?.syncIntervalMin ?? 0) })}
-                          className="h-6 text-xs w-11 px-1"
-                        />
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="syncUseHikerCard"
-                        checked={!!formData?.syncUseHiker}
-                        onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                      />
-                      <Label htmlFor="syncUseHikerCard" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 text-xs px-2 gap-1"
-                        disabled={syncNowStatus === "syncing"}
-                        onClick={handleSyncNow}
-                      >
-                        {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                        {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
-                        {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
-                        {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
-                      </Button>
-                    </div>
-                  </div>
-                  {/* Right: stat icons */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                        <Users className="w-4 h-4 text-blue-500 mb-1" />
-                        <span className="text-base font-bold">
-                          {profile?.followersCount != null ? profile.followersCount.toLocaleString() : " "}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
-                      </div>
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                        <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
-                        <span className="text-base font-bold">
-                          {profile?.followingCount != null ? profile.followingCount.toLocaleString() : " "}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
-                      </div>
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                        <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
-                        <span className="text-base font-bold">
-                          {profile?.postsCount != null ? profile.postsCount.toLocaleString() : " "}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Posts</span>
-                      </div>
-                    </div>
-                    {profile?.lastSyncedAt && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Last synced: {new Date(profile.lastSyncedAt).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
 
+          </div>
+          )}
+
+          {/* ── Profile Sync ── */}
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setShowProfileSync(v => !v)}
+              className="flex items-center gap-2 w-full px-0 py-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors select-none border-b border-border mb-0"
+            >
+              <RefreshCw className="w-4 h-4 text-primary" />
+              Profile Sync
+              <span className="ml-auto text-xs font-normal">{showProfileSync ? "▲ Collapse" : "▼ Expand"}</span>
+            </button>
+          </div>
+          {showProfileSync && (
+          <div className="mt-4">
+            <div className="flex items-start gap-4">
+              {/* Sync controls — left of stats */}
+              <div className="flex flex-col gap-1.5 shrink-0 border-r border-border pr-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={!!formData?.syncEnabled}
+                    onCheckedChange={v => updateField({ syncEnabled: v })}
+                  />
+                  <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData?.syncIntervalMin ?? 60}
+                      onChange={e => updateField({ syncIntervalMin: Math.min(Number(e.target.value), formData?.syncIntervalMax ?? Infinity) })}
+                      className="h-6 text-xs w-11 px-1"
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData?.syncIntervalMax ?? 120}
+                      onChange={e => updateField({ syncIntervalMax: Math.max(Number(e.target.value), formData?.syncIntervalMin ?? 0) })}
+                      className="h-6 text-xs w-11 px-1"
+                    />
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="syncUseHikerCard"
+                    checked={!!formData?.syncUseHiker}
+                    onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                  />
+                  <Label htmlFor="syncUseHikerCard" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs px-2 gap-1"
+                    disabled={syncNowStatus === "syncing"}
+                    onClick={handleSyncNow}
+                  >
+                    {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                    {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
+                    {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
+                    {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
+                  </Button>
+                </div>
+              </div>
+              {/* Right: stat icons */}
+              <div className="flex flex-col gap-2 shrink-0">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
+                    <Users className="w-4 h-4 text-blue-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.followersCount != null ? profile.followersCount.toLocaleString() : " "}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
+                    <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.followingCount != null ? profile.followingCount.toLocaleString() : " "}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
+                    <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.postsCount != null ? profile.postsCount.toLocaleString() : " "}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Posts</span>
+                  </div>
+                </div>
+                {profile?.lastSyncedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Last synced: {new Date(profile.lastSyncedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
           )}
         </Tabs.Content>
