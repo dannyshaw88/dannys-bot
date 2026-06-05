@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.786",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser window no longer overlaps the Windows taskbar on open — it now fills the available work area exactly as a normal browser would, with the title bar always visible and closeable." },
+      { category: "UI", text: "Statistics page: all data columns are now centre-aligned. The Account Name column remains left-aligned." },
+      { category: "UI", text: "Statistics page: 'Human Session Tool' column renamed to 'Human Session'." },
+      { category: "Feature", text: "Statistics page now has two tabs — Tool Performance (existing table) and Metrics (new)." },
+      { category: "Feature", text: "Metrics tab: select any account from a dropdown to view today's and lifetime activity as interactive pie charts, plus a grid of data-point cards for every tracked action type." },
+    ],
+  },
+  {
     version: "1.0.785",
     date: "5 Jun 2026",
     items: [

@@ -1610,10 +1610,14 @@ export async function openEbWindow(opts: {
   });
   win.once("ready-to-show", () => {
     win.show();
-    // Maximize after show — Electron on Windows can cover the taskbar if
-    // maximize is called before the OS has registered the window; showing first
-    // gives the shell time to set up the work area before we resize.
-    win.maximize();
+    // Use the work area of the display the window is on instead of maximize().
+    // win.maximize() on Windows occasionally enters a full-screen-like state
+    // that hides the OS taskbar and places the window in front of everything
+    // with no visible title bar. Setting bounds to the work area gives the
+    // same "maximised" result that a normal browser produces — the window fills
+    // the available desktop space but always stops at the taskbar.
+    const display = eScreen.getDisplayMatching(win.getBounds());
+    win.setBounds(display.workArea);
   });
 
   // Belt-and-suspenders proxy re-apply after first page load.
