@@ -957,62 +957,60 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
               {tool.type === 'follow' && (
                 <div className="pt-4 border-t border-border space-y-3">
                   <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Injection Settings</h4>
-                  <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          id="injectSearchEnabled"
-                          checked={!!(settings as any).injectSearchEnabled}
-                          onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                        />
-                        <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                          Inject SearchByUsername
-                        </label>
-                      </div>
-                      <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {/* Inject SearchByUsername — inline checkbox + % range */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        id="injectSearchEnabled"
+                        checked={!!(settings as any).injectSearchEnabled}
+                        onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                      />
+                      <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
+                        Inject Search
+                      </label>
+                      <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectSearchMin ?? 1}
                           onChange={(e) => setSettings({ ...settings, injectSearchMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMax ?? 100) } as any)}
                         />
-                        <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                        <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectSearchMax ?? 1}
                           onChange={(e) => setSettings({ ...settings, injectSearchMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMin ?? 1) } as any)}
                         />
-                        <span className="text-[10px] text-muted-foreground">%</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
                     </div>
-                    <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          id="injectSuggestedEnabled"
-                          checked={!!(settings as any).injectSuggestedEnabled}
-                          onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                        />
-                        <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                          Inject GetSuggestedUsers
-                        </label>
-                      </div>
-                      <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                    <div className="w-px h-5 bg-border/50 shrink-0" />
+                    {/* Inject GetSuggestedUsers — inline */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        id="injectSuggestedEnabled"
+                        checked={!!(settings as any).injectSuggestedEnabled}
+                        onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                      />
+                      <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
+                        Inject Suggested Users
+                      </label>
+                      <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectSuggestedMin ?? 1}
                           onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMax ?? 100) } as any)}
                         />
-                        <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                        <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectSuggestedMax ?? 1}
                           onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectSuggestedMax: v, injectSuggestedMin: Math.min((settings as any).injectSuggestedMin ?? 1, v) } as any); }}
                         />
-                        <span className="text-[10px] text-muted-foreground">%</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
                     </div>
-                    <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-                    {/* ── Inject Profile Browsing ── */}
+                    <div className="w-px h-5 bg-border/50 shrink-0" />
+                    {/* ── Inject Profile Browsing — inline, right of Inject Suggested ── */}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <input
                         type="checkbox"

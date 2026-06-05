@@ -27,7 +27,7 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "like",          label: "Likes",         icon: <Heart className="w-3.5 h-3.5" />,         color: "text-rose-500",    isTool: false },
   { key: "comment",       label: "Comments",      icon: <MessageCircle className="w-3.5 h-3.5" />, color: "text-indigo-500",  isTool: false },
   { key: "story",         label: "Story Views",   icon: <Eye className="w-3.5 h-3.5" />,           color: "text-emerald-500", isTool: false },
-  { key: "human_session", label: "Human Sessions",icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: false },
+  { key: "human_session", label: "Human Session Tool", icon: <Bot className="w-3.5 h-3.5" />, color: "text-cyan-500", isTool: true, toolTypeKey: "human_session" },
 ];
 
 const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb" | "trustscore", number> = {
@@ -122,19 +122,32 @@ function ProfileStatsRow({
         const lifetime = getStat(key, "lifetime");
         return (
           <td key={key} style={{ width: colWidths[key] }} className="px-4 py-3">
-            <div className="flex items-center gap-2">
-              {isTool && tool && (
-                <Switch
-                  checked={tool.enabled}
-                  onCheckedChange={(val) => handleToggle(tool, val)}
-                  className="scale-75 origin-left"
-                />
-              )}
-              <div className="flex items-baseline gap-1 text-[13px]">
-                <span className="font-bold tabular-nums text-foreground">{todayCount}</span>
-                <span className="text-muted-foreground text-[11px]">/ {lifetime}</span>
+            {key === "human_session" ? (
+              // Human Session Tool column: toggle only, no counts
+              <div className="flex items-center">
+                {tool && (
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={(val) => handleToggle(tool, val)}
+                    className="scale-75 origin-left"
+                  />
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {isTool && tool && (
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={(val) => handleToggle(tool, val)}
+                    className="scale-75 origin-left"
+                  />
+                )}
+                <div className="flex items-baseline gap-1 text-[13px]">
+                  <span className="font-bold tabular-nums text-foreground">{todayCount}</span>
+                  <span className="text-muted-foreground text-[11px]">/ {lifetime}</span>
+                </div>
+              </div>
+            )}
           </td>
         );
       })}
@@ -467,7 +480,7 @@ export function StatsPage() {
         </CardHeader>
         <CardContent className="p-0 flex flex-col">
           <div className="overflow-x-auto">
-            <table className="text-sm text-left" style={{ tableLayout: "fixed", width: "100%" }}>
+            <table className="text-sm text-left" style={{ tableLayout: "fixed", minWidth: "100%", width: `${colWidths.account + (visibleCols.open_eb ? colWidths.open_eb : 0) + colWidths.trustscore + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
               <colgroup>
                 <col style={{ width: colWidths.account }} />
                 {visibleCols.open_eb && <col style={{ width: colWidths.open_eb }} />}

@@ -1608,7 +1608,13 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
-  win.once("ready-to-show", () => { win.show(); });
+  win.once("ready-to-show", () => {
+    win.show();
+    // Maximize after show — Electron on Windows can cover the taskbar if
+    // maximize is called before the OS has registered the window; showing first
+    // gives the shell time to set up the work area before we resize.
+    win.maximize();
+  });
 
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its

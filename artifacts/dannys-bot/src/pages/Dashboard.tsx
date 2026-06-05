@@ -62,6 +62,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.779",
+    date: "4 Jun 2026",
+    items: [
+      { category: "Fix", text: "Inject Profile Browsing, Inject Suggested Users, and Inject Search percentages now default to 1% when no value has been saved — previously they defaulted to 30–60%, causing them to fire far more often than expected. All injection percentages are per-user: a 5% setting means each individual user has a 5% chance of triggering the action, never a batch-level toggle." },
+      { category: "UI", text: "Follow Tool injection settings (Inject Search, Inject Suggested Users, Inject Profile Browsing) are now all on a single row instead of being stacked across two rows." },
+      { category: "Fix", text: "Embedded browser windows now open maximised. Showing the window before maximising prevents the known Windows bug where the Chromium window covers the taskbar." },
+      { category: "Fix", text: "Export API Calls: Human Session operations (GetReelsTray, NotificationsBadge, ViewTimelineFeed, LauncherSync, etc.) now correctly show 'Human Session Tool' in the Operation Name column instead of 'Emulation'." },
+      { category: "Fix", text: "Export API Calls: Source column now shows 'Equinox' for all engine-generated calls and 'HikerAPI' for HikerAPI-sourced data, replacing the previous verbose internal source names." },
+      { category: "Fix", text: "Statistics page: Human Session Tool column now shows only the on/off toggle — no counts. Column renamed from 'Human Sessions' to 'Human Session Tool'." },
+      { category: "Fix", text: "Statistics page: adjusting a column width in the Columns panel no longer causes other columns to expand or shift. Each column width is now independent." },
+    ],
+  },
+  {
     version: "1.0.778",
     date: "4 Jun 2026",
     items: [

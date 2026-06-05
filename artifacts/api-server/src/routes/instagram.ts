@@ -1768,13 +1768,18 @@ export async function registerInstagramRoutes(
         if (source === "HikerAPI")  return "HikerAPI";
         if (source === "Browser")   return "Browser Session";
         if (source === "ProfileSync") return "Profile Sync";
-        if (source === "Human Session Emulation") return "Emulation";
+        if (source === "Human Session Emulation") return "Human Session Tool";
         if (source === "Follow Tool")   return "Follow Tool";
         if (source === "Unfollow Tool") return "Unfollow Tool";
         if (source === "Contact Tool")  return "Contact Tool";
         // Legacy / untagged calls — fall back to the operation name itself
         return operationName;
       };
+
+      // Source column: show "HikerAPI" for HikerAPI-fetched data, "Equinox" for
+      // everything else (engine, verify, browser, sync, emulation, tools, etc.)
+      const resolveSource = (source: string): string =>
+        source === "HikerAPI" ? "HikerAPI" : "Equinox";
 
       const esc = (v: string) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
@@ -1823,7 +1828,7 @@ export async function registerInstagramRoutes(
           resolveOperationName(call.source ?? "", call.operationName ?? ""),
           call.operationName ?? "",
           call.message ?? "",
-          call.source ?? "",
+          resolveSource(call.source ?? ""),
           call.navChain ?? "",
           ipPort,
           String(call.durationMs ?? ""),

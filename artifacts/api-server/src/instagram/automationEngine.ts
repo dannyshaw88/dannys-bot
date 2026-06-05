@@ -3337,24 +3337,24 @@ class AutomationEngine {
     engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
 
     const injectSuggestedEnabled = !!(s.injectSuggestedEnabled);
-    const injectSuggestedMin     = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 40));
-    const injectSuggestedMax     = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 60));
+    const injectSuggestedMin     = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 1));
+    const injectSuggestedMax     = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 1));
 
     const injectSearchEnabled = !!(s.injectSearchEnabled);
-    const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
-    const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
+    const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 1));
+    const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 1));
 
     const injectProfileBrowsingEnabled            = !!(s.injectProfileBrowsingEnabled);
-    const injectProfileBrowsingMin                = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
-    const injectProfileBrowsingMax                = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
+    const injectProfileBrowsingMin                = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 1));
+    const injectProfileBrowsingMax                = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 1));
     const injectProfileBrowsingFeedMin            = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
     const injectProfileBrowsingFeedMax            = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
     const injectProfileBrowsingPostPctMin         = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
     const injectProfileBrowsingPostPctMax         = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
     const injectProfileBrowsingBeforeFollow       = !!(s.injectProfileBrowsingBeforeFollow);
     // Dedicated before-follow chance — falls back to the general browsing chance if not set
-    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? injectProfileBrowsingMin));
-    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? injectProfileBrowsingMax));
+    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? 1));
+    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? 1));
     // Abandon-follow after browsing
     const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
