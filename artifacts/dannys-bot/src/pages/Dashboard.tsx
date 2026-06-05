@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.783",
+    date: "5 Jun 2026",
+    items: [
+      { category: "UI", text: "Activity log detail messages are cleaner: 'Visited profile', 'Scrolled N posts', 'Opened post from profile' — the username is already shown in the Target column so it is no longer repeated in the detail." },
+      { category: "UI", text: "Accounts page: Status and TrustScore column headers and badges are now center-aligned." },
+      { category: "UI", text: "Accounts page Actions column: removed the Config link. Browser button is now a globe icon." },
+      { category: "UI", text: "Dashboard activity table: Action, Target, and TrustScore column headers and cells are now center-aligned." },
+    ],
+  },
+  {
     version: "1.0.782",
     date: "5 Jun 2026",
     items: [
@@ -5335,7 +5345,7 @@ export function Dashboard() {
                             localStorage.setItem("dashboard_col_order", JSON.stringify(next));
                           }}
                           onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
-                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target") ? "text-center" : ""}`}
                         >
                           {COL_LABELS[key]}
                         </th>
@@ -5379,15 +5389,15 @@ export function Dashboard() {
                         if (item.kind === "import") {
                           const imp = item.importData!;
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><span className="flex items-center gap-1.5 text-foreground min-w-0"><Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" /><span className="truncate text-xs font-semibold">Import</span></span></td>;
-                          if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Profile Import</span></td>;
-                          if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate" title={imp.fileName}>{imp.fileName}</td>;
+                          if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Profile Import</span></td>;
+                          if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate text-center" title={imp.fileName}>{imp.fileName}</td>;
                           if (col === "detail") return <td key={col} className="px-3 py-3 text-xs truncate"><span className="flex items-center gap-2">{imp.created > 0 && <span className="font-semibold text-emerald-600">{imp.created} created</span>}{imp.updated > 0 && <span className="font-semibold text-blue-600">{imp.updated} updated</span>}{imp.failed > 0 && <span className="font-semibold text-destructive">{imp.failed} failed</span>}</span></td>;
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(imp.ts), "MMM d yyyy, HH:mm:ss")}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
                         if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
-                        if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
-                        if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>{item.targetUsername ? `@${item.targetUsername}` : " "}</td>;
+                        if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
+                        if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-foreground/80 truncate text-center" title={item.targetUsername || undefined}>{item.targetUsername ? `@${item.targetUsername}` : " "}</td>;
                         if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>{item.detail || " "}</td>;
                         return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span></span></td>;
                       };

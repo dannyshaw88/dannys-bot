@@ -3418,7 +3418,7 @@ class AutomationEngine {
         // "profile" from_module — navigating to a user's profile from the followers list
         await client.visitUserProfile(targetUser.pk, "profile");
         engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
-        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `Visited profile`);
       } catch { /* non-critical */ }
 
       const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
@@ -3426,7 +3426,7 @@ class AutomationEngine {
       try {
         profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
         engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
-        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `[Profile Browse] Scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
       } catch { /* non-critical */ }
 
       if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
@@ -3436,7 +3436,7 @@ class AutomationEngine {
             try {
               await client.viewFeedPost(post.mediaId);
               engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
-              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `[Profile Browse] Opened post from @${targetUser.username}'s profile`);
+              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
             } catch { /* non-critical */ }
           }
         }

@@ -1188,7 +1188,7 @@ export function ProfilesPage() {
                 onDragEnd: () => { profDragColRef.current = null; setProfDragOverCol(null); },
               };
               if (key === "status") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   STATUS
                 </button>
               );
@@ -1217,7 +1217,7 @@ export function ProfilesPage() {
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
               if (key === "trustscore") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("trustscore")} style={{ width: profColWidths.trustscore }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("trustscore")} style={{ width: profColWidths.trustscore }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   TRUSTSCORE
                 </button>
               );
@@ -1320,7 +1320,7 @@ export function ProfilesPage() {
                   </div>
                   {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
                     if (key === "status") return (
-                      <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-start gap-1.5 shrink-0">
+                      <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-center gap-1.5 shrink-0">
                         {hasProxy
                           ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} />
                           : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
@@ -1398,8 +1398,7 @@ export function ProfilesPage() {
                     }
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
-                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`text-[11px] transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}>Browser</button>
-                        <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
+                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Globe className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
                       </div>
                     );
