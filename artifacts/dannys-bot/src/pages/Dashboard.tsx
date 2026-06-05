@@ -62,6 +62,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.789",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy manager: account dropdown now displays usernames correctly instead of appearing white/invisible." },
+      { category: "Feature", text: "Inject Browsing: Like % — set a percentage chance to like each scrolled post during profile browse injections." },
+      { category: "Feature", text: "Inject Browsing: Save Media % — set a percentage chance to save each post during profile browse injections." },
+      { category: "Feature", text: "Inject Browsing: Watch Stories % — set a percentage chance to watch the target user's stories during each profile browse." },
+      { category: "Feature", text: "Inject Browsing: View Highlights % — set a percentage chance to view the target user's highlights during each profile browse." },
+      { category: "Feature", text: "Inject Browsing: Comment % — set a percentage chance to leave a comment on a post during profile browse; supports spintax for varied comments." },
+      { category: "UI", text: "Inject Browsing settings are now all on a single compact row (Browse Before Follow, Abandon Follow, and all new % fields inline)." },
+      { category: "UI", text: "Inject Search and Inject Suggested Users are now on their own row, separate from Inject Browsing." },
+    ],
+  },
+  {
     version: "1.0.788",
     date: "5 Jun 2026",
     items: [

@@ -3359,6 +3359,18 @@ class AutomationEngine {
     const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
     const injectProfileBrowsingAbandonPctMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMax ?? 20));
+    // New inject browsing action settings
+    const injectProfileBrowsingLikePctMin         = Math.max(0, s.injectProfileBrowsingLikePctMin ?? 0);
+    const injectProfileBrowsingLikePctMax         = Math.max(0, s.injectProfileBrowsingLikePctMax ?? 0);
+    const injectProfileBrowsingSaveMediaPctMin    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMin ?? 0);
+    const injectProfileBrowsingSaveMediaPctMax    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMax ?? 0);
+    const injectProfileBrowsingWatchStoriesPctMin = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMin ?? 0);
+    const injectProfileBrowsingWatchStoriesPctMax = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMax ?? 0);
+    const injectProfileBrowsingViewHighlightsPctMin = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMin ?? 0);
+    const injectProfileBrowsingViewHighlightsPctMax = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMax ?? 0);
+    const injectProfileBrowsingCommentPctMin      = Math.max(0, s.injectProfileBrowsingCommentPctMin ?? 0);
+    const injectProfileBrowsingCommentPctMax      = Math.max(0, s.injectProfileBrowsingCommentPctMax ?? 0);
+    const injectProfileBrowsingCommentText        = (s.injectProfileBrowsingCommentText as string | undefined) ?? "";
 
     // Helper: pick `n` random indices from [lo, hi] without repeats (partial Fisher-Yates).
     // Returns a Set — elements are `followed` counter values at which the injection fires.
@@ -3419,7 +3431,8 @@ class AutomationEngine {
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
     let hitHardLimit = false; // true when a real cap/block/stop occurred (not just ran out of candidates)
 
-    // Helper: browse the target user's profile — visit, scroll feed, open posts.
+    // Helper: browse the target user's profile — visit, scroll feed, open/like/save posts,
+    // optionally watch stories and highlights, and optionally post a comment.
     // Used for both the between-follows injection and the before-follow browse.
     const browseTargetProfile = async (label: string, targetUser: { pk: string; username: string }) => {
       try {
@@ -3437,6 +3450,7 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
       } catch { /* non-critical */ }
 
+      // Open posts (view individual post detail)
       if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
         const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
         for (const post of profilePosts) {
@@ -3445,6 +3459,87 @@ class AutomationEngine {
               await client.viewFeedPost(post.mediaId);
               engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
               this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
+            } catch { /* non-critical */ }
+          }
+        }
+      }
+
+      // Like posts
+      if (injectProfileBrowsingLikePctMax > 0 && profilePosts.length > 0) {
+        const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < likePct) {
+            try {
+              const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
+              if (likeResult && likeResult !== "blocked") {
+                engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
+                this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
+                await storage.incrementStat(profile.id, "like");
+              }
+            } catch { /* non-critical */ }
+          }
+        }
+      }
+
+      // Save media
+      if (injectProfileBrowsingSaveMediaPctMax > 0 && profilePosts.length > 0) {
+        const savePct = randInt(injectProfileBrowsingSaveMediaPctMin, injectProfileBrowsingSaveMediaPctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < savePct) {
+            try {
+              const saved = await client.saveMedia(post.mediaId);
+              if (saved) {
+                engineLog("INFO", `@${profile.username}: [${label}] saved post ${post.shortcode} from @${targetUser.username}`);
+                this.logAction(profile.id, tool.id, "save_media", targetUser.username, post.shortcode, "post", "ok", `Saved post from profile browse`);
+              }
+            } catch { /* non-critical */ }
+          }
+        }
+      }
+
+      // Watch stories
+      if (injectProfileBrowsingWatchStoriesPctMax > 0) {
+        const storiesPct = randInt(injectProfileBrowsingWatchStoriesPctMin, injectProfileBrowsingWatchStoriesPctMax);
+        if (Math.random() * 100 < storiesPct) {
+          try {
+            const storiesUrl = await client.viewStories(targetUser.pk, targetUser.username);
+            if (storiesUrl) {
+              engineLog("INFO", `@${profile.username}: [${label}] watched stories of @${targetUser.username}`);
+              this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
+              await storage.incrementStat(profile.id, "story");
+            }
+          } catch { /* non-critical */ }
+        }
+      }
+
+      // View highlights
+      if (injectProfileBrowsingViewHighlightsPctMax > 0) {
+        const highlightsPct = randInt(injectProfileBrowsingViewHighlightsPctMin, injectProfileBrowsingViewHighlightsPctMax);
+        if (Math.random() * 100 < highlightsPct) {
+          try {
+            const hlUrl = await client.viewHighlights(targetUser.pk, targetUser.username);
+            if (hlUrl) {
+              engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
+              this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
+            }
+          } catch { /* non-critical */ }
+        }
+      }
+
+      // Comment on a post (spintax supported)
+      if (injectProfileBrowsingCommentPctMax > 0 && profilePosts.length > 0 && injectProfileBrowsingCommentText.trim()) {
+        const commentPct = randInt(injectProfileBrowsingCommentPctMin, injectProfileBrowsingCommentPctMax);
+        if (Math.random() * 100 < commentPct) {
+          const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
+          const commentText = this.spin(injectProfileBrowsingCommentText).trim();
+          if (commentText) {
+            try {
+              const commented = await client.postComment(post.mediaId, commentText);
+              if (commented) {
+                engineLog("INFO", `@${profile.username}: [${label}] commented on post ${post.shortcode} of @${targetUser.username}: "${commentText}"`);
+                this.logAction(profile.id, tool.id, "comment", targetUser.username, post.shortcode, "post", "ok", `Commented: ${commentText}`);
+                await storage.incrementStat(profile.id, "comment");
+              }
             } catch { /* non-critical */ }
           }
         }

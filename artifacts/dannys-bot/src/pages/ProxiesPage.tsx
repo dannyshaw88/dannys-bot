@@ -278,14 +278,14 @@ function ProxyRow({
           ))}
           {unassignedProfiles.length > 0 && (
             <select
-              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
               value=""
               onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
               disabled={assignPending}
             >
-              <option value="">+ Assign account…</option>
+              <option value="" className="text-muted-foreground">+ Assign account…</option>
               {unassignedProfiles.map(p => (
-                <option key={p.id} value={p.id}>{p.username}</option>
+                <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
               ))}
             </select>
           )}

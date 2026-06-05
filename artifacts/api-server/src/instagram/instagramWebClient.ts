@@ -2579,6 +2579,14 @@ export class InstagramWebClient {
     }, `Save media ${mediaId}`);
   }
 
+  async postComment(mediaId: string, text: string): Promise<boolean> {
+    return this.timed("PostComment", async () => {
+      const body = new URLSearchParams({ comment_text: text }).toString();
+      const j = await this.mobileSessionPost(`/api/v1/media/${mediaId}/comment/`, body);
+      return j?.status === "ok";
+    }, `Comment on media ${mediaId}`);
+  }
+
   async likeDirectMessage(threadId: string, itemId: string): Promise<boolean> {
     return this.timed("LikeDM", async () => {
       const body = new URLSearchParams({}).toString();
