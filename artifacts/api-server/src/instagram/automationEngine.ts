@@ -193,11 +193,6 @@ interface ProfileState {
   dailyDate: string;
   hourlyCount: number;
   hourlyHour: string;
-  // Per-action variation counters (keyed by action name: like/viewStories/viewReels/viewHighlights/comment)
-  actionDailyCount: Record<string, number>;
-  actionDailyDate: string;
-  actionHourlyCount: Record<string, number>;
-  actionHourlyHour: string;
   // Per-action block suspensions (keyed by action name: follow/like/viewStories/etc.)
   actionSuspensions: Record<string, ActionSuspension>;
   // Human session tools run on their own separate timer
@@ -555,8 +550,6 @@ class AutomationEngine {
       client: null,
       dailyCount: 0, dailyDate: todayStr(),
       hourlyCount: 0, hourlyHour: hourStr(),
-      actionDailyCount: {}, actionDailyDate: todayStr(),
-      actionHourlyCount: {}, actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: true,
@@ -757,8 +750,6 @@ class AutomationEngine {
       client: null,
       dailyCount: 0, dailyDate: todayStr(),
       hourlyCount: 0, hourlyHour: hourStr(),
-      actionDailyCount: {}, actionDailyDate: todayStr(),
-      actionHourlyCount: {}, actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,   // run immediately on first tick
       lastHumanToolsEnabled: true,
@@ -862,8 +853,6 @@ class AutomationEngine {
       client: null,
       dailyCount: 0, dailyDate: todayStr(),
       hourlyCount: 0, hourlyHour: hourStr(),
-      actionDailyCount: {}, actionDailyDate: todayStr(),
-      actionHourlyCount: {}, actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -977,8 +966,6 @@ class AutomationEngine {
       client: null,
       dailyCount: 0, dailyDate: todayStr(),
       hourlyCount: 0, hourlyHour: hourStr(),
-      actionDailyCount: {}, actionDailyDate: todayStr(),
-      actionHourlyCount: {}, actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -1052,8 +1039,6 @@ class AutomationEngine {
       client: null,
       dailyCount: 0, dailyDate: todayStr(),
       hourlyCount: 0, hourlyHour: hourStr(),
-      actionDailyCount: {}, actionDailyDate: todayStr(),
-      actionHourlyCount: {}, actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -1769,28 +1754,6 @@ class AutomationEngine {
     }).catch(() => {});
   }
 
-  // ── Per-action daily/hourly counter helpers ───────────────────────────────
-  private actionDaily(state: ProfileState, key: string): number {
-    if (state.actionDailyDate !== todayStr()) {
-      state.actionDailyCount = {};
-      state.actionDailyDate = todayStr();
-    }
-    return state.actionDailyCount[key] ?? 0;
-  }
-  private actionHourly(state: ProfileState, key: string): number {
-    if (state.actionHourlyHour !== hourStr()) {
-      state.actionHourlyCount = {};
-      state.actionHourlyHour = hourStr();
-    }
-    return state.actionHourlyCount[key] ?? 0;
-  }
-  private bumpAction(state: ProfileState, key: string): void {
-    this.actionDaily(state, key);
-    this.actionHourly(state, key);
-    state.actionDailyCount[key]  = (state.actionDailyCount[key]  ?? 0) + 1;
-    state.actionHourlyCount[key] = (state.actionHourlyCount[key] ?? 0) + 1;
-  }
-
   // ── Action block / suspension helpers ────────────────────────────────────
 
   // Returns true if the given action is currently suspended due to a block.
@@ -1859,215 +1822,6 @@ class AutomationEngine {
       console.warn(`[engine] @profile${profileId}: ${msg}`);
       this.logAction(profileId, toolId, "action_suspended", targetUsername, sourceValue, sourceType, "suspended", msg);
     }
-  }
-
-  // Returns true if the action should fire before the follow, respecting all limits.
-  // chanceMin/Max  = overall % probability to trigger this action at all
-  // beforeMin/Max  = of those triggers, % to run BEFORE the follow
-  // maxDayMin/Max  = daily cap (max number of times per day, randomised each check)
-  // maxHourMin/Max = hourly cap
-  private shouldDoAction(
-    state: ProfileState,
-    key: string,
-    s: any,
-    chanceMinKey: string, chanceMaxKey: string,
-    beforeMinKey: string, beforeMaxKey: string,
-    maxDayMinKey: string, maxDayMaxKey: string,
-    maxHourMinKey: string, maxHourMaxKey: string,
-  ): boolean {
-    // 1. Overall chance roll
-    const chance = randInt(s[chanceMinKey] ?? 0, s[chanceMaxKey] ?? 0);
-    if (chance <= 0 || Math.random() * 100 >= chance) return false;
-
-    // 2. Daily cap (0 = no limit)
-    const maxDay = randInt(s[maxDayMinKey] ?? 0, s[maxDayMaxKey] ?? 0);
-    if (maxDay > 0 && this.actionDaily(state, key) >= maxDay) return false;
-
-    // 3. Hourly cap (0 = no limit)
-    const maxHour = randInt(s[maxHourMinKey] ?? 0, s[maxHourMaxKey] ?? 0);
-    if (maxHour > 0 && this.actionHourly(state, key) >= maxHour) return false;
-
-    // 4. "Do before follow" probability — gates whether we act NOW (before follow)
-    const beforePct = randInt(s[beforeMinKey] ?? 0, s[beforeMaxKey] ?? 0);
-    if (beforePct <= 0 || Math.random() * 100 >= beforePct) return false;
-
-    return true;
-  }
-
-  // ── Pre-follow action variations (like, stories, reels, highlights) ────────
-  private async preFollowActions(
-    profile: Profile,
-    tool: Tool,
-    client: InstagramWebClient,
-    user: { pk: string; username: string },
-    source: { value: string; type: string },
-    s: any,
-    state: ProfileState,
-    hikerClient: HikerApiClient | null = null,
-  ): Promise<boolean> {
-    const uname = user.username;
-    const uid = user.pk;
-
-    // Like before follow
-    if (
-      !this.isActionSuspended(state, "like") &&
-      this.shouldDoAction(state, "like", s,
-        "likeChanceMin", "likeChanceMax",
-        "likeBeforeMin", "likeBeforeMax",
-        "likeMaxPerDayMin", "likeMaxPerDayMax",
-        "likeMaxPerHourMin", "likeMaxPerHourMax",
-      )
-    ) {
-      const likeCount = randInt(s.likeProcessMin ?? 1, s.likeProcessMax ?? 1);
-      for (let i = 0; i < likeCount; i++) {
-        try {
-          const mediaId = hikerClient
-            ? await hikerClient.getUserRecentMediaId(uid)
-            : await client.getUserRecentMediaId(uid);
-          if (mediaId) {
-            const liked = await client.likeMedia(mediaId, uname);
-            if (liked === "blocked") {
-              // Jarvee ABD dismiss — try before applying suspension
-              await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
-              const abdOk = await client.tryDismissABD();
-              if (abdOk) {
-                await storage.updateProfile(profile.id, { accountStatus: "valid" });
-                await storage.incrementStat(profile.id, "abd");
-                console.log(`[engine] @${profile.username}: Like ABD auto-dismissed ✓ — continuing`);
-                this.logAction(profile.id, tool.id, "abd_dismissed", uname, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed");
-                await sleep(5000);
-                break; // stop liking this user's post but don't suspend
-              }
-              await storage.updateProfile(profile.id, { accountStatus: "valid" });
-              this.recordActionBlock(state, profile.id, tool.id, "like", "Like", uname, source.value, source.type);
-              break;
-            } else if (liked) {
-              this.bumpAction(state, "like");
-              await storage.incrementStat(profile.id, "like");
-              console.log(`[engine] @${profile.username}: ♥ liked post of @${uname} (${i + 1}/${likeCount})`);
-              this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "ok", `Liked post (${i + 1}/${likeCount})`);
-              await sleep(randInt((s.likeDelayMin ?? 2) * 1000, (s.likeDelayMax ?? 6) * 1000));
-            }
-          }
-        } catch (e: any) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] like @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    } else if (this.isActionSuspended(state, "like")) {
-      console.log(`[engine] @${profile.username}: like suspended (${this.suspensionRemaining(state, "like")} remaining) — skipping`);
-    }
-
-    // View stories before follow
-    if (
-      !this.isActionSuspended(state, "viewStories") &&
-      this.shouldDoAction(state, "viewStories", s,
-        "viewStoriesChanceMin", "viewStoriesChanceMax",
-        "viewStoriesBeforeMin", "viewStoriesBeforeMax",
-        "viewStoriesMaxPerDayMin", "viewStoriesMaxPerDayMax",
-        "viewStoriesMaxPerHourMin", "viewStoriesMaxPerHourMax",
-      )
-    ) {
-      const storyCount = randInt(s.viewStoriesProcessMin ?? 1, s.viewStoriesProcessMax ?? 3);
-      for (let i = 0; i < storyCount; i++) {
-        try {
-          const ok = await client.viewStories(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewStories");
-            await storage.incrementStat(profile.id, "story");
-            console.log(`[engine] @${profile.username}: 📖 viewed stories of @${uname} (${i + 1}/${storyCount})`);
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "ok", `Stories viewed (${i + 1}/${storyCount})`);
-            await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1000, (s.viewStoriesDelayMax ?? 6) * 1000));
-          } else break;
-        } catch (e: any) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] stories @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-
-    // View reels before follow
-    if (
-      !this.isActionSuspended(state, "viewReels") &&
-      this.shouldDoAction(state, "viewReels", s,
-        "viewReelsChanceMin", "viewReelsChanceMax",
-        "viewReelsBeforeMin", "viewReelsBeforeMax",
-        "viewReelsMaxPerDayMin", "viewReelsMaxPerDayMax",
-        "viewReelsMaxPerHourMin", "viewReelsMaxPerHourMax",
-      )
-    ) {
-      const reelCount = randInt(s.viewReelsProcessMin ?? 1, s.viewReelsProcessMax ?? 2);
-      for (let i = 0; i < reelCount; i++) {
-        try {
-          const ok = await client.viewReels(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewReels");
-            console.log(`[engine] @${profile.username}: 🎬 viewed reels of @${uname} (${i + 1}/${reelCount})`);
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "ok", `Reels viewed (${i + 1}/${reelCount})`);
-            await sleep(randInt((s.viewReelsDelayMin ?? 2) * 1000, (s.viewReelsDelayMax ?? 6) * 1000));
-          } else break;
-        } catch (e: any) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] reels @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-
-    // View highlights before follow
-    if (
-      !this.isActionSuspended(state, "viewHighlights") &&
-      this.shouldDoAction(state, "viewHighlights", s,
-        "viewHighlightsChanceMin", "viewHighlightsChanceMax",
-        "viewHighlightsBeforeMin", "viewHighlightsBeforeMax",
-        "viewHighlightsMaxPerDayMin", "viewHighlightsMaxPerDayMax",
-        "viewHighlightsMaxPerHourMin", "viewHighlightsMaxPerHourMax",
-      )
-    ) {
-      const highlightCount = randInt(s.viewHighlightsProcessMin ?? 1, s.viewHighlightsProcessMax ?? 2);
-      for (let i = 0; i < highlightCount; i++) {
-        try {
-          const ok = await client.viewHighlights(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewHighlights");
-            console.log(`[engine] @${profile.username}: ⭐ viewed highlights of @${uname} (${i + 1}/${highlightCount})`);
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "ok", `Highlights viewed (${i + 1}/${highlightCount})`);
-            await sleep(randInt((s.viewHighlightsDelayMin ?? 2) * 1000, (s.viewHighlightsDelayMax ?? 6) * 1000));
-          } else break;
-        } catch (e: any) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] highlights @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-    return false;
   }
 
   // ── Spintax resolver: {A|B|C} → picks one branch randomly ────────────────
@@ -3610,9 +3364,6 @@ class AutomationEngine {
         hitHardLimit = true; break;
       }
 
-      // Pre-follow action variations (like, stories, reels, highlights)
-      if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) { hitHardLimit = true; break; }
-
       // Inject GetSuggestedUsers and/or searchUserByUsername before some follows (follows 2+).
       // RULE: searchUserByUsername must NEVER fire immediately before getSuggestedUsers —
       // that is not a real app flow (you cannot reach suggested users from the search bar).
@@ -3893,7 +3644,6 @@ class AutomationEngine {
             filterSkipped++; continue;
           }
           if (this.isActionSuspended(state, "follow")) { hitHardLimit = true; break; }
-          if (await this.preFollowActions(profile, tool, client, user, rescrapeSource, s, state, hikerClient)) { hitHardLimit = true; break; }
           let result: { ok: boolean; status?: string; reason?: string };
           try {
             const sourceLabel = rescrapeSource.value ? (rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value) : undefined;
@@ -4012,8 +3762,6 @@ class AutomationEngine {
         client: null,
         dailyCount: 0, dailyDate: "",
         hourlyCount: 0, hourlyHour: "",
-        actionDailyCount: {}, actionDailyDate: "",
-        actionHourlyCount: {}, actionHourlyHour: "",
         actionSuspensions: {},
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,
@@ -4278,8 +4026,6 @@ class AutomationEngine {
         client: null,
         dailyCount: 0,   dailyDate:   todayStr(),
         hourlyCount: 0,  hourlyHour:  hourStr(),
-        actionDailyCount: {}, actionDailyDate:  todayStr(),
-        actionHourlyCount: {}, actionHourlyHour: hourStr(),
         actionSuspensions: {},
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,

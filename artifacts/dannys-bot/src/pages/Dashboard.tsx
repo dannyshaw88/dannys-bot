@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.791",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Cleanup", text: "Follow tool: Session Action Variation removed from the UI and all related backend logic cleaned up — fewer moving parts, same core follow behaviour." },
+    ],
+  },
+  {
     version: "1.0.790",
     date: "5 Jun 2026",
     items: [
