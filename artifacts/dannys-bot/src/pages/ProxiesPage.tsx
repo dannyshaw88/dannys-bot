@@ -796,7 +796,7 @@ export function ProxiesPage() {
                 <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Columns</p>
                 {proxyColOrder.map((key, ordIdx) => {
                   const updateWidth = (delta: number) => {
-                    const v = Math.max(40, Math.min(400, proxyColWidths[key] + delta));
+                    const v = Math.max(1, Math.min(400, proxyColWidths[key] + delta));
                     const next = { ...proxyColWidths, [key]: v };
                     setProxyColWidths(next);
                     localStorage.setItem("proxies_col_widths_px", JSON.stringify(next));
@@ -809,7 +809,7 @@ export function ProxiesPage() {
                       </div>
                       <label className="text-xs w-20 text-muted-foreground shrink-0">{PROXY_COL_LABELS[key]}</label>
                       <button onClick={() => updateWidth(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
-                      <input type="number" min={40} max={400} value={proxyColWidths[key]} onChange={e => { const v = Math.max(40, Math.min(400, Number(e.target.value))); const next = { ...proxyColWidths, [key]: v }; setProxyColWidths(next); localStorage.setItem("proxies_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                      <input type="number" min={1} max={400} value={proxyColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(400, Number(e.target.value))); const next = { ...proxyColWidths, [key]: v }; setProxyColWidths(next); localStorage.setItem("proxies_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
                       <button onClick={() => updateWidth(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
                     </div>
                   );

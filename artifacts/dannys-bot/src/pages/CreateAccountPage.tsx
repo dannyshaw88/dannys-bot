@@ -603,7 +603,7 @@ export function CreateAccountPage() {
                 <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
                 {([ ["account","Account"],["status","Status"],["active","Active"],["actions","Actions"],["ip","IP:Port"] ] as [keyof typeof DEFAULT_COL_WIDTHS, string][]).map(([key, label]) => {
                   const updateCol = (delta: number) => {
-                    const v = Math.max(40, Math.min(600, colWidths[key] + delta));
+                    const v = Math.max(1, Math.min(600, colWidths[key] + delta));
                     const next = { ...colWidths, [key]: v };
                     setColWidths(next);
                     localStorage.setItem("creator_col_widths_px", JSON.stringify(next));
@@ -612,7 +612,7 @@ export function CreateAccountPage() {
                     <div key={key} className="flex items-center gap-1.5 mb-2">
                       <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
                       <button onClick={() => updateCol(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
-                      <input type="number" min={40} max={600} value={colWidths[key]} onChange={e => { const v = Math.max(40, Math.min(600, Number(e.target.value))); const next = { ...colWidths, [key]: v }; setColWidths(next); localStorage.setItem("creator_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                      <input type="number" min={1} max={600} value={colWidths[key]} onChange={e => { const v = Math.max(1, Math.min(600, Number(e.target.value))); const next = { ...colWidths, [key]: v }; setColWidths(next); localStorage.setItem("creator_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
                       <button onClick={() => updateCol(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
                     </div>
                   );

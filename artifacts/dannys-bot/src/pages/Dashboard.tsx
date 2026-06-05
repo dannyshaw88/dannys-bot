@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.787",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Stats page: Human Session toggle now correctly shows and syncs the on/off state for each account." },
+      { category: "Feature", text: "Stats page: Reposts column added to the Tool Performance table." },
+      { category: "Feature", text: "Stats page Metrics tab: added Total API Calls, ABD Dismissed, Captchas Hit, and Bans Detected data points to the Account Health section." },
+      { category: "Feature", text: "Stats page Metrics tab: Human Session Cycles counter added, and pie charts now show only action-type stats (follows, unfollows, DMs, likes, comments, story views, reposts)." },
+      { category: "UI", text: "Column width inputs across all pages: minimum width removed — columns can now be made as narrow as needed." },
+      { category: "Tracking", text: "Repost, captcha, and ban events now increment their own stat counters so they appear in the Metrics tab." },
+    ],
+  },
+  {
     version: "1.0.786",
     date: "5 Jun 2026",
     items: [
@@ -5167,7 +5179,7 @@ export function Dashboard() {
                     {colOrder.map((key, idx) => {
                       const label = COL_LABELS[key];
                       const updateCol = (delta: number) => {
-                        const v = Math.max(40, Math.min(600, colWidths[key] + delta));
+                        const v = Math.max(1, Math.min(600, colWidths[key] + delta));
                         const next = { ...colWidths, [key]: v };
                         setColWidths(next);
                         localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
@@ -5199,11 +5211,11 @@ export function Dashboard() {
                           </button>
                           <input
                             type="number"
-                            min={40}
+                            min={1}
                             max={600}
                             value={colWidths[key]}
                             onChange={e => {
-                              const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                              const v = Math.max(1, Math.min(600, Number(e.target.value)));
                               const next = { ...colWidths, [key]: v };
                               setColWidths(next);
                               localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));

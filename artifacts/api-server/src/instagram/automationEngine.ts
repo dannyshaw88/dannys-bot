@@ -2411,6 +2411,12 @@ class AutomationEngine {
     // Debug-log every account-level error so the exact triggering message is visible
     console.error(`[engine] applyAccountLevelError profileId=${profileId} status=${status} raw=${rawError.slice(0, 400)}`);
     await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
+    if (status === "banned" || status === "suspended") {
+      await storage.incrementStat(profileId, "banned").catch(() => {});
+    }
+    if (status === "captcha") {
+      await storage.incrementStat(profileId, "captcha").catch(() => {});
+    }
     if (state && status === "logged_out") state.client = null;
     if (status === "logged_out" && toolId !== undefined) {
       this.logAction(profileId, toolId, "logged_out", "", "", "", "error", rawError.slice(0, 300));
@@ -2956,6 +2962,7 @@ class AutomationEngine {
                 }
                 console.log(`[engine] @${profile.username}: 🔁 uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
+                await storage.incrementStat(profile.id, "repost");
                 uploadedCount++;
                 if (deleteAfterUpload) {
                   try { await fsPromises.unlink(filePath); } catch (e: any) {
@@ -3051,6 +3058,7 @@ class AutomationEngine {
               });
               console.log(`[engine] @${profile.username}: 🔁 reposted ${item.mediaId} from @${sourceUsername} → own post ${postedShortcode} (alteration=${level}) [${repostedCount + 1}/${targetCount}]`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level}) [${repostedCount + 1}/${targetCount}]`);
+              await storage.incrementStat(profile.id, "repost");
               repostedCount++;
             } else {
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}`);
@@ -3981,6 +3989,7 @@ class AutomationEngine {
 
       console.log(`[engine] @${profile.username}: 🔁 [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} → ${postedShortcode}`);
       this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+      await storage.incrementStat(profileId, "repost");
 
       return { ok: true, message: `Reposted → instagram.com/p/${postedShortcode}` };
     } catch (e: any) {

@@ -357,6 +357,11 @@ export async function registerInstagramRoutes(
   });
 
   // Must be before /:id routes so Express doesn't treat "last-api-calls" as an ID.
+  app.get("/api/profiles/:profileId/api-call-count", async (req, res) => {
+    const count = await storage.getInstagramApiCallCount(Number(req.params.profileId));
+    res.json({ count });
+  });
+
   app.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
     res.json(data);

@@ -18,13 +18,13 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronRight, Bot, Monitor, ImagePlus,
-  BarChart2, Zap,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
-type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "human_session";
+type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
 type ColKey = StatKey | "open_eb" | "trustscore";
 
 const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean; toolTypeKey?: string; pieColor: string }[] = [
@@ -34,20 +34,21 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "like",          label: "Likes",         icon: <Heart className="w-3.5 h-3.5" />,         color: "text-rose-500",    isTool: false, pieColor: "#f43f5e" },
   { key: "comment",       label: "Comments",      icon: <MessageCircle className="w-3.5 h-3.5" />, color: "text-indigo-500",  isTool: false, pieColor: "#6366f1" },
   { key: "story",         label: "Story Views",   icon: <Eye className="w-3.5 h-3.5" />,           color: "text-emerald-500", isTool: false, pieColor: "#10b981" },
-  { key: "human_session", label: "Human Session", icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_session", pieColor: "#06b6d4" },
+  { key: "repost",        label: "Reposts",       icon: <Repeat2 className="w-3.5 h-3.5" />,       color: "text-sky-500",     isTool: false, pieColor: "#0ea5e9" },
+  { key: "human_session", label: "Human Session", icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_sessions", pieColor: "#06b6d4" },
 ];
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
   account: 160, open_eb: 80, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
-  like: 100, comment: 110, story: 120, human_session: 140,
+  like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
   follow: true, unfollow: true, dm: true, like: true,
-  comment: true, story: true, human_session: true, open_eb: true, trustscore: true,
+  comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true,
 };
 
-const DEFAULT_STAT_COL_ORDER: ColKey[] = ["open_eb", "trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "human_session"];
+const DEFAULT_STAT_COL_ORDER: ColKey[] = ["open_eb", "trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
 
 function ProfileStatsRow({
   profile,
@@ -97,7 +98,7 @@ function ProfileStatsRow({
         </button>
       </td>
 
-      {/* All non-account columns — centered */}
+      {/* All non-account columns — centred */}
       {statColOrder.filter(key => visibleCols[key]).map(key => {
         if (key === "open_eb") {
           return (
@@ -331,7 +332,7 @@ export function StatsPage() {
   };
 
   const updateWidth = (key: ColKey | "account", delta: number) => {
-    const v = Math.max(40, colWidths[key] + delta);
+    const v = Math.max(1, colWidths[key] + delta);
     const next = { ...colWidths, [key]: v };
     setColWidths(next);
     localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
@@ -376,39 +377,60 @@ export function StatsPage() {
     enabled: !!selectedProfile,
   });
 
+  const { data: apiCallCountData } = useQuery<{ count: number }>({
+    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-call-count`] : ["no-profile-api"],
+    enabled: !!selectedProfile,
+    refetchInterval: 30000,
+  });
+
+  const getStat = (type: string, date: string) =>
+    metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
+
+  // Only actions go in the pie chart (non-tool stat keys)
+  const actionStatTypes = ALL_STAT_TYPES.filter(st => !st.isTool);
+
   const pieData = useMemo(() => {
-    return ALL_STAT_TYPES
-      .filter(st => !st.isTool)
+    return actionStatTypes
       .map(st => ({
         name: st.label,
-        value: metricsStats.find((s: any) => s.toolType === st.key && s.date === today)?.count ?? 0,
+        value: getStat(st.key, today),
         color: st.pieColor,
       }))
       .filter(d => d.value > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metricsStats, today]);
 
   const lifetimePieData = useMemo(() => {
-    return ALL_STAT_TYPES
-      .filter(st => !st.isTool)
+    return actionStatTypes
       .map(st => ({
         name: st.label,
-        value: metricsStats.find((s: any) => s.toolType === st.key && s.date === "lifetime")?.count ?? 0,
+        value: getStat(st.key, "lifetime"),
         color: st.pieColor,
       }))
       .filter(d => d.value > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metricsStats]);
 
   const totalToday = useMemo(() =>
-    ALL_STAT_TYPES.filter(st => !st.isTool).reduce((sum, st) =>
-      sum + (metricsStats.find((s: any) => s.toolType === st.key && s.date === today)?.count ?? 0), 0),
-    [metricsStats, today]);
+    actionStatTypes.reduce((sum, st) => sum + getStat(st.key, today), 0),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [metricsStats, today]);
 
   const totalLifetime = useMemo(() =>
-    ALL_STAT_TYPES.filter(st => !st.isTool).reduce((sum, st) =>
-      sum + (metricsStats.find((s: any) => s.toolType === st.key && s.date === "lifetime")?.count ?? 0), 0),
-    [metricsStats]);
+    actionStatTypes.reduce((sum, st) => sum + getStat(st.key, "lifetime"), 0),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [metricsStats]);
 
-  const humanSessionEnabled = metricsTools?.find(t => t.type === "human_session")?.enabled ?? false;
+  const humanSessionTool = metricsTools?.find(t => t.type === "human_sessions");
+  const humanSessionEnabled = humanSessionTool?.enabled ?? false;
+
+  // Extra tracked metrics (stored via incrementStat with these keys)
+  const abdToday    = getStat("abd", today);
+  const abdLifetime = getStat("abd", "lifetime");
+  const bannedToday    = getStat("banned", today);
+  const bannedLifetime = getStat("banned", "lifetime");
+  const captchaToday    = getStat("captcha", today);
+  const captchaLifetime = getStat("captcha", "lifetime");
 
   return (
     <AppLayout>
@@ -503,9 +525,10 @@ export function StatsPage() {
                             </button>
                             <input
                               type="number"
+                              min={1}
                               value={colWidths[key as StatKey | "account"]}
                               onChange={e => {
-                                const v = Math.max(40, Number(e.target.value) || 40);
+                                const v = Math.max(1, Number(e.target.value) || 1);
                                 const next = { ...colWidths, [key]: v };
                                 setColWidths(next);
                                 localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
@@ -541,7 +564,6 @@ export function StatsPage() {
                   </colgroup>
                   <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
                     <tr>
-                      {/* Account header — left-aligned */}
                       <th className="px-4 py-3 font-bold uppercase tracking-wide text-left">
                         <button onClick={() => cycleSort("account")} className="flex items-center hover:text-foreground transition-colors">
                           Account Name{sortIcon("account")}
@@ -702,9 +724,7 @@ export function StatsPage() {
                 </SelectContent>
               </Select>
               {selectedProfile && (
-                <span className="text-xs text-muted-foreground">
-                  @{selectedProfile.username}
-                </span>
+                <span className="text-xs text-muted-foreground">@{selectedProfile.username}</span>
               )}
             </div>
 
@@ -716,86 +736,50 @@ export function StatsPage() {
               </Card>
             ) : (
               <>
-                {/* Charts row */}
+                {/* Pie charts — actions only */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Today pie chart */}
                   <Card className="desktop-card border-none shadow-sm">
                     <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <BarChart2 className="w-4 h-4 text-primary" />
-                        Today's Activity Breakdown
+                        Today's Actions Breakdown
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
                       {pieData.length === 0 ? (
-                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                          No activity recorded today
-                        </div>
+                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No actions recorded today</div>
                       ) : (
                         <ResponsiveContainer width="100%" height={220}>
                           <PieChart>
-                            <Pie
-                              data={pieData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={55}
-                              outerRadius={85}
-                              paddingAngle={2}
-                              dataKey="value"
-                            >
-                              {pieData.map((entry, idx) => (
-                                <Cell key={idx} fill={entry.color} />
-                              ))}
+                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
+                              {pieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
                             </Pie>
-                            <Tooltip
-                              formatter={(value: number, name: string) => [value.toLocaleString(), name]}
-                              contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                            />
-                            <Legend
-                              formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>}
-                            />
+                            <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                            <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
                           </PieChart>
                         </ResponsiveContainer>
                       )}
                     </CardContent>
                   </Card>
 
-                  {/* Lifetime pie chart */}
                   <Card className="desktop-card border-none shadow-sm">
                     <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <BarChart2 className="w-4 h-4 text-primary" />
-                        Lifetime Activity Breakdown
+                        Lifetime Actions Breakdown
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
                       {lifetimePieData.length === 0 ? (
-                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                          No lifetime activity recorded
-                        </div>
+                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No lifetime actions recorded</div>
                       ) : (
                         <ResponsiveContainer width="100%" height={220}>
                           <PieChart>
-                            <Pie
-                              data={lifetimePieData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={55}
-                              outerRadius={85}
-                              paddingAngle={2}
-                              dataKey="value"
-                            >
-                              {lifetimePieData.map((entry, idx) => (
-                                <Cell key={idx} fill={entry.color} />
-                              ))}
+                            <Pie data={lifetimePieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
+                              {lifetimePieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
                             </Pie>
-                            <Tooltip
-                              formatter={(value: number, name: string) => [value.toLocaleString(), name]}
-                              contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                            />
-                            <Legend
-                              formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>}
-                            />
+                            <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                            <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
                           </PieChart>
                         </ResponsiveContainer>
                       )}
@@ -803,44 +787,88 @@ export function StatsPage() {
                   </Card>
                 </div>
 
-                {/* Summary data points */}
+                {/* Action data points */}
                 <Card className="desktop-card border-none shadow-sm">
                   <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                       <Zap className="w-4 h-4 text-primary" />
-                      Account Data Points
+                      Action Totals
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                      {/* Total actions today */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {/* Grand totals */}
                       <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Today</span>
                         <span className="text-2xl font-bold tabular-nums text-foreground">{totalToday.toLocaleString()}</span>
                         <span className="text-[10px] text-muted-foreground">all actions</span>
                       </div>
-
-                      {/* Total lifetime */}
                       <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Lifetime</span>
                         <span className="text-2xl font-bold tabular-nums text-foreground">{totalLifetime.toLocaleString()}</span>
                         <span className="text-[10px] text-muted-foreground">all actions</span>
                       </div>
+                      {/* Per-action breakdown */}
+                      {actionStatTypes.map(st => (
+                        <div key={st.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                          <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${st.color}`}>
+                            {st.icon}{st.label}
+                          </span>
+                          <span className="text-2xl font-bold tabular-nums text-foreground">{getStat(st.key, today).toLocaleString()}</span>
+                          <span className="text-[10px] text-muted-foreground">today · {getStat(st.key, "lifetime").toLocaleString()} lifetime</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
 
-                      {/* Per-tool breakdown today */}
-                      {ALL_STAT_TYPES.filter(st => !st.isTool).map(st => {
-                        const todayVal = metricsStats.find((s: any) => s.toolType === st.key && s.date === today)?.count ?? 0;
-                        const lifetimeVal = metricsStats.find((s: any) => s.toolType === st.key && s.date === "lifetime")?.count ?? 0;
-                        return (
-                          <div key={st.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                            <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${st.color}`}>
-                              {st.icon}{st.label}
-                            </span>
-                            <span className="text-2xl font-bold tabular-nums text-foreground">{todayVal.toLocaleString()}</span>
-                            <span className="text-[10px] text-muted-foreground">today · {lifetimeVal.toLocaleString()} lifetime</span>
-                          </div>
-                        );
-                      })}
+                {/* Account health & system data points */}
+                <Card className="desktop-card border-none shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-primary" />
+                      Account Health &amp; System
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {/* Total API calls */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <Webhook className="w-3 h-3" />Total API Calls
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">
+                          {(apiCallCountData?.count ?? 0).toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">all time</span>
+                      </div>
+
+                      {/* ABD dismissed */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-500 flex items-center gap-1">
+                          <ShieldAlert className="w-3 h-3" />ABD Dismissed
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{abdToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {abdLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Captchas encountered */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-500 flex items-center gap-1">
+                          <Activity className="w-3 h-3" />Captchas Hit
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{captchaToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {captchaLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Bans / suspensions detected */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-destructive flex items-center gap-1">
+                          <PhoneOff className="w-3 h-3" />Bans Detected
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{bannedToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {bannedLifetime.toLocaleString()} lifetime</span>
+                      </div>
 
                       {/* Human Session status */}
                       <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
@@ -851,6 +879,15 @@ export function StatsPage() {
                           {humanSessionEnabled ? "Enabled" : "Disabled"}
                         </span>
                         <span className="text-[10px] text-muted-foreground">current status</span>
+                      </div>
+
+                      {/* HS cycles today */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-500 flex items-center gap-1">
+                          <Bot className="w-3 h-3" />HS Cycles
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{getStat("human_session", today).toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {getStat("human_session", "lifetime").toLocaleString()} lifetime</span>
                       </div>
                     </div>
                   </CardContent>
