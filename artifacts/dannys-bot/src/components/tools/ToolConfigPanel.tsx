@@ -1046,8 +1046,11 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingCommentPctMax: v, injectProfileBrowsingCommentPctMin: Math.min(v, (settings as any).injectProfileBrowsingCommentPctMin ?? 0) } as any); }} />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
-                      <div className="w-px h-4 bg-border/50 shrink-0" />
-                      {/* Browse Before Follow */}
+                    </div>
+                  </div>
+                  {/* Row 3: Browse Before Follow + Abandon Follow */}
+                  {!!(settings as any).injectProfileBrowsingEnabled && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       <div className="flex items-center gap-1.5 shrink-0">
                         <input type="checkbox" id="injectProfileBrowsingBeforeFollow" checked={!!(settings as any).injectProfileBrowsingBeforeFollow} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollow: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                         <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Browse Before Follow</label>
@@ -1074,7 +1077,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         </>
                       )}
                     </div>
-                  </div>
+                  )}
                   {/* Comment spintax — shown when comment % is set and browsing enabled */}
                   {!!(settings as any).injectProfileBrowsingEnabled && ((settings as any).injectProfileBrowsingCommentPctMax ?? 0) > 0 && (
                     <div className="flex flex-col gap-1 ml-5 pt-1">

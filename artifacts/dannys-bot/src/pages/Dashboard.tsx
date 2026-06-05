@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.790",
+    date: "5 Jun 2026",
+    items: [
+      { category: "UI", text: "Inject Browsing: Browse Before Follow and Abandon Follow moved to their own third row, keeping row 2 focused on action percentages only." },
+    ],
+  },
+  {
     version: "1.0.789",
     date: "5 Jun 2026",
     items: [
