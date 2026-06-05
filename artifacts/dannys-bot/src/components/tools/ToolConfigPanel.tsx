@@ -335,10 +335,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     // give each account a random start time within [delayMin, delayMax] so
     // they don't all fire at the same moment. This mirrors what the engine
     // does on a cold startup (randInt(delayMin, delayMax)).
-    const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
-    if (willEnable && willRandomise) {
+    if (willRandomise) {
       const delayMin = Math.max(1, (settings as any).delayMin ?? 1);
       const delayMax = Math.max(delayMin, (settings as any).delayMax ?? 5);
       staggerOffsets = targetIds.map(() =>
@@ -745,14 +744,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                   <Label htmlFor="globalDelayMin" className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
                   <Input id="globalDelayMin" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
                     value={settings.delayMin}
-                    onChange={(e) => setSettings({...settings, delayMin: Math.min(Math.min(10000, Number(e.target.value)), settings.delayMax ?? 10000)})}
+                    onChange={(e) => { const v = Math.min(10000, Math.max(0, Number(e.target.value))); setSettings({...settings, delayMin: v, delayMax: Math.max(v, settings.delayMax ?? 10000)}); }}
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label htmlFor="globalDelayMax" className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
                   <Input id="globalDelayMax" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
                     value={settings.delayMax}
-                    onChange={(e) => setSettings({...settings, delayMax: Math.max(Math.min(10000, Number(e.target.value)), settings.delayMin ?? 0)})}
+                    onChange={(e) => { const v = Math.min(10000, Math.max(0, Number(e.target.value))); setSettings({...settings, delayMax: v, delayMin: Math.min(v, settings.delayMin ?? 0)}); }}
                   />
                 </div>
               </div>
@@ -1025,12 +1024,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                         <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMin ?? 1}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMax ?? 100) } as any)}
+                          onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingMin: v, injectProfileBrowsingMax: Math.max(v, (settings as any).injectProfileBrowsingMax ?? 100) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                         <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMax ?? 1}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMin ?? 1) } as any)}
+                          onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingMax: v, injectProfileBrowsingMin: Math.min(v, (settings as any).injectProfileBrowsingMin ?? 1) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
@@ -1038,29 +1037,29 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                   </div>
                   {/* Profile Browsing sub-settings — stacked vertically below the injection row */}
                   {!!(settings as any).injectProfileBrowsingEnabled && (
-                    <div className="flex flex-col gap-y-2">
+                    <div className="flex flex-col gap-y-2 ml-5">
                       {/* Feed Posts + Open Post% */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Feed Posts</span>
                         <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingFeedMin ?? 3}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingFeedMax ?? 30) } as any)}
+                          onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingFeedMin: v, injectProfileBrowsingFeedMax: Math.max(v, (settings as any).injectProfileBrowsingFeedMax ?? 30) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                         <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingFeedMax ?? 6}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingFeedMin ?? 1) } as any)}
+                          onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingFeedMax: v, injectProfileBrowsingFeedMin: Math.min(v, (settings as any).injectProfileBrowsingFeedMin ?? 1) } as any); }}
                         />
                         <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Open Post%</span>
                         <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingPostPctMin ?? 0}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingPostPctMax ?? 100) } as any)}
+                          onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingPostPctMin: v, injectProfileBrowsingPostPctMax: Math.max(v, (settings as any).injectProfileBrowsingPostPctMax ?? 100) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                         <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingPostPctMax ?? 0}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingPostPctMin ?? 0) } as any)}
+                          onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingPostPctMax: v, injectProfileBrowsingPostPctMin: Math.min(v, (settings as any).injectProfileBrowsingPostPctMin ?? 0) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
@@ -1079,12 +1078,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}>
                           <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                             value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any)}
+                            onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: v, injectProfileBrowsingBeforeFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any); }}
                           />
                           <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                           <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                             value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)}
+                            onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: v, injectProfileBrowsingBeforeFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any); }}
                           />
                           <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                         </div>
@@ -1105,12 +1104,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingAbandonFollow ? 'opacity-40 pointer-events-none' : ''}`}>
                             <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                               value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10}
-                              onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)}
+                              onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any); }}
                             />
                             <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                             <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
                               value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20}
-                              onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)}
+                              onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any); }}
                             />
                             <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                           </div>

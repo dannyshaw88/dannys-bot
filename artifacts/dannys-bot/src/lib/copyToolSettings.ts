@@ -103,4 +103,26 @@ export async function copyToolSettingsToProfiles(
       })
     );
   }
+
+  // ── PHASE 2.5: cold restart for already-running tools with stagger (no enable signal) ──
+  // When "Randomise timing" is ticked but Start/Stop is not being copied, stagger offsets
+  // are already written to DB in Phase 1. We still need to trigger a cold restart so the
+  // engine picks up the new staggerOffsetMins immediately — otherwise the tool just keeps
+  // running on its current schedule and the stagger is ignored until the next natural stop.
+  if (!hasEnabled && hasStagger) {
+    await Promise.all(
+      toolRecords.map(async ({ profileId, tool }, i) => {
+        if (!tool?.enabled) return; // only restart currently-running tools
+        const stagger = staggerOffsetMins?.[i] ?? 0;
+        if (stagger <= 0) return;
+        const res = await fetch(`/api/tools/${tool.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: true, cold: true }),
+          credentials: "include",
+        });
+        if (!res.ok) console.warn(`[copySettings] cold restart failed for tool ${tool.id} (profile ${profileId})`);
+      })
+    );
+  }
 }

@@ -250,13 +250,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const SENTINEL_KEYS = ["startStop", "hs_followEnabled", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources", "hs_clearFollowSources"];
     const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k) && !k.includes(":"));
 
-    const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
-    if (willRandomise && targetIds.length > 1) {
-      const delayMax = (settings as any).delayMax ?? 60;
-      staggerOffsets = targetIds.map((_, i) =>
-        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+    if (willRandomise) {
+      const delayMin = Math.max(1, (settings as any).delayMin ?? 30);
+      const delayMax = Math.max(delayMin, (settings as any).delayMax ?? 60);
+      staggerOffsets = targetIds.map(() =>
+        delayMin + Math.floor(Math.random() * (delayMax - delayMin + 1))
       );
     }
     try {

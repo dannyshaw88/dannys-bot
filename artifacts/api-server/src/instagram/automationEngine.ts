@@ -1403,12 +1403,8 @@ class AutomationEngine {
           await storage.updateProfile(profile.id, { accountStatus: "valid" });
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "skipped", "Instagram action-blocked contact DM");
           await storage.updateContactPendingMessage(msg.id, { status: "failed" });
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-            const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
-            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-            this.logAction(profile.id, tool.id, "action_suspended", msg.instagramUsername, "", "", "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
-          }
+          // Contact DM "blocked" is ABD (Automated Behaviour Detected) — not a real Action Block.
+          // Do not trigger Stop Tool if Blocked for ABD errors.
           break;
         }
         if (result) {
@@ -2197,13 +2193,9 @@ class AutomationEngine {
         attempted++;
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
-          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-            const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
-            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-            this.logAction(profile.id, tool.id, "action_suspended", fu.instagramUsername, "", "", "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
-          }
+          // Unfollow "blocked" is always a feedback_required / ABD-type warning from Instagram —
+          // it is NOT a real "Action Blocked" prompt. Do not trigger Stop Tool if Blocked here.
+          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram automated-behaviour warning — breaking unfollow session");
           break;
         }
         if (result) {
@@ -3615,10 +3607,11 @@ class AutomationEngine {
         // Explicit Instagram account-level block (feedback_required / "Please wait" / "something went wrong")
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
+          const isFeedbackRequired = reason.includes("feedback_required");
           // Jarvee "Auto Verify Automatic Behaviour Detected": if the block is a soft
           // feedback_required ABD warning, try to dismiss it via the challenge endpoint
           // before applying the 24-hour suspension. If dismiss succeeds the session continues.
-          if (reason.includes("feedback_required") && state.client) {
+          if (isFeedbackRequired && state.client) {
             await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
             const abdOk = await state.client.tryDismissABD();
             if (abdOk) {
@@ -3632,7 +3625,9 @@ class AutomationEngine {
             await storage.updateProfile(profile.id, { accountStatus: "valid" });
           }
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+          // Only trigger Stop Tool if Blocked for real Action Blocked / "We restrict certain actions" errors —
+          // NOT for Automated Behaviour Detected (feedback_required ABD), which is a soft warning.
+          if (!isFeedbackRequired && s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
             const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
             const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
             await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
@@ -3641,18 +3636,8 @@ class AutomationEngine {
           hitHardLimit = true; break; // Abort session immediately when legitimately blocked
         }
 
-        // Catch-all: any other follow_blocked result (e.g. "200 undefined", unknown errors).
-        // If Stop Tool if Blocked is enabled, honour it for ALL block types — not just the
-        // named ones above.
-        if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-          const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
-          const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-          await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-          this.logAction(profile.id, tool.id, "action_suspended", user.username, source.value, source.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
-          hitHardLimit = true; break;
-        }
-
-        // Blocked attempts count against the session limit (users per session = real API calls)
+        // Catch-all: unclassified block error (e.g. "200 undefined", transient errors).
+        // Do NOT trigger Stop Tool if Blocked — these are not real "Action Blocked" prompts.
         if (followed + blocked >= processCount) break;
 
         // Always delay between attempts — even on block — to avoid hammering Instagram
@@ -3829,9 +3814,10 @@ class AutomationEngine {
               this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", reason.slice(0, 300));
               state.client = null; hitHardLimit = true; break;
             }
-            if (reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong")) {
+            const isRescrapeABD = reason.includes("feedback_required");
+            if (reason.includes("Please wait") || isRescrapeABD || reason.includes("something went wrong")) {
               // Jarvee ABD dismiss — try to acknowledge soft "Automated Behavior" warnings
-              if (reason.includes("feedback_required") && state.client) {
+              if (isRescrapeABD && state.client) {
                 await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
                 const abdOk = await state.client.tryDismissABD();
                 if (abdOk) {
@@ -3845,16 +3831,16 @@ class AutomationEngine {
                 await storage.updateProfile(profile.id, { accountStatus: "valid" });
               }
               this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
+              // Only trigger Stop Tool if Blocked for real Action Blocked errors, not ABD (feedback_required).
+              if (!isRescrapeABD && s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+                const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+                const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+                await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+                this.logAction(profile.id, tool.id, "action_suspended", user.username, rescrapeSource.value, rescrapeSource.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+              }
               hitHardLimit = true; break;
             }
-            // Catch-all: honour stopOnBlock for any unclassified block type
-            if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-              const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
-              const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-              await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-              this.logAction(profile.id, tool.id, "action_suspended", user.username, rescrapeSource.value, rescrapeSource.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
-              hitHardLimit = true; break;
-            }
+            // Catch-all: unclassified block — do NOT trigger Stop Tool if Blocked.
             if (followed + blocked >= processCount) break;
             await sleep(randInt(followMin, followMax)); continue;
           }

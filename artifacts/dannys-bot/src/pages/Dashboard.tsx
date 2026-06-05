@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.782",
+    date: "5 Jun 2026",
+    items: [
+      { category: "Fix", text: "Randomise Timing in Copy Settings now correctly staggers all accounts using random offsets within your Execute Every Min–Max range, regardless of whether Start/Stop is also being copied. Running tools are cold-restarted with their stagger delay immediately." },
+      { category: "Fix", text: "Min/Max field pairs (Execute Every, Inject Profile Browsing, Browse Before Follow, Abandon Follow, etc.) now work intuitively: increasing min auto-bumps max up, decreasing max auto-bumps min down — no more getting stuck." },
+      { category: "Fix", text: "Inject Profile Browsing sub-settings (Feed Posts, Open Post%, Browse Before Follow, Abandon Follow) are now indented directly below the Inject Profile Browsing toggle instead of being left-aligned." },
+      { category: "Fix", text: "Stop Tool if Blocked no longer triggers on Automated Behaviour Detected errors. It now only fires for real Action Blocked or We restrict certain actions prompts from Instagram." },
+    ],
+  },
+  {
     version: "1.0.781",
     date: "5 Jun 2026",
     items: [
