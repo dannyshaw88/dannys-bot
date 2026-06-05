@@ -9,7 +9,7 @@ import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
   Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
-  Flame, CheckCircle2, PlayCircle,
+  PlayCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -67,10 +67,6 @@ const FP_GPUS = [
   { vendor: "Google",                      renderer: "Tensor G2" },
 ];
 
-const _warmupDefaults = {
-  reelsMin: 1, reelsMax: 3,
-  reelsIdleMin: 5, reelsIdleMax: 12,
-};
 
 const FP_SPEECH_PROFILES = [
   "US English only",
@@ -106,48 +102,6 @@ function generateGhostFingerprint(): GhostFingerprint {
   };
 }
 
-// ── Warmup Row ─────────────────────────────────────────────────────────────────
-
-function WarmupRow({ label, min, max, onMin, onMax, idleMin, idleMax, onIdleMin, onIdleMax }: {
-  label: string;
-  min: number; max: number;
-  onMin: (v: number) => void; onMax: (v: number) => void;
-  idleMin: number; idleMax: number;
-  onIdleMin: (v: number) => void; onIdleMax: (v: number) => void;
-}) {
-  const clampCount = (v: number) => Math.max(0, Math.min(50, isNaN(v) ? 0 : v));
-  const clampIdle  = (v: number) => Math.max(0, Math.min(3600, isNaN(v) ? 0 : v));
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
-      {/* Count */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <input type="number" min="0" max="50" value={min}
-          onChange={e => onMin(clampCount(parseInt(e.target.value, 10)))}
-          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <span className="text-[10px] text-muted-foreground">–</span>
-        <input type="number" min="0" max="50" value={max}
-          onChange={e => onMax(clampCount(parseInt(e.target.value, 10)))}
-          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-      {/* Idle wait */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <input type="number" min="0" max="3600" value={idleMin}
-          onChange={e => onIdleMin(clampIdle(parseInt(e.target.value, 10)))}
-          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <span className="text-[10px] text-muted-foreground">–</span>
-        <input type="number" min="0" max="3600" value={idleMax}
-          onChange={e => onIdleMax(clampIdle(parseInt(e.target.value, 10)))}
-          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <span className="text-[9px] text-muted-foreground/70 ml-0.5">s</span>
-      </div>
-    </div>
-  );
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -407,16 +361,6 @@ export function CreateGhostPage() {
   // Ghost fingerprint — regenerated on every Nuke Environment
   const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
 
-  // Pre-Signup Warm-up — persisted to localStorage so values survive page reloads
-  const [warmupConfig, setWarmupConfig] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ghost-warmup-config");
-      if (saved) return JSON.parse(saved) as typeof _warmupDefaults;
-    } catch { /* ignore */ }
-    return _warmupDefaults;
-  });
-  const [warmupStatus, setWarmupStatus] = useState<"idle" | "running" | "done">("idle");
-  const [warmupLastStep, setWarmupLastStep] = useState("");
 
   const isOpen = browserState === "open";
 
@@ -432,49 +376,6 @@ export function CreateGhostPage() {
     });
   }, []);
 
-  // Persist warmup config to localStorage whenever it changes
-  useEffect(() => {
-    try { localStorage.setItem("ghost-warmup-config", JSON.stringify(warmupConfig)); } catch { /* ignore */ }
-  }, [warmupConfig]);
-
-  const handleBrowserMessage = useCallback((msg: any) => {
-    try {
-      const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
-      if (parsed.type === "signupStep" && parsed.msg) {
-        setWarmupLastStep(parsed.msg);
-      }
-      if (parsed.type === "warmupDone") {
-        setWarmupStatus("done");
-        setWarmupLastStep("Warm-up complete ✓");
-      }
-    } catch { /* non-fatal */ }
-  }, []);
-
-  // In native Electron mode the BrowserPanel is not rendered (Ghost Browser
-  // runs as its own OS window), so its WebSocket to /api/signup/browser/stream
-  // never opens and warmup signupStep / warmupDone messages are silently
-  // dropped.  Open our own WS here purely to receive those messages.
-  useEffect(() => {
-    if (!isNative) return;
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${proto}//${window.location.host}/api/signup/browser/stream`;
-    let ws: WebSocket | null = null;
-    let dead = false;
-
-    const connect = () => {
-      if (dead) return;
-      ws = new WebSocket(wsUrl);
-      ws.onmessage = (e) => {
-        try { handleBrowserMessage(JSON.parse(e.data)); } catch {}
-      };
-      ws.onclose = () => {
-        if (!dead) setTimeout(connect, 3000);
-      };
-      ws.onerror = () => { ws?.close(); };
-    };
-    connect();
-    return () => { dead = true; ws?.close(); };
-  }, [isNative, handleBrowserMessage]);
 
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
@@ -498,27 +399,9 @@ export function CreateGhostPage() {
 
   const hasProxy = proxySelection.kind !== "none" && resolvedProxy !== undefined;
 
-  const handleRunWarmup = useCallback(async () => {
-    if (!isOpen) return;
-    setWarmupStatus("running");
-    setWarmupLastStep("Starting warm-up…");
-    try {
-      await fetch("/api/signup/browser/warmup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(warmupConfig),
-      });
-    } catch {
-      setWarmupStatus("idle");
-      setWarmupLastStep("");
-    }
-  }, [isOpen, warmupConfig]);
-
   const handleOpen = async () => {
     if (!manualValid) return;
     setBrowserState("opening");
-    setWarmupStatus("idle");
-    setWarmupLastStep("");
     setActiveUA(selectedUA);
     setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
     await fetch("/api/signup/browser/open", {
@@ -535,27 +418,15 @@ export function CreateGhostPage() {
       }),
     }).catch(() => {});
     setBrowserState("open");
-    // Auto-start warm-up immediately — no need to click "Run Warm-up" manually.
-    setWarmupStatus("running");
-    setWarmupLastStep("Starting warm-up…");
-    fetch("/api/signup/browser/warmup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(warmupConfig),
-    }).catch(() => { setWarmupStatus("idle"); setWarmupLastStep(""); });
   };
 
   const handleClose = async () => {
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     setBrowserState("closed");
-    setWarmupStatus("idle");
-    setWarmupLastStep("");
   };
 
   const handleFresh = async () => {
     setBrowserState("resetting");
-    setWarmupStatus("idle");
-    setWarmupLastStep("");
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     await fetch("/api/signup/browser/reset", { method: "POST" }).catch(() => {});
     setSelectedUA(randomUA());
@@ -680,52 +551,6 @@ export function CreateGhostPage() {
               value={selectedUA.api}
               onSelect={ua => setSelectedUA(ua)}
             />
-          </div>
-
-          {/* Pre-Signup Warm-up — no toggle, status inline */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1">Pre-Signup Warm-up</p>
-              {warmupStatus === "running" && <Loader2 className="w-3 h-3 text-amber-500 animate-spin shrink-0" />}
-              {warmupStatus === "done"    && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />}
-            </div>
-
-            {/* Status directly under title */}
-            {!isOpen ? (
-              <p className="text-[10px] text-muted-foreground">Open browser to begin</p>
-            ) : warmupStatus === "running" ? (
-              <div className="flex items-start gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground leading-snug break-words">
-                  {warmupLastStep || "Starting…"}
-                </p>
-              </div>
-            ) : warmupStatus === "done" ? (
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                <p className="text-[10px] text-green-600 font-medium">Complete ✓</p>
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground">Ready</p>
-            )}
-
-            <div className="space-y-2 pt-0.5 border-t border-border/50">
-              <div className="flex items-center gap-1.5">
-                <span className="flex-1" />
-                <span className="w-[72px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Count</span>
-                <span className="w-[76px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Wait (s)</span>
-              </div>
-              <WarmupRow
-                label="▶ View trending reels"
-                min={warmupConfig.reelsMin} max={warmupConfig.reelsMax}
-                onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
-                onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
-                idleMin={warmupConfig.reelsIdleMin} idleMax={warmupConfig.reelsIdleMax}
-                onIdleMin={v => setWarmupConfig(c => ({ ...c, reelsIdleMin: Math.min(v, c.reelsIdleMax) }))}
-                onIdleMax={v => setWarmupConfig(c => ({ ...c, reelsIdleMax: Math.max(v, c.reelsIdleMin) }))}
-              />
-            </div>
           </div>
 
           {/* Actions + Account Fields */}
@@ -869,7 +694,6 @@ export function CreateGhostPage() {
               streamUrl="/api/signup/browser/stream"
               inputUrl="/api/signup/browser/input"
               forceStream={true}
-              onMessage={handleBrowserMessage}
             />
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8">

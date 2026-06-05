@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
   Plus, Trash2, Instagram, Activity, ChevronDown, ChevronUp, ChevronRight, Upload, Download,
-  ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
+  ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock, Monitor, Flag,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
   Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images,
@@ -301,6 +301,25 @@ export function ProfilesPage() {
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [fixingAbd, setFixingAbd] = useState(false);
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
+  const [flaggedIds, setFlaggedIds] = useState<number[]>(() => {
+    try { return JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]; } catch { return []; }
+  });
+  const handleBulkFlag = useCallback(() => {
+    setFlaggedIds(prev => {
+      const newIds = [...new Set([...prev, ...selectedProfileIds])];
+      try { localStorage.setItem("equinox:flagged_profiles", JSON.stringify(newIds)); } catch {}
+      return newIds;
+    });
+    setActionsOpen(false);
+  }, [selectedProfileIds]);
+  const handleBulkUnflag = useCallback(() => {
+    setFlaggedIds(prev => {
+      const newIds = prev.filter(id => !selectedProfileIds.includes(id));
+      try { localStorage.setItem("equinox:flagged_profiles", JSON.stringify(newIds)); } catch {}
+      return newIds;
+    });
+    setActionsOpen(false);
+  }, [selectedProfileIds]);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
@@ -1315,6 +1334,7 @@ export function ProfilesPage() {
                         {profile.accountLabel || profile.username}
                         {profile.locked && <span title="Locked — excluded from copy targets"><Lock className="w-3 h-3 text-amber-500 shrink-0" /></span>}
                         {isDupUsername && <span title={`Duplicate username: @${profile.username}`} className="text-purple-500 font-bold text-[9px] shrink-0 border border-purple-300 rounded px-0.5 bg-purple-100">DUP</span>}
+                        {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" /></span>}
                       </span>
                     </Link>
                   </div>
@@ -1398,7 +1418,7 @@ export function ProfilesPage() {
                     }
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
-                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Globe className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Monitor className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
                       </div>
                     );
@@ -1880,7 +1900,7 @@ export function ProfilesPage() {
               </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
+                <Monitor className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
@@ -1994,6 +2014,18 @@ export function ProfilesPage() {
               >
                 <UserCog className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Change Details{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
+              <button
+                onClick={() => { selectedProfileIds.length > 0 && selectedProfileIds.every(id => flaggedIds.includes(id)) ? handleBulkUnflag() : handleBulkFlag(); }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Flag className="w-4 h-4 shrink-0 text-red-500" />
+                {selectedProfileIds.length > 0 && selectedProfileIds.every(id => flaggedIds.includes(id))
+                  ? `Unflag Accounts (${selectedProfileIds.length})`
+                  : `Flag Accounts${selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}`
+                }
               </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">

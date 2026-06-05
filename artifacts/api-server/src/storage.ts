@@ -191,8 +191,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProfile(id: number): Promise<void> {
+    const [profile] = await db.select({ proxyId: profiles.proxyId }).from(profiles).where(eq(profiles.id, id));
+    const linkedProxyId = profile?.proxyId ?? null;
+
     await db.delete(tools).where(eq(tools.profileId, id));
     await db.delete(profiles).where(eq(profiles.id, id));
+
+    if (linkedProxyId) {
+      const others = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.proxyId, linkedProxyId));
+      if (others.length === 0) {
+        await db.delete(proxies).where(eq(proxies.id, linkedProxyId));
+      }
+    }
   }
 
   async updateProfileStatus(id: number, status: string): Promise<Profile> {
@@ -202,7 +212,7 @@ export class DatabaseStorage implements IStorage {
 
   async getToolsByProfile(profileId: number): Promise<Tool[]> {
     const existing = await db.select().from(tools).where(eq(tools.profileId, profileId));
-    const allTypes = ['follow', 'unfollow', 'like', 'dm', 'contact'];
+    const allTypes = ['follow', 'unfollow', 'like', 'dm', 'contact', 'human_session'];
     const existingTypes = new Set(existing.map(t => t.type));
     const missing = allTypes.filter(t => !existingTypes.has(t));
     if (missing.length > 0) {

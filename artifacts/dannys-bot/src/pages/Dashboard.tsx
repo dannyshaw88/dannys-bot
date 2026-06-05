@@ -62,6 +62,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.785",
+    date: "5 Jun 2026",
+    items: [
+      { category: "UI", text: "Accounts page: browser button now shows a monitor icon instead of a globe icon." },
+      { category: "Fix", text: "Deleting an account now automatically removes its linked proxy from the proxy manager if no other accounts share it." },
+      { category: "Fix", text: "Proxy ping now uses a direct TCP connection test — dead proxies correctly show as offline instead of falsely reporting alive." },
+      { category: "Fix", text: "Statistics page: Human Session Tool toggle is now visible for all accounts." },
+      { category: "Fix", text: "Ghost Browser: pre-signup warm-up section removed — the browser opens cleanly without auto-running warm-up actions." },
+      { category: "UI", text: "Device Identity dropdown is now one row tall with the UA string truncated to fit, instead of wrapping across multiple lines." },
+      { category: "UI", text: "Settings: My Account tab is now the first tab." },
+      { category: "UI", text: "Settings › My Account: subscription plan cards are now always visible regardless of login status." },
+      { category: "UI", text: "Admin panel: admin accounts now show ∞ for account slots instead of a number." },
+      { category: "Feature", text: "Accounts page › Actions: new Flag Accounts option marks selected accounts with a red flag icon. Flag / Unflag toggles automatically based on current state." },
+    ],
+  },
+  {
     version: "1.0.784",
     date: "5 Jun 2026",
     items: [

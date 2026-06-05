@@ -596,7 +596,7 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
-        {(["General", "Scraping", "Automation", "Security", "Data", "Import", "TrustScores", "My Account"] as const).map(tab => (
+        {(["My Account", "General", "Scraping", "Automation", "Security", "Data", "Import", "TrustScores"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -1818,7 +1818,7 @@ function AdminUsersSection() {
                       {tierBadge(u.tier)}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-[10px] text-muted-foreground">{u.account_limit} slots</span>
+                      <span className="text-[10px] text-muted-foreground">{u.is_admin === 1 ? "∞" : u.account_limit} slots</span>
                       <span className="text-[10px] text-muted-foreground">Exp: {fmtDate(u.expires_at)}</span>
                     </div>
                   </div>
@@ -1883,114 +1883,116 @@ function MyAccountTabContent() {
     return <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading…</span></div>;
   }
 
-  if (!me?.ok) {
-    return <div className="text-sm text-muted-foreground">Not signed in. Please restart Equinox.</div>;
-  }
+  const tier = me?.ok ? (PLAN_TIERS.find(t => t.id === me.tier) ?? null) : null;
 
-  const tier = PLAN_TIERS.find(t => t.id === me.tier) ?? null;
-
-  const expiresAt = me.expiresAt ? new Date(me.expiresAt) : null;
+  const expiresAt = me?.ok && me.expiresAt ? new Date(me.expiresAt) : null;
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86400000) : null;
   const isExpired = daysLeft !== null && daysLeft <= 0;
   const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 7;
 
   return (
     <div className="space-y-5 max-w-md">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative cursor-pointer group shrink-0" onClick={() => avatarInputRef.current?.click()} title="Click to change profile picture">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-border" />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><UserCircle className="w-6 h-6 text-primary" /></div>
-            )}
-            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-              <Camera className="w-3.5 h-3.5 text-white" />
-            </div>
-          </div>
-          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-          <div>
-            <p className="text-sm font-semibold">{me.username}</p>
-            {me.isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
-          </div>
-        </div>
-        {me.isAdmin ? (
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-700">Owner</span>
-        ) : tier ? (
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tier.badge}`}>{tier.label}</span>
-        ) : null}
-      </div>
-
-      {/* Plan card */}
-      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Plan</span>
-          <span className="font-semibold">{me.isAdmin ? "Owner (Unlimited)" : tier?.label ?? me.tier}</span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Account slots</span>
-          <span className="font-semibold">{me.isAdmin ? "Unlimited" : `${me.accountLimit ?? "—"}`}</span>
-        </div>
-        {!me.isAdmin && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Subscription expires</span>
-            {expiresAt ? (
-              <span className={`font-semibold ${isExpired ? "text-destructive" : isExpiringSoon ? "text-amber-500" : ""}`}>
-                {expiresAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                {isExpiringSoon && !isExpired && <span className="ml-1">({daysLeft}d left)</span>}
-                {isExpired && <span className="ml-1">(expired)</span>}
-              </span>
-            ) : (
-              <span className="text-muted-foreground font-medium">—</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Subscription plan tiers — radio buttons, all tiers visible */}
-      {!me.isAdmin && (
-        <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Subscription Plans</p>
-          {PLAN_TIERS.map(t => {
-            const isCurrent = t.id === me.tier;
-            return (
-              <label
-                key={t.id}
-                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-not-allowed select-none ${isCurrent ? "border-primary/40 bg-primary/5" : "border-border/50 opacity-50"}`}
-              >
-                <input
-                  type="radio"
-                  name="plan-tier"
-                  value={t.id}
-                  checked={isCurrent}
-                  disabled
-                  readOnly
-                  className="accent-primary"
-                />
-                <div className="flex-1 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
-                    <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium ${isCurrent ? "" : "text-muted-foreground"}`}>{t.price}</span>
-                    {isCurrent && <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Current</span>}
-                    {!isCurrent && <span className="text-[10px] text-muted-foreground italic">coming soon</span>}
-                  </div>
+      {me?.ok ? (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative cursor-pointer group shrink-0" onClick={() => avatarInputRef.current?.click()} title="Click to change profile picture">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-border" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><UserCircle className="w-6 h-6 text-primary" /></div>
+                )}
+                <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <Camera className="w-3.5 h-3.5 text-white" />
                 </div>
-              </label>
-            );
-          })}
-        </div>
+              </div>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <div>
+                <p className="text-sm font-semibold">{me.username}</p>
+                {me.isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
+              </div>
+            </div>
+            {me.isAdmin ? (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-700">Owner</span>
+            ) : tier ? (
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tier.badge}`}>{tier.label}</span>
+            ) : null}
+          </div>
+
+          {/* Plan card */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Plan</span>
+              <span className="font-semibold">{me.isAdmin ? "Owner (Unlimited)" : tier?.label ?? me.tier}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Account slots</span>
+              <span className="font-semibold">{me.isAdmin ? "Unlimited" : `${me.accountLimit ?? "—"}`}</span>
+            </div>
+            {!me.isAdmin && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Subscription expires</span>
+                {expiresAt ? (
+                  <span className={`font-semibold ${isExpired ? "text-destructive" : isExpiringSoon ? "text-amber-500" : ""}`}>
+                    {expiresAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    {isExpiringSoon && !isExpired && <span className="ml-1">({daysLeft}d left)</span>}
+                    {isExpired && <span className="ml-1">(expired)</span>}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground font-medium">—</span>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-muted-foreground">Not signed in. Please restart Equinox.</div>
       )}
 
-      {/* Admin: User Management */}
-      {me.isAdmin && <AdminUsersSection />}
+      {/* Subscription plan tiers — always visible regardless of login/admin status */}
+      <div className="space-y-2">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Subscription Plans</p>
+        {PLAN_TIERS.map(t => {
+          const isCurrent = me?.ok && t.id === me.tier;
+          return (
+            <label
+              key={t.id}
+              className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-not-allowed select-none ${isCurrent ? "border-primary/40 bg-primary/5" : "border-border/50 opacity-50"}`}
+            >
+              <input
+                type="radio"
+                name="plan-tier"
+                value={t.id}
+                checked={!!isCurrent}
+                disabled
+                readOnly
+                className="accent-primary"
+              />
+              <div className="flex-1 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                  <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-medium ${isCurrent ? "" : "text-muted-foreground"}`}>{t.price}</span>
+                  {isCurrent && <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Current</span>}
+                  {!isCurrent && <span className="text-[10px] text-muted-foreground italic">coming soon</span>}
+                </div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
 
-      <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground w-fit">
-        <LogOut className="w-3.5 h-3.5" /> Sign out
-      </Button>
+      {/* Admin: User Management */}
+      {me?.ok && me.isAdmin && <AdminUsersSection />}
+
+      {me?.ok && (
+        <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground w-fit">
+          <LogOut className="w-3.5 h-3.5" /> Sign out
+        </Button>
+      )}
     </div>
   );
 }

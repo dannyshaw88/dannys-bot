@@ -66,7 +66,7 @@ import {
   submitSignupCodeViaEB,
   isEBSignupSession,
   sendSignupWsMsg,
-  runWarmupOnOpenBrowser,
+
   storePendingAutomateSession,
   consumePendingAutomateSession,
   type ProxyConfig,
@@ -317,36 +317,20 @@ export async function registerInstagramRoutes(
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
 
-    const auth = proxy.username && proxy.password
-      ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}`
-      : "";
-
     const start = Date.now();
     try {
-      // Ping via HTTPS CONNECT tunnel to instagram.com — the same target the
-      // automation uses. This gives a reliable alive/dead signal and catches
-      // proxies that block non-Instagram traffic.
-      const https = await import("https");
-      let agent: any;
-      if ((proxy as any).proxyType === "socks5") {
-        const { SocksProxyAgent } = await import("socks-proxy-agent");
-        const proxyUrl = `socks5://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
-        agent = new SocksProxyAgent(proxyUrl);
-      } else {
-        const { HttpsProxyAgent } = await import("https-proxy-agent");
-        const proxyUrl = `http://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
-        agent = new HttpsProxyAgent(proxyUrl);
-      }
+      // Raw TCP reachability test — definitively confirms whether the proxy
+      // host:port is reachable. If the TCP connection fails the proxy is dead.
+      const net = await import("net");
       await new Promise<void>((resolve, reject) => {
-        const req2 = https.default.get({
-          hostname: "www.instagram.com",
-          path: "/",
-          agent,
-          timeout: 10000,
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-        }, (r) => { r.resume(); resolve(); });
-        req2.on("error", reject);
-        req2.on("timeout", () => { req2.destroy(); reject(new Error("timeout")); });
+        const sock = (net.default ?? net).createConnection({
+          host: proxy.host,
+          port: Number(proxy.port),
+          timeout: 5000,
+        });
+        sock.once("connect", () => { sock.destroy(); resolve(); });
+        sock.once("error", reject);
+        sock.once("timeout", () => { sock.destroy(); reject(new Error("TCP timeout")); });
       });
       res.json({ alive: true, latencyMs: Date.now() - start });
     } catch (err: any) {
@@ -2406,92 +2390,6 @@ export async function registerInstagramRoutes(
     }
   });
 
-  // ── Ghost Browser warm-up step/done relay endpoints (called by Electron ebManager) ──
-  // The Electron IPC ghost-warmup handler runs asynchronously and POSTs progress
-  // here so the frontend WebSocket receives signupStep / warmupDone messages.
-  app.post("/api/signup/browser/warmup-step", (req, res) => {
-    const { msg } = req.body as { msg?: string };
-    if (msg) sendSignupWsMsg({ type: "signupStep", msg });
-    res.json({ ok: true });
-  });
-
-  app.post("/api/signup/browser/warmup-done", (_req, res) => {
-    sendSignupWsMsg({ type: "warmupDone" });
-    res.json({ ok: true });
-  });
-
-  // ── Trending reels for Ghost Browser warmup (called by Electron ebManager) ──
-  // Returns real trending reel URLs via HikerAPI, or [] if not configured.
-  app.get("/api/signup/browser/trending-reels", async (req, res) => {
-    const n = Math.min(10, Math.max(1, Number(req.query.n) || 5));
-    try {
-      const settings = await storage.getGlobalSettings();
-      if (settings.hikerApiEnabled !== "true" || !settings.hikerApiToken) {
-        return res.json({ urls: [] });
-      }
-      const { HikerApiClient } = await import("../instagram/hikerApiClient");
-      const hiker = new HikerApiClient(settings.hikerApiToken);
-      const shortcodes = await hiker.getTrendingReelShortcodes(n + 2);
-      const urls = shortcodes.slice(0, n).map(sc => `https://www.instagram.com/reel/${sc}/`);
-      return res.json({ urls });
-    } catch (e: any) {
-      return res.json({ urls: [], warning: e?.message?.slice(0, 100) });
-    }
-  });
-
-  // ── Ghost Browser warm-up: runs warmupSignupSession on the open _signupPage ──
-  app.post("/api/signup/browser/warmup", async (req, res) => {
-    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
-    if (ipcPort) {
-      // Desktop (Electron) mode — forward the warmup config to the Electron main
-      // process which runs it on the native Ghost BrowserWindow.
-      // Progress arrives back via /api/signup/browser/warmup-step and warmup-done.
-      try {
-        await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-warmup`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify(req.body),
-        });
-      } catch {
-        sendSignupWsMsg({ type: "signupStep", msg: "Warm-up error: could not reach Electron process." });
-        sendSignupWsMsg({ type: "warmupDone" });
-      }
-      res.json({ ok: true });
-      return;
-    }
-    if (!isSignupBrowserOpen()) {
-      return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
-    }
-    const {
-      reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
-      reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
-      postClicksPerProfileMin, postClicksPerProfileMax, postBrowseTimeMin, postBrowseTimeMax,
-    } = req.body as {
-      reelsMin?: number; reelsMax?: number;
-      postsMin?: number; postsMax?: number;
-      profilesMin?: number; profilesMax?: number;
-      reelsIdleMin?: number; reelsIdleMax?: number;
-      postsIdleMin?: number; postsIdleMax?: number;
-      profilesIdleMin?: number; profilesIdleMax?: number;
-      postClicksPerProfileMin?: number; postClicksPerProfileMax?: number;
-      postBrowseTimeMin?: number; postBrowseTimeMax?: number;
-    };
-    res.json({ ok: true });
-    (async () => {
-      try {
-        await runWarmupOnOpenBrowser({
-          reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
-          reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
-          postClicksPerProfileMin, postClicksPerProfileMax, postBrowseTimeMin, postBrowseTimeMax,
-          onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg }),
-        });
-        sendSignupWsMsg({ type: "warmupDone" });
-      } catch (e: any) {
-        sendSignupWsMsg({ type: "signupStep", msg: `Warm-up error: ${e?.message ?? "unknown"}` });
-        sendSignupWsMsg({ type: "warmupDone" });
-      }
-    })().catch(() => {});
-  });
 
   // ── EB form automation: fire-and-forget; results arrive via WS signupStep/signupDone/signupPaused ──
   app.post("/api/signup/browser/automate", async (req, res) => {
