@@ -4238,17 +4238,25 @@ export function startEbIpcServer(
             } catch {}
           };
 
-          // Tap element then clear existing content and type new text
+          // Tap element then clear existing content and type new text.
+          // Uses typeTextCDP (per-character key events) so React's synthetic onChange fires.
+          // modifiers: 2 = Ctrl on Windows (not 8 which is Shift).
           const clearAndType = async (x: number, y: number, text: string) => {
-            await tap(x, y);
-            await sleep(250);
-            // Select all
+            // Click via mouse events — more reliable than touch gesture for input focus
+            try {
+              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", modifiers: 0 });
+              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x, y, button: "left", clickCount: 1, modifiers: 0 });
+              await sleep(60);
+              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+            } catch {}
+            await sleep(300);
+            // Ctrl+A (modifiers: 2 = Ctrl on Windows)
             try {
               await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyDown", modifiers: 8, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+                type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
               });
               await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyUp", modifiers: 8, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+                type: "keyUp", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
               });
             } catch {}
             await sleep(80);
@@ -4261,8 +4269,9 @@ export function startEbIpcServer(
                 type: "keyUp", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
               });
             } catch {}
-            await sleep(80);
-            await typeText(text);
+            await sleep(100);
+            // Type via per-character key events so React onChange fires on every keystroke
+            await typeTextCDP(wc.debugger, text, { minDelay: 60, maxDelay: 160 });
           };
 
           // JS helper: find any button/link by text content, return centre coords

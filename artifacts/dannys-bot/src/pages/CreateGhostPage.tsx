@@ -9,7 +9,7 @@ import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
   Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus, ExternalLink,
-  ClipboardPaste, Copy, RefreshCw, PlayCircle, UserPlus, Key,
+  ClipboardPaste, Copy, RefreshCw, UserPlus, Key,
   CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -544,13 +544,42 @@ export function CreateGhostPage() {
     setCodePending(false);
   };
 
-  // Start the automated signup flow in the Ghost Browser
-  const handleAutoSignup = async () => {
+  // Create Account — opens the browser if needed, then runs the full signup flow
+  const handleCreateAccount = async () => {
     const uname = (generatedUsername || usernameSpin).trim();
     if (!uname || !password.trim() || !emailAddr.trim() || !dob.trim()) {
-      setSignupStatus("⚠ Fill in username, password, email, and DOB before running auto signup.");
+      setSignupStatus("⚠ Fill in username, password, email, and DOB before creating an account.");
       return;
     }
+
+    // Open the browser first if it's not already running
+    if (!isOpen) {
+      if (!manualValid) {
+        setSignupStatus("⚠ Fix proxy settings before opening browser.");
+        return;
+      }
+      setBrowserState("opening");
+      setSignupStatus("Opening browser…");
+      setActiveUA(selectedUA);
+      setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
+      await fetch("/api/signup/browser/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userAgent: selectedUA.api,
+          proxyHost: resolvedProxy?.host,
+          proxyPort: resolvedProxy?.port,
+          proxyUsername: resolvedProxy?.username,
+          proxyPassword: resolvedProxy?.password,
+          proxyType: (resolvedProxy as any)?.proxyType,
+          fingerprint,
+        }),
+      }).catch(() => {});
+      setBrowserState("open");
+      // Give the browser a moment to fully initialise before starting signup
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
     setSignupRunning(true);
     setSignupStatus("Starting automated signup…");
     setCodePending(false);
@@ -714,34 +743,45 @@ export function CreateGhostPage() {
 
           {/* Actions + Account Fields */}
           <div className="desktop-card p-2.5 space-y-1.5">
-            {!isOpen ? (
-              <Button
-                className="w-full bg-cyan-500 hover:bg-cyan-600 text-white border-0 gap-2"
-                onClick={handleOpen}
-                disabled={browserState === "opening" || browserState === "resetting" || !manualValid}
-              >
-                {browserState === "opening"
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Starting…</>
-                  : <><Ghost className="w-4 h-4" />Open Browser</>}
-              </Button>
-            ) : (
-              <Button variant="outline" className="w-full gap-2" onClick={handleClose}>
-                <WifiOff className="w-4 h-4" />
-                Close Browser
-              </Button>
-            )}
+            {/* Create Account — opens browser then runs full signup */}
+            <Button
+              className={cn(
+                "w-full gap-2 text-xs",
+                signupRunning || browserState === "opening"
+                  ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
+                  : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
+              )}
+              onClick={handleCreateAccount}
+              disabled={signupRunning || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
+              title="Opens the browser and runs the full signup flow automatically"
+            >
+              {signupRunning
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
+                : browserState === "opening"
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Browser…</>
+                : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
+            </Button>
 
+            {/* Nuke Environment — directly below Create Account */}
             <Button
               variant="outline"
               className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
               onClick={handleFresh}
-              disabled={browserState === "opening" || browserState === "resetting"}
+              disabled={browserState === "opening" || browserState === "resetting" || signupRunning}
               title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
             >
               {browserState === "resetting"
                 ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
                 : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
             </Button>
+
+            {/* Close Browser — only shown when browser is open */}
+            {isOpen && (
+              <Button variant="outline" className="w-full gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
+                <WifiOff className="w-3.5 h-3.5" />
+                Close Browser
+              </Button>
+            )}
 
             {/* Username Spin */}
             <div className="pt-0.5 space-y-1">
@@ -956,45 +996,29 @@ export function CreateGhostPage() {
               </div>
             </div>
 
-            {/* Auto Signup button */}
-            <div className="pt-1 border-t border-border/50 space-y-1.5">
-              <Button
-                className={cn(
-                  "w-full gap-2 text-xs",
-                  signupRunning
-                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
-                    : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
+            {/* Signup status + code-pending message */}
+            {(signupStatus || (codePending && signupRunning)) && (
+              <div className="pt-1 border-t border-border/50 space-y-1.5">
+                {signupStatus && (
+                  <div className={cn(
+                    "rounded-md border px-2 py-1.5 text-[10px] leading-relaxed",
+                    signupStatus.startsWith("✅")
+                      ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
+                      : signupStatus.includes("⚠") || signupStatus.includes("error")
+                      ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
+                      : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
+                  )}>
+                    {signupRunning && <Loader2 className="w-2.5 h-2.5 animate-spin inline mr-1" />}
+                    {signupStatus}
+                  </div>
                 )}
-                onClick={handleAutoSignup}
-                disabled={!isOpen || signupRunning || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
-                title="Runs the full signup flow automatically: cookies → create account → email → code → DOB → username → terms"
-              >
-                {signupRunning
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running Signup…</>
-                  : <><PlayCircle className="w-3.5 h-3.5" />Auto Signup</>}
-              </Button>
-
-              {/* Signup status */}
-              {signupStatus && (
-                <div className={cn(
-                  "rounded-md border px-2 py-1.5 text-[10px] leading-relaxed",
-                  signupStatus.startsWith("✅")
-                    ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
-                    : signupStatus.includes("⚠") || signupStatus.includes("error")
-                    ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
-                    : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
-                )}>
-                  {signupRunning && <Loader2 className="w-2.5 h-2.5 animate-spin inline mr-1" />}
-                  {signupStatus}
-                </div>
-              )}
-
-              {codePending && signupRunning && (
-                <p className="text-[10px] text-amber-600 font-medium">
-                  ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
-                </p>
-              )}
-            </div>
+                {codePending && signupRunning && (
+                  <p className="text-[10px] text-amber-600 font-medium">
+                    ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Add to Equinox */}
             <div className="pt-1 border-t border-border/50">
@@ -1067,7 +1091,7 @@ export function CreateGhostPage() {
               <div className="space-y-1.5 max-w-xs">
                 <p className="text-base font-semibold text-foreground">Browser not started</p>
                 <p className="text-sm text-muted-foreground">
-                  Configure your proxy and device identity, then click <span className="font-medium">Open Browser</span> to launch a clean, isolated session.
+                  Fill in your account details, then click <span className="font-medium">Create Account</span> to launch the browser and run the signup automatically.
                 </p>
               </div>
             </div>

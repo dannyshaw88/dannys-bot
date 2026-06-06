@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.800",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: email field now fills correctly. The previous approach used a batch text-insert that Instagram's React forms ignored. It now types character-by-character so every keystroke fires the form's onChange and the Next button becomes active." },
+      { category: "Fix", text: "Ghost Browser signup: Ctrl+A was sending Shift+A (wrong modifier). Fixed to the correct Ctrl modifier so the field clears properly before typing." },
+      { category: "UI", text: "Ghost Browser: removed the Open Browser button. The new Create Account button opens the browser automatically as its first step, then runs the full signup flow — one click instead of two." },
+      { category: "UI", text: "Ghost Browser: Nuke Environment button moved to directly below Create Account for quicker access." },
+      { category: "UI", text: "Ghost Browser: Close Browser button now only appears when the browser is actually running." },
+    ],
+  },
+  {
     version: "1.0.799",
     date: "6 Jun 2026",
     items: [
