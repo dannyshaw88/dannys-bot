@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { db } from "@workspace/db";
+import { db, sqlite } from "@workspace/db";
 import { userAgents } from "./shared/userAgents";
 
 // Real-time event bus — fires whenever any profile's accountStatus changes in the DB.
@@ -68,6 +68,12 @@ export interface IStorage {
   getLastValidApiCallByProfile(): Promise<Record<number, string>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
+
+  // Pre-Status-Change Hit Tracking
+  getPreStatusChangeHits(profileId: number): Promise<{ operationName: string; perAccountCount: number }[]>;
+  getGlobalPreStatusChangeHits(): Promise<{ operationName: string; globalCount: number }[]>;
+  getPreStatusChangeHitsByProfile(profileId: number): Promise<{ operationName: string; fromStatus: string; toStatus: string; occurredAt: string }[]>;
+  bulkInsertPreStatusChangeHits(hits: { profileId: number; username: string; operationName: string; fromStatus: string; toStatus: string; occurredAt: string }[]): Promise<void>;
 
   // Followed Users
   getFollowedUsersByProfile(profileId: number, limit?: number): Promise<FollowedUser[]>;
@@ -193,6 +199,16 @@ export class DatabaseStorage implements IStorage {
     if ("accountStatus" in updates) {
       const caller = new Error().stack?.split("\n").slice(2, 5).join(" | ") ?? "unknown";
       console.log(`[status-audit] profile=${id} accountStatus="${updates.accountStatus}" caller=${caller}`);
+      // Record the last API endpoint called before this status change (non-fatal)
+      try {
+        const cur = sqlite.prepare("SELECT account_status, username FROM profiles WHERE id = ?").get(id) as { account_status: string; username: string } | undefined;
+        const lastCall = sqlite.prepare("SELECT operation_name FROM instagram_api_calls WHERE profile_id = ? ORDER BY id DESC LIMIT 1").get(id) as { operation_name: string } | undefined;
+        if (lastCall) {
+          sqlite.prepare("INSERT INTO pre_status_change_hits (profile_id, username, operation_name, from_status, to_status, occurred_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+            id, cur?.username ?? "", lastCall.operation_name, cur?.account_status ?? "", updates.accountStatus, new Date().toISOString()
+          );
+        }
+      } catch (_e) { /* non-fatal */ }
     }
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
     if ("accountStatus" in updates) {
@@ -396,6 +412,46 @@ export class DatabaseStorage implements IStorage {
       totalCount: Number(r.totalCount ?? 0),
       todayCount: Number(r.todayCount ?? 0),
     }));
+  }
+
+  async getPreStatusChangeHits(profileId: number): Promise<{ operationName: string; perAccountCount: number }[]> {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, COUNT(*) as cnt
+      FROM pre_status_change_hits
+      WHERE profile_id = ?
+      GROUP BY operation_name
+      ORDER BY cnt DESC
+    `).all(profileId) as { operation_name: string; cnt: number }[];
+    return rows.map(r => ({ operationName: r.operation_name, perAccountCount: r.cnt }));
+  }
+
+  async getGlobalPreStatusChangeHits(): Promise<{ operationName: string; globalCount: number }[]> {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, COUNT(*) as cnt
+      FROM pre_status_change_hits
+      GROUP BY operation_name
+      ORDER BY cnt DESC
+    `).all() as { operation_name: string; cnt: number }[];
+    return rows.map(r => ({ operationName: r.operation_name, globalCount: r.cnt }));
+  }
+
+  async getPreStatusChangeHitsByProfile(profileId: number): Promise<{ operationName: string; fromStatus: string; toStatus: string; occurredAt: string }[]> {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, from_status, to_status, occurred_at
+      FROM pre_status_change_hits
+      WHERE profile_id = ?
+      ORDER BY id ASC
+    `).all(profileId) as { operation_name: string; from_status: string; to_status: string; occurred_at: string }[];
+    return rows.map(r => ({ operationName: r.operation_name, fromStatus: r.from_status, toStatus: r.to_status, occurredAt: r.occurred_at }));
+  }
+
+  async bulkInsertPreStatusChangeHits(hits: { profileId: number; username: string; operationName: string; fromStatus: string; toStatus: string; occurredAt: string }[]): Promise<void> {
+    if (!hits.length) return;
+    const stmt = sqlite.prepare("INSERT INTO pre_status_change_hits (profile_id, username, operation_name, from_status, to_status, occurred_at) VALUES (?, ?, ?, ?, ?, ?)");
+    const txn = sqlite.transaction(() => {
+      for (const h of hits) stmt.run(h.profileId, h.username, h.operationName, h.fromStatus, h.toStatus, h.occurredAt);
+    });
+    txn();
   }
 
   private _apiCallInsertCount = 0;

@@ -17,7 +17,7 @@ import {
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock, Monitor, Flag,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
-  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images,
+  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images, BarChart2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -1419,7 +1419,8 @@ export function ProfilesPage() {
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
                         <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}><Monitor className="w-[18px] h-[18px]" /></button>
-                        <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
+                        <button onClick={() => { window.location.href = `/stats?profileId=${profile.id}&tab=metrics`; }} title="View account metrics" className="text-muted-foreground/40 hover:text-primary transition-colors"><BarChart2 className="w-[16px] h-[16px]" /></button>
+                        <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} title="Delete account" className="text-muted-foreground/40 hover:text-destructive transition-colors"><Trash2 className="w-[16px] h-[16px]" /></button>
                       </div>
                     );
                     if (key === "battery") {

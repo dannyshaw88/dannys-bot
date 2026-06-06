@@ -368,6 +368,15 @@ export async function registerInstagramRoutes(
     res.json(counts);
   });
 
+  app.get("/api/profiles/:profileId/pre-status-change-hits", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const [perAccount, global] = await Promise.all([
+      storage.getPreStatusChangeHits(profileId),
+      storage.getGlobalPreStatusChangeHits(),
+    ]);
+    res.json({ perAccount, global });
+  });
+
   app.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
     res.json(data);
@@ -3112,11 +3121,12 @@ export async function registerInstagramRoutes(
   async function buildEqxPayload(id: number, trustScoreId?: string): Promise<{ encrypted: Buffer; safeUsername: string } | null> {
     const profile = await storage.getProfile(id);
     if (!profile) return null;
-    const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
+    const [allTools, followedUsers, statsData, apiCallsData, preStatusChangeHitsData] = await Promise.all([
       storage.getToolsByProfile(id),
       storage.getFollowedUsersByProfile(id, 100000),
       storage.getStatsByProfile(id),
       storage.getInstagramApiCallsByProfile(id, 2000),
+      storage.getPreStatusChangeHitsByProfile(id),
     ]);
     const toolsWithSources = await Promise.all(
       allTools.map(async t => ({
@@ -3186,6 +3196,12 @@ export async function registerInstagramRoutes(
         navChain: c.navChain,
         ipAddress: c.ipAddress,
         durationMs: c.durationMs,
+      })),
+      preStatusChangeHits: preStatusChangeHitsData.map(h => ({
+        operationName: h.operationName,
+        fromStatus: h.fromStatus,
+        toStatus: h.toStatus,
+        occurredAt: h.occurredAt,
       })),
     };
     const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
@@ -3414,6 +3430,22 @@ export async function registerInstagramRoutes(
         }
       } catch (e) {
         req.log.warn({ err: e }, "import-eqx: failed to import stats (non-fatal)");
+      }
+
+      // Import pre-status-change hits
+      try {
+        if (Array.isArray(payload.preStatusChangeHits) && payload.preStatusChangeHits.length > 0) {
+          await storage.bulkInsertPreStatusChangeHits(payload.preStatusChangeHits.map((h: any) => ({
+            profileId: created.id,
+            username: created.username ?? "",
+            operationName: h.operationName || "",
+            fromStatus: h.fromStatus || "",
+            toStatus: h.toStatus || "",
+            occurredAt: h.occurredAt || new Date().toISOString(),
+          })));
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to import pre-status-change hits (non-fatal)");
       }
 
       storage.createSessionAction({

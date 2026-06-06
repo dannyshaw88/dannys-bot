@@ -309,6 +309,20 @@ if (!igApiCallsColNames.has("username")) {
   sqlite.exec(`ALTER TABLE instagram_api_calls ADD COLUMN username TEXT DEFAULT '';`);
 }
 
+// Pre-status-change hit tracker — records the last API endpoint called before each status change.
+// Linked by both profile_id and username so data survives EQX export/import cycles.
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS pre_status_change_hits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    username TEXT DEFAULT '',
+    operation_name TEXT NOT NULL,
+    from_status TEXT DEFAULT '',
+    to_status TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+  );
+`);
+
 // DEVICE ISOLATION GUARD
 // Two passes run on every startup:
 //
@@ -376,5 +390,6 @@ for (const { id } of profileIds) {
   insertHumanSession.run(id, id);
 }
 
+export { sqlite };
 export const db = drizzle(sqlite, { schema });
 export * from "./schema";

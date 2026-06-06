@@ -129,7 +129,7 @@ function ProfileStatsRow({
   const displayName = profile.accountLabel || profile.username;
 
   return (
-    <tr className="hover:bg-accent/5 transition-colors border-b border-border/50">
+    <tr className={`hover:bg-accent/5 transition-colors border-b border-border/50${profile.accountStatus === 'stopped' ? ' opacity-50' : ''}`}>
       {/* Account column — left-aligned */}
       <td style={{ width: colWidths.account }} className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
         <button
@@ -416,7 +416,15 @@ export function StatsPage() {
   });
 
   // ── Metrics tab state ────────────────────────────────────────────────────────
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("tab") || "performance";
+  });
+
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("profileId") || "";
+  });
 
   const selectedProfile = useMemo(() => {
     if (!selectedAccountId || !profiles) return profiles?.[0] ?? null;
@@ -444,6 +452,27 @@ export function StatsPage() {
     enabled: !!selectedProfile,
     refetchInterval: 60000,
   });
+
+  const { data: preStatusChangeHitsData } = useQuery<{
+    perAccount: { operationName: string; perAccountCount: number }[];
+    global: { operationName: string; globalCount: number }[];
+  }>({
+    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/pre-status-change-hits`] : ["no-profile-psch"],
+    enabled: !!selectedProfile,
+    refetchInterval: 60000,
+  });
+
+  const perAccountHitsMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const r of preStatusChangeHitsData?.perAccount ?? []) m[r.operationName] = r.perAccountCount;
+    return m;
+  }, [preStatusChangeHitsData]);
+
+  const globalHitsMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const r of preStatusChangeHitsData?.global ?? []) m[r.operationName] = r.globalCount;
+    return m;
+  }, [preStatusChangeHitsData]);
 
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
@@ -509,7 +538,7 @@ export function StatsPage() {
         <p className="text-muted-foreground mt-1">Daily and lifetime performance metrics for all accounts.</p>
       </div>
 
-      <Tabs defaultValue="performance" className="flex flex-col gap-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-0">
         <TabsList className="w-fit mb-3">
           <TabsTrigger value="performance" className="flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5" />
@@ -620,7 +649,7 @@ export function StatsPage() {
             </CardHeader>
             <CardContent className="p-0 flex flex-col">
               <div className="overflow-x-auto">
-                <table className="text-sm" style={{ tableLayout: "fixed", minWidth: "100%", width: `${colWidths.account + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
+                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
                   <colgroup>
                     <col style={{ width: colWidths.account }} />
                     {statColOrder.filter(k => visibleCols[k]).map(k => <col key={k} style={{ width: colWidths[k] }} />)}
@@ -910,7 +939,9 @@ export function StatsPage() {
                             <tr className="border-b border-border/50">
                               <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Endpoint</th>
                               <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Today</th>
-                              <th className="text-center py-2 pl-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Total</th>
+                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Total</th>
+                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-amber-500/80 whitespace-nowrap" title="Times this endpoint was the last API call before this account's status changed">Pre-Change (Account)</th>
+                              <th className="text-center py-2 pl-3 text-[10px] font-bold uppercase tracking-wide text-red-500/80 whitespace-nowrap" title="Times this endpoint was the last API call before any account's status changed">Pre-Change (Global)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/30">
@@ -918,7 +949,9 @@ export function StatsPage() {
                               <tr key={row.operationName} className="hover:bg-muted/5 transition-colors">
                                 <td className="py-1.5 pr-4 text-[12px] font-mono text-foreground/80">{row.operationName}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-foreground">{row.todayCount.toLocaleString()}</td>
-                                <td className="py-1.5 pl-3 text-center tabular-nums text-[12px] text-muted-foreground">{row.totalCount.toLocaleString()}</td>
+                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] text-muted-foreground">{row.totalCount.toLocaleString()}</td>
+                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-amber-500">{(perAccountHitsMap[row.operationName] ?? 0) > 0 ? (perAccountHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
+                                <td className="py-1.5 pl-3 text-center tabular-nums text-[12px] font-bold text-red-500">{(globalHitsMap[row.operationName] ?? 0) > 0 ? (globalHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -928,8 +961,14 @@ export function StatsPage() {
                               <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-foreground">
                                 {endpointCountsData.reduce((s, r) => s + r.todayCount, 0).toLocaleString()}
                               </td>
-                              <td className="py-2 pl-3 text-center tabular-nums text-[11px] text-muted-foreground">
+                              <td className="py-2 px-3 text-center tabular-nums text-[11px] text-muted-foreground">
                                 {endpointCountsData.reduce((s, r) => s + r.totalCount, 0).toLocaleString()}
+                              </td>
+                              <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-amber-500">
+                                {preStatusChangeHitsData?.perAccount.reduce((s, r) => s + r.perAccountCount, 0).toLocaleString() ?? "—"}
+                              </td>
+                              <td className="py-2 pl-3 text-center tabular-nums text-[11px] font-bold text-red-500">
+                                {preStatusChangeHitsData?.global.reduce((s, r) => s + r.globalCount, 0).toLocaleString() ?? "—"}
                               </td>
                             </tr>
                           </tfoot>

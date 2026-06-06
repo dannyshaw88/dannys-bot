@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.793",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Feature", text: "Accounts page: the Delete action is now a compact bin icon. A new bar-chart icon opens that account's Metrics tab directly." },
+      { category: "Fix", text: "Statistics page: column widths are now exact — removed the minimum-width constraint that was spreading columns across the full screen." },
+      { category: "Feature", text: "Statistics page: rows for accounts that are toggled off (stopped) are now visually dimmed so active and stopped accounts are easy to tell apart." },
+      { category: "Feature", text: "Metrics — Raw API Endpoint Count: two new columns show how many times each endpoint was the last one called before a status change, both for the selected account and across all accounts." },
+    ],
+  },
+  {
     version: "1.0.792",
     date: "6 Jun 2026",
     items: [
