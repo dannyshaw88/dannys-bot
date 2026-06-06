@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.796",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser cookie banner: the 'Allow all cookies' button now fires three separate click mechanisms — touch tap, mouse events, and direct element click — so the banner dismisses even when screen dimensions (DPR > 1 mobile emulation) cause the original tap to land on the banner title instead of the button." },
+    ],
+  },
+  {
     version: "1.0.795",
     date: "6 Jun 2026",
     items: [

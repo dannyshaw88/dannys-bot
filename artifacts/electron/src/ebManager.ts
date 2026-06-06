@@ -2227,17 +2227,42 @@ export async function openEbWindow(opts: {
         // touchstart→touchend→click with pointerType="touch", isTrusted=true.
         // For desktop UAs this still works because the fallback inside cdpTapGesture
         // sends dispatchMouseEvent if synthesizeTapGesture fails.
+        // Layer 1: synthesizeTapGesture (touch events, isTrusted=true)
         try {
           await cdpTapGesture(win.webContents.debugger, pos.x, pos.y);
           _ebLog(`CookieBanner: touch tap dispatched at (${pos.x},${pos.y}) label="${pos.label}"`);
         } catch (cdpErr) {
-          // CDP failed — fall back to sendInputEvent
-          _ebLog(`CookieBanner: CDP failed (${cdpErr}), falling back to sendInputEvent`);
-          win.webContents.focus();
-          await humanMouseClick(win.webContents, pos.x, pos.y);
+          _ebLog(`CookieBanner: touch tap failed (${cdpErr})`);
         }
+        // Layer 2: dispatchMouseEvent — belt-and-suspenders for DPR coordinate mismatch.
+        // synthesizeTapGesture can silently misfire when setDeviceMetricsOverride DPR>1
+        // is active in Electron/Chromium: the command succeeds (no exception) but the tap
+        // lands at the PHYSICAL pixel position rather than the CSS pixel position, so the
+        // click hits the banner title text instead of the "Allow all cookies" button.
+        // dispatchMouseEvent is documented to use genuine CSS pixel coordinates and is
+        // unaffected by this DPR mapping quirk.
+        await new Promise(r => setTimeout(r, 100));
+        try {
+          const _dbg = win.webContents.debugger;
+          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: pos.x, y: pos.y, button: "none", modifiers: 0 });
+          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
+          await new Promise(r => setTimeout(r, 60));
+          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
+          _ebLog(`CookieBanner: mouse events also dispatched at (${pos.x},${pos.y})`);
+        } catch {}
+        // Layer 3: direct JS click — no coordinates needed, immune to all DPR issues.
+        // Cookie banners do not check event.isTrusted so this fires reliably.
+        await new Promise(r => setTimeout(r, 80));
+        try {
+          await win.webContents.executeJavaScript(`(function(){
+            var A=${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
+            var b=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+            if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}
+            if(b){b.click();return true;}return false;
+          })()`).catch(() => {});
+        } catch {}
         // Wait then check if it actually dismissed
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1300));
         if (win.isDestroyed()) break;
         const stillThere = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null);
         if (!stillThere) {
@@ -4322,14 +4347,45 @@ export function startEbIpcServer(
               }
               if (cookiePos) {
                 relay("Accepting cookies…");
+                // Layer 1: synthesizeTapGesture (touch events)
                 await tap(cookiePos.x, cookiePos.y);
+                await sleep(250);
+                // Layer 2: dispatchMouseEvent — covers DPR coordinate mismatch where
+                // synthesizeTapGesture lands at the wrong physical position (banner
+                // title instead of the button) when setDeviceMetricsOverride DPR>1
+                try {
+                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: cookiePos.x, y: cookiePos.y, button: "none", modifiers: 0 });
+                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: cookiePos.x, y: cookiePos.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await sleep(60);
+                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: cookiePos.x, y: cookiePos.y, button: "left", clickCount: 1, modifiers: 0 });
+                } catch {}
+                await sleep(200);
+                // Layer 3: direct JS click — no coordinates, immune to all DPR issues
+                try {
+                  await js(`(function(){
+                    var A=${JSON.stringify(COOKIE_LABELS)};
+                    var b=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+                    if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}
+                    if(b){b.click();return true;}return false;
+                  })()`);
+                } catch {}
                 // Wait for banner to dismiss + any resulting navigation to settle
-                await sleep(2500);
-                // Verify it actually dismissed — retry once if still present
+                await sleep(2200);
+                // Verify it actually dismissed — retry all three layers if still present
                 const stillThere = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
                 if (stillThere) {
-                  relay("Cookie banner still visible — retrying click…");
+                  relay("Cookie banner still visible — retrying all click layers…");
                   await tap(stillThere.x, stillThere.y);
+                  await sleep(200);
+                  try {
+                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: stillThere.x, y: stillThere.y, button: "left", clickCount: 1, modifiers: 0 });
+                    await sleep(60);
+                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: stillThere.x, y: stillThere.y, button: "left", clickCount: 1, modifiers: 0 });
+                  } catch {}
+                  await sleep(200);
+                  try {
+                    await js(`(function(){var A=${JSON.stringify(COOKIE_LABELS)};var b=document.querySelector('[data-cookiebanner="accept_button"]');if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}if(b)b.click();return!!b;})()`);
+                  } catch {}
                   await sleep(2000);
                 }
               } else {
