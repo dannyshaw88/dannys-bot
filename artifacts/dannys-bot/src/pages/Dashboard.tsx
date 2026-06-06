@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.801",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: password page now detected and filled immediately after the email verification code step — Instagram's current flow shows password before date of birth, not after name/username. Previously the automation skipped the password entirely and failed silently." },
+      { category: "UI", text: "Ghost Browser: Create Account, Nuke Environment, and Close Browser buttons moved to just above the Add to Equinox button. Fields are now at the top, actions at the bottom." },
+      { category: "UI", text: "Ghost Browser: code-wait panel now shows a live elapsed timer (MM:SS) alongside the 5-minute timeout, so you can see how long you have left to enter the verification code." },
+    ],
+  },
+  {
     version: "1.0.800",
     date: "6 Jun 2026",
     items: [

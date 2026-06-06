@@ -392,6 +392,10 @@ export function CreateGhostPage() {
   const [addedToEquinox, setAddedToEquinox]   = useState(false);
   const [addingToEquinox, setAddingToEquinox] = useState(false);
 
+  // Code-wait countdown timer (counts up from 0, shown when codePending)
+  const [codeWaitSecs, setCodeWaitSecs] = useState(0);
+  const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const isOpen = browserState === "open";
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
 
@@ -404,6 +408,18 @@ export function CreateGhostPage() {
       if ((statusData as any).running) setBrowserState("open");
     });
   }, []);
+
+  // Code-wait timer — starts counting when codePending, resets when done
+  useEffect(() => {
+    if (codePending && signupRunning) {
+      setCodeWaitSecs(0);
+      codeTimerRef.current = setInterval(() => setCodeWaitSecs(s => s + 1), 1000);
+    } else {
+      if (codeTimerRef.current) { clearInterval(codeTimerRef.current); codeTimerRef.current = null; }
+      setCodeWaitSecs(0);
+    }
+    return () => { if (codeTimerRef.current) clearInterval(codeTimerRef.current); };
+  }, [codePending, signupRunning]);
 
   // Poll signup status while automation is running
   useEffect(() => {
@@ -741,47 +757,8 @@ export function CreateGhostPage() {
             )}
           </div>
 
-          {/* Actions + Account Fields */}
+          {/* Account Fields + Actions */}
           <div className="desktop-card p-2.5 space-y-1.5">
-            {/* Create Account — opens browser then runs full signup */}
-            <Button
-              className={cn(
-                "w-full gap-2 text-xs",
-                signupRunning || browserState === "opening"
-                  ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
-                  : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
-              )}
-              onClick={handleCreateAccount}
-              disabled={signupRunning || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
-              title="Opens the browser and runs the full signup flow automatically"
-            >
-              {signupRunning
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
-                : browserState === "opening"
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Browser…</>
-                : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
-            </Button>
-
-            {/* Nuke Environment — directly below Create Account */}
-            <Button
-              variant="outline"
-              className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
-              onClick={handleFresh}
-              disabled={browserState === "opening" || browserState === "resetting" || signupRunning}
-              title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
-            >
-              {browserState === "resetting"
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
-                : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
-            </Button>
-
-            {/* Close Browser — only shown when browser is open */}
-            {isOpen && (
-              <Button variant="outline" className="w-full gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
-                <WifiOff className="w-3.5 h-3.5" />
-                Close Browser
-              </Button>
-            )}
 
             {/* Username Spin */}
             <div className="pt-0.5 space-y-1">
@@ -1013,12 +990,60 @@ export function CreateGhostPage() {
                   </div>
                 )}
                 {codePending && signupRunning && (
-                  <p className="text-[10px] text-amber-600 font-medium">
-                    ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-amber-600 font-medium">
+                      ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      Elapsed: {Math.floor(codeWaitSecs / 60)}:{String(codeWaitSecs % 60).padStart(2, "0")} &nbsp;·&nbsp; Timeout: 5:00
+                    </p>
+                  </div>
                 )}
               </div>
             )}
+
+            {/* Action buttons — Create Account, Nuke Environment, Close Browser */}
+            <div className="pt-1 border-t border-border/50 space-y-1.5">
+              {/* Create Account — opens browser then runs full signup */}
+              <Button
+                className={cn(
+                  "w-full gap-2 text-xs",
+                  signupRunning || browserState === "opening"
+                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
+                    : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
+                )}
+                onClick={handleCreateAccount}
+                disabled={signupRunning || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
+                title="Opens the browser and runs the full signup flow automatically"
+              >
+                {signupRunning
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
+                  : browserState === "opening"
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Browser…</>
+                  : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
+              </Button>
+
+              {/* Nuke Environment */}
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
+                onClick={handleFresh}
+                disabled={browserState === "opening" || browserState === "resetting" || signupRunning}
+                title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
+              >
+                {browserState === "resetting"
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
+                  : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
+              </Button>
+
+              {/* Close Browser — only shown when browser is open */}
+              {isOpen && (
+                <Button variant="outline" className="w-full gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
+                  <WifiOff className="w-3.5 h-3.5" />
+                  Close Browser
+                </Button>
+              )}
+            </div>
 
             {/* Add to Equinox */}
             <div className="pt-1 border-t border-border/50">

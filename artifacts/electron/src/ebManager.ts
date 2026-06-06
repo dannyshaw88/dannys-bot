@@ -4505,6 +4505,30 @@ export function startEbIpcServer(
               await sleep(3000);
             }
 
+            // ── Step 4b: Password page (appears before DOB in current IG flow) ─
+            // Instagram's email signup now shows password on its own step right
+            // after the email-verification code. Detect it and fill before DOB.
+            {
+              let pwPosEarly = await js(findInputScript([
+                "password", "Password", "Create a password",
+              ])) as {x:number;y:number}|null;
+              if (!pwPosEarly) {
+                // Give the page a moment to finish transitioning
+                await sleep(1800);
+                pwPosEarly = await js(findInputScript([
+                  "password", "Password", "Create a password",
+                ])) as {x:number;y:number}|null;
+              }
+              if (pwPosEarly) {
+                relay("Password page detected — filling password…");
+                await clearAndType(pwPosEarly.x, pwPosEarly.y, password);
+                await sleep(800);
+                const pwNextOk = await waitAndTap(["next", "continue"], "Next (after password)");
+                if (!pwNextOk) relay("⚠ 'Next' not found after password — Instagram may be showing a validation error. Check the browser window.");
+                await sleep(2800);
+              }
+            }
+
             // ── Step 5: Date of Birth ─────────────────────────────────────────
             relay("Filling date of birth…");
             const dobParts = dob.split("/");
