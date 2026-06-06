@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.795",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser auto-signup: cookie banner acceptance now reliably succeeds — replaced a single one-shot check (which often ran before Instagram's React had rendered the banner) with a polling loop that waits up to 7 seconds, matching the behaviour of every other browser flow in the app." },
+      { category: "Fix", text: "Ghost Browser auto-signup: if the first cookie banner tap does not dismiss the overlay, the flow now automatically retries the click once before continuing." },
+    ],
+  },
+  {
     version: "1.0.794",
     date: "6 Jun 2026",
     items: [

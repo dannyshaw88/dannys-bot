@@ -4302,16 +4302,39 @@ export function startEbIpcServer(
             await navAndWait("https://www.instagram.com/accounts/emailsignup/");
 
             // ── Step 1: Accept cookie banner if present ───────────────────────
+            // Poll up to 14 times × 500 ms (7 s total) — Instagram's React banner
+            // can take 1–5 s to render after did-finish-load, so a single one-shot
+            // check misses it on most connections and the banner stays visible,
+            // blocking the email field in Step 3.
             relay("Checking for cookie banner…");
             const COOKIE_LABELS = [
               "allow all cookies", "accept all cookies", "allow all", "accept all",
               "allow essential and optional cookies", "accept cookies",
+              "allow cookies", "alle cookies akzeptieren", "accepter tout",
+              "aceptar todo", "accetta tutto", "tillåt alla", "alle accepteren",
             ];
-            const cookiePos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
-            if (cookiePos) {
-              relay("Accepting cookies…");
-              await tap(cookiePos.x, cookiePos.y);
-              await sleep(1800);
+            {
+              let cookiePos: {x:number;y:number}|null = null;
+              for (let ck = 0; ck < 14; ck++) {
+                cookiePos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+                if (cookiePos) break;
+                await sleep(500);
+              }
+              if (cookiePos) {
+                relay("Accepting cookies…");
+                await tap(cookiePos.x, cookiePos.y);
+                // Wait for banner to dismiss + any resulting navigation to settle
+                await sleep(2500);
+                // Verify it actually dismissed — retry once if still present
+                const stillThere = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+                if (stillThere) {
+                  relay("Cookie banner still visible — retrying click…");
+                  await tap(stillThere.x, stillThere.y);
+                  await sleep(2000);
+                }
+              } else {
+                relay("No cookie banner detected — continuing…");
+              }
             }
 
             // ── Step 2: If redirected to homepage, click through to signup ────
