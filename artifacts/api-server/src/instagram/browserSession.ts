@@ -7359,6 +7359,75 @@ export async function createInstagramAccountViaEBForm(params: {
       step(`EB: email form not found at ${url} — ${diagUrl}`);
     }
 
+    // ── Phone gate fallback ──────────────────────────────────────────────────
+    // Instagram now redirects both email signup URLs to /accounts/signup/phone/.
+    // If we ended up there, find and click the "Sign up with email" link/button,
+    // then wait for the email form to appear.
+    if (!emailFormReady) {
+      step("EB: email form not found via direct URL — checking for phone gate 'Sign up with email' link...");
+
+      // Use real mouse click via getBoundingClientRect so React's pointer-event
+      // handlers fire correctly (synthetic el.click() is ignored by React).
+      const phoneGateCoords = await page.evaluate((labels: string[]) => {
+        const candidates = Array.from(document.querySelectorAll<HTMLElement>("a, button, [role='button'], span, div"));
+        for (const el of candidates) {
+          const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
+          if (labels.some(l => txt === l || txt.includes(l))) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            }
+          }
+        }
+        return null;
+      }, PHONE_GATE_LABELS);
+
+      if (phoneGateCoords) {
+        step(`EB: clicking 'Sign up with email' button at (${Math.round(phoneGateCoords.x)}, ${Math.round(phoneGateCoords.y)})...`);
+        await page.mouse.click(phoneGateCoords.x, phoneGateCoords.y);
+        await delay(1800);
+        await dismissCookieBanner(page);
+        emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 10000 })
+          .then(() => true).catch(() => false);
+        if (emailFormReady) {
+          step("EB: email form ready after phone gate click ✓");
+        } else {
+          // One more attempt — navigate to legacy URL after clicking the link
+          step("EB: email form still not ready after phone gate click — trying legacy URL one more time...");
+          try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 20000 }); }
+          catch (e: any) { step(`EB: legacy nav warning: ${e?.message?.slice(0, 80)}`); }
+          await delay(800);
+          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 8000 })
+            .then(() => true).catch(() => false);
+          if (emailFormReady) step("EB: email form ready after legacy fallback ✓");
+          else step("EB: email form still not found after all attempts");
+        }
+      } else {
+        step("EB: no 'Sign up with email' link found on phone gate — page may still be loading or Instagram changed the layout");
+        // Short extra wait then try once more
+        await delay(2000);
+        const retryCoords = await page.evaluate((labels: string[]) => {
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>("a, button, [role='button'], span, div"));
+          for (const el of candidates) {
+            const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
+            if (labels.some(l => txt === l || txt.includes(l))) {
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            }
+          }
+          return null;
+        }, PHONE_GATE_LABELS);
+        if (retryCoords) {
+          step("EB: found 'Sign up with email' on retry — clicking...");
+          await page.mouse.click(retryCoords.x, retryCoords.y);
+          await delay(1800);
+          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 10000 })
+            .then(() => true).catch(() => false);
+          if (emailFormReady) step("EB: email form ready after retry click ✓");
+        }
+      }
+    }
+
     // Final diagnostic before attempting to fill
     const finalDiag = await page.evaluate(() => ({
       url: window.location.href,

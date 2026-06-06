@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.798",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser auto-signup: when Instagram redirects the email signup URL to the phone gate, the flow now automatically finds and clicks the 'Sign up with email' link using a real mouse click so React's event handlers fire correctly." },
+      { category: "Fix", text: "Ghost Browser auto-signup: added a second retry pass for the phone gate button in case the page was still loading when the first search ran, then falls back to the legacy emailsignup URL as a last resort." },
+    ],
+  },
+  {
     version: "1.0.797",
     date: "6 Jun 2026",
     items: [
