@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.797",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser auto-signup: each step in the flow now verifies the previous step actually completed before moving on. Cookie banner must be confirmed dismissed before the email field is searched. If the banner cannot be dismissed after 5 attempts the flow stops with a clear error instead of blindly continuing and failing silently on the email field." },
+      { category: "Fix", text: "Ghost Browser auto-signup: 'Create new account', 'Sign up with email', and 'Next' buttons now stop the flow with a descriptive error if not found, rather than continuing and crashing later with a confusing message." },
+      { category: "Fix", text: "Ghost Browser auto-signup: email field now polls up to 8 seconds before reporting not found, giving the page time to settle after the cookie banner dismissal animation." },
+    ],
+  },
+  {
     version: "1.0.796",
     date: "6 Jun 2026",
     items: [

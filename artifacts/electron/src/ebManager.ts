@@ -4326,11 +4326,10 @@ export function startEbIpcServer(
             // ── Step 0: Navigate to the email signup page ────────────────────
             await navAndWait("https://www.instagram.com/accounts/emailsignup/");
 
-            // ── Step 1: Accept cookie banner if present ───────────────────────
-            // Poll up to 14 times × 500 ms (7 s total) — Instagram's React banner
-            // can take 1–5 s to render after did-finish-load, so a single one-shot
-            // check misses it on most connections and the banner stays visible,
-            // blocking the email field in Step 3.
+            // ── Step 1: Accept cookie banner — verify dismissed before continuing ─
+            // Each step in the flow gates on the previous step being CONFIRMED done.
+            // The cookie banner must be GONE before we proceed to the email field.
+            // If it cannot be dismissed after 5 attempts the flow stops with an error.
             relay("Checking for cookie banner…");
             const COOKIE_LABELS = [
               "allow all cookies", "accept all cookies", "allow all", "accept all",
@@ -4338,82 +4337,109 @@ export function startEbIpcServer(
               "allow cookies", "alle cookies akzeptieren", "accepter tout",
               "aceptar todo", "accetta tutto", "tillåt alla", "alle accepteren",
             ];
+            // Helper: fire all 3 click layers at given coords
+            const clickCookieAt = async (pos: {x:number;y:number}) => {
+              // L1: touch tap (synthesizeTapGesture)
+              await tap(pos.x, pos.y);
+              await sleep(200);
+              // L2: mouse events (unambiguous CSS pixel coords — covers DPR mismatch)
+              try {
+                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: pos.x, y: pos.y, button: "none", modifiers: 0 });
+                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
+                await sleep(60);
+                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
+              } catch {}
+              await sleep(150);
+              // L3: direct JS click — no coordinate dependency at all
+              try {
+                await js(`(function(){
+                  var A=${JSON.stringify(COOKIE_LABELS)};
+                  var b=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+                  if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}
+                  if(b){b.click();return true;}return false;
+                })()`);
+              } catch {}
+            };
+
             {
-              let cookiePos: {x:number;y:number}|null = null;
-              for (let ck = 0; ck < 14; ck++) {
-                cookiePos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
-                if (cookiePos) break;
+              // Phase A: poll up to 7 s for the banner to appear after page load
+              let initialPos: {x:number;y:number}|null = null;
+              for (let poll = 0; poll < 14; poll++) {
+                initialPos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+                if (initialPos) break;
                 await sleep(500);
               }
-              if (cookiePos) {
-                relay("Accepting cookies…");
-                // Layer 1: synthesizeTapGesture (touch events)
-                await tap(cookiePos.x, cookiePos.y);
-                await sleep(250);
-                // Layer 2: dispatchMouseEvent — covers DPR coordinate mismatch where
-                // synthesizeTapGesture lands at the wrong physical position (banner
-                // title instead of the button) when setDeviceMetricsOverride DPR>1
-                try {
-                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: cookiePos.x, y: cookiePos.y, button: "none", modifiers: 0 });
-                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: cookiePos.x, y: cookiePos.y, button: "left", clickCount: 1, modifiers: 0 });
-                  await sleep(60);
-                  await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: cookiePos.x, y: cookiePos.y, button: "left", clickCount: 1, modifiers: 0 });
-                } catch {}
-                await sleep(200);
-                // Layer 3: direct JS click — no coordinates, immune to all DPR issues
-                try {
-                  await js(`(function(){
-                    var A=${JSON.stringify(COOKIE_LABELS)};
-                    var b=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-                    if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}
-                    if(b){b.click();return true;}return false;
-                  })()`);
-                } catch {}
-                // Wait for banner to dismiss + any resulting navigation to settle
-                await sleep(2200);
-                // Verify it actually dismissed — retry all three layers if still present
-                const stillThere = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
-                if (stillThere) {
-                  relay("Cookie banner still visible — retrying all click layers…");
-                  await tap(stillThere.x, stillThere.y);
-                  await sleep(200);
-                  try {
-                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: stillThere.x, y: stillThere.y, button: "left", clickCount: 1, modifiers: 0 });
-                    await sleep(60);
-                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: stillThere.x, y: stillThere.y, button: "left", clickCount: 1, modifiers: 0 });
-                  } catch {}
-                  await sleep(200);
-                  try {
-                    await js(`(function(){var A=${JSON.stringify(COOKIE_LABELS)};var b=document.querySelector('[data-cookiebanner="accept_button"]');if(!b){for(var e of document.querySelectorAll('button,[role="button"],a')){var t=(e.innerText||e.textContent||'').trim().toLowerCase();if(A.indexOf(t)!==-1){b=e;break;}}}if(b)b.click();return!!b;})()`);
-                  } catch {}
-                  await sleep(2000);
-                }
+
+              if (!initialPos) {
+                relay("✅ No cookie banner — proceeding…");
               } else {
-                relay("No cookie banner detected — continuing…");
+                // Phase B: click and VERIFY dismissed — up to 5 attempts
+                let cookieDismissed = false;
+                for (let attempt = 1; attempt <= 5; attempt++) {
+                  // Re-detect position on each attempt (banner may have shifted)
+                  const pos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+                  if (!pos) {
+                    // Already gone (previous attempt worked)
+                    cookieDismissed = true;
+                    relay(`✅ Cookie banner dismissed (confirmed on attempt ${attempt})`);
+                    break;
+                  }
+                  relay(`Accepting cookies… (attempt ${attempt}/5)`);
+                  await clickCookieAt(pos);
+                  // Wait for React to unmount the banner
+                  await sleep(2000);
+                  // Verify it actually disappeared
+                  const check = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+                  if (!check) {
+                    cookieDismissed = true;
+                    relay(`✅ Cookie banner dismissed (attempt ${attempt})`);
+                    break;
+                  }
+                  relay(`Banner still visible after attempt ${attempt} — retrying…`);
+                  if (attempt < 5) await sleep(1000);
+                }
+
+                if (!cookieDismissed) {
+                  relay("❌ Cookie banner could not be dismissed after 5 attempts. Please click 'Allow all cookies' manually and restart the signup flow.");
+                  return;
+                }
               }
+              // Extra settling time so any post-dismiss navigation completes
+              await sleep(1000);
             }
 
             // ── Step 2: If redirected to homepage, click through to signup ────
+            // Each waitAndTap return is checked — flow stops if the button isn't found
             const curUrl = wc.getURL();
             if (!curUrl.includes("emailsignup") && !curUrl.includes("signup")) {
               relay("Finding 'Create new account'…");
-              await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
+              const foundCreate = await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
+              if (!foundCreate) { relay("❌ 'Create new account' button not found — stopping. Please check the browser state."); return; }
               await sleep(2000);
-              await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
+              const foundEmail = await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
+              if (!foundEmail) { relay("❌ 'Sign up with email' option not found — stopping. Please check the browser state."); return; }
               await sleep(2000);
             }
 
             // ── Step 3: Fill email address ────────────────────────────────────
-            relay("Filling email address…");
-            const emailPos = await js(findInputScript([
-              "emailOrPhone", "email", "Email", "Mobile Number or Email", "Mobile number or email address",
-            ])) as {x:number;y:number}|null;
-            if (!emailPos) { relay("⚠ Email field not found — check browser state"); return; }
+            // Verify the email field is actually on screen before attempting to type
+            relay("Waiting for email field…");
+            let emailPos: {x:number;y:number}|null = null;
+            for (let poll = 0; poll < 10; poll++) {
+              emailPos = await js(findInputScript([
+                "emailOrPhone", "email", "Email", "Mobile Number or Email", "Mobile number or email address",
+              ])) as {x:number;y:number}|null;
+              if (emailPos) break;
+              await sleep(800);
+            }
+            if (!emailPos) { relay("❌ Email field not found after 8 s — cookie banner may still be visible or page did not load correctly. Stopping."); return; }
+            relay("✅ Email field found — filling…");
             await clearAndType(emailPos.x, emailPos.y, email);
             await sleep(600);
 
-            // Click Next
-            await waitAndTap(["next", "continue"], "Next (after email)");
+            // Click Next — verify the button exists before continuing to code-wait step
+            const nextOk = await waitAndTap(["next", "continue"], "Next (after email)");
+            if (!nextOk) { relay("❌ 'Next' button not found after email entry — stopping. The email may have been rejected or the form layout changed."); return; }
             await sleep(3500);
 
             // ── Step 4: Verification code — poll until frontend provides it ───
