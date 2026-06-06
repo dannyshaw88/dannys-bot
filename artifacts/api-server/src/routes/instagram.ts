@@ -362,6 +362,12 @@ export async function registerInstagramRoutes(
     res.json({ count });
   });
 
+  app.get("/api/profiles/:profileId/api-endpoint-counts", async (req, res) => {
+    const todayPrefix = new Date().toISOString().slice(0, 10);
+    const counts = await storage.getApiEndpointCounts(Number(req.params.profileId), todayPrefix);
+    res.json(counts);
+  });
+
   app.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
     res.json(data);
@@ -1447,6 +1453,10 @@ export async function registerInstagramRoutes(
             // Preserve existing proxyId if the import doesn't specify a proxy
             if (!resolvedProxyId && existing.proxyId) {
               delete updates.proxyId;
+            }
+            // Never overwrite the original "first added" timestamp in Notes
+            if (existing.notes && String(existing.notes).trim()) {
+              delete updates.notes;
             }
             await storage.updateProfile(existing.id, updates);
             // Seed/refresh the browser cookie file if the import provided cookies
@@ -3576,7 +3586,7 @@ export async function registerInstagramRoutes(
             twoFASecretKey:          ja.twoFASecret ?? null,
             emailValidationUsername: ja.email ?? null,
             emailValidationPassword: ja.emailPassword ?? null,
-            notes:                   "Imported from Jarvee",
+            notes:                   null, // createProfile will auto-stamp the first-added date
           };
 
           if (proxyStr) profileData.proxy = proxyStr;

@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.792",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings: Inject Profile Browsing now includes all settings — Like %, Save Media %, Watch Stories %, View Highlights %, Comment %, and Comment Text are included when copying Follow tool and Human Session injection settings." },
+      { category: "Fix", text: "Inject Browsing: Feed Posts min/max fields now accept 0, so you can set a chance of zero posts being viewed during a browsing injection." },
+      { category: "Feature", text: "Account Notes: automatically stamped with the exact date and time an account was first added to Equinox. Preserved across EQX export and re-import — never overwritten." },
+      { category: "Feature", text: "Statistics page: new Status column shows the account status pill alongside tool performance data." },
+      { category: "Feature", text: "Metrics page: new Raw API Endpoint Count block shows every API endpoint hit with today's count and all-time total." },
+    ],
+  },
+  {
     version: "1.0.791",
     date: "5 Jun 2026",
     items: [

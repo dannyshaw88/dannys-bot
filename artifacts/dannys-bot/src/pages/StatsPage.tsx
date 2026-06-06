@@ -25,7 +25,53 @@ import { queryClient } from "@/lib/queryClient";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
-type ColKey = StatKey | "open_eb" | "trustscore";
+type ColKey = StatKey | "open_eb" | "trustscore" | "status";
+
+const STATUS_DISPLAY: Record<string, { label: string; pill: string }> = {
+  pending:              { label: "Pending",         pill: "bg-slate-50 text-slate-600 border-slate-200" },
+  verifying:            { label: "Verifying",       pill: "bg-blue-50 text-blue-600 border-blue-200" },
+  valid:                { label: "Valid",            pill: "bg-green-50 text-green-700 border-green-200" },
+  banned:               { label: "Banned",           pill: "bg-red-50 text-red-700 border-red-200" },
+  captcha:              { label: "Captcha",          pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  locked:               { label: "Locked",           pill: "bg-red-50 text-red-700 border-red-200" },
+  email_confirmation:   { label: "Email Confirm",   pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  phone_verification:   { label: "Phone Verify",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  "2fa_verification":   { label: "2FA Verify",      pill: "bg-purple-50 text-purple-700 border-purple-200" },
+  stopped:              { label: "Stopped",          pill: "bg-slate-100 text-slate-600 border-slate-200" },
+  logged_out:           { label: "Logged Out",       pill: "bg-orange-50 text-orange-700 border-orange-200" },
+  bad_password:         { label: "Bad Password",    pill: "bg-red-50 text-red-700 border-red-200" },
+  action_blocked:       { label: "Action Blocked",  pill: "bg-red-50 text-red-700 border-red-200" },
+  action_required:      { label: "Action Required", pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  account_disabled:     { label: "Disabled",        pill: "bg-red-50 text-red-700 border-red-200" },
+  api_block:            { label: "API Block",       pill: "bg-red-50 text-red-700 border-red-200" },
+  compromised:          { label: "Compromised",     pill: "bg-red-50 text-red-700 border-red-200" },
+  invalid_credentials:  { label: "Invalid Creds",  pill: "bg-red-50 text-red-700 border-red-200" },
+  no_internet:          { label: "No Internet",     pill: "bg-slate-100 text-slate-600 border-slate-200" },
+  suspended:            { label: "Suspended",        pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  confirm_human:        { label: "Confirm Human",   pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  temporary_locked:     { label: "Temp. Locked",   pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  scrape_warning:       { label: "Scrape Warn",     pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  post_deleted:         { label: "Post Deleted",    pill: "bg-red-50 text-red-700 border-red-200" },
+  captcha_disabled:     { label: "Captcha Dis.",    pill: "bg-slate-100 text-slate-600 border-slate-200" },
+  email_verification:   { label: "Email Verify",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  phone_validation:     { label: "Phone Valid.",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  password_reset:       { label: "Pwd Reset",       pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  selfie_verification:  { label: "Selfie Verify",   pill: "bg-purple-50 text-purple-700 border-purple-200" },
+  own_phone_verification: { label: "Own Phone",     pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  email_connection:     { label: "Email Connect",   pill: "bg-orange-50 text-orange-700 border-orange-200" },
+  upload:               { label: "Upload",           pill: "bg-blue-50 text-blue-700 border-blue-200" },
+  review:               { label: "Review",           pill: "bg-slate-100 text-slate-600 border-slate-200" },
+};
+
+function StatusPill({ status }: { status?: string | null }) {
+  const s = status ?? "pending";
+  const d = STATUS_DISPLAY[s] ?? { label: s.replace(/_/g, " "), pill: "bg-slate-50 text-slate-600 border-slate-200" };
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${d.pill}`}>
+      {d.label}
+    </span>
+  );
+}
 
 const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean; toolTypeKey?: string; pieColor: string }[] = [
   { key: "follow",        label: "Follow",        icon: <UserPlus className="w-3.5 h-3.5" />,     color: "text-blue-500",    isTool: false, pieColor: "#3b82f6" },
@@ -39,16 +85,16 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
 ];
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
-  account: 160, open_eb: 80, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
+  account: 160, status: 120, open_eb: 80, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
-  follow: true, unfollow: true, dm: true, like: true,
+  status: true, follow: true, unfollow: true, dm: true, like: true,
   comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true,
 };
 
-const DEFAULT_STAT_COL_ORDER: ColKey[] = ["open_eb", "trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
+const DEFAULT_STAT_COL_ORDER: ColKey[] = ["status", "open_eb", "trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
 
 function ProfileStatsRow({
   profile,
@@ -100,6 +146,15 @@ function ProfileStatsRow({
 
       {/* All non-account columns — centred */}
       {statColOrder.filter(key => visibleCols[key]).map(key => {
+        if (key === "status") {
+          return (
+            <td key="status" style={{ width: colWidths.status }} className="px-4 py-3 text-center">
+              <div className="flex justify-center">
+                <StatusPill status={profile.accountStatus} />
+              </div>
+            </td>
+          );
+        }
         if (key === "open_eb") {
           return (
             <td key="open_eb" style={{ width: colWidths.open_eb }} className="px-4 py-3 text-center">
@@ -343,6 +398,7 @@ export function StatsPage() {
   const colGroups: [string, string][] = [
     ["account", "Account"],
     ...statColOrder.map(k => {
+      if (k === "status") return ["status", "Status"] as [string, string];
       if (k === "open_eb") return ["open_eb", "Open EB"] as [string, string];
       if (k === "trustscore") return ["trustscore", "TrustScore"] as [string, string];
       return [k, ALL_STAT_TYPES.find(s => s.key === k)!.label] as [string, string];
@@ -381,6 +437,12 @@ export function StatsPage() {
     queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-call-count`] : ["no-profile-api"],
     enabled: !!selectedProfile,
     refetchInterval: 30000,
+  });
+
+  const { data: endpointCountsData } = useQuery<{ operationName: string; todayCount: number; totalCount: number }[]>({
+    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-endpoint-counts`] : ["no-profile-endpoint"],
+    enabled: !!selectedProfile,
+    refetchInterval: 60000,
   });
 
   const getStat = (type: string, date: string) =>
@@ -493,7 +555,8 @@ export function StatsPage() {
                             let icon: React.ReactNode;
                             let label: string;
                             let color: string;
-                            if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
+                            if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
+                            else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
                             else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
                             else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
                             return (
@@ -572,7 +635,14 @@ export function StatsPage() {
                       {statColOrder.filter(key => visibleCols[key]).map(key => {
                         const isDragTarget = statDragOverCol === key;
                         let thContent: React.ReactNode;
-                        if (key === "open_eb") {
+                        if (key === "status") {
+                          thContent = (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground/60">
+                              <ShieldAlert className="w-3 h-3" />
+                              <span className="text-[10px] uppercase tracking-wide">Status</span>
+                            </span>
+                          );
+                        } else if (key === "open_eb") {
                           thContent = (
                             <span className="inline-flex items-center gap-1 text-cyan-500/70">
                               <Monitor className="w-3 h-3" />
@@ -819,6 +889,53 @@ export function StatsPage() {
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Raw API Endpoint Count */}
+                <Card className="desktop-card border-none shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Webhook className="w-4 h-4 text-primary" />
+                      Raw API Endpoint Count
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    {!endpointCountsData || endpointCountsData.length === 0 ? (
+                      <div className="py-8 text-center text-muted-foreground text-sm">No API calls recorded yet for this account.</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border/50">
+                              <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Endpoint</th>
+                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Today</th>
+                              <th className="text-center py-2 pl-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {endpointCountsData.map(row => (
+                              <tr key={row.operationName} className="hover:bg-muted/5 transition-colors">
+                                <td className="py-1.5 pr-4 text-[12px] font-mono text-foreground/80">{row.operationName}</td>
+                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-foreground">{row.todayCount.toLocaleString()}</td>
+                                <td className="py-1.5 pl-3 text-center tabular-nums text-[12px] text-muted-foreground">{row.totalCount.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-border/50 bg-muted/5">
+                              <td className="py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total ({endpointCountsData.length} endpoints)</td>
+                              <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-foreground">
+                                {endpointCountsData.reduce((s, r) => s + r.todayCount, 0).toLocaleString()}
+                              </td>
+                              <td className="py-2 pl-3 text-center tabular-nums text-[11px] text-muted-foreground">
+                                {endpointCountsData.reduce((s, r) => s + r.totalCount, 0).toLocaleString()}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

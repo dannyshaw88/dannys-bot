@@ -64,6 +64,7 @@ export interface IStorage {
   getInstagramApiCalls(limit?: number): Promise<any[]>;
   getInstagramApiCallsByProfile(profileId: number, limit?: number): Promise<any[]>;
   getInstagramApiCallCount(profileId: number): Promise<number>;
+  getApiEndpointCounts(profileId: number, todayPrefix: string): Promise<{ operationName: string; todayCount: number; totalCount: number }[]>;
   getLastValidApiCallByProfile(): Promise<Record<number, string>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
@@ -163,12 +164,21 @@ export class DatabaseStorage implements IStorage {
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    // Auto-stamp the Notes field with the date/time the account was first added to
+    // Equinox. Only written when notes is blank — never overwrites an existing value
+    // (e.g. a note that came from an EQX re-import already carries the original stamp).
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const firstAddedStamp = `Added: ${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
     const [created] = await db.insert(profiles).values({
       ...profile,
       // Only fall back to random UA if the caller did not supply one
       userAgentApi: profile.userAgentApi || randomUA.api,
       userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
       tags: profile.tags || "No Group Assigned",
+      // Preserve any existing notes (EQX import carries the original stamp); only
+      // set the auto-stamp when notes is genuinely absent.
+      notes: (profile.notes && String(profile.notes).trim()) ? profile.notes : firstAddedStamp,
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;
@@ -367,6 +377,25 @@ export class DatabaseStorage implements IStorage {
       .where(gt(instagramApiCalls.id, sinceId))
       .orderBy(desc(instagramApiCalls.id))
       .limit(limit);
+  }
+
+  async getApiEndpointCounts(profileId: number, todayPrefix: string): Promise<{ operationName: string; todayCount: number; totalCount: number }[]> {
+    const likePattern = todayPrefix + "%";
+    const rows = await db
+      .select({
+        operationName: instagramApiCalls.operationName,
+        totalCount: sql<number>`COUNT(*)`,
+        todayCount: sql<number>`SUM(CASE WHEN ${instagramApiCalls.date} LIKE ${likePattern} THEN 1 ELSE 0 END)`,
+      })
+      .from(instagramApiCalls)
+      .where(eq(instagramApiCalls.profileId, profileId))
+      .groupBy(instagramApiCalls.operationName)
+      .orderBy(desc(sql<number>`COUNT(*)`));
+    return rows.map(r => ({
+      operationName: r.operationName,
+      totalCount: Number(r.totalCount ?? 0),
+      todayCount: Number(r.todayCount ?? 0),
+    }));
   }
 
   private _apiCallInsertCount = 0;
