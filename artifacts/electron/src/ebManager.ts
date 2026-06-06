@@ -281,6 +281,63 @@ function getChromeBuildInfo(majorVersion: string): { full: string; grease: strin
   return CHROME_BUILD_INFO[majorVersion] ?? { full: `${majorVersion}.0.6778.260`, grease: " Not A;Brand", greaseVer: "8" };
 }
 
+// ── Mobile device profile resolver ────────────────────────────────────────────
+//
+// Returns the CSS-pixel screen dimensions and DPR that the JS fingerprint script
+// will select for this UA, so the CDP Emulation.setDeviceMetricsOverride call
+// uses IDENTICAL values — no mismatch between JS-level overrides and Chromium's
+// C++-level viewport geometry.
+//
+// The PRNG seed and profile-selection logic are an exact TypeScript mirror of the
+// JS inside buildFingerprintScript() — changing either must keep them in sync.
+//
+// WHY THIS IS CRITICAL:
+//   Without setDeviceMetricsOverride, Chromium's layout engine uses the real
+//   BrowserWindow size (1280×820).  CSS @media (pointer:coarse) / (max-width:480px)
+//   queries evaluate against the real viewport, so Instagram's React app renders
+//   its desktop layout and applies desktop-specific JavaScript branches (e.g.
+//   PointerEvent.pointerType === "mouse").  JS overrides to screen.width / innerWidth
+//   only affect JS reads — they cannot change how Chromium measures the viewport
+//   for CSS, layout, or native input handling.
+const MOBILE_PROFILES: [number, number, number][] = [
+  [360,808,3.0],[411,914,2.625],[411,914,2.625],[360,780,3.0],
+  [360,780,3.0],[393,851,2.75],[412,915,2.625],[412,900,2.70],
+  [393,873,2.75],[393,873,2.75],[393,868,2.75],[360,780,3.0],
+];
+
+function getMobileDeviceProfile(
+  browserUA: string | null,
+  apiUA: string | null,
+): { width: number; height: number; dpr: number } | null {
+  if (!browserUA) return null;
+  const isMob = browserUA.includes("Mobile") || browserUA.includes("Android");
+  if (!isMob) return null;
+
+  // If the API UA carries explicit pixel dimensions, use them (highest fidelity).
+  // Format: "34/14; 420dpi; 1080x2340; ..."
+  if (apiUA) {
+    const m = apiUA.match(/;\s*(\d+)dpi;\s*(\d+)x(\d+)/);
+    if (m) {
+      const dpi = +m[1], pW = +m[2], pH = +m[3];
+      const dpr = Math.round(dpi / 160 * 10000) / 10000;
+      return { width: Math.round(pW / dpr), height: Math.round(pH / dpr), dpr };
+    }
+  }
+
+  // Mirror the PRNG-based selection from buildFingerprintScript so both pick the
+  // same profile entry.  Seed: djb2-XOR of each UA character, same as the JS.
+  let s = 5381;
+  for (let i = 0; i < browserUA.length; i++) {
+    s = (((s << 5) + s) ^ browserUA.charCodeAt(i)) >>> 0;
+  }
+  if (!s) s = 1;
+  // One iteration of the LCG (matches the first _r() call selecting the profile)
+  s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+  const idx = Math.floor((s / 0x100000000) * MOBILE_PROFILES.length);
+  const p = MOBILE_PROFILES[idx] ?? MOBILE_PROFILES[0];
+  return { width: p[0], height: p[1], dpr: p[2] };
+}
+
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
 // Applied via CDP Page.addScriptToEvaluateOnNewDocument (runs before any page script)
 // AND via dom-ready executeJavaScript (belt-and-suspenders if CDP is unavailable).
@@ -426,6 +483,51 @@ async function typeTextCDP(
     const base  = min + Math.random() * (max - min);
     const pause = Math.random() < 0.08 ? 400 + Math.random() * 600 : 0;
     await new Promise<void>(r => setTimeout(r, Math.round(base + pause)));
+  }
+}
+
+// ── CDP touch tap (replaces mouse clicks for mobile accounts) ─────────────────
+//
+// WHY NOT dispatchMouseEvent:
+//   On a real Android phone, every tap fires touchstart → touchend → click.
+//   CDP Input.dispatchMouseEvent fires mousedown + mouseup — events that NEVER
+//   appear on a touchscreen device.  Instagram's React event handlers read
+//   event.pointerType and event.sourceCapabilities.firesTouchEvents to distinguish
+//   mouse from touch.  Sending mouse events when the UA claims Android Mobile is a
+//   reliable bot signal detectable client-side without any server round-trip.
+//
+// HOW Input.synthesizeTapGesture WORKS:
+//   Chromium synthesises a complete native touch gesture: touchstart → touchmove
+//   (optional) → touchend → click, with correct pointerType="touch", isTrusted=true,
+//   and sourceCapabilities.firesTouchEvents=true.  Instagram cannot distinguish this
+//   from a finger tap on a real device.
+//
+// FALLBACK:
+//   synthesizeTapGesture is available in all Chromium ≥ 72 builds (Electron ≥ 5).
+//   If the command fails (e.g. a very old build or a race condition), we fall back
+//   to dispatchMouseEvent so the flow doesn't break entirely.
+async function cdpTapGesture(
+  dbg: Electron.Debugger,
+  x: number,
+  y: number,
+  opts?: { durationMs?: number },
+): Promise<void> {
+  const dur = opts?.durationMs ?? Math.round(50 + Math.random() * 80);
+  try {
+    await dbg.sendCommand("Input.synthesizeTapGesture", {
+      x,
+      y,
+      duration:         dur,
+      tapCount:         1,
+      gestureSourceType: "touch",
+    });
+  } catch {
+    // Fallback: mouse events (still isTrusted=true, just wrong pointer type)
+    try {
+      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0 });
+      await new Promise(r => setTimeout(r, 40 + Math.random() * 50));
+      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+    } catch {}
   }
 }
 
@@ -1078,12 +1180,10 @@ async function doAutoLogin(
       await delay(500);
     }
     if (ckPos) {
-      console.log(`[doAutoLogin:${profileId}] @${username} — cookie banner at (${ckPos.x},${ckPos.y}), dismissing via CDP`);
+      console.log(`[doAutoLogin:${profileId}] @${username} — cookie banner at (${ckPos.x},${ckPos.y}), dismissing via touch tap`);
       try {
         try { wc.debugger.attach("1.3"); } catch {}
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await cdpTapGesture(wc.debugger, ckPos.x, ckPos.y);
         await delay(2000);
       } catch {}
     }
@@ -1126,11 +1226,13 @@ async function doAutoLogin(
     return { ok: false, message: "Could not find login form on Instagram login page" };
   }
 
-  // Step 2: click username field + type via CDP (isTrusted = true throughout)
+  // Step 2: tap username field (touch event) + type via CDP
+  // WHY cdpTapGesture instead of dispatchMouseEvent:
+  //   synthesizeTapGesture fires touchstart→touchend→click with pointerType="touch".
+  //   dispatchMouseEvent fires mousedown+mouseup — events that never appear on a
+  //   real Android phone. Instagram reads event.pointerType to detect mouse input.
   try {
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: fields.u.x, y: fields.u.y, button: "left", clickCount: 1, modifiers: 0 });
-    await delay(60);
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: fields.u.x, y: fields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+    await cdpTapGesture(wc.debugger, fields.u.x, fields.u.y);
     await delay(150);
     // Select-all + delete any pre-filled content before typing
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -1140,10 +1242,8 @@ async function doAutoLogin(
     await delay(100);
     await typeTextCDP(wc.debugger, username);
 
-    // Step 3: click password field + type via CDP
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: fields.p.x, y: fields.p.y, button: "left", clickCount: 1, modifiers: 0 });
-    await delay(60);
-    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: fields.p.x, y: fields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+    // Step 3: tap password field (touch event) + type via CDP
+    await cdpTapGesture(wc.debugger, fields.p.x, fields.p.y);
     await delay(150);
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -1156,7 +1256,7 @@ async function doAutoLogin(
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
   }
 
-  // Step 4: poll for submit button position, click via CDP
+  // Step 4: poll for submit button position, tap via touch gesture
   {
     let btnPos: { x: number; y: number } | null = null;
     for (let i = 0; i < 20; i++) {
@@ -1175,9 +1275,7 @@ async function doAutoLogin(
       await delay(250);
     }
     if (btnPos) {
-      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: btnPos.x, y: btnPos.y, button: "left", clickCount: 1, modifiers: 0 });
-      await delay(60);
-      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: btnPos.x, y: btnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+      await cdpTapGesture(wc.debugger, btnPos.x, btnPos.y);
     } else {
       // Fallback: Enter via CDP (still isTrusted = true)
       console.warn(`[doAutoLogin:${profileId}] submit button not found — sending Enter via CDP`);
@@ -1242,15 +1340,13 @@ async function doAutoLogin(
 
     if (tfPos) {
       try {
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: tfPos.x, y: tfPos.y, button: "left", clickCount: 1, modifiers: 0 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: tfPos.x, y: tfPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await cdpTapGesture(wc.debugger, tfPos.x, tfPos.y);
         await delay(150);
         await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
       } catch {}
     }
 
-    // Poll for 2FA submit button, click via CDP
+    // Poll for 2FA submit button, tap via touch gesture
     {
       let tf2BtnPos: { x: number; y: number } | null = null;
       for (let i = 0; i < 16; i++) {
@@ -1267,9 +1363,7 @@ async function doAutoLogin(
         await delay(250);
       }
       if (tf2BtnPos) {
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: tf2BtnPos.x, y: tf2BtnPos.y, button: "left", clickCount: 1, modifiers: 0 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: tf2BtnPos.x, y: tf2BtnPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await cdpTapGesture(wc.debugger, tf2BtnPos.x, tf2BtnPos.y);
       } else {
         // Fallback: Enter via CDP
         await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
@@ -1769,6 +1863,49 @@ export async function openEbWindow(opts: {
         }
       }
 
+      // ── Mobile device metrics override ────────────────────────────────────────
+      // CRITICAL for anti-detect: without this, Chromium's C++ layout engine uses
+      // the real BrowserWindow size (1280×820) even though the JS fingerprint
+      // overrides screen.width/innerWidth.  JS overrides only affect JS reads —
+      // they cannot change how Chromium evaluates CSS @media queries, computes
+      // layout, or classifies input events (PointerEvent.pointerType stays "mouse").
+      //
+      // setDeviceMetricsOverride with mobile:true makes Chromium:
+      //   • evaluate @media (pointer:coarse) and (max-width:Xpx) against mobile dims
+      //   • render the Instagram mobile SPA layout (not desktop)
+      //   • report PointerEvent.pointerType="touch" for native touch input
+      //   • apply the correct devicePixelRatio at the compositor level
+      //
+      // setTouchEmulationEnabled enables Chromium's native touch input stack so that
+      // Input.synthesizeTapGesture produces real touchstart/touchend events (not
+      // mouse events with a wrong pointer type).
+      if (_fpIsMobile) {
+        const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
+        if (_mobileProfile) {
+          try {
+            await win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+              width:             _mobileProfile.width,
+              height:            _mobileProfile.height,
+              deviceScaleFactor: _mobileProfile.dpr,
+              mobile:            true,
+              screenOrientation: { type: "portraitPrimary", angle: 0 },
+            });
+            console.log(`[ebManager:${profileId}] setDeviceMetricsOverride: ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
+          } catch (dmErr) {
+            console.warn(`[ebManager:${profileId}] setDeviceMetricsOverride failed:`, dmErr);
+          }
+          try {
+            await win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+              enabled:        true,
+              maxTouchPoints: 10,
+            });
+            console.log(`[ebManager:${profileId}] setTouchEmulationEnabled: touch input stack active`);
+          } catch (teErr) {
+            console.warn(`[ebManager:${profileId}] setTouchEmulationEnabled failed:`, teErr);
+          }
+        }
+      }
+
       // ── Locale override — match navigator.languages ─────────────────────────
       // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
       // locale unless overridden at the CDP level.
@@ -2086,20 +2223,13 @@ export async function openEbWindow(opts: {
 
         if (!pos) break; // banner gone (or never appeared) — stop
 
-        // Use CDP Input.dispatchMouseEvent — same mechanism Puppeteer uses,
-        // produces isTrusted=true events that React's synthetic event system
-        // handles correctly for both <button> and <a> elements.
+        // Use cdpTapGesture (synthesizeTapGesture) for mobile accounts — fires
+        // touchstart→touchend→click with pointerType="touch", isTrusted=true.
+        // For desktop UAs this still works because the fallback inside cdpTapGesture
+        // sends dispatchMouseEvent if synthesizeTapGesture fails.
         try {
-          await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
-            type: "mousePressed", x: pos.x, y: pos.y,
-            button: "left", clickCount: 1, modifiers: 0,
-          });
-          await new Promise(r => setTimeout(r, 60));
-          await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
-            type: "mouseReleased", x: pos.x, y: pos.y,
-            button: "left", clickCount: 1, modifiers: 0,
-          });
-          _ebLog(`CookieBanner: CDP click dispatched at (${pos.x},${pos.y}) label="${pos.label}"`);
+          await cdpTapGesture(win.webContents.debugger, pos.x, pos.y);
+          _ebLog(`CookieBanner: touch tap dispatched at (${pos.x},${pos.y}) label="${pos.label}"`);
         } catch (cdpErr) {
           // CDP failed — fall back to sendInputEvent
           _ebLog(`CookieBanner: CDP failed (${cdpErr}), falling back to sendInputEvent`);
@@ -2142,11 +2272,9 @@ export async function openEbWindow(opts: {
               })()`;
               const _loginPos = await win.webContents.executeJavaScript(_loginBtnJs).catch(() => null) as { x: number; y: number } | null;
               if (_loginPos) {
-                _ebLog(`CookieBanner post-dismiss: splash page — clicking Log In at (${_loginPos.x},${_loginPos.y})`);
+                _ebLog(`CookieBanner post-dismiss: splash page — tapping Log In at (${_loginPos.x},${_loginPos.y})`);
                 try {
-                  await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _loginPos.x, y: _loginPos.y, button: "left", clickCount: 1, modifiers: 0 });
-                  await new Promise(r => setTimeout(r, 60));
-                  await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _loginPos.x, y: _loginPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await cdpTapGesture(win.webContents.debugger, _loginPos.x, _loginPos.y);
                 } catch {}
               }
             }
@@ -2245,15 +2373,9 @@ export async function openEbWindow(opts: {
           if (!pos) break; // no overlay present
           // Capture current URL so we can recover if dismissing causes a redirect
           const beforeUrl = win.isDestroyed() ? "" : win.webContents.getURL();
-          _ebLog(`GhostOverlay#${attempt + 1}: overlay at (${pos.x},${pos.y}), CDP click (beforeUrl=${beforeUrl.slice(0, 80)})`);
+          _ebLog(`GhostOverlay#${attempt + 1}: overlay at (${pos.x},${pos.y}), touch tap (beforeUrl=${beforeUrl.slice(0, 80)})`);
           try {
-            await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
-              type: "mousePressed", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0,
-            });
-            await new Promise(r => setTimeout(r, 60));
-            await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
-              type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0,
-            });
+            await cdpTapGesture(win.webContents.debugger, pos.x, pos.y);
           } catch (cdpErr) {
             _ebLog(`GhostOverlay: CDP failed (${cdpErr}), falling back to humanMouseClick`);
             win.webContents.focus();
@@ -2612,9 +2734,7 @@ export async function openEbWindow(opts: {
             try {
               const _d = win.webContents.debugger;
               const _ms = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _afFields.u.x, y: _afFields.u.y, button: "left", clickCount: 1, modifiers: 0 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _afFields.u.x, y: _afFields.u.y, button: "left", clickCount: 1, modifiers: 0 });
+              await cdpTapGesture(_d, _afFields.u.x, _afFields.u.y);
               await _ms(150);
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -2622,9 +2742,7 @@ export async function openEbWindow(opts: {
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _ms(100);
               await typeTextCDP(_d, username);
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _afFields.p.x, y: _afFields.p.y, button: "left", clickCount: 1, modifiers: 0 });
+              await cdpTapGesture(_d, _afFields.p.x, _afFields.p.y);
               await _ms(150);
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -2645,9 +2763,7 @@ export async function openEbWindow(opts: {
                   })()
                 `).catch(() => null) as { x: number; y: number } | null;
                 if (_bp) {
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
-                  await _ms(60);
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await cdpTapGesture(_d, _bp.x, _bp.y);
                   break;
                 }
                 await _ms(250);
@@ -2684,9 +2800,7 @@ export async function openEbWindow(opts: {
             try {
               const _d = win.webContents.debugger;
               const _ms = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _af2Pos.x, y: _af2Pos.y, button: "left", clickCount: 1, modifiers: 0 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _af2Pos.x, y: _af2Pos.y, button: "left", clickCount: 1, modifiers: 0 });
+              await cdpTapGesture(_d, _af2Pos.x, _af2Pos.y);
               await _ms(150);
               await typeTextCDP(_d, code, { minDelay: 40, maxDelay: 100 });
               for (let _bi = 0; _bi < 16; _bi++) {
@@ -2700,9 +2814,7 @@ export async function openEbWindow(opts: {
                   })()
                 `).catch(() => null) as { x: number; y: number } | null;
                 if (_bp) {
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
-                  await _ms(60);
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await cdpTapGesture(_d, _bp.x, _bp.y);
                   break;
                 }
                 await _ms(250);
@@ -2780,9 +2892,7 @@ function setupToolbarIpc(): void {
       })()`).catch(() => null) as { x: number; y: number } | null;
       if (focusPos) {
         try {
-          await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: focusPos.x, y: focusPos.y, button: "left", clickCount: 1, modifiers: 0 });
-          await new Promise<void>(r => setTimeout(r, 40));
-          await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: focusPos.x, y: focusPos.y, button: "left", clickCount: 1, modifiers: 0 });
+          await cdpTapGesture(wc.debugger, focusPos.x, focusPos.y);
           await new Promise<void>(r => setTimeout(r, 60));
           await typeTextCDP(wc.debugger, text);
         } catch {}
@@ -2856,9 +2966,7 @@ function setupToolbarIpc(): void {
             for (let _ck = 0; _ck < 10; _ck++) {
               const _ckPos = await targetWc.executeJavaScript(_ckDetect).catch(() => null) as { x: number; y: number } | null;
               if (_ckPos) {
-                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _ckPos.x, y: _ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
-                await _ms(60);
-                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _ckPos.x, y: _ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                await cdpTapGesture(_d, _ckPos.x, _ckPos.y);
                 await _ms(2000);
                 break;
               }
@@ -2889,10 +2997,8 @@ function setupToolbarIpc(): void {
 
             if (_flds === 'navigate') return 'navigate';
 
-            // Fill username via CDP
-            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _flds.u.x, y: _flds.u.y, button: "left", clickCount: 1, modifiers: 0 });
-            await _ms(60);
-            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _flds.u.x, y: _flds.u.y, button: "left", clickCount: 1, modifiers: 0 });
+            // Fill username via CDP touch tap
+            await cdpTapGesture(_d, _flds.u.x, _flds.u.y);
             await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -2901,10 +3007,8 @@ function setupToolbarIpc(): void {
             await _ms(100);
             await typeTextCDP(_d, _lgUsr);
 
-            // Fill password via CDP
-            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _flds.p.x, y: _flds.p.y, button: "left", clickCount: 1, modifiers: 0 });
-            await _ms(60);
-            await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _flds.p.x, y: _flds.p.y, button: "left", clickCount: 1, modifiers: 0 });
+            // Fill password via CDP touch tap
+            await cdpTapGesture(_d, _flds.p.x, _flds.p.y);
             await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -2922,7 +3026,7 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(500 + Math.floor(Math.random() * 400));
 
-            // Poll for submit button, click via CDP
+            // Poll for submit button, tap via touch gesture
             for (let _bi = 0; _bi < 20; _bi++) {
               const _bp = await targetWc.executeJavaScript(`
                 (() => {
@@ -2936,9 +3040,7 @@ function setupToolbarIpc(): void {
                 })()
               `).catch(() => null) as { x: number; y: number } | null;
               if (_bp) {
-                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
-                await _ms(60);
-                await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                await cdpTapGesture(_d, _bp.x, _bp.y);
                 return 'ok';
               }
               await _ms(250);
@@ -3136,10 +3238,8 @@ function setupToolbarIpc(): void {
             }
 
             if (totpPos) {
-              // Step 2: CDP click to focus the field
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: totpPos.x, y: totpPos.y, button: "left", clickCount: 1, modifiers: 0 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: totpPos.x, y: totpPos.y, button: "left", clickCount: 1, modifiers: 0 });
+              // Step 2: touch tap to focus the field
+              await cdpTapGesture(_d, totpPos.x, totpPos.y);
               await _ms(120);
 
               // Step 3: type each digit via typeTextCDP (isTrusted=true, human timing)
@@ -3166,9 +3266,7 @@ function setupToolbarIpc(): void {
                   return null;
                 })()`).catch(() => null) as { x: number; y: number } | null;
                 if (_bp) {
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
-                  await _ms(60);
-                  await _d.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bp.x, y: _bp.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await cdpTapGesture(_d, _bp.x, _bp.y);
                   break;
                 }
                 await _ms(200);
@@ -3223,10 +3321,8 @@ function setupToolbarIpc(): void {
           })()`).catch(() => null) as { x: number; y: number } | null;
 
           if (phonePos) {
-            // CDP click to focus
-            await _d2.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: phonePos.x, y: phonePos.y, button: "left", clickCount: 1, modifiers: 0 });
-            await _ms2(60);
-            await _d2.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: phonePos.x, y: phonePos.y, button: "left", clickCount: 1, modifiers: 0 });
+            // Touch tap to focus the phone field
+            await cdpTapGesture(_d2, phonePos.x, phonePos.y);
             await _ms2(120);
             // Select-all + delete to clear existing value
             await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -4030,6 +4126,378 @@ export function startEbIpcServer(
           const _weDone2 = ebMap.get(-1);
           if (_weDone2) _weDone2.warmupActive = false;
           relayDone();
+        });
+
+        return;
+      }
+
+      // ── POST /eb/ghost-signup ───────────────────────────────────────────────
+      // Fully automated Instagram account creation flow using CDP touch events.
+      // The browser must already be open (Ghost Browser, profileId -1).
+      // Flow: navigate → accept cookies → "Create new account" → "Sign up with
+      // email" → fill email → wait for code → DOB → name → username → terms.
+      // Progress is relayed to the API server via /api/signup/browser/ghost-signup-step.
+      if (req.method === "POST" && u.pathname === "/eb/ghost-signup") {
+        const e = ebMap.get(-1);
+        if (!e || e.win.isDestroyed()) {
+          return send(res, 200, { ok: false, error: "Ghost Browser is not open" });
+        }
+
+        const { email, username, password, dob } = body as {
+          email: string; username: string; password: string; dob: string;
+        };
+        if (!email || !username || !password || !dob) {
+          return send(res, 200, { ok: false, error: "email, username, password, and dob are required" });
+        }
+
+        send(res, 200, { ok: true });
+
+        (async () => {
+          const wc = e.win.webContents;
+          const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+          const relay = (msg: string) => {
+            console.log(`[ghost-signup] ${msg}`);
+            if (_serverPort) {
+              fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ msg }),
+              }).catch(() => {});
+            }
+          };
+
+          const relayDone = () => {
+            if (_serverPort) {
+              fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ msg: "✅ Signup flow complete! Click 'Add to Equinox' to save the account.", done: true }),
+              }).catch(() => {});
+            }
+          };
+
+          // Attach debugger (no-op if already attached)
+          try { wc.debugger.attach("1.3"); } catch {}
+
+          const js = (script: string): Promise<any> =>
+            wc.executeJavaScript(script).catch((err: any) => {
+              console.log(`[ghost-signup] js error: ${err?.message}`);
+              return null;
+            });
+
+          // CDP touch tap (isTrusted, invisible to Instagram as a mouse event)
+          const tap = async (x: number, y: number) => {
+            try {
+              await wc.debugger.sendCommand("Input.synthesizeTapGesture", {
+                x, y, duration: 60, tapCount: 1, gestureSourceType: "touch",
+              });
+              await sleep(120);
+            } catch {
+              try {
+                await wc.debugger.sendCommand("Input.dispatchMouseEvent", {
+                  type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0,
+                });
+                await sleep(80);
+                await wc.debugger.sendCommand("Input.dispatchMouseEvent", {
+                  type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0,
+                });
+              } catch {}
+            }
+          };
+
+          // Type text into the currently-focused element
+          const typeText = async (text: string) => {
+            try {
+              await wc.debugger.sendCommand("Input.insertText", { text });
+            } catch {}
+          };
+
+          // Tap element then clear existing content and type new text
+          const clearAndType = async (x: number, y: number, text: string) => {
+            await tap(x, y);
+            await sleep(250);
+            // Select all
+            try {
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
+                type: "keyDown", modifiers: 8, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+              });
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
+                type: "keyUp", modifiers: 8, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+              });
+            } catch {}
+            await sleep(80);
+            // Delete selected
+            try {
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
+                type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
+              });
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
+                type: "keyUp", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
+              });
+            } catch {}
+            await sleep(80);
+            await typeText(text);
+          };
+
+          // JS helper: find any button/link by text content, return centre coords
+          const findByTextScript = (needles: string[]) => `(function(){
+            var ns=${JSON.stringify(needles.map(n=>n.toLowerCase()))};
+            var els=Array.from(document.querySelectorAll('button,a,div[role="button"],span[role="button"]'));
+            for(var i=0;i<ns.length;i++){
+              var el=els.find(function(e){return(e.innerText||e.textContent||'').trim().toLowerCase().includes(ns[i]);});
+              if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}
+            }
+            return null;
+          })()`;
+
+          // JS helper: find an input field by name/placeholder/aria-label
+          const findInputScript = (attrs: string[]) => `(function(){
+            var a=${JSON.stringify(attrs)};
+            for(var i=0;i<a.length;i++){
+              var sels=['[name="'+a[i]+'"]','[placeholder="'+a[i]+'"]','[aria-label="'+a[i]+'"]'];
+              for(var s=0;s<sels.length;s++){var el=document.querySelector(sels[s]);if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}}
+            }
+            // Fallback: first visible text/email/password input
+            var inputs=Array.from(document.querySelectorAll('input[type="text"],input[type="email"],input[type="password"],input:not([type])'));
+            for(var j=0;j<inputs.length;j++){var r2=inputs[j].getBoundingClientRect();if(r2.width>0&&r2.height>0)return{x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2)};}
+            return null;
+          })()`;
+
+          // Wait for element by text, tap it, return true/false
+          const waitAndTap = async (needles: string[], label: string, timeoutMs = 20000): Promise<boolean> => {
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+              const pos = await js(findByTextScript(needles)) as {x:number;y:number}|null;
+              if (pos) {
+                relay(`Tapping "${label}"…`);
+                await tap(pos.x, pos.y);
+                await sleep(900);
+                return true;
+              }
+              await sleep(1200);
+            }
+            relay(`⚠ "${label}" not found after ${Math.round(timeoutMs/1000)}s`);
+            return false;
+          };
+
+          // Wait for a page load with timeout
+          const navAndWait = async (url: string) => {
+            relay(`Navigating to ${url}…`);
+            await new Promise<void>(resolve => {
+              let done = false;
+              const finish = () => { if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", onFinish); wc.removeListener("did-fail-load", onFail); resolve(); } };
+              const onFinish = () => finish();
+              const onFail = (_: any, code: number) => { if (code === -3) return; finish(); };
+              const t = setTimeout(finish, 25000);
+              wc.on("did-finish-load", onFinish);
+              wc.on("did-fail-load", onFail);
+              wc.loadURL(url).catch(() => {});
+            });
+            await sleep(2000);
+          };
+
+          try {
+            // ── Step 0: Navigate to the email signup page ────────────────────
+            await navAndWait("https://www.instagram.com/accounts/emailsignup/");
+
+            // ── Step 1: Accept cookie banner if present ───────────────────────
+            relay("Checking for cookie banner…");
+            const COOKIE_LABELS = [
+              "allow all cookies", "accept all cookies", "allow all", "accept all",
+              "allow essential and optional cookies", "accept cookies",
+            ];
+            const cookiePos = await js(findByTextScript(COOKIE_LABELS)) as {x:number;y:number}|null;
+            if (cookiePos) {
+              relay("Accepting cookies…");
+              await tap(cookiePos.x, cookiePos.y);
+              await sleep(1800);
+            }
+
+            // ── Step 2: If redirected to homepage, click through to signup ────
+            const curUrl = wc.getURL();
+            if (!curUrl.includes("emailsignup") && !curUrl.includes("signup")) {
+              relay("Finding 'Create new account'…");
+              await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
+              await sleep(2000);
+              await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
+              await sleep(2000);
+            }
+
+            // ── Step 3: Fill email address ────────────────────────────────────
+            relay("Filling email address…");
+            const emailPos = await js(findInputScript([
+              "emailOrPhone", "email", "Email", "Mobile Number or Email", "Mobile number or email address",
+            ])) as {x:number;y:number}|null;
+            if (!emailPos) { relay("⚠ Email field not found — check browser state"); return; }
+            await clearAndType(emailPos.x, emailPos.y, email);
+            await sleep(600);
+
+            // Click Next
+            await waitAndTap(["next", "continue"], "Next (after email)");
+            await sleep(3500);
+
+            // ── Step 4: Verification code — poll until frontend provides it ───
+            relay("⏳ Waiting for verification code — use 'Fetch from IMAP' or type it manually and click 'Submit Code'…");
+            let verifyCode = "";
+            const codeTimeout = Date.now() + 5 * 60 * 1000; // 5 min
+            while (!verifyCode && Date.now() < codeTimeout) {
+              try {
+                if (_serverPort) {
+                  const cr = await fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-code-peek`);
+                  const cj = await cr.json() as any;
+                  if (cj.code) { verifyCode = String(cj.code).trim(); break; }
+                }
+              } catch {}
+              await sleep(3000);
+            }
+
+            if (!verifyCode) { relay("⚠ Timed out waiting for verification code (5 min)"); return; }
+
+            relay(`Got code: ${verifyCode} — entering…`);
+            await sleep(500);
+
+            const codePos = await js(findInputScript([
+              "code", "confirmationCode", "Confirmation code", "Enter confirmation code", "Verification code",
+            ])) as {x:number;y:number}|null;
+            if (codePos) {
+              await clearAndType(codePos.x, codePos.y, verifyCode);
+              await sleep(500);
+              await waitAndTap(["next", "confirm", "continue", "verify"], "Next (after code)");
+              await sleep(3000);
+            } else {
+              relay("⚠ Code input not found — entering via keyboard only");
+              await typeText(verifyCode);
+              await sleep(500);
+              await waitAndTap(["next", "confirm", "continue"], "Next (after code)");
+              await sleep(3000);
+            }
+
+            // ── Step 5: Date of Birth ─────────────────────────────────────────
+            relay("Filling date of birth…");
+            const dobParts = dob.split("/");
+            const dobDay   = parseInt(dobParts[0] ?? "15", 10);
+            const dobMonth = parseInt(dobParts[1] ?? "6",  10);
+            const dobYear  = parseInt(dobParts[2] ?? "1995", 10);
+
+            // Try native <select> dropdowns first, then React-custom dropdowns
+            await js(`(function(){
+              var selects=Array.from(document.querySelectorAll('select'));
+              for(var i=0;i<selects.length;i++){
+                var s=selects[i];
+                var opts=Array.from(s.options).map(function(o){return o.text||o.value;});
+                var hasMonthName=opts.some(function(o){return/january|february|march|april|may|june|july|august|september|october|november|december/i.test(o);});
+                var hasMonthNum=opts.some(function(o){return o.trim()==='1'||o.trim()==='01';});
+                if(hasMonthName||hasMonthNum){
+                  // Month select
+                  for(var k=0;k<s.options.length;k++){
+                    var ov=s.options[k].value;
+                    if(ov===${dobMonth}||ov==='${String(dobMonth).padStart(2,"0")}'){
+                      s.selectedIndex=k;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                    }
+                  }
+                } else if(opts.some(function(o){return parseInt(o)>1900&&parseInt(o)<2100;})){
+                  // Year select
+                  for(var k2=0;k2<s.options.length;k2++){
+                    if(s.options[k2].value=='${dobYear}'||s.options[k2].text=='${dobYear}'){
+                      s.selectedIndex=k2;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                    }
+                  }
+                } else if(opts.some(function(o){return parseInt(o)>0&&parseInt(o)<=31;})){
+                  // Day select
+                  for(var k3=0;k3<s.options.length;k3++){
+                    if(s.options[k3].value=='${dobDay}'||s.options[k3].value==='${String(dobDay).padStart(2,"0")}'){
+                      s.selectedIndex=k3;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                    }
+                  }
+                }
+              }
+              // Also try by aria-label
+              function setNativeVal(sel,val){var el=document.querySelector(sel);if(!el||el.tagName!=='SELECT')return;var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;nativeInputValueSetter.call(el,val);el.dispatchEvent(new Event('change',{bubbles:true}));}
+              setNativeVal('[aria-label*="Month"],[aria-label*="month"]','${dobMonth}');
+              setNativeVal('[aria-label*="Day"],[aria-label*="day"]','${dobDay}');
+              setNativeVal('[aria-label*="Year"],[aria-label*="year"]','${dobYear}');
+            })()`);
+            await sleep(800);
+
+            // Click custom DOB dropdowns if native selects didn't work
+            const monthBtnPos = await js(`(function(){
+              var el=document.querySelector('[aria-label*="Month"],[aria-label*="month"]');
+              if(el&&el.tagName!=='SELECT'){var r=el.getBoundingClientRect();if(r.width>0)return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}
+              return null;
+            })()`) as {x:number;y:number}|null;
+            if (monthBtnPos) {
+              await tap(monthBtnPos.x, monthBtnPos.y);
+              await sleep(600);
+              // Pick the month option
+              await js(`(function(){
+                var items=Array.from(document.querySelectorAll('[role="option"],[role="listbox"] li,ul li'));
+                var el=items.find(function(i){return parseInt((i.getAttribute('value')||i.dataset.value||''))===${dobMonth}||(i.innerText||'').trim().startsWith('${dobMonth}');});
+                if(el){var r=el.getBoundingClientRect();window._sgPos={x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}
+              })()`);
+              const optPos = await js(`window._sgPos||null`) as {x:number;y:number}|null;
+              if (optPos) { await tap(optPos.x, optPos.y); await sleep(400); }
+            }
+
+            await waitAndTap(["next", "continue"], "Next (after DOB)");
+            await sleep(2800);
+
+            // ── Step 6: Full name (blank) ─────────────────────────────────────
+            relay("Name screen — leaving blank, clicking Next…");
+            // Just attempt Next without touching the name field
+            const nameNextOk = await waitAndTap(["next", "continue", "skip"], "Next (after name)", 8000);
+            if (!nameNextOk) {
+              // Tap outside any overlay and try again
+              await tap(400, 100);
+              await sleep(500);
+              await waitAndTap(["next", "continue"], "Next (after name, retry)");
+            }
+            await sleep(2800);
+
+            // ── Step 7: Username ──────────────────────────────────────────────
+            relay("Filling username…");
+            const unamePos = await js(findInputScript([
+              "username", "Username", "user name", "Choose a username",
+            ])) as {x:number;y:number}|null;
+            if (unamePos) {
+              await clearAndType(unamePos.x, unamePos.y, username);
+              await sleep(1200);
+              await waitAndTap(["next", "continue"], "Next (after username)");
+              await sleep(2800);
+            } else {
+              relay("⚠ Username field not found");
+            }
+
+            // ── Step 8: Password (if on its own screen) ───────────────────────
+            const pwPos = await js(findInputScript([
+              "password", "Password", "Create a password",
+            ])) as {x:number;y:number}|null;
+            if (pwPos) {
+              relay("Filling password…");
+              await clearAndType(pwPos.x, pwPos.y, password);
+              await sleep(500);
+              await waitAndTap(["next", "continue"], "Next (after password)");
+              await sleep(2800);
+            }
+
+            // ── Step 9: Accept terms ──────────────────────────────────────────
+            relay("Accepting terms…");
+            await waitAndTap(["i agree", "agree to", "accept", "next", "continue", "done"], "I agree (terms)");
+            await sleep(2000);
+
+            relayDone();
+          } catch (err: any) {
+            relay(`⚠ Signup error: ${err?.message ?? String(err)}`);
+            if (_serverPort) {
+              fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ msg: `⚠ Signup error: ${err?.message ?? String(err)}`, done: true }),
+              }).catch(() => {});
+            }
+          }
+        })().catch((err: any) => {
+          console.log(`[ghost-signup] OUTER CATCH: ${err?.message ?? String(err)}`);
         });
 
         return;

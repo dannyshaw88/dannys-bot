@@ -8,8 +8,9 @@ import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
-  Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
-  PlayCircle, UserPlus, Phone, Smartphone, Key, CheckCircle2,
+  Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus, ExternalLink,
+  ClipboardPaste, Copy, RefreshCw, PlayCircle, UserPlus, Key,
+  CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +21,8 @@ function NukeIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5"/>
       <circle cx="12" cy="12" r="2.5"/>
-      {/* Top blade (centered at 270° SVG = up), spanning 240°–300° */}
       <path d="M10.25 8.97 A3.5 3.5 0 0 1 13.75 8.97 L16.5 4.21 A9 9 0 0 0 7.5 4.21 Z"/>
-      {/* Lower-right blade (centered at 30°), spanning 0°–60° */}
       <path d="M15.5 12 A3.5 3.5 0 0 1 13.75 15.03 L16.5 19.79 A9 9 0 0 0 21 12 Z"/>
-      {/* Lower-left blade (centered at 150°), spanning 120°–180° */}
       <path d="M10.25 15.03 A3.5 3.5 0 0 1 8.5 12 L3 12 A9 9 0 0 0 7.5 19.79 Z"/>
     </svg>
   );
@@ -67,7 +65,6 @@ const FP_GPUS = [
   { vendor: "Google",                      renderer: "Tensor G2" },
 ];
 
-
 const FP_SPEECH_PROFILES = [
   "US English only",
   "US + UK English",
@@ -101,7 +98,6 @@ function generateGhostFingerprint(): GhostFingerprint {
     speechProfile:  Math.floor(Math.random() * 8),
   };
 }
-
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -144,6 +140,16 @@ function generatePassword(length = 14): string {
   const chars = [rand(upper), rand(lower), rand(digits), rand(special)];
   for (let i = chars.length; i < length; i++) chars.push(rand(all));
   return chars.sort(() => Math.random() - 0.5).join("");
+}
+
+function generateDob(): string {
+  const age = Math.floor(Math.random() * 22) + 18; // 18–39
+  const now = new Date();
+  const year = now.getFullYear() - age;
+  const month = Math.floor(Math.random() * 12) + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const day = Math.floor(Math.random() * daysInMonth) + 1;
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -331,31 +337,6 @@ function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
   );
 }
 
-// ── 5sim countries ─────────────────────────────────────────────────────────────
-
-const FIVESIM_COUNTRIES = [
-  { value: "russia",      label: "Russia" },
-  { value: "ukraine",     label: "Ukraine" },
-  { value: "kazakhstan",  label: "Kazakhstan" },
-  { value: "indonesia",   label: "Indonesia" },
-  { value: "philippines", label: "Philippines" },
-  { value: "india",       label: "India" },
-  { value: "brazil",      label: "Brazil" },
-  { value: "vietnam",     label: "Vietnam" },
-  { value: "myanmar",     label: "Myanmar" },
-  { value: "cambodia",    label: "Cambodia" },
-  { value: "nigeria",     label: "Nigeria" },
-  { value: "pakistan",    label: "Pakistan" },
-  { value: "bangladesh",  label: "Bangladesh" },
-  { value: "ghana",       label: "Ghana" },
-  { value: "kenya",       label: "Kenya" },
-  { value: "egypt",       label: "Egypt" },
-  { value: "colombia",    label: "Colombia" },
-  { value: "mexico",      label: "Mexico" },
-  { value: "thailand",    label: "Thailand" },
-  { value: "malaysia",    label: "Malaysia" },
-];
-
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export function CreateGhostPage() {
@@ -379,29 +360,39 @@ export function CreateGhostPage() {
 
   // Account fields
   const [usernameSpin, setUsernameSpin] = useState("");
-  const [bioSpin, setBioSpin]           = useState("");
   const [password, setPassword]         = useState(() => generatePassword());
+  const [bioSpin, setBioSpin]           = useState("");
+
+  // Email / IMAP fields
+  const [emailAddr, setEmailAddr]   = useState("");
+  const [emailPass, setEmailPass]   = useState("");
+  const [imapHost, setImapHost]     = useState("");
+  const [imapPort, setImapPort]     = useState("993");
+  const [imapSecure, setImapSecure] = useState(true);
+
+  // Verification code
+  const [manualCode, setManualCode]       = useState("");
+  const [fetchingCode, setFetchingCode]   = useState(false);
+  const [fetchCodeMsg, setFetchCodeMsg]   = useState("");
+  const [codePending, setCodePending]     = useState(false);
+
+  // DOB
+  const [dob, setDob] = useState(() => generateDob());
 
   // Ghost fingerprint — regenerated on every Nuke Environment
-  const [fingerprint, setFingerprint]             = useState<GhostFingerprint>(() => generateGhostFingerprint());
+  const [fingerprint, setFingerprint]                 = useState<GhostFingerprint>(() => generateGhostFingerprint());
   const [fingerprintExpanded, setFingerprintExpanded] = useState(false);
 
-  // 5sim
-  const [fiveSimToken, setFiveSimToken]   = useState(() => localStorage.getItem("ghost_5sim_token") ?? "");
-  const [fiveSimCountry, setFiveSimCountry] = useState("russia");
-  const [fiveSimOrderId, setFiveSimOrderId] = useState<number | null>(null);
-  const [fiveSimPhone, setFiveSimPhone]   = useState("");
-  const [fiveSimCode, setFiveSimCode]     = useState("");
-  const [fiveSimStatus, setFiveSimStatus] = useState<"idle" | "buying" | "waiting" | "got_code" | "cancelled" | "error">("idle");
-  const [fiveSimError, setFiveSimError]   = useState("");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Signup automation
+  const [signupRunning, setSignupRunning] = useState(false);
+  const [signupStatus, setSignupStatus]   = useState("");
+  const signupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Add to Equinox
-  const [addedToEquinox, setAddedToEquinox] = useState(false);
+  const [addedToEquinox, setAddedToEquinox]   = useState(false);
   const [addingToEquinox, setAddingToEquinox] = useState(false);
 
   const isOpen = browserState === "open";
-
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
 
   useEffect(() => {
@@ -414,11 +405,29 @@ export function CreateGhostPage() {
     });
   }, []);
 
+  // Poll signup status while automation is running
   useEffect(() => {
+    if (!signupRunning) {
+      if (signupPollRef.current) { clearInterval(signupPollRef.current); signupPollRef.current = null; }
+      return;
+    }
+    signupPollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch("/api/signup/browser/ghost-signup-status");
+        const j = await r.json() as any;
+        if (j.msg) setSignupStatus(j.msg);
+        if (j.msg && (j.msg.startsWith("✅") || j.msg.includes("error") || j.msg.includes("⚠"))) {
+          // Done or error — stop spinning, but don't stop polling in case more msgs come
+        }
+        if (j.done) {
+          setSignupRunning(false);
+        }
+      } catch {}
+    }, 2000);
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (signupPollRef.current) clearInterval(signupPollRef.current);
     };
-  }, []);
+  }, [signupRunning]);
 
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
@@ -439,8 +448,6 @@ export function CreateGhostPage() {
   const manualValid =
     proxySelection.kind !== "manual" ||
     (manualHost.trim() !== "" && /^\d+$/.test(manualPort) && parseInt(manualPort, 10) > 0 && parseInt(manualPort, 10) <= 65535);
-
-  const hasProxy = proxySelection.kind !== "none" && resolvedProxy !== undefined;
 
   const handleOpen = async () => {
     if (!manualValid) return;
@@ -466,6 +473,8 @@ export function CreateGhostPage() {
   const handleClose = async () => {
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     setBrowserState("closed");
+    setSignupRunning(false);
+    setSignupStatus("");
   };
 
   const handleFresh = async () => {
@@ -474,92 +483,101 @@ export function CreateGhostPage() {
     await fetch("/api/signup/browser/reset", { method: "POST" }).catch(() => {});
     setSelectedUA(randomUA());
     setPassword(generatePassword());
+    setDob(generateDob());
     setFingerprint(generateGhostFingerprint());
+    setFetchCodeMsg("");
+    setManualCode("");
+    setSignupStatus("");
+    setSignupRunning(false);
     setBrowserState("closed");
   };
 
-  // 5sim helpers
-  const save5SimToken = (val: string) => {
-    setFiveSimToken(val);
-    localStorage.setItem("ghost_5sim_token", val);
-  };
-
-  const stopPoll = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  };
-
-  const handleBuyNumber = async () => {
-    if (!fiveSimToken.trim()) { setFiveSimError("Enter your 5sim API token first"); return; }
-    setFiveSimStatus("buying");
-    setFiveSimError("");
-    setFiveSimPhone("");
-    setFiveSimCode("");
-    setFiveSimOrderId(null);
+  // IMAP: fetch verification code from email inbox
+  const handleFetchCode = async () => {
+    if (!imapHost.trim() || !emailAddr.trim() || !emailPass.trim()) {
+      setFetchCodeMsg("⚠ Fill in email address, email password, and IMAP host first.");
+      return;
+    }
+    setFetchingCode(true);
+    setFetchCodeMsg("Connecting to IMAP…");
     try {
-      const r = await fetch("/api/fivesim/buy", {
+      const r = await fetch("/api/imap/fetch-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ country: fiveSimCountry, operator: "any", apiKey: fiveSimToken.trim() }),
+        body: JSON.stringify({
+          host: imapHost.trim(),
+          port: parseInt(imapPort, 10) || 993,
+          secure: imapSecure,
+          email: emailAddr.trim(),
+          password: emailPass.trim(),
+        }),
       });
-      const json = await r.json();
-      if (!json.ok) { setFiveSimStatus("error"); setFiveSimError(json.error ?? "Failed to buy number"); return; }
-      const order = json.data;
-      setFiveSimOrderId(order.id);
-      setFiveSimPhone(order.phone ?? "");
-      setFiveSimStatus("waiting");
-      pollRef.current = setInterval(async () => {
-        try {
-          const pr = await fetch(`/api/fivesim/check/${order.id}?apiKey=${encodeURIComponent(fiveSimToken.trim())}`);
-          const pj = await pr.json();
-          if (!pj.ok) return;
-          const d = pj.data;
-          if (d.status === "RECEIVED" || (d.sms && d.sms.length > 0)) {
-            const sms = d.sms?.[0];
-            if (sms?.code || sms?.text) {
-              stopPoll();
-              setFiveSimCode(sms.code ?? sms.text ?? "");
-              setFiveSimStatus("got_code");
-            }
-          } else if (d.status === "CANCEL" || d.status === "BANNED") {
-            stopPoll();
-            setFiveSimStatus("cancelled");
-          }
-        } catch {}
-      }, 5000);
-    } catch (err) {
-      setFiveSimStatus("error");
-      setFiveSimError(String(err));
+      const j = await r.json() as any;
+      if (j.ok && j.code) {
+        setManualCode(j.code);
+        setFetchCodeMsg(`✅ Got code: ${j.code}`);
+        // Auto-submit to the signup flow
+        await fetch("/api/signup/browser/ghost-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: j.code }),
+        }).catch(() => {});
+        setCodePending(false);
+      } else {
+        setFetchCodeMsg(`⚠ ${j.error ?? "No code found in recent emails"}`);
+      }
+    } catch (err: any) {
+      setFetchCodeMsg(`⚠ ${err?.message ?? "IMAP error"}`);
     }
+    setFetchingCode(false);
   };
 
-  const handleCancelNumber = async () => {
-    stopPoll();
-    if (fiveSimOrderId && fiveSimToken) {
-      fetch(`/api/fivesim/cancel/${fiveSimOrderId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: fiveSimToken.trim() }),
-      }).catch(() => {});
-    }
-    setFiveSimStatus("idle");
-    setFiveSimPhone("");
-    setFiveSimCode("");
-    setFiveSimOrderId(null);
+  // Submit manual code to the running signup flow
+  const handleSubmitCode = async () => {
+    if (!manualCode.trim()) return;
+    await fetch("/api/signup/browser/ghost-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: manualCode.trim() }),
+    }).catch(() => {});
+    setFetchCodeMsg(`✅ Code ${manualCode.trim()} submitted to signup flow`);
+    setCodePending(false);
   };
 
-  const handleFinishNumber = async () => {
-    stopPoll();
-    if (fiveSimOrderId && fiveSimToken) {
-      fetch(`/api/fivesim/finish/${fiveSimOrderId}`, {
+  // Start the automated signup flow in the Ghost Browser
+  const handleAutoSignup = async () => {
+    const uname = (generatedUsername || usernameSpin).trim();
+    if (!uname || !password.trim() || !emailAddr.trim() || !dob.trim()) {
+      setSignupStatus("⚠ Fill in username, password, email, and DOB before running auto signup.");
+      return;
+    }
+    setSignupRunning(true);
+    setSignupStatus("Starting automated signup…");
+    setCodePending(false);
+    setFetchCodeMsg("");
+
+    try {
+      const r = await fetch("/api/signup/browser/ghost-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: fiveSimToken.trim() }),
-      }).catch(() => {});
+        body: JSON.stringify({
+          email: emailAddr.trim(),
+          username: uname,
+          password: password.trim(),
+          dob: dob.trim(),
+        }),
+      });
+      const j = await r.json() as any;
+      if (!j.ok) {
+        setSignupStatus(`⚠ ${j.error ?? "Failed to start signup"}`);
+        setSignupRunning(false);
+      } else {
+        setCodePending(true);
+      }
+    } catch (err: any) {
+      setSignupStatus(`⚠ ${err?.message ?? "Error"}`);
+      setSignupRunning(false);
     }
-    setFiveSimStatus("idle");
-    setFiveSimPhone("");
-    setFiveSimCode("");
-    setFiveSimOrderId(null);
   };
 
   const handleAddToEquinox = async () => {
@@ -571,7 +589,13 @@ export function CreateGhostPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ username: uname, password: password.trim() }),
+        body: JSON.stringify({
+          username: uname,
+          password: password.trim(),
+          email: emailAddr.trim() || undefined,
+          userAgent: activeUA.api,
+          embeddedUserAgent: activeUA.embedded,
+        }),
       });
       if (r.ok || r.status === 201) {
         setAddedToEquinox(true);
@@ -712,7 +736,7 @@ export function CreateGhostPage() {
               className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
               onClick={handleFresh}
               disabled={browserState === "opening" || browserState === "resetting"}
-              title="Wipes all cookies, cache, localStorage, and persistent data, and picks a new device identity"
+              title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
             >
               {browserState === "resetting"
                 ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
@@ -735,23 +759,7 @@ export function CreateGhostPage() {
               </div>
             </div>
 
-            {/* Bio Spin */}
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
-              <div className="flex gap-1">
-                <Input
-                  value={bioSpin}
-                  onChange={e => setBioSpin(e.target.value)}
-                  placeholder="{Photographer|Artist|Creator} 📸"
-                  className="h-8 text-xs font-mono flex-1 min-w-0"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} />
-              </div>
-            </div>
-
-            {/* Password */}
+            {/* Password — directly under username */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] text-muted-foreground font-medium">Password</p>
@@ -777,111 +785,213 @@ export function CreateGhostPage() {
               </div>
             </div>
 
-            {/* 5sim */}
+            {/* DOB */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-cyan-500" />
+                  <p className="text-[10px] text-muted-foreground font-medium">Date of Birth (DD/MM/YYYY)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDob(generateDob())}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Generate random 18+ DOB"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  Random
+                </button>
+              </div>
+              <Input
+                value={dob}
+                onChange={e => setDob(e.target.value)}
+                placeholder="DD/MM/YYYY"
+                className="h-8 text-xs font-mono"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </div>
+
+            {/* Email section */}
             <div className="pt-1 space-y-1.5 border-t border-border/50">
               <div className="flex items-center gap-1.5">
-                <Smartphone className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">5sim SMS</p>
+                <Mail className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Email / IMAP</p>
               </div>
 
+              {/* Email address */}
               <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground font-medium">API Token</p>
+                <p className="text-[10px] text-muted-foreground font-medium">Email Address</p>
+                <div className="flex gap-1">
+                  <Input
+                    value={emailAddr}
+                    onChange={e => setEmailAddr(e.target.value)}
+                    placeholder="user@example.com"
+                    className="h-8 text-xs flex-1 min-w-0"
+                    type="email"
+                    autoComplete="off"
+                  />
+                  <FieldActions value={emailAddr} isOpen={isOpen} />
+                </div>
+              </div>
+
+              {/* Email password */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-muted-foreground" />
+                  <p className="text-[10px] text-muted-foreground font-medium">Email Password</p>
+                </div>
                 <Input
-                  value={fiveSimToken}
-                  onChange={e => save5SimToken(e.target.value)}
-                  placeholder="5sim API token"
+                  value={emailPass}
+                  onChange={e => setEmailPass(e.target.value)}
+                  placeholder="Email account password"
                   className="h-7 text-xs font-mono"
                   type="password"
                   autoComplete="off"
                 />
               </div>
 
+              {/* IMAP Settings */}
               <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground font-medium">Country</p>
-                <select
-                  value={fiveSimCountry}
-                  onChange={e => setFiveSimCountry(e.target.value)}
-                  className="h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  {FIVESIM_COUNTRIES.map(c => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {fiveSimStatus === "idle" || fiveSimStatus === "error" || fiveSimStatus === "cancelled" ? (
-                <Button
-                  size="sm"
-                  className="w-full h-7 text-xs gap-1.5 bg-cyan-500 hover:bg-cyan-600 text-white border-0"
-                  onClick={handleBuyNumber}
-                  disabled={!fiveSimToken.trim()}
-                >
-                  <Phone className="w-3 h-3" />
-                  Get Number
-                </Button>
-              ) : null}
-
-              {fiveSimStatus === "buying" && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Purchasing number…
+                <div className="flex items-center gap-1">
+                  <Server className="w-3 h-3 text-muted-foreground" />
+                  <p className="text-[10px] text-muted-foreground font-medium">IMAP Settings</p>
                 </div>
-              )}
-
-              {(fiveSimStatus === "waiting" || fiveSimStatus === "got_code") && fiveSimPhone && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-muted-foreground font-medium">Phone Number</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <div className="flex-1 h-7 rounded-md border border-input bg-muted/30 px-2 flex items-center">
-                      <span className="text-xs font-mono text-foreground">{fiveSimPhone}</span>
-                    </div>
-                    <FieldActions value={fiveSimPhone} isOpen={isOpen} />
-                  </div>
-                </div>
-              )}
-
-              {fiveSimStatus === "waiting" && (
-                <div className="flex items-center gap-2 text-xs text-amber-600">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Waiting for SMS…
+                <div className="flex gap-1">
+                  <Input
+                    value={imapHost}
+                    onChange={e => setImapHost(e.target.value)}
+                    placeholder="imap.gmail.com"
+                    className="h-7 text-xs flex-1 min-w-0"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <Input
+                    value={imapPort}
+                    onChange={e => setImapPort(e.target.value)}
+                    placeholder="993"
+                    className="h-7 text-xs w-14"
+                    autoComplete="off"
+                  />
                   <button
                     type="button"
-                    onClick={handleCancelNumber}
-                    className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                    onClick={() => setImapSecure(s => !s)}
+                    title={imapSecure ? "TLS enabled" : "TLS disabled"}
+                    className={cn(
+                      "h-7 px-1.5 rounded-md border text-[10px] font-medium transition-colors shrink-0",
+                      imapSecure
+                        ? "border-green-400 text-green-700 bg-green-50 dark:bg-green-950/30"
+                        : "border-border text-muted-foreground bg-muted/30"
+                    )}
                   >
-                    Cancel
+                    TLS
                   </button>
                 </div>
-              )}
+              </div>
 
-              {fiveSimStatus === "got_code" && fiveSimCode && (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground font-medium">SMS Code</p>
-                  <div className="flex gap-1">
-                    <div className="flex-1 h-7 rounded-md border border-green-400 bg-green-50 dark:bg-green-950/30 px-2 flex items-center gap-1.5">
-                      <Key className="w-3 h-3 text-green-600 shrink-0" />
-                      <span className="text-xs font-mono font-semibold text-green-700 dark:text-green-400">{fiveSimCode}</span>
-                    </div>
-                    <FieldActions value={fiveSimCode} isOpen={isOpen} />
-                  </div>
+              {/* Verification code + fetch */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-1">
+                  <Key className="w-3 h-3 text-muted-foreground" />
+                  <p className="text-[10px] text-muted-foreground font-medium">Verification Code</p>
+                </div>
+                <div className="flex gap-1">
+                  <Input
+                    value={manualCode}
+                    onChange={e => setManualCode(e.target.value)}
+                    placeholder="6-digit code (manual fallback)"
+                    className="h-8 text-xs font-mono flex-1 min-w-0"
+                    maxLength={8}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="flex gap-1">
                   <Button
                     size="sm"
                     variant="outline"
-                    className="w-full h-7 text-xs gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
-                    onClick={handleFinishNumber}
+                    className="flex-1 h-7 text-[10px] gap-1 border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
+                    onClick={handleFetchCode}
+                    disabled={fetchingCode || !imapHost.trim() || !emailAddr.trim() || !emailPass.trim()}
+                    title="Connect via IMAP and extract the Instagram code from your inbox"
                   >
-                    <CheckCircle2 className="w-3 h-3" />
-                    Finish &amp; Release Number
+                    {fetchingCode ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                    Fetch from IMAP
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 h-7 text-[10px] gap-1"
+                    onClick={handleSubmitCode}
+                    disabled={!manualCode.trim()}
+                    title="Submit the code you typed to the running signup flow"
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    Submit Code
+                  </Button>
+                </div>
+                {fetchCodeMsg && (
+                  <p className={cn(
+                    "text-[10px]",
+                    fetchCodeMsg.startsWith("✅") ? "text-green-600" : "text-amber-600"
+                  )}>
+                    {fetchCodeMsg}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Bio Spin */}
+            <div className="pt-1 space-y-1 border-t border-border/50">
+              <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
+              <div className="flex gap-1">
+                <Input
+                  value={bioSpin}
+                  onChange={e => setBioSpin(e.target.value)}
+                  placeholder="{Photographer|Artist|Creator} 📸"
+                  className="h-8 text-xs font-mono flex-1 min-w-0"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} />
+              </div>
+            </div>
+
+            {/* Auto Signup button */}
+            <div className="pt-1 border-t border-border/50 space-y-1.5">
+              <Button
+                className={cn(
+                  "w-full gap-2 text-xs",
+                  signupRunning
+                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
+                    : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
+                )}
+                onClick={handleAutoSignup}
+                disabled={!isOpen || signupRunning || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
+                title="Runs the full signup flow automatically: cookies → create account → email → code → DOB → username → terms"
+              >
+                {signupRunning
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running Signup…</>
+                  : <><PlayCircle className="w-3.5 h-3.5" />Auto Signup</>}
+              </Button>
+
+              {/* Signup status */}
+              {signupStatus && (
+                <div className={cn(
+                  "rounded-md border px-2 py-1.5 text-[10px] leading-relaxed",
+                  signupStatus.startsWith("✅")
+                    ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
+                    : signupStatus.includes("⚠") || signupStatus.includes("error")
+                    ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
+                    : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
+                )}>
+                  {signupRunning && <Loader2 className="w-2.5 h-2.5 animate-spin inline mr-1" />}
+                  {signupStatus}
                 </div>
               )}
 
-              {fiveSimError && (
-                <p className="text-[10px] text-red-600 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 shrink-0" />
-                  {fiveSimError}
+              {codePending && signupRunning && (
+                <p className="text-[10px] text-amber-600 font-medium">
+                  ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
                 </p>
               )}
             </div>
@@ -898,7 +1008,7 @@ export function CreateGhostPage() {
                 )}
                 onClick={handleAddToEquinox}
                 disabled={addingToEquinox || !usernameSpin.trim() || !password.trim()}
-                title="Save this username and password as a new Equinox account"
+                title="Save this account (username, password, email, UA) to Equinox accounts"
               >
                 {addingToEquinox
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Adding…</>

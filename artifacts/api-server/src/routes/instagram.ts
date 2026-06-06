@@ -2466,6 +2466,108 @@ export async function registerInstagramRoutes(
     })().catch(() => {});
   });
 
+  // ── Ghost Browser automated signup — in-memory state ──────────────────────
+  let _ghostSignupCode: string | null = null;
+  let _ghostSignupLatestStep = "";
+  let _ghostSignupDone = false;
+
+  // Frontend triggers the automated signup flow in the Ghost Browser
+  app.post("/api/signup/browser/ghost-signup", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) return res.json({ ok: false, error: "Not running in Electron mode" });
+    _ghostSignupCode = null;
+    _ghostSignupLatestStep = "Starting…";
+    _ghostSignupDone = false;
+    try {
+      const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      const j = await r.json() as any;
+      return res.json(j);
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, error: err?.message ?? "IPC error" });
+    }
+  });
+
+  // EB posts progress steps here; frontend polls ghost-signup-status
+  app.post("/api/signup/browser/ghost-signup-step", (req, res) => {
+    const { msg, done } = (req.body ?? {}) as { msg?: string; done?: boolean };
+    if (msg) {
+      _ghostSignupLatestStep = msg;
+      sendSignupWsMsg({ type: "signupStep", msg });
+    }
+    if (done) _ghostSignupDone = true;
+    return res.json({ ok: true });
+  });
+
+  // Frontend polls this to show live status in the Ghost Browser panel
+  app.get("/api/signup/browser/ghost-signup-status", (_req, res) => {
+    return res.json({ ok: true, msg: _ghostSignupLatestStep, done: _ghostSignupDone });
+  });
+
+  // Frontend sets the verification code (from IMAP fetch or manual entry)
+  app.post("/api/signup/browser/ghost-code", (req, res) => {
+    const { code } = (req.body ?? {}) as { code?: string };
+    if (!code) return res.status(400).json({ ok: false, error: "code is required" });
+    _ghostSignupCode = String(code).trim();
+    return res.json({ ok: true });
+  });
+
+  // EB polls this to get the code once the frontend has provided it (consumed on read)
+  app.get("/api/signup/browser/ghost-code-peek", (_req, res) => {
+    const code = _ghostSignupCode;
+    if (code) _ghostSignupCode = null;
+    return res.json({ ok: true, code: code ?? null });
+  });
+
+  // ── IMAP email code fetch ─────────────────────────────────────────────────
+  // Connects to the email inbox via IMAP and extracts the 6-digit Instagram
+  // verification code from the most recent Instagram email.
+  app.post("/api/imap/fetch-code", async (req, res) => {
+    const { host, port, secure = true, email, password } = (req.body ?? {}) as {
+      host: string; port?: number; secure?: boolean; email: string; password: string;
+    };
+    if (!host || !email || !password) {
+      return res.status(400).json({ ok: false, error: "host, email, and password are required" });
+    }
+    try {
+      const { ImapFlow } = await import("imapflow") as any;
+      const client = new ImapFlow({
+        host,
+        port: Number(port) || (secure ? 993 : 143),
+        secure: !!secure,
+        auth: { user: email, pass: password },
+        logger: false,
+      });
+      await client.connect();
+      const lock = await client.getMailboxLock("INBOX");
+      let code: string | null = null;
+      try {
+        const since = new Date(Date.now() - 20 * 60 * 1000); // last 20 min
+        const uids = await client.search({ since }, { uid: true });
+        if (uids && uids.length > 0) {
+          // Fetch the last 10 messages, newest first
+          const slice = uids.slice(-10).reverse();
+          for await (const msg of client.fetch(slice, { source: true, uid: true })) {
+            const src: string = msg.source.toString("utf8");
+            // Instagram codes are standalone 6-digit sequences
+            const m = src.match(/(?<![.\d])(\d{6})(?![.\d])/);
+            if (m) { code = m[1]; break; }
+          }
+        }
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+      if (code) return res.json({ ok: true, code });
+      return res.json({ ok: false, error: "No 6-digit verification code found in the last 20 minutes of email" });
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, error: err?.message ?? "IMAP connection failed" });
+    }
+  });
+
   // Accept a user-picked file and upload it to the pending Puppeteer file chooser
   app.post("/api/browser/:profileId/files", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -4183,58 +4285,6 @@ export async function registerInstagramRoutes(
     }
   });
 
-  // ── 5sim proxy routes ─────────────────────────────────────────────────────
-  // Proxy 5sim.net API calls through the server so the API key is never
-  // exposed in client-side network requests.
-
-  app.post("/api/5sim/get-number", async (req, res) => {
-    try {
-      const { apiKey, country = "any" } = req.body as { apiKey: string; country?: string };
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const countrySlug = country === "any" ? "any" : encodeURIComponent(country);
-      const url = `https://5sim.net/v1/user/buy/activation/${countrySlug}/any/instagram`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      if (!r.ok) return res.json({ ok: false, error: `5sim HTTP ${r.status}` });
-      const data = await r.json() as { id?: number; phone?: string; status?: string };
-      if (data.id && data.phone) {
-        return res.json({ ok: true, id: String(data.id), phone: data.phone.replace(/^\+/, "") });
-      }
-      return res.json({ ok: false, error: JSON.stringify(data) });
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
-
-  app.get("/api/5sim/get-sms/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { apiKey } = req.query as { apiKey: string };
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const url = `https://5sim.net/v1/user/check/${encodeURIComponent(id)}`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      if (!r.ok) return res.json({ ok: false, status: `HTTP ${r.status}` });
-      const data = await r.json() as { sms?: Array<{ code?: string }>; status?: string };
-      const code = data.sms?.[0]?.code;
-      if (code) return res.json({ ok: true, code });
-      return res.json({ ok: false, status: data.status ?? "WAIT_CODE" });
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
-
-  app.post("/api/5sim/cancel/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { apiKey } = req.body as { apiKey: string };
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const url = `https://5sim.net/v1/user/cancel/${encodeURIComponent(id)}`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      return res.json({ ok: r.ok });
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
-
   // ── One-time startup migration: seed missing browser cookie files ─────────
   // Accounts imported before v1.0.372 have igApiCookies in the DB but no
   // browser-data/cookies-{id}.json on disk.  Chrome starts blank for these
@@ -4392,65 +4442,4 @@ export async function registerInstagramRoutes(
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
 
-  // ── 5sim proxy routes ─────────────────────────────────────────────────────────
-  // These proxy calls to the 5sim API so the browser never exposes the API key
-  // via a direct CORS request and all traffic goes through the app server.
-
-  app.post("/api/fivesim/buy", async (req, res) => {
-    try {
-      const { country = "russia", operator = "any", apiKey } = req.body ?? {};
-      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
-      const url = `https://5sim.net/v1/user/buy/activation/${encodeURIComponent(country)}/${encodeURIComponent(operator)}/instagram`;
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-      });
-      const text = await r.text();
-      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
-      const data = JSON.parse(text);
-      res.json({ ok: true, data });
-    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
-  });
-
-  app.get("/api/fivesim/check/:orderId", async (req, res) => {
-    try {
-      const apiKey = req.query.apiKey as string;
-      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
-      const url = `https://5sim.net/v1/user/check/${encodeURIComponent(req.params.orderId)}`;
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-      });
-      const text = await r.text();
-      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
-      const data = JSON.parse(text);
-      res.json({ ok: true, data });
-    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
-  });
-
-  app.post("/api/fivesim/cancel/:orderId", async (req, res) => {
-    try {
-      const { apiKey } = req.body ?? {};
-      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
-      const url = `https://5sim.net/v1/user/cancel/${encodeURIComponent(req.params.orderId)}`;
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-      });
-      const text = await r.text();
-      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
-      res.json({ ok: true, data: JSON.parse(text) });
-    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
-  });
-
-  app.post("/api/fivesim/finish/:orderId", async (req, res) => {
-    try {
-      const { apiKey } = req.body ?? {};
-      if (!apiKey) return res.status(400).json({ ok: false, error: "Missing 5sim API key" });
-      const url = `https://5sim.net/v1/user/finish/${encodeURIComponent(req.params.orderId)}`;
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-      });
-      const text = await r.text();
-      if (!r.ok) return res.status(r.status).json({ ok: false, error: `5sim error ${r.status}: ${text}` });
-      res.json({ ok: true, data: JSON.parse(text) });
-    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
-  });
 }

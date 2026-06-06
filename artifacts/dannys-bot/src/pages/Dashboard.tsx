@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.794",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser: fully automated Instagram signup flow — open the browser, click Auto Signup, and it handles cookies, email entry, verification code, date of birth, username, and terms acceptance automatically." },
+      { category: "Feature", text: "Ghost Browser: email and IMAP fields added — enter your email address, email password, and IMAP server so the app can fetch the 6-digit Instagram verification code from your inbox automatically." },
+      { category: "Feature", text: "Ghost Browser: manual code fallback — if IMAP fails for any reason, type the code yourself and click Submit Code to pass it to the running signup flow." },
+      { category: "Feature", text: "Ghost Browser: date of birth field added with a one-click random generator that always produces an 18+ age. Regenerates automatically on Nuke Environment." },
+      { category: "Change", text: "Ghost Browser: password field moved directly below username for a more logical fill order." },
+      { category: "Remove", text: "5sim SMS integration removed — account creation now uses email verification via IMAP instead of phone number SMS." },
+    ],
+  },
+  {
     version: "1.0.793",
     date: "6 Jun 2026",
     items: [
