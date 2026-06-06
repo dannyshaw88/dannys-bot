@@ -3005,7 +3005,7 @@ function setupToolbarIpc(): void {
                 let uInp, pInp, t = 0;
                 while (t++ < 20) {
                   uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
-                  pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+                  pInp = document.querySelector('input[type="password"]') || document.querySelector('input[autocomplete="current-password"]') || document.querySelector('input[name="password"]');
                   if (uInp && pInp) break;
                   await wait(300);
                 }
@@ -4408,17 +4408,35 @@ export function startEbIpcServer(
               await sleep(1000);
             }
 
-            // ── Step 2: If redirected to homepage, click through to signup ────
-            // Each waitAndTap return is checked — flow stops if the button isn't found
-            const curUrl = wc.getURL();
-            if (!curUrl.includes("emailsignup") && !curUrl.includes("signup")) {
-              relay("Finding 'Create new account'…");
-              const foundCreate = await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
-              if (!foundCreate) { relay("❌ 'Create new account' button not found — stopping. Please check the browser state."); return; }
-              await sleep(2000);
-              const foundEmail = await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
-              if (!foundEmail) { relay("❌ 'Sign up with email' option not found — stopping. Please check the browser state."); return; }
-              await sleep(2000);
+            // ── Step 2: Handle phone gate or homepage redirect ───────────────
+            // Instagram often redirects /accounts/emailsignup/ → /accounts/signup/phone/
+            // The URL still contains "signup" so the old single-condition check silently
+            // skipped the phone-gate click. Now we detect the phone gate explicitly.
+            {
+              const curUrl = wc.getURL();
+              const onPhoneGate = curUrl.includes("signup/phone");
+              const onHomepage  = !curUrl.includes("emailsignup") && !curUrl.includes("signup");
+
+              if (onPhoneGate) {
+                // Instagram redirected to phone gate — tap "Sign up with email" directly
+                relay("Phone gate detected — tapping 'Sign up with email'…");
+                const foundEmail = await waitAndTap(
+                  ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address", "email address"],
+                  "Sign up with email (phone gate)"
+                );
+                if (!foundEmail) { relay("❌ 'Sign up with email' not found on phone gate — stopping."); return; }
+                await sleep(2500);
+              } else if (onHomepage) {
+                // Landed on homepage — click through to signup flow first
+                relay("Finding 'Create new account'…");
+                const foundCreate = await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
+                if (!foundCreate) { relay("❌ 'Create new account' button not found — stopping. Please check the browser state."); return; }
+                await sleep(2000);
+                const foundEmail = await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
+                if (!foundEmail) { relay("❌ 'Sign up with email' option not found — stopping. Please check the browser state."); return; }
+                await sleep(2000);
+              }
+              // else: already on emailsignup form — no action needed
             }
 
             // ── Step 3: Fill email address ────────────────────────────────────

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.799",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: fixed the phone gate being silently skipped. When Instagram redirects the email signup page to /accounts/signup/phone/, the flow now detects that URL specifically and clicks 'Sign up with email' — previously the URL still contained 'signup' so the click was never triggered and the flow failed with 'Email field not found'." },
+      { category: "Fix", text: "Ghost Browser Login button: password field selector now checks input[type=\"password\"] first, then input[autocomplete=\"current-password\"], falling back to input[name=\"password\"] — matches Instagram's current DOM structure." },
+    ],
+  },
+  {
     version: "1.0.798",
     date: "6 Jun 2026",
     items: [
