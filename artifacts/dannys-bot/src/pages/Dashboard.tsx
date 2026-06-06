@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.802",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: after filling the password, the flow now waits for the password page to fully disappear before moving on to date of birth — previously it could type into the password field a second time if the page hadn't transitioned yet." },
+      { category: "Fix", text: "Ghost Browser signup: Step 8 password fallback is now skipped if Step 4b already handled the password, preventing any chance of a double-type." },
+      { category: "Fix", text: "Ghost Browser: Create Account button is now disabled while the browser is opening, so a second click cannot accidentally start a duplicate signup run." },
+    ],
+  },
+  {
     version: "1.0.801",
     date: "6 Jun 2026",
     items: [

@@ -1013,7 +1013,7 @@ export function CreateGhostPage() {
                     : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
                 )}
                 onClick={handleCreateAccount}
-                disabled={signupRunning || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
+                disabled={signupRunning || browserState === "opening" || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
                 title="Opens the browser and runs the full signup flow automatically"
               >
                 {signupRunning

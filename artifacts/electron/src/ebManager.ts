@@ -4508,6 +4508,7 @@ export function startEbIpcServer(
             // ── Step 4b: Password page (appears before DOB in current IG flow) ─
             // Instagram's email signup now shows password on its own step right
             // after the email-verification code. Detect it and fill before DOB.
+            let passwordFilled = false;
             {
               let pwPosEarly = await js(findInputScript([
                 "password", "Password", "Create a password",
@@ -4525,7 +4526,21 @@ export function startEbIpcServer(
                 await sleep(800);
                 const pwNextOk = await waitAndTap(["next", "continue"], "Next (after password)");
                 if (!pwNextOk) relay("⚠ 'Next' not found after password — Instagram may be showing a validation error. Check the browser window.");
-                await sleep(2800);
+
+                // Wait until the password field is GONE before moving on.
+                // Without this guard, Step 5/8 can type into the still-visible
+                // password field a second time before the page has transitioned.
+                relay("Waiting for password page to transition…");
+                const pwGoneDeadline = Date.now() + 9000;
+                while (Date.now() < pwGoneDeadline) {
+                  await sleep(700);
+                  const stillThere = await js(findInputScript([
+                    "password", "Password", "Create a password",
+                  ])) as {x:number;y:number}|null;
+                  if (!stillThere) break;
+                }
+                await sleep(1000); // extra settle after transition
+                passwordFilled = true;
               }
             }
 
@@ -4624,16 +4639,18 @@ export function startEbIpcServer(
               relay("⚠ Username field not found");
             }
 
-            // ── Step 8: Password (if on its own screen) ───────────────────────
-            const pwPos = await js(findInputScript([
-              "password", "Password", "Create a password",
-            ])) as {x:number;y:number}|null;
-            if (pwPos) {
-              relay("Filling password…");
-              await clearAndType(pwPos.x, pwPos.y, password);
-              await sleep(500);
-              await waitAndTap(["next", "continue"], "Next (after password)");
-              await sleep(2800);
+            // ── Step 8: Password (fallback — only if Step 4b didn't already fill it) ─
+            if (!passwordFilled) {
+              const pwPos = await js(findInputScript([
+                "password", "Password", "Create a password",
+              ])) as {x:number;y:number}|null;
+              if (pwPos) {
+                relay("Filling password (late-stage)…");
+                await clearAndType(pwPos.x, pwPos.y, password);
+                await sleep(500);
+                await waitAndTap(["next", "continue"], "Next (after password)");
+                await sleep(2800);
+              }
             }
 
             // ── Step 9: Accept terms ──────────────────────────────────────────
