@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.803",
+    date: "6 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: opening the browser now lands directly on Instagram's homepage instead of a blank page — Create Account only needs to be pressed once and the signup starts immediately." },
+      { category: "Fix", text: "Ghost Browser signup: after filling the password and clicking Next, the flow now waits for the date of birth dropdowns to actually appear (positive confirmation) before proceeding — previously it only checked that the password field had disappeared, which could exit too early mid-animation and cause the next typing to land in the still-focused password field." },
+      { category: "Debug", text: "Ghost Browser signup: added live debug lines to the status panel showing the current URL and what each step detects at every transition point, making it much easier to diagnose future flow issues." },
+    ],
+  },
+  {
     version: "1.0.802",
     date: "6 Jun 2026",
     items: [

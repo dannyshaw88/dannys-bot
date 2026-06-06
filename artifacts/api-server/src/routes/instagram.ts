@@ -2313,6 +2313,9 @@ export async function registerInstagramRoutes(
         const body = {
           profileId: -1,
           username: "Ghost",
+          // Open directly on Instagram's homepage so signup starts immediately
+          // (no blank-page flash that forces a second "Create Account" click)
+          initialUrl: "https://www.instagram.com/",
           proxy: proxyHost && proxyPort
             ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined, type: (proxyType ?? "http") as "http" | "socks5" }
             : undefined,

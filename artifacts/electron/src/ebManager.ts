@@ -4510,15 +4510,18 @@ export function startEbIpcServer(
             // after the email-verification code. Detect it and fill before DOB.
             let passwordFilled = false;
             {
+              relay(`[debug] Checking for password page — URL: ${wc.getURL()}`);
               let pwPosEarly = await js(findInputScript([
                 "password", "Password", "Create a password",
               ])) as {x:number;y:number}|null;
+              relay(`[debug] Password field detected: ${pwPosEarly ? `yes at ${pwPosEarly.x},${pwPosEarly.y}` : "no"}`);
               if (!pwPosEarly) {
                 // Give the page a moment to finish transitioning
                 await sleep(1800);
                 pwPosEarly = await js(findInputScript([
                   "password", "Password", "Create a password",
                 ])) as {x:number;y:number}|null;
+                relay(`[debug] Password field after 1.8s wait: ${pwPosEarly ? `yes at ${pwPosEarly.x},${pwPosEarly.y}` : "no"}`);
               }
               if (pwPosEarly) {
                 relay("Password page detected — filling password…");
@@ -4527,24 +4530,36 @@ export function startEbIpcServer(
                 const pwNextOk = await waitAndTap(["next", "continue"], "Next (after password)");
                 if (!pwNextOk) relay("⚠ 'Next' not found after password — Instagram may be showing a validation error. Check the browser window.");
 
-                // Wait until the password field is GONE before moving on.
-                // Without this guard, Step 5/8 can type into the still-visible
-                // password field a second time before the page has transitioned.
-                relay("Waiting for password page to transition…");
-                const pwGoneDeadline = Date.now() + 9000;
-                while (Date.now() < pwGoneDeadline) {
+                // Wait for a POSITIVE indicator that we've left the password page:
+                // poll for the DOB month selector to appear (not just for the password
+                // field to disappear — the field can hide mid-animation while still
+                // being the focused element, causing the next clearAndType to type into it).
+                relay("Waiting for DOB page to appear after password…");
+                const dobReadyDeadline = Date.now() + 12000;
+                let dobReady = false;
+                while (Date.now() < dobReadyDeadline) {
                   await sleep(700);
-                  const stillThere = await js(findInputScript([
-                    "password", "Password", "Create a password",
-                  ])) as {x:number;y:number}|null;
-                  if (!stillThere) break;
+                  const curUrl = wc.getURL();
+                  // Check for DOB selects (native or aria-label)
+                  const hasDob = await js(`(function(){
+                    var s=document.querySelector('select[aria-label*="Month"],select[aria-label*="month"],[aria-label*="Month"],[aria-label*="month"],select');
+                    if(s){var r=s.getBoundingClientRect();if(r.width>0&&r.height>0)return true;}
+                    // Also check for the password field being gone AND URL changed
+                    var pw=document.querySelector('input[type="password"]');
+                    return !pw || pw.getBoundingClientRect().width===0;
+                  })()`);
+                  relay(`[debug] DOB wait — URL: ${curUrl} | dobSignal: ${hasDob}`);
+                  if (hasDob) { dobReady = true; break; }
                 }
-                await sleep(1000); // extra settle after transition
+                if (!dobReady) relay("⚠ DOB page did not appear within 12 s after password — proceeding anyway");
+                await sleep(800); // extra settle
                 passwordFilled = true;
+                relay(`[debug] Password step complete. URL now: ${wc.getURL()}`);
               }
             }
 
             // ── Step 5: Date of Birth ─────────────────────────────────────────
+            relay(`[debug] Starting DOB step — URL: ${wc.getURL()}`);
             relay("Filling date of birth…");
             const dobParts = dob.split("/");
             const dobDay   = parseInt(dobParts[0] ?? "15", 10);
