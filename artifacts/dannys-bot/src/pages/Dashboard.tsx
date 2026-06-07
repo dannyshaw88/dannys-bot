@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.806",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser 'not open' warning — root cause properly fixed. The browser window becomes visible before its internal registration completes (due to async setup), so the status check always saw it as closed for the first several seconds. The window is now registered the instant it is created, so the status is accurate immediately and the warning no longer appears." },
+    ],
+  },
+  {
     version: "1.0.805",
     date: "7 Jun 2026",
     items: [

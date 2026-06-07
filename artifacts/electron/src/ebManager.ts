@@ -1712,6 +1712,16 @@ export async function openEbWindow(opts: {
     win.maximize();
   });
 
+  // Register in ebMap IMMEDIATELY — before any async CDP/proxy/cookie work.
+  // ready-to-show (above) fires and makes the window visible while the async
+  // setup below is still running.  If ebMap.set were placed after that async
+  // work (as it historically was, ~280 lines later), /eb/state?profileId=X
+  // would return { open:false } for several seconds while the window is
+  // visibly on screen — causing the frontend status poll to incorrectly
+  // conclude the browser isn't open.  Registering here ensures the VERY NEXT
+  // poll (within 5 s) sees { open:true } and the UI reflects reality.
+  ebMap.set(profileId, { win, username, proxy, partition });
+
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its
   // on-disk proxy config AFTER setProxy() resolves above, overwriting the newly
