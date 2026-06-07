@@ -4383,6 +4383,51 @@ export function startEbIpcServer(
           };
 
           try {
+            // ── Mobile emulation setup (MUST run before Step 0) ─────────────
+            // The Ghost Browser window is 1280×820 with no UA set by default.
+            // On DESKTOP Instagram, clicking "Sign up" opens an in-page modal
+            // with NO URL change — waitForUrl("/accounts/signup/phone") would
+            // time out forever because that URL only exists in the MOBILE flow.
+            // Forcing mobile UA + viewport here ensures Instagram renders its
+            // mobile SPA so clicking "Sign up" navigates to /accounts/signup/phone.
+            relay("[mobile-setup] Forcing mobile layout via CDP (required for signup URL flow)…");
+            try {
+              await wc.debugger.sendCommand("Emulation.setUserAgentOverride", {
+                userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+                acceptLanguage: "en-US,en;q=0.9",
+                platform: "Linux armv8l",
+                userAgentMetadata: {
+                  brands: [
+                    { brand: "Not_A Brand",   version: "8" },
+                    { brand: "Chromium",       version: "131" },
+                    { brand: "Google Chrome",  version: "131" },
+                  ],
+                  fullVersionList: [
+                    { brand: "Not_A Brand",   version: "8.0.0.0" },
+                    { brand: "Chromium",       version: "131.0.6778.204" },
+                    { brand: "Google Chrome",  version: "131.0.6778.204" },
+                  ],
+                  platform:        "Android",
+                  platformVersion: "14",
+                  architecture:    "arm",
+                  model:           "Pixel 8",
+                  mobile:          true,
+                  bitness:         "64",
+                  wow64:           false,
+                },
+              });
+              await wc.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+                width: 393, height: 851, deviceScaleFactor: 2.75, mobile: true,
+                screenOrientation: { type: "portraitPrimary", angle: 0 },
+              });
+              await wc.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+                enabled: true, maxTouchPoints: 10,
+              });
+              relay("[mobile-setup] ✅ Mobile UA=Pixel 8 Chrome/131 viewport=393x851 dpr=2.75 touch=on");
+            } catch (mobileErr: any) {
+              relay(`[mobile-setup] ⚠ Could not set mobile layout: ${mobileErr?.message ?? String(mobileErr)} — desktop layout may be active, signup flow may fail`);
+            }
+
             // ── Step 0: Navigate to Instagram homepage ───────────────────────
             // Start from the homepage so Instagram's SPA can set device cookies
             // naturally before we proceed. Direct navigation to emailsignup/ or

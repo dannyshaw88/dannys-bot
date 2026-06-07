@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.814",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: the browser now forces mobile layout (Pixel 8, Chrome 131, 393×851 viewport) via CDP before navigating to Instagram — this is required because on the desktop layout, clicking 'Sign up' opens a pop-up with no URL change instead of navigating to /accounts/signup/phone." },
+      { category: "Fix", text: "Ghost Browser signup: all step-by-step debug messages now appear directly in the server log file so failures are immediately visible without checking a separate Electron debug log." },
+    ],
+  },
+  {
     version: "1.0.813",
     date: "7 Jun 2026",
     items: [

@@ -2499,6 +2499,7 @@ export async function registerInstagramRoutes(
     const { msg, done } = (req.body ?? {}) as { msg?: string; done?: boolean };
     if (msg) {
       _ghostSignupLatestStep = msg;
+      console.log(`[ghost-signup-step] ${msg}`);
       sendSignupWsMsg({ type: "signupStep", msg });
     }
     if (done) _ghostSignupDone = true;
