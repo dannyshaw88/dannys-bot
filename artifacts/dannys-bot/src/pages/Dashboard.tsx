@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.808",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: 'Sign up' click on the Instagram homepage now uses href-based detection (finds the link by its URL, not just its text), with a triple-click method (touch + mouse events + JS click) for maximum reliability. Text matching is kept as a fallback. Removed yellow IMAP waiting prompt. Nuke Environment is always clickable even mid-signup." },
+    ],
+  },
+  {
     version: "1.0.807",
     date: "7 Jun 2026",
     items: [
