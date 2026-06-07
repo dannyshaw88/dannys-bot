@@ -7602,39 +7602,95 @@ export async function createInstagramAccountViaEBForm(params: {
 
     if (onBirthday) {
       step("EB: filling birthday form...");
+      // Wait for React to fully mount the DOB form before interacting
+      await delay(1000);
       const MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-      await page.evaluate((m: number, mName: string, d: number, y: number) => {
-        for (const sel of Array.from(document.querySelectorAll<HTMLSelectElement>("select"))) {
-          const lbl = (sel.title || sel.getAttribute("aria-label") || "").toLowerCase();
-          if (lbl.includes("month")) {
-            for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(m) || opt.text === mName || opt.text.startsWith(mName.slice(0, 3))) {
-                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
-              }
-            }
+      const mName = MONTHS[month] ?? "";
+
+      // ── React-safe value setter ────────────────────────────────────────────
+      // Plain el.value = x is ignored by React controlled components because React
+      // overrides the native value property. We must call the *native prototype*
+      // setter (which React's override does not intercept) and then fire both the
+      // `input` and `change` events — React's synthetic onChange fires on `change`
+      // but reads the value from `input`, so both events are required.
+      //
+      // Strategy:
+      //  1. Try labelled <select> elements (aria-label / title containing month/day/year)
+      //  2. Fall back to positional order (Instagram always renders month=0, day=1, year=2)
+      //  3. If no <select> elements exist, fall back to <input> fields (some IG flows)
+      // ─────────────────────────────────────────────────────────────────────────
+
+      const dobResult = await page.evaluate((m: number, mn: string, d: number, y: number) => {
+        function setSelectNative(sel: HTMLSelectElement, value: string): boolean {
+          const ns = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
+          if (ns) ns.call(sel, value); else sel.value = value;
+          sel.dispatchEvent(new Event("input",  { bubbles: true }));
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+        function setInputNative(inp: HTMLInputElement, value: string): boolean {
+          const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+          if (ns) ns.call(inp, value); else inp.value = value;
+          inp.dispatchEvent(new Event("input",  { bubbles: true }));
+          inp.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+        function findSelectOption(sel: HTMLSelectElement, num: number, name: string): string | null {
+          const ns = String(num);
+          for (const opt of Array.from(sel.options)) {
+            if (opt.value === ns || opt.text === name || opt.text.trim().startsWith(name.slice(0, 3)) || opt.text === ns) return opt.value;
           }
-          if (lbl.includes("day")) {
-            for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(d) || opt.text === String(d)) {
-                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
-              }
-            }
-          }
-          if (lbl.includes("year")) {
-            for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(y) || opt.text === String(y)) {
-                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
-              }
-            }
+          return null;
+        }
+
+        const allSelects = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
+        let monthFilled = false, dayFilled = false, yearFilled = false;
+
+        // Pass 1: labelled selects
+        for (const sel of allSelects) {
+          const lbl = (sel.title || sel.getAttribute("aria-label") || sel.getAttribute("name") || "").toLowerCase();
+          if (!monthFilled && lbl.includes("month")) {
+            const v = findSelectOption(sel, m, mn);
+            if (v !== null) { setSelectNative(sel, v); monthFilled = true; }
+          } else if (!dayFilled && lbl.includes("day")) {
+            const v = findSelectOption(sel, d, String(d));
+            if (v !== null) { setSelectNative(sel, v); dayFilled = true; }
+          } else if (!yearFilled && (lbl.includes("year") || lbl.includes("yr"))) {
+            const v = findSelectOption(sel, y, String(y));
+            if (v !== null) { setSelectNative(sel, v); yearFilled = true; }
           }
         }
-        for (const inp of Array.from(document.querySelectorAll<HTMLInputElement>("input"))) {
-          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || "").toLowerCase();
-          if (lbl.includes("month")) { inp.value = String(m); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
-          else if (lbl.includes("day")) { inp.value = String(d); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
-          else if (lbl.includes("year")) { inp.value = String(y); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
+
+        // Pass 2: positional fallback — Instagram's standard order is month, day, year
+        if ((!monthFilled || !dayFilled || !yearFilled) && allSelects.length >= 3) {
+          if (!monthFilled) {
+            const v = findSelectOption(allSelects[0], m, mn);
+            if (v !== null) { setSelectNative(allSelects[0], v); monthFilled = true; }
+          }
+          if (!dayFilled) {
+            const v = findSelectOption(allSelects[1], d, String(d));
+            if (v !== null) { setSelectNative(allSelects[1], v); dayFilled = true; }
+          }
+          if (!yearFilled) {
+            const v = findSelectOption(allSelects[2], y, String(y));
+            if (v !== null) { setSelectNative(allSelects[2], v); yearFilled = true; }
+          }
         }
-      }, month, MONTHS[month] ?? "", day, year);
+
+        // Pass 3: input field fallback (some IG flows render text inputs instead of selects)
+        if (!monthFilled || !dayFilled || !yearFilled) {
+          for (const inp of Array.from(document.querySelectorAll<HTMLInputElement>("input"))) {
+            const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
+            if (!monthFilled && lbl.includes("month")) { setInputNative(inp, String(m)); monthFilled = true; }
+            else if (!dayFilled && lbl.includes("day")) { setInputNative(inp, String(d)); dayFilled = true; }
+            else if (!yearFilled && (lbl.includes("year") || lbl.includes("yr"))) { setInputNative(inp, String(y)); yearFilled = true; }
+          }
+        }
+
+        return { monthFilled, dayFilled, yearFilled, selectCount: allSelects.length };
+      }, month, mName, day, year);
+
+      step(`EB: birthday fill result — month:${dobResult.monthFilled} day:${dobResult.dayFilled} year:${dobResult.yearFilled} (${dobResult.selectCount} selects found)`);
       await delay(600);
       step("EB: birthday filled ✓");
 

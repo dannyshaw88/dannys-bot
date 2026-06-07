@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.817",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: date of birth form now fills correctly. The previous code used plain el.value assignment which React's controlled components silently ignore. The fix uses the native HTMLSelectElement prototype setter (bypassing React's override) and fires both 'input' and 'change' events — both are required for React to register the selection. Includes a positional fallback (month/day/year order) if Instagram's select labels change, and an input-field fallback for alternate signup flows." },
+    ],
+  },
+  {
     version: "1.0.816",
     date: "7 Jun 2026",
     items: [
