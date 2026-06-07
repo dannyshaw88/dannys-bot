@@ -4300,14 +4300,34 @@ export function startEbIpcServer(
           // Input.insertText to type — identical to how a mobile virtual keyboard delivers text.
           // No mouse events, no hardware key events, no virtual key codes.
           const clearAndType = async (x: number, y: number, text: string) => {
-            // Tap to focus — fires touchstart/touchend/click with pointerType="touch"
+            // JS focus/click FIRST — same root cause as navigation:
+            // CDP tap fires raw touch events that React does NOT handle for form focus.
+            // JS element.focus() + .click() fires React's synthetic onFocus/onClick
+            // so the input becomes the active element and React's state is updated.
+            try {
+              await js(`(function(){
+                // elementFromPoint finds the exact element at the coordinates
+                var el = document.elementFromPoint(${x}, ${y});
+                // Walk up in case we hit a wrapper div instead of the input
+                var found = el;
+                while (found && found.tagName !== 'INPUT' && found.tagName !== 'TEXTAREA') {
+                  found = found.parentElement;
+                  if (!found || found === document.body) { found = el; break; }
+                }
+                if (found) { found.focus(); found.click(); }
+              })()`);
+            } catch {}
+            // Belt-and-suspenders: CDP tap as well
             await tap(x, y);
             await sleep(400);
             // Clear via JS using the native property setter so React's controlled state resets.
-            // Then fire input+change so React's onChange handler picks up the empty value.
+            // Use activeElement first, fall back to elementFromPoint in case tap stole focus.
             try {
               await js(`(function(){
                 var el = document.activeElement;
+                if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                  el = document.elementFromPoint(${x}, ${y});
+                }
                 if (!el) return;
                 var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
                 if (setter && setter.set) { setter.set.call(el, ''); }
@@ -4317,11 +4337,22 @@ export function startEbIpcServer(
               })()`);
             } catch {}
             await sleep(120);
-            // Insert text via Input.insertText — this is the CDP equivalent of IME/virtual
-            // keyboard input on Android. Fires the input event on the focused element so
-            // React's synthetic onChange updates correctly. No key codes, no key events.
+            // Insert text via Input.insertText — CDP equivalent of IME/virtual keyboard.
+            // Fires input event on the focused element so React's onChange updates correctly.
             try {
               await wc.debugger.sendCommand("Input.insertText", { text });
+            } catch {}
+            await sleep(150);
+            // Verify the text actually landed in the field (helps diagnose future issues)
+            try {
+              const fieldVal = await js(`(function(){
+                var el = document.activeElement;
+                if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                  el = document.elementFromPoint(${x}, ${y});
+                }
+                return el ? el.value : null;
+              })()`);
+              relay(`[clearAndType] Field value after type: "${fieldVal}" (expected ${text.length} chars)`);
             } catch {}
           };
 

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.816",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: email field (and all other form fields) now focus correctly before typing. The app now uses JavaScript element.focus() and .click() to activate the field before clearing and typing — CDP tap events don't reliably trigger React's form focus handler, which left the field empty and caused 'Email required' when Next was clicked." },
+      { category: "Fix", text: "Ghost Browser signup: each field now logs its actual value after typing so you can see in the log whether the text landed correctly." },
+    ],
+  },
+  {
     version: "1.0.815",
     date: "7 Jun 2026",
     items: [
