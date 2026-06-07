@@ -358,17 +358,25 @@ export function CreateGhostPage() {
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
   const [isNative, setIsNative]                 = useState(false);
 
+  // ── localStorage persistence for form fields ────────────────────────────────
+  // Reads saved values on first render so restarts don't wipe the form.
+  const _LS_KEY = "ghost-browser-fields-v1";
+  const _lsLoad = (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(_LS_KEY) ?? "{}"); } catch { return {}; }
+  };
+  const _ls = _lsLoad();
+
   // Account fields
-  const [usernameSpin, setUsernameSpin] = useState("");
-  const [password, setPassword]         = useState(() => generatePassword());
-  const [bioSpin, setBioSpin]           = useState("");
+  const [usernameSpin, setUsernameSpin] = useState(() => _ls.usernameSpin ?? "");
+  const [password, setPassword]         = useState(() => _ls.password ?? generatePassword());
+  const [bioSpin, setBioSpin]           = useState(() => _ls.bioSpin ?? "");
 
   // Email / IMAP fields
-  const [emailAddr, setEmailAddr]   = useState("");
-  const [emailPass, setEmailPass]   = useState("");
-  const [imapHost, setImapHost]     = useState("");
-  const [imapPort, setImapPort]     = useState("993");
-  const [imapSecure, setImapSecure] = useState(true);
+  const [emailAddr, setEmailAddr]   = useState(() => _ls.emailAddr   ?? "");
+  const [emailPass, setEmailPass]   = useState(() => _ls.emailPass   ?? "");
+  const [imapHost, setImapHost]     = useState(() => _ls.imapHost    ?? "");
+  const [imapPort, setImapPort]     = useState(() => _ls.imapPort    ?? "993");
+  const [imapSecure, setImapSecure] = useState(() => (_ls.imapSecure ?? "true") === "true");
 
   // Verification code
   const [manualCode, setManualCode]       = useState("");
@@ -377,7 +385,7 @@ export function CreateGhostPage() {
   const [codePending, setCodePending]     = useState(false);
 
   // DOB
-  const [dob, setDob] = useState(() => generateDob());
+  const [dob, setDob] = useState(() => _ls.dob ?? generateDob());
 
   // Ghost fingerprint — regenerated on every Nuke Environment
   const [fingerprint, setFingerprint]                 = useState<GhostFingerprint>(() => generateGhostFingerprint());
@@ -399,14 +407,41 @@ export function CreateGhostPage() {
   const isOpen = browserState === "open";
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
 
+  // ── Persist form fields to localStorage whenever they change ─────────────
   useEffect(() => {
-    Promise.all([
-      fetch("/api/is-electron").then(r => r.json()).catch(() => ({ electron: false })),
-      fetch("/api/signup/browser/status").then(r => r.json()).catch(() => ({ running: false })),
-    ]).then(([elData, statusData]) => {
-      setIsNative(!!(elData as any).electron);
-      if ((statusData as any).running) setBrowserState("open");
-    });
+    try {
+      localStorage.setItem(_LS_KEY, JSON.stringify({
+        usernameSpin, password, dob, bioSpin,
+        emailAddr, emailPass, imapHost, imapPort,
+        imapSecure: String(imapSecure),
+      }));
+    } catch {}
+  }, [usernameSpin, password, dob, bioSpin, emailAddr, emailPass, imapHost, imapPort, imapSecure]);
+
+  // ── Browser status check (mount + continuous poll) ────────────────────────
+  // Run once on mount, then every 5 s so the "Ghost Browser is not open"
+  // indicator stays accurate even if the browser was opened/closed externally
+  // (e.g. after a software restart or a Nuke Environment reset).
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const [elData, statusData] = await Promise.all([
+          fetch("/api/is-electron").then(r => r.json()).catch(() => ({ electron: false })),
+          fetch("/api/signup/browser/status").then(r => r.json()).catch(() => ({ running: false })),
+        ]);
+        setIsNative(!!(elData as any).electron);
+        setBrowserState(prev => {
+          // Only update if the real state differs from what the UI thinks —
+          // don't clobber "opening" / "resetting" mid-transition states.
+          if ((statusData as any).running && prev === "closed") return "open";
+          if (!(statusData as any).running && prev === "open")  return "closed";
+          return prev;
+        });
+      } catch {}
+    };
+    checkStatus();
+    const poll = setInterval(checkStatus, 5000);
+    return () => clearInterval(poll);
   }, []);
 
   // Code-wait timer — starts counting when codePending, resets when done

@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.804",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: cookie banner auto-dismiss no longer taps 'Log In' after closing the banner — that tap was navigating the Ghost Browser to the login page and breaking the signup flow entirely." },
+      { category: "Fix", text: "Ghost Browser page fields (username, password, date of birth, email, IMAP settings, bio) are now saved to local storage and restored on restart — restarting the software no longer clears the form." },
+      { category: "Fix", text: "Ghost Browser status now refreshes every 5 seconds instead of only on page load, so the 'Ghost Browser is not open' warning goes away correctly once the browser is open." },
+      { category: "Fix", text: "EB toolbar Login button now presses Tab after typing the username to advance focus to the password field before typing the password — previously the password field was sometimes skipped." },
+      { category: "Fix", text: "EB toolbar URL bar: clicking it now selects all text immediately so you can type a new URL straight away. The selection highlight stays blue even when the toolbar loses window focus." },
+    ],
+  },
+  {
     version: "1.0.803",
     date: "6 Jun 2026",
     items: [
