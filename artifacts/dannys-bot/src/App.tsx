@@ -104,7 +104,6 @@ function LoginSplash() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: u.trim(), password: p }),
-        credentials: "include",
       });
       const data = await r.json();
       if (data.ok) {

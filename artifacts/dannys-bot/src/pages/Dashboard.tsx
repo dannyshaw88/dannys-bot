@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.811",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Migrated to new Replit environment — app now runs correctly with the API server on port 8080 and the frontend Vite proxy updated to match." },
+      { category: "Fix", text: "Login no longer shows 'Connection failed' — CORS and session handling corrected for the Replit preview environment." },
+    ],
+  },
+  {
     version: "1.0.810",
     date: "7 Jun 2026",
     items: [
