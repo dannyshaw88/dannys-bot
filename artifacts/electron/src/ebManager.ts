@@ -527,11 +527,13 @@ async function cdpTapGesture(
       gestureSourceType: "touch",
     });
   } catch {
-    // Fallback: mouse events (still isTrusted=true, just wrong pointer type)
+    // Fallback: dispatchMouseEvent with pointerType:"touch" so Instagram still
+    // sees a touch-originated click (not a desktop mouse click) even if
+    // synthesizeTapGesture failed. isTrusted=true because it comes from CDP.
     try {
-      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0 });
+      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x, y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
       await new Promise(r => setTimeout(r, 40 + Math.random() * 50));
-      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+      await dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
     } catch {}
   }
 }
@@ -2278,21 +2280,19 @@ export async function openEbWindow(opts: {
         } catch (cdpErr) {
           _ebLog(`CookieBanner: touch tap failed (${cdpErr})`);
         }
-        // Layer 2: dispatchMouseEvent — belt-and-suspenders for DPR coordinate mismatch.
-        // synthesizeTapGesture can silently misfire when setDeviceMetricsOverride DPR>1
-        // is active in Electron/Chromium: the command succeeds (no exception) but the tap
-        // lands at the PHYSICAL pixel position rather than the CSS pixel position, so the
-        // click hits the banner title text instead of the "Allow all cookies" button.
-        // dispatchMouseEvent is documented to use genuine CSS pixel coordinates and is
-        // unaffected by this DPR mapping quirk.
+        // Layer 2: dispatchMouseEvent with pointerType:"touch" — belt-and-suspenders for
+        // DPR coordinate mismatch. synthesizeTapGesture can silently misfire when
+        // setDeviceMetricsOverride DPR>1 is active: the command succeeds but the tap lands
+        // at the physical pixel position instead of the CSS pixel position.
+        // dispatchMouseEvent uses genuine CSS pixel coordinates and is unaffected by the DPR
+        // quirk. pointerType:"touch" preserves the phone identity — no mouse signals leak.
         await new Promise(r => setTimeout(r, 100));
         try {
           const _dbg = win.webContents.debugger;
-          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: pos.x, y: pos.y, button: "none", modifiers: 0 });
-          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
+          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
           await new Promise(r => setTimeout(r, 60));
-          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
-          _ebLog(`CookieBanner: mouse events also dispatched at (${pos.x},${pos.y})`);
+          await _dbg.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
+          _ebLog(`CookieBanner: touch-typed fallback dispatched at (${pos.x},${pos.y})`);
         } catch {}
         // Layer 3: direct JS click — no coordinates needed, immune to all DPR issues.
         // Cookie banners do not check event.isTrusted so this fires reliably.
@@ -4276,13 +4276,15 @@ export function startEbIpcServer(
               });
               await sleep(120);
             } catch {
+              // Fallback: dispatchMouseEvent with pointerType:"touch" — isTrusted=true from CDP,
+              // no desktop mouse signature. Identical to what a real phone generates.
               try {
                 await wc.debugger.sendCommand("Input.dispatchMouseEvent", {
-                  type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0,
+                  type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch",
                 });
                 await sleep(80);
                 await wc.debugger.sendCommand("Input.dispatchMouseEvent", {
-                  type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0,
+                  type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch",
                 });
               } catch {}
             }
@@ -4300,10 +4302,10 @@ export function startEbIpcServer(
           // Input.insertText to type — identical to how a mobile virtual keyboard delivers text.
           // No mouse events, no hardware key events, no virtual key codes.
           const clearAndType = async (x: number, y: number, text: string) => {
-            // JS focus/click FIRST — same root cause as navigation:
-            // CDP tap fires raw touch events that React does NOT handle for form focus.
-            // JS element.focus() + .click() fires React's synthetic onFocus/onClick
-            // so the input becomes the active element and React's state is updated.
+            // JS focus FIRST — focus() fires React's synthetic onFocus so the input
+            // becomes the active element and React's state is updated.
+            // We do NOT call .click() here — that would dispatch a MouseEvent which
+            // leaks desktop pointer identity. The CDP tap below fires the touch event.
             try {
               await js(`(function(){
                 // elementFromPoint finds the exact element at the coordinates
@@ -4314,7 +4316,7 @@ export function startEbIpcServer(
                   found = found.parentElement;
                   if (!found || found === document.body) { found = el; break; }
                 }
-                if (found) { found.focus(); found.click(); }
+                if (found) { found.focus(); }
               })()`);
             } catch {}
             // Belt-and-suspenders: CDP tap as well
@@ -4616,20 +4618,23 @@ export function startEbIpcServer(
                     continue;
                   }
 
-                  // JS click fires React's synthetic event system → SPA navigation.
-                  // CDP synthesizeTapGesture only fires raw touch events that Instagram's
-                  // React SPA does NOT handle for anchor/button navigation (confirmed in logs:
-                  // tap fires, URL stays at instagram.com/ for 20s every time).
-                  relay(`[step2a] Attempting JS click on Sign Up (href-first, bypasses React tap-event bug)…`);
-                  const jsSignupClicked = await js(`(function(){
+                  // Navigation strategy: use CDP dispatchMouseEvent with pointerType:"touch".
+                  // synthesizeTapGesture misfires on SPA navigation due to a DPR coordinate
+                  // mismatch (CSS px ≠ physical px when DPR>1 is active via setDeviceMetrics).
+                  // dispatchMouseEvent uses genuine CSS pixel coordinates AND accepts pointerType
+                  // so Instagram's React sees a trusted touch-typed click — identical to what a
+                  // real Android Chrome produces when the user taps an anchor.
+                  // NO JS element.click() — that dispatches an isTrusted=false MouseEvent.
+                  relay(`[step2a] Resolving Sign Up target coords for touch-typed CDP click…`);
+                  const signupNavTarget = await js(`(function(){
                     var anchors = Array.from(document.querySelectorAll('a'));
-                    // Priority 1: find signup anchor by href attribute
+                    // Priority 1: anchor with signup href — use its bounding rect centre
                     var byHref = anchors.find(function(a){
                       var h = a.getAttribute('href') || '';
                       return h.includes('/accounts/signup') && !h.includes('email') && !h.includes('phone') && !h.includes('login');
                     });
-                    if (byHref) { byHref.click(); return 'href:' + byHref.getAttribute('href'); }
-                    // Priority 2: any button/link with exact 'sign up' text — JS click
+                    if (byHref) { var r=byHref.getBoundingClientRect(); if(r.width>0) return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),found:'href:'+byHref.getAttribute('href')}; }
+                    // Priority 2: visible button/link with signup text
                     var byText = Array.from(document.querySelectorAll('a,button,div[role="button"],span[role="button"]'))
                       .find(function(e){
                         var r = e.getBoundingClientRect();
@@ -4637,11 +4642,22 @@ export function startEbIpcServer(
                         var t = (e.innerText||e.textContent||'').trim().toLowerCase();
                         return t === 'sign up' || t === 'create new account' || t === 'create account';
                       });
-                    if (byText) { byText.click(); return 'text:' + (byText.textContent||'').trim().slice(0,40); }
+                    if (byText) { var r2=byText.getBoundingClientRect(); return {x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2),found:'text:'+(byText.textContent||'').trim().slice(0,40)}; }
                     return null;
                   })()`);
-                  relay(`[step2a] JS click result: ${jsSignupClicked ?? "null — no signup element found"}`);
-                  // Belt-and-suspenders: also CDP tap in case JS click didn't fire
+                  relay(`[step2a] Sign Up nav target: ${signupNavTarget ? JSON.stringify(signupNavTarget) : "null — no signup element found"}`);
+                  if (signupNavTarget) {
+                    const nx = (signupNavTarget as any).x as number;
+                    const ny = (signupNavTarget as any).y as number;
+                    // Fire touch-typed CDP click: isTrusted=true, pointerType="touch"
+                    try {
+                      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: nx, y: ny, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
+                      await sleep(60);
+                      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: nx, y: ny, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
+                      relay(`[step2a] Touch-typed CDP click dispatched at (${nx},${ny})`);
+                    } catch {}
+                  }
+                  // Belt-and-suspenders: also synthesizeTapGesture
                   await tap(pos.x, pos.y);
                   await sleep(1500);
 
@@ -4701,16 +4717,16 @@ export function startEbIpcServer(
                     continue;
                   }
 
-                  // JS click — same reason as step 2a: CDP tap doesn't trigger React SPA nav
-                  relay(`[step2b] JS-clicking 'Sign up with email' (href-first)…`);
-                  const jsEmailClicked = await js(`(function(){
-                    // Priority 1: find by href containing emailsignup
+                  // Same touch-typed CDP click strategy as step 2a — no JS element.click().
+                  relay(`[step2b] Resolving 'Sign up with email' coords for touch-typed CDP click…`);
+                  const emailNavTarget = await js(`(function(){
+                    // Priority 1: anchor with emailsignup href
                     var byHref = Array.from(document.querySelectorAll('a')).find(function(a){
                       var h = a.getAttribute('href') || '';
                       return h.includes('emailsignup') || h.includes('signup/email');
                     });
-                    if (byHref) { byHref.click(); return 'href:' + byHref.getAttribute('href'); }
-                    // Priority 2: any element whose text contains 'email' in a signup context
+                    if (byHref) { var r=byHref.getBoundingClientRect(); if(r.width>0) return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),found:'href:'+byHref.getAttribute('href')}; }
+                    // Priority 2: visible element with email signup text
                     var byText = Array.from(document.querySelectorAll('a,button,div[role="button"],span[role="button"]'))
                       .find(function(e){
                         var r = e.getBoundingClientRect();
@@ -4718,11 +4734,21 @@ export function startEbIpcServer(
                         var t = (e.innerText||e.textContent||'').trim().toLowerCase();
                         return t.includes('sign up with email') || t.includes('use email') || t === 'email address';
                       });
-                    if (byText) { byText.click(); return 'text:' + (byText.textContent||'').trim().slice(0,40); }
+                    if (byText) { var r2=byText.getBoundingClientRect(); return {x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2),found:'text:'+(byText.textContent||'').trim().slice(0,40)}; }
                     return null;
                   })()`);
-                  relay(`[step2b] JS click result: ${jsEmailClicked ?? "null — no element found"}`);
-                  // Belt-and-suspenders CDP tap
+                  relay(`[step2b] Email nav target: ${emailNavTarget ? JSON.stringify(emailNavTarget) : "null — no element found"}`);
+                  if (emailNavTarget) {
+                    const enx = (emailNavTarget as any).x as number;
+                    const eny = (emailNavTarget as any).y as number;
+                    try {
+                      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: enx, y: eny, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
+                      await sleep(60);
+                      await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: enx, y: eny, button: "left", clickCount: 1, modifiers: 0, pointerType: "touch" });
+                      relay(`[step2b] Touch-typed CDP click dispatched at (${enx},${eny})`);
+                    } catch {}
+                  }
+                  // Belt-and-suspenders: synthesizeTapGesture
                   await tap(emailPos.x, emailPos.y);
                   await sleep(1500);
 

@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.821",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: all navigation clicks now use touch-typed events only. Replaced every JS element.click() and mouse-typed CDP event in the signup flow with Input.dispatchMouseEvent using pointerType:\"touch\", matching what a real Android phone sends. This removes mouse signal leaks that Instagram can detect as desktop automation." },
+    ],
+  },
+  {
     version: "1.0.820",
     date: "7 Jun 2026",
     items: [
