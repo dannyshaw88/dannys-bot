@@ -361,6 +361,28 @@ const WEBRTC_BLOCKER_JS = `(function () {
   try { Object.defineProperty(window, 'webkitRTCPeerConnection',  { get: function () { return B; }, configurable: true }); } catch {}
 })();`;
 
+// Mouse-hover suppressor injected into the ghost signup browser via CDP.
+// When the user moves their real PC mouse over the Electron window, Chrome
+// forwards native MouseEvent/PointerEvent hover events to the page. Instagram
+// reads event.pointerType and navigator.maxTouchPoints to classify devices —
+// hover events with pointerType:"mouse" are a hard desktop signal that a real
+// Android phone never produces (phones have no hover concept).
+//
+// This script runs in the capture phase (first, before ANY page script) and
+// calls stopImmediatePropagation() on every hover/movement event, so Instagram's
+// listeners never see them. We deliberately do NOT block mousedown/mouseup/click/
+// pointerdown/pointerup because those are used by our own CDP touch events
+// (which arrive with pointerType:"touch" and are isTrusted=true).
+const MOUSE_HOVER_BLOCKER_JS = `(function(){
+  var BLOCK=['mousemove','mouseover','mouseout','mouseenter','mouseleave',
+             'pointermove','pointerover','pointerout','pointerenter','pointerleave'];
+  function block(e){ e.stopImmediatePropagation(); }
+  BLOCK.forEach(function(t){
+    window.addEventListener(t, block, true);
+    document.addEventListener(t, block, true);
+  });
+})();`;
+
 // Hardware fingerprint spoofing script injected into every EB page via CDP.
 // Mirrors applyStealthScripts() in browserSession.ts exactly so the leak tool
 // reports the same values that Account Settings shows (battery %, CPU cores,
@@ -4262,6 +4284,20 @@ export function startEbIpcServer(
           // Attach debugger (no-op if already attached)
           try { wc.debugger.attach("1.3"); } catch {}
 
+          // Inject mouse-hover blocker: suppresses real PC mouse hover/move events
+          // before Instagram's scripts see them (runs in capture phase, isTrusted
+          // events from host input, but we block hover — NOT tap/click).
+          try {
+            await wc.debugger.sendCommand("Page.enable");
+          } catch {}
+          try {
+            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: MOUSE_HOVER_BLOCKER_JS });
+          } catch {}
+          // Also execute on the currently-loaded page (addScriptToEvaluateOnNewDocument
+          // only applies to future navigations — we need it on the page that's already open)
+          wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
+          wc.on("dom-ready", () => { wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {}); });
+
           const js = (script: string): Promise<any> =>
             wc.executeJavaScript(script).catch((err: any) => {
               console.log(`[ghost-signup] js error: ${err?.message}`);
@@ -4290,17 +4326,21 @@ export function startEbIpcServer(
             }
           };
 
-          // Type text into the currently-focused element
+          // Type text into the currently-focused element — character by character
+          // with human-like inter-key delays. typeTextCDP fires rawKeyDown +
+          // Input.insertText (1 char) + keyUp per character, so Instagram's
+          // keystroke-timing analyser sees natural inter-character gaps, not a paste.
           const typeText = async (text: string) => {
             try {
-              await wc.debugger.sendCommand("Input.insertText", { text });
+              await typeTextCDP(wc.debugger, text);
             } catch {}
           };
 
           // Tap element then clear existing content and type new text.
           // MOBILE-ONLY: synthesizeTapGesture to focus, JS to clear value (no Ctrl+A/Delete),
-          // Input.insertText to type — identical to how a mobile virtual keyboard delivers text.
-          // No mouse events, no hardware key events, no virtual key codes.
+          // then typeTextCDP to type character-by-character with human delays.
+          // No mouse events. Full-string Input.insertText is NOT used here — it
+          // delivers all characters as a single paste event with 0 ms inter-char gap.
           const clearAndType = async (x: number, y: number, text: string) => {
             // JS focus FIRST — focus() fires React's synthetic onFocus so the input
             // becomes the active element and React's state is updated.
@@ -4339,10 +4379,12 @@ export function startEbIpcServer(
               })()`);
             } catch {}
             await sleep(120);
-            // Insert text via Input.insertText — CDP equivalent of IME/virtual keyboard.
-            // Fires input event on the focused element so React's onChange updates correctly.
+            // Type character-by-character via typeTextCDP — fires rawKeyDown +
+            // Input.insertText (1 char) + keyUp per character with 80–280 ms human
+            // inter-key delays. Instagram's keystroke-timing analyser sees natural
+            // gaps; a full-string Input.insertText would look like an instant paste.
             try {
-              await wc.debugger.sendCommand("Input.insertText", { text });
+              await typeTextCDP(wc.debugger, text);
             } catch {}
             await sleep(150);
             // Verify the text actually landed in the field (helps diagnose future issues)

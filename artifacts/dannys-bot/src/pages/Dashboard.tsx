@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.822",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: fields are now typed character-by-character with human-like random delays (80–280 ms between keys) instead of being pasted all at once. Instagram's keystroke-timing analyser treats an instant paste as a bot signal regardless of how the click got there." },
+      { category: "Fix", text: "Ghost Browser signup: your PC mouse hovering over the Electron window no longer leaks mouse events to Instagram. A capture-phase JavaScript blocker is now injected before Instagram's scripts load, silently swallowing all mousemove/pointermove/mouseover events so Instagram only ever sees the touch events our automation sends." },
+    ],
+  },
+  {
     version: "1.0.821",
     date: "7 Jun 2026",
     items: [
