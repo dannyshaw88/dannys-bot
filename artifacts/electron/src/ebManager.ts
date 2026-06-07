@@ -2013,6 +2013,35 @@ export async function openEbWindow(opts: {
       return;
     }
     chromeErrorRecoveryCount = 0; // Reset counter on any successful navigation
+
+    // ── Scraping-warning overlay ───────────────────────────────────────────
+    // Instagram sends an empty-body HTML shell for this page; the React app
+    // that normally fills it in is often blocked by CSP or cookie state, so
+    // the user sees a completely white screen with no feedback.
+    // Inject a visible banner so the account situation is always clear.
+    if (navUrl.includes("/accounts/scraping_warning")) {
+      _ebLog(`⚠️ scraping_warning page detected for @${username} — injecting overlay`);
+      // Wait 2 s for any async page JS to run first; if the page already has
+      // content we skip the inject, otherwise show our overlay.
+      await new Promise(r => setTimeout(r, 2000));
+      if (!win.isDestroyed()) {
+        win.webContents.executeJavaScript(`
+          (function() {
+            if (document.body && document.body.children.length > 0) return; // page has content
+            if (document.getElementById('__eq-scraping-warn')) return;
+            var d = document.createElement('div');
+            d.id = '__eq-scraping-warn';
+            d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:32px;text-align:center;box-sizing:border-box;';
+            d.innerHTML = '<div style="font-size:40px;margin-bottom:12px">⚠️</div>'
+              + '<div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px">Automated Behaviour Detected</div>'
+              + '<div style="font-size:13px;color:#555;max-width:380px;line-height:1.5">Instagram has flagged this account. You may need to log in manually, solve any challenge shown, and then re-verify the account in Equinox once the session is restored.</div>'
+              + '<div style="margin-top:18px;font-size:11px;color:#999">Account: ' + ${JSON.stringify(username)} + '</div>';
+            (document.body || document.documentElement).appendChild(d);
+          })()
+        `).catch(() => {});
+      }
+    }
+
     // Push URL change to BrowserPanel address bar (via server WS relay)
     fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-nav`, {
       method:  "POST",

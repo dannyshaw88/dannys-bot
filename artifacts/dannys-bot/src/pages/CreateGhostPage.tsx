@@ -431,10 +431,15 @@ export function CreateGhostPage() {
         ]);
         setIsNative(!!(elData as any).electron);
         setBrowserState(prev => {
-          // Only update if the real state differs from what the UI thinks —
-          // don't clobber "opening" / "resetting" mid-transition states.
+          // The poll ONLY auto-discovers a browser that's already open
+          // (e.g. after an app restart).  It must NEVER set the state to
+          // "closed" — the fire-and-forget /eb/open call returns before
+          // openEbWindow registers the window in ebMap, so the first few
+          // polls after clicking "Open Browser" legitimately return
+          // running:false even though the window is visible.  Treating
+          // running:false as "closed" is what caused the regression.
+          // Only handleClose / handleFresh should ever set "closed".
           if ((statusData as any).running && prev === "closed") return "open";
-          if (!(statusData as any).running && prev === "open")  return "closed";
           return prev;
         });
       } catch {}

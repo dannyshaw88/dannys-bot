@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.805",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser 'not open' warning: the status poll introduced in v1.0.804 was actively setting the browser state to 'closed' whenever it checked the server during the window-opening sequence — the open call returns before the window is fully registered, so the poll was always racing against itself. The poll now only ever auto-discovers a browser that was opened before the app started; it never overrides an explicit 'Open Browser' click." },
+      { category: "Fix", text: "Automated Behaviour Detected white screen: when any account's embedded browser lands on Instagram's scraping_warning page (which arrives as an empty HTML shell), an overlay is now injected after 2 seconds explaining what happened and what to do next." },
+    ],
+  },
+  {
     version: "1.0.804",
     date: "7 Jun 2026",
     items: [
