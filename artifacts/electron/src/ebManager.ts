@@ -4585,9 +4585,34 @@ export function startEbIpcServer(
                     continue;
                   }
 
-                  relay(`[step2a] Tapping Sign Up at (${pos.x}, ${pos.y})…`);
+                  // JS click fires React's synthetic event system → SPA navigation.
+                  // CDP synthesizeTapGesture only fires raw touch events that Instagram's
+                  // React SPA does NOT handle for anchor/button navigation (confirmed in logs:
+                  // tap fires, URL stays at instagram.com/ for 20s every time).
+                  relay(`[step2a] Attempting JS click on Sign Up (href-first, bypasses React tap-event bug)…`);
+                  const jsSignupClicked = await js(`(function(){
+                    var anchors = Array.from(document.querySelectorAll('a'));
+                    // Priority 1: find signup anchor by href attribute
+                    var byHref = anchors.find(function(a){
+                      var h = a.getAttribute('href') || '';
+                      return h.includes('/accounts/signup') && !h.includes('email') && !h.includes('phone') && !h.includes('login');
+                    });
+                    if (byHref) { byHref.click(); return 'href:' + byHref.getAttribute('href'); }
+                    // Priority 2: any button/link with exact 'sign up' text — JS click
+                    var byText = Array.from(document.querySelectorAll('a,button,div[role="button"],span[role="button"]'))
+                      .find(function(e){
+                        var r = e.getBoundingClientRect();
+                        if (r.width <= 0 || r.height <= 0) return false;
+                        var t = (e.innerText||e.textContent||'').trim().toLowerCase();
+                        return t === 'sign up' || t === 'create new account' || t === 'create account';
+                      });
+                    if (byText) { byText.click(); return 'text:' + (byText.textContent||'').trim().slice(0,40); }
+                    return null;
+                  })()`);
+                  relay(`[step2a] JS click result: ${jsSignupClicked ?? "null — no signup element found"}`);
+                  // Belt-and-suspenders: also CDP tap in case JS click didn't fire
                   await tap(pos.x, pos.y);
-                  await sleep(1200);
+                  await sleep(1500);
 
                   relay(`[step2a] Post-click URL: ${wc.getURL()}`);
 
@@ -4645,9 +4670,30 @@ export function startEbIpcServer(
                     continue;
                   }
 
-                  relay(`[step2b] Tapping 'Sign up with email' at (${emailPos.x}, ${emailPos.y})…`);
+                  // JS click — same reason as step 2a: CDP tap doesn't trigger React SPA nav
+                  relay(`[step2b] JS-clicking 'Sign up with email' (href-first)…`);
+                  const jsEmailClicked = await js(`(function(){
+                    // Priority 1: find by href containing emailsignup
+                    var byHref = Array.from(document.querySelectorAll('a')).find(function(a){
+                      var h = a.getAttribute('href') || '';
+                      return h.includes('emailsignup') || h.includes('signup/email');
+                    });
+                    if (byHref) { byHref.click(); return 'href:' + byHref.getAttribute('href'); }
+                    // Priority 2: any element whose text contains 'email' in a signup context
+                    var byText = Array.from(document.querySelectorAll('a,button,div[role="button"],span[role="button"]'))
+                      .find(function(e){
+                        var r = e.getBoundingClientRect();
+                        if (r.width <= 0 || r.height <= 0) return false;
+                        var t = (e.innerText||e.textContent||'').trim().toLowerCase();
+                        return t.includes('sign up with email') || t.includes('use email') || t === 'email address';
+                      });
+                    if (byText) { byText.click(); return 'text:' + (byText.textContent||'').trim().slice(0,40); }
+                    return null;
+                  })()`);
+                  relay(`[step2b] JS click result: ${jsEmailClicked ?? "null — no element found"}`);
+                  // Belt-and-suspenders CDP tap
                   await tap(emailPos.x, emailPos.y);
-                  await sleep(1200);
+                  await sleep(1500);
 
                   relay(`[step2b] Post-click URL: ${wc.getURL()}`);
 

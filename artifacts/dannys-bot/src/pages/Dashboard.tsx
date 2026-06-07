@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.815",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: 'Sign up' and 'Sign up with email' navigation now uses JavaScript element.click() instead of CDP touch events. CDP touch events fire raw touch signals that Instagram's React SPA ignores for navigation — the URL stayed at instagram.com for 20 seconds every attempt. JS click fires React's synthetic event system and triggers real SPA navigation." },
+      { category: "Fix", text: "Ghost Browser signup: 'Sign up' click now searches by link href (/accounts/signup) first, then falls back to exact text match — href-based detection is more reliable than text matching which can pick up the wrong element on Instagram's homepage." },
+    ],
+  },
+  {
     version: "1.0.814",
     date: "7 Jun 2026",
     items: [
