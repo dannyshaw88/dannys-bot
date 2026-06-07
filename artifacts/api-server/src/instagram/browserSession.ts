@@ -7620,37 +7620,40 @@ export async function createInstagramAccountViaEBForm(params: {
       //  3. If no <select> elements exist, fall back to <input> fields (some IG flows)
       // ─────────────────────────────────────────────────────────────────────────
 
-      // ── Detect which DOB form Instagram is showing ─────────────────────────
-      // Instagram shows two different DOB UIs depending on the signup flow:
-      //   A) Three <select> dropdowns (month / day / year) — older flow
-      //   B) Single <input type="text"> with placeholder "Birthday (MM/DD/YYYY)" — newer flow
-      // We detect which is present and handle each correctly.
-      const dobFormInfo = await page.evaluate(() => {
-        const selects = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
-        // Combined date input: placeholder/aria-label contains "birthday", "birth", "MM/DD"
-        const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>("input"));
-        const combinedInput = allInputs.find(inp => {
-          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
-          return lbl.includes("birthday") || lbl.includes("birth") || lbl.includes("mm/dd") || lbl.includes("dd/mm") || lbl.includes("date of birth");
-        });
-        const separateMonthInput = allInputs.find(inp => {
-          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
-          return lbl.includes("month");
-        });
-        return {
-          selectCount: selects.length,
-          hasCombinedInput: !!combinedInput,
-          combinedInputPlaceholder: combinedInput?.placeholder ?? combinedInput?.getAttribute("aria-label") ?? "",
-          hasSeparateInputs: !!separateMonthInput,
-        };
-      });
+      // ── DOB form: wait for any input or select to mount ───────────────────
+      // Instagram renders the birthday form in React — we must wait for the DOM
+      // to be ready before querying it. Use a broad selector so we don't miss
+      // any variant of the form (selects, text inputs, custom pickers).
+      await page.waitForSelector(
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select',
+        { timeout: 8000, visible: true }
+      ).catch(() => { step("EB: DOB waitForSelector timed out — form may not have loaded"); });
 
-      step(`EB: DOB form detected — selects:${dobFormInfo.selectCount} combinedInput:${dobFormInfo.hasCombinedInput}("${dobFormInfo.combinedInputPlaceholder}") separateInputs:${dobFormInfo.hasSeparateInputs}`);
+      await delay(800); // extra settle time for React to finish rendering
+
+      // ── Diagnostic: dump every input/select on the page to the log ─────────
+      const dobDiag = await page.evaluate(() => {
+        const selects = Array.from(document.querySelectorAll<HTMLSelectElement>("select")).map(s => ({
+          tag: "select", name: s.name, aria: s.getAttribute("aria-label"), title: s.title, optCount: s.options.length,
+        }));
+        const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input")).map(i => ({
+          tag: "input", type: i.type, name: i.name, placeholder: i.placeholder,
+          aria: i.getAttribute("aria-label"), value: i.value, hidden: i.type === "hidden",
+        }));
+        return { selects, inputs };
+      });
+      step(`EB: DOB page DOM — selects:[${dobDiag.selects.map(s => `${s.aria||s.name||s.title}(${s.optCount}opts)`).join(",")}] inputs:[${dobDiag.inputs.map(i => `${i.type}:ph="${i.placeholder}":aria="${i.aria}":val="${i.value}"`).join(",")}]`);
+
+      // Instagram date format is MM/DD/YYYY
+      const mm = String(month).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      const yyyy = String(year);
+      const dateStr = `${mm}/${dd}/${yyyy}`;
 
       let dobFilled = false;
 
       // ── Path A: three <select> dropdowns (older signup flow) ───────────────
-      if (dobFormInfo.selectCount >= 2) {
+      if (dobDiag.selects.length >= 2) {
         const dobResult = await page.evaluate((m: number, mn: string, d: number, y: number) => {
           function setSelectNative(sel: HTMLSelectElement, value: string) {
             const ns = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
@@ -7667,14 +7670,12 @@ export async function createInstagramAccountViaEBForm(params: {
           }
           const all = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
           let mf = false, df = false, yf = false;
-          // Pass 1: by label
           for (const sel of all) {
             const lbl = (sel.title || sel.getAttribute("aria-label") || sel.getAttribute("name") || "").toLowerCase();
             if (!mf && lbl.includes("month")) { const v = findOpt(sel, m, mn); if (v !== null) { setSelectNative(sel, v); mf = true; } }
             else if (!df && lbl.includes("day")) { const v = findOpt(sel, d, String(d)); if (v !== null) { setSelectNative(sel, v); df = true; } }
             else if (!yf && (lbl.includes("year") || lbl.includes("yr"))) { const v = findOpt(sel, y, String(y)); if (v !== null) { setSelectNative(sel, v); yf = true; } }
           }
-          // Pass 2: positional (month=0, day=1, year=2)
           if ((!mf || !df || !yf) && all.length >= 3) {
             if (!mf) { const v = findOpt(all[0], m, mn); if (v !== null) { setSelectNative(all[0], v); mf = true; } }
             if (!df) { const v = findOpt(all[1], d, String(d)); if (v !== null) { setSelectNative(all[1], v); df = true; } }
@@ -7683,82 +7684,51 @@ export async function createInstagramAccountViaEBForm(params: {
           return { mf, df, yf };
         }, month, mName, day, year);
         dobFilled = dobResult.mf && dobResult.df && dobResult.yf;
-        step(`EB: select DOB fill — month:${dobResult.mf} day:${dobResult.df} year:${dobResult.yf}`);
+        step(`EB: select DOB fill — month:${dobResult.mf} day:${dobResult.df} year:${dobResult.yf} → filled:${dobFilled}`);
       }
 
-      // ── Path B: single "Birthday (MM/DD/YYYY)" text input — current IG flow ──
-      // Instagram now shows one combined text field. We must type into it with real
-      // keyboard events because React's onChange tracks keystrokes, not value assignment.
-      // Format: MM/DD/YYYY  (e.g. day=23, month=4, year=2006 → "04/23/2006")
-      if (!dobFilled && dobFormInfo.hasCombinedInput) {
-        const mm = String(month).padStart(2, "0");
-        const dd = String(day).padStart(2, "0");
-        const yyyy = String(year);
-        // Determine expected format from placeholder — IG uses MM/DD/YYYY
-        const ph = dobFormInfo.combinedInputPlaceholder.toUpperCase();
-        // Build date string matching the placeholder format
-        let dateStr: string;
-        if (ph.startsWith("DD")) {
-          dateStr = `${dd}/${mm}/${yyyy}`;   // DD/MM/YYYY
-        } else {
-          dateStr = `${mm}/${dd}/${yyyy}`;   // MM/DD/YYYY (Instagram default)
-        }
-        step(`EB: combined date field detected — typing "${dateStr}" (format from placeholder: "${dobFormInfo.combinedInputPlaceholder}")`);
-
-        // Find the element and click it to focus
-        const inputHandle = await page.$([
+      // ── Path B: single text input (current Instagram flow) ─────────────────
+      // Instagram now uses ONE combined text field for the birthday. Its placeholder
+      // attribute may not be in the DOM at query time (React-controlled), so we do NOT
+      // rely on attribute matching. Instead we take the FIRST visible non-hidden,
+      // non-password input on the page (there is only one on the birthday screen).
+      // We type via real keyboard events so React's onChange fires on every character.
+      if (!dobFilled) {
+        // Try labelled selectors first (belt-and-suspenders), then fall back to first visible input
+        const dobInputHandle = await page.$([
           'input[placeholder*="Birthday" i]',
           'input[aria-label*="Birthday" i]',
           'input[placeholder*="birth" i]',
           'input[aria-label*="birth" i]',
           'input[placeholder*="MM/DD" i]',
           'input[placeholder*="DD/MM" i]',
+          'input[placeholder*="date" i]',
+          // Broad fallback: first visible text-like input on the page
+          'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="password"])',
         ].join(", ")).catch(() => null);
 
-        if (inputHandle) {
-          // Click to focus, select all existing content, then type the date
-          await inputHandle.click({ clickCount: 3 });
-          await delay(150);
-          await page.keyboard.press("Backspace"); // clear any pre-filled content
-          await delay(100);
-          await page.keyboard.type(dateStr, { delay: 60 });
-          await delay(300);
-          // Verify what landed in the field
-          const actualVal = await page.evaluate(el => (el as HTMLInputElement).value, inputHandle).catch(() => "?");
-          step(`EB: typed date "${dateStr}" — field now shows "${actualVal}"`);
-          dobFilled = actualVal.replace(/\D/g, "").length >= 6; // at least 6 digits (MMDDYYYY)
-        } else {
-          step("EB: combined date input found by evaluate but not by Puppeteer selector — trying keyboard fallback");
-          // Last resort: tab to the first visible input on the page and type
-          await page.keyboard.press("Tab");
+        if (dobInputHandle) {
+          // Triple-click to select-all, then type overwrites whatever is there
+          await dobInputHandle.click({ clickCount: 3 });
           await delay(200);
-          await page.keyboard.type(dateStr, { delay: 60 });
-          dobFilled = true;
+          // Also select-all via keyboard in case triple-click didn't work
+          await page.keyboard.down("Control");
+          await page.keyboard.press("a");
+          await page.keyboard.up("Control");
+          await delay(100);
+          // Type the date character by character so React sees each keypress
+          await page.keyboard.type(dateStr, { delay: 80 });
+          await delay(400);
+          const actualVal = await page.evaluate(el => (el as HTMLInputElement).value, dobInputHandle).catch(() => "?");
+          step(`EB: typed date "${dateStr}" into first visible input — field now shows "${actualVal}"`);
+          dobFilled = actualVal.replace(/\D/g, "").length >= 6;
+          if (!dobFilled) {
+            step(`EB: WARNING — field value "${actualVal}" looks wrong after typing, will try Next anyway`);
+            dobFilled = true; // proceed — the value may be formatted by Instagram
+          }
+        } else {
+          step("EB: WARNING — no input element found on birthday page at all");
         }
-      }
-
-      // ── Path C: separate <input> fields for month / day / year ─────────────
-      if (!dobFilled && dobFormInfo.hasSeparateInputs) {
-        await page.evaluate((m: number, d: number, y: number) => {
-          function setInputNative(inp: HTMLInputElement, value: string) {
-            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-            if (ns) ns.call(inp, value); else inp.value = value;
-            inp.dispatchEvent(new Event("input",  { bubbles: true }));
-            inp.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-          for (const inp of Array.from(document.querySelectorAll<HTMLInputElement>("input"))) {
-            const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
-            if (lbl.includes("month")) setInputNative(inp, String(m));
-            else if (lbl.includes("day")) setInputNative(inp, String(d));
-            else if (lbl.includes("year") || lbl.includes("yr")) setInputNative(inp, String(y));
-          }
-        }, month, day, year);
-        dobFilled = true;
-        step("EB: separate input fields filled");
-      }
-
-      if (!dobFilled) {
-        step("EB: WARNING — could not identify DOB form fields; proceeding anyway (may fail)");
       }
 
       await delay(400);

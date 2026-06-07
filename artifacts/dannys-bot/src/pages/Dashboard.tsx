@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.819",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: date of birth now reliably typed into Instagram's current birthday form. Removed dependency on placeholder/aria-label attribute matching (Instagram's React app does not always set these in the DOM). The fix now waits for any visible input to appear, dumps a full diagnostic of every input and select on the page to the log, then types the date into the first visible non-hidden input using real keyboard events — this works regardless of how Instagram labels the field." },
+    ],
+  },
+  {
     version: "1.0.818",
     date: "7 Jun 2026",
     items: [
