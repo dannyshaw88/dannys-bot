@@ -7296,16 +7296,48 @@ export async function createInstagramAccountViaEBForm(params: {
     // Chrome sends these automatically on real Android but headless Puppeteer needs
     // explicit injection — without them Instagram sees UA-Hints mismatch and flags
     // the session as inconsistent.
+    // CDP session — reused for all taps and text inserts throughout the signup flow
+    let cdp: any = null;
     try {
-      const _cdp = await page.createCDPSession();
-      await _cdp.send("Network.setExtraHTTPHeaders", {
+      cdp = await page.createCDPSession();
+      await cdp.send("Network.setExtraHTTPHeaders", {
         headers: {
           "Accept-Language":    "en-US,en;q=0.9",
           "sec-ch-ua-mobile":   "?1",
           "sec-ch-ua-platform": '"Android"',
         },
       });
-    } catch { /* non-fatal — CDP might not be available */ }
+    } catch { /* non-fatal */ }
+
+    // synthesizeTapGesture — fires touchstart/touchend/click with pointerType="touch",
+    // identical to a real Android device. No mouse events, no desktop fingerprint.
+    const tap = async (x: number, y: number) => {
+      if (!cdp) return;
+      try {
+        await cdp.send("Input.synthesizeTapGesture", { x, y, duration: 60, tapCount: 1, gestureSourceType: "touch" });
+        await delay(120);
+      } catch {}
+    };
+
+    // Tap to focus → JS clear via React-safe native setter → Input.insertText (mobile IME style).
+    // No keyDown/keyUp key codes, no Ctrl+A, no mouse events.
+    const clearAndType = async (x: number, y: number, text: string) => {
+      await tap(x, y);
+      await delay(400);
+      try {
+        await page.evaluate(() => {
+          const el = document.activeElement as HTMLInputElement;
+          if (!el) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+          if (setter?.set) setter.set.call(el, "");
+          else (el as HTMLInputElement).value = "";
+          el.dispatchEvent(new Event("input",  { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      } catch {}
+      await delay(120);
+      try { if (cdp) await cdp.send("Input.insertText", { text }); } catch {}
+    };
 
     // Apply stealth patches BEFORE any navigation so Instagram never sees the
     // headless fingerprint (navigator.webdriver, canvas, WebGL, battery, etc.)
@@ -7326,179 +7358,223 @@ export async function createInstagramAccountViaEBForm(params: {
     const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
     const PHONE_GATE_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "use your email address"];
 
-    const _waitForEmailForm = async (maxMs: number): Promise<boolean> => {
-      const deadline = Date.now() + maxMs;
-      while (Date.now() < deadline) {
-        const found = await page.evaluate((sel: string) => !!document.querySelector(sel), EMAIL_FORM_SELECTORS).catch(() => false);
-        if (found) return true;
-        await delay(400);
-      }
-      return false;
-    };
+    // ── Navigate to homepage — same starting point as ebManager.ts ───────────
+    step("EB: navigating to Instagram homepage...");
+    try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
+    catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
+    await delay(1500);
 
-    // ── Navigate directly to the email signup URL ────────────────────────────
-    // Instagram redirects / to the phone gate — skip it entirely.
-    // Navigate straight to /accounts/signup/email/ (the new SPA route) or
-    // the legacy /accounts/emailsignup/ as a fallback. Both serve the email form.
-    const EMAIL_URLS = [
-      "https://www.instagram.com/accounts/signup/email/",
-      "https://www.instagram.com/accounts/emailsignup/",
+    // ── Cookie banner — tap only (synthesizeTapGesture) ──────────────────────
+    const COOKIE_ACCEPT_LABELS = [
+      "allow all cookies", "accept all cookies", "allow all", "accept all",
+      "allow essential and optional cookies", "accept cookies",
+      "allow cookies", "alle cookies akzeptieren", "accepter tout",
+      "aceptar todo", "accetta tutto", "tillåt alla", "alle accepteren",
     ];
-    let emailFormReady = false;
-    for (const url of EMAIL_URLS) {
-      step(`EB: navigating to ${url}...`);
-      try { await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 }); }
-      catch (e: any) { step(`EB: nav warning: ${e?.message?.slice(0, 80)}`); }
-      await dismissCookieBanner(page);
-      await delay(800);
-      emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6000 })
-        .then(() => true).catch(() => false);
-      if (emailFormReady) { step(`EB: email form ready at ${url} ✓`); break; }
-      // Log what we see if not found
-      const diagUrl = await page.evaluate(() => `${window.location.href} | inputs: ${Array.from(document.querySelectorAll("input")).map(i => i.getAttribute("aria-label") || i.type).join(",")}`).catch(() => "");
-      step(`EB: email form not found at ${url} — ${diagUrl}`);
-    }
-
-    // ── Phone gate fallback ──────────────────────────────────────────────────
-    // Instagram now redirects both email signup URLs to /accounts/signup/phone/.
-    // If we ended up there, find and click the "Sign up with email" link/button,
-    // then wait for the email form to appear.
-    if (!emailFormReady) {
-      step("EB: email form not found via direct URL — checking for phone gate 'Sign up with email' link...");
-
-      // Use real mouse click via getBoundingClientRect so React's pointer-event
-      // handlers fire correctly (synthetic el.click() is ignored by React).
-      const phoneGateCoords = await page.evaluate((labels: string[]) => {
-        const candidates = Array.from(document.querySelectorAll<HTMLElement>("a, button, [role='button'], span, div"));
-        for (const el of candidates) {
-          const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
-          if (labels.some(l => txt === l || txt.includes(l))) {
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) {
-              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-            }
-          }
+    for (let att = 0; att < 6; att++) {
+      const cPos = await page.evaluate((labels: string[]) => {
+        const a = document.querySelector<HTMLElement>("[data-cookiebanner='accept_button']");
+        if (a) { const r = a.getBoundingClientRect(); if (r.width > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; }
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("button,[role='button'],a"))) {
+          const t = (el.innerText || el.textContent || "").trim().toLowerCase();
+          if (labels.indexOf(t) !== -1) { const r = el.getBoundingClientRect(); if (r.width > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; }
         }
         return null;
-      }, PHONE_GATE_LABELS);
-
-      if (phoneGateCoords) {
-        step(`EB: clicking 'Sign up with email' button at (${Math.round(phoneGateCoords.x)}, ${Math.round(phoneGateCoords.y)})...`);
-        await page.mouse.click(phoneGateCoords.x, phoneGateCoords.y);
-        await delay(1800);
-        await dismissCookieBanner(page);
-        emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 10000 })
-          .then(() => true).catch(() => false);
-        if (emailFormReady) {
-          step("EB: email form ready after phone gate click ✓");
-        } else {
-          // One more attempt — navigate to legacy URL after clicking the link
-          step("EB: email form still not ready after phone gate click — trying legacy URL one more time...");
-          try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 20000 }); }
-          catch (e: any) { step(`EB: legacy nav warning: ${e?.message?.slice(0, 80)}`); }
-          await delay(800);
-          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 8000 })
-            .then(() => true).catch(() => false);
-          if (emailFormReady) step("EB: email form ready after legacy fallback ✓");
-          else step("EB: email form still not found after all attempts");
+      }, COOKIE_ACCEPT_LABELS).catch(() => null);
+      if (!cPos) break;
+      step(`EB: tapping cookie banner (attempt ${att + 1})...`);
+      await tap(cPos.x, cPos.y);
+      await delay(1500);
+      const stillUp = await page.evaluate((labels: string[]) => {
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("button,[role='button'],a"))) {
+          if (labels.indexOf((el.innerText || el.textContent || "").trim().toLowerCase()) !== -1) return true;
         }
+        return false;
+      }, COOKIE_ACCEPT_LABELS).catch(() => false);
+      if (!stillUp) { step("EB: cookie banner dismissed ✓"); break; }
+    }
+    await delay(1000);
+
+    // ── Tap "Sign up" on the homepage — same as ebManager.ts ────────────────
+    // Find via CSS href selector, fall back to text match. scrollIntoView before tap.
+    // Poll for navigation OR phone gate appearing in DOM (same-URL modal).
+    let signupNavigated = false;
+    const homepageUrl = page.url();
+    for (let att = 0; att < 4 && !signupNavigated; att++) {
+      const sPos = await page.evaluate(() => {
+        let el: HTMLElement | null = document.querySelector<HTMLElement>("a[href*='/accounts/signup']");
+        if (!el) {
+          const all = Array.from(document.querySelectorAll<HTMLElement>("a,button,[role='button']"));
+          el = all.find(e => (e.textContent || "").trim().toLowerCase() === "sign up") ?? null;
+          if (!el) el = all.find(e => (e.textContent || "").trim().toLowerCase().includes("sign up")) ?? null;
+        }
+        if (el) {
+          el.scrollIntoView({ behavior: "instant", block: "center" });
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        }
+        return null;
+      }).catch(() => null);
+
+      if (sPos) {
+        step(`EB: tapping 'Sign up' at (${sPos.x}, ${sPos.y}) — attempt ${att + 1}...`);
+        await tap(sPos.x, sPos.y);
+        await delay(400);
+        // JS .click() fallback — fires no mouse events, coordinate-independent
+        await page.evaluate(() => {
+          let el: HTMLElement | null = document.querySelector<HTMLElement>("a[href*='/accounts/signup']");
+          if (!el) {
+            const all = Array.from(document.querySelectorAll<HTMLElement>("a,button,[role='button']"));
+            el = all.find(e => (e.textContent || "").trim().toLowerCase().includes("sign up")) ?? null;
+          }
+          if (el) el.click();
+        }).catch(() => {});
       } else {
-        step("EB: no 'Sign up with email' link found on phone gate — page may still be loading or Instagram changed the layout");
-        // Short extra wait then try once more
+        step(`EB: 'Sign up' link not found (attempt ${att + 1}) — waiting 2 s for page to settle...`);
         await delay(2000);
-        const retryCoords = await page.evaluate((labels: string[]) => {
-          const candidates = Array.from(document.querySelectorAll<HTMLElement>("a, button, [role='button'], span, div"));
-          for (const el of candidates) {
+        continue;
+      }
+
+      // Poll for URL change OR phone gate appearing in DOM (Instagram sometimes shows modal at same URL)
+      for (let poll = 0; poll < 10 && !signupNavigated; poll++) {
+        await delay(500);
+        const nowUrl = page.url();
+        if (nowUrl !== homepageUrl) { signupNavigated = true; step(`EB: navigated → ${nowUrl.replace("https://www.instagram.com", "ig.com")} ✓`); break; }
+        const pgVisible = await page.evaluate((labels: string[]) => {
+          const all = Array.from(document.querySelectorAll<HTMLElement>("button,a,[role='button']"));
+          return all.some(e => {
+            const t = (e.textContent || "").trim().toLowerCase();
+            return labels.some(l => t === l || t.includes(l));
+          }) || !!document.querySelector("input[name='phoneNumber'],input[name='phone'],input[type='tel']");
+        }, PHONE_GATE_LABELS).catch(() => false);
+        if (pgVisible) { signupNavigated = true; step("EB: phone gate visible in DOM ✓"); break; }
+      }
+
+      if (!signupNavigated && att < 3) {
+        step(`EB: navigation not detected after attempt ${att + 1} — retrying...`);
+        await delay(1000);
+      }
+    }
+
+    if (!signupNavigated) {
+      const diagText = await page.evaluate(() => document.body.innerText.slice(0, 200)).catch(() => "");
+      step(`EB: could not navigate past homepage — page: "${diagText}"`);
+      await cleanup();
+      return { status: "error", message: "Could not navigate past Instagram homepage — 'Sign up' tap did not trigger navigation. Check proxy and try again.", steps };
+    }
+    await delay(1500);
+
+    // ── Tap "Sign up with email" on the phone gate ───────────────────────────
+    let emailFormReady = await page.evaluate((sel: string) => !!document.querySelector(sel), EMAIL_FORM_SELECTORS).catch(() => false);
+
+    if (!emailFormReady) {
+      step("EB: looking for 'Sign up with email' on phone gate...");
+      for (let att = 0; att < 4; att++) {
+        const ePos = await page.evaluate((labels: string[]) => {
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role='button'],span,div"))) {
             const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
             if (labels.some(l => txt === l || txt.includes(l))) {
               const r = el.getBoundingClientRect();
-              if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+              if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
             }
           }
           return null;
-        }, PHONE_GATE_LABELS);
-        if (retryCoords) {
-          step("EB: found 'Sign up with email' on retry — clicking...");
-          await page.mouse.click(retryCoords.x, retryCoords.y);
+        }, PHONE_GATE_LABELS).catch(() => null);
+
+        if (ePos) {
+          step(`EB: tapping 'Sign up with email' at (${ePos.x}, ${ePos.y}) — attempt ${att + 1}...`);
+          await tap(ePos.x, ePos.y);
           await delay(1800);
-          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 10000 })
-            .then(() => true).catch(() => false);
-          if (emailFormReady) step("EB: email form ready after retry click ✓");
+          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6000 }).then(() => true).catch(() => false);
+          if (emailFormReady) { step("EB: email form ready ✓"); break; }
+          step(`EB: email form not ready after tap ${att + 1} — retrying...`);
+        } else {
+          step(`EB: 'Sign up with email' not found (attempt ${att + 1}) — waiting 2 s...`);
+          await delay(2000);
         }
       }
+    } else {
+      step("EB: already on email form (phone gate skipped) ✓");
     }
 
-    // Final diagnostic before attempting to fill
-    const finalDiag = await page.evaluate(() => ({
-      url: window.location.href,
-      inputs: Array.from(document.querySelectorAll("input")).map(el => ({
-        name: el.name, type: el.type, placeholder: el.placeholder,
-        autocomplete: el.autocomplete, id: el.id, ariaLabel: el.getAttribute("aria-label"),
-      })),
-      bodySnippet: document.body.innerText.replace(/\s+/g, " ").slice(0, 400),
-    })).catch(() => null);
-    if (finalDiag) {
-      step(`EB final diag: url=${finalDiag.url}`);
-      step(`EB final diag: inputs=${JSON.stringify(finalDiag.inputs)}`);
-      step(`EB final diag: page="${finalDiag.bodySnippet}"`);
+    if (!emailFormReady) {
+      const diagUrl = page.url();
+      const diagText = await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => "");
+      step(`EB: email form not found — url=${diagUrl} page="${diagText}"`);
+      await cleanup();
+      return { status: "error", message: "Could not reach the email signup form — Instagram may have changed their signup flow", steps };
     }
-    try { await page.screenshot({ path: `/tmp/eb-diag-final.png`, fullPage: true }); } catch {}
 
+    // Final diagnostic
+    try { await page.screenshot({ path: "/tmp/eb-diag-final.png", fullPage: true }); } catch {}
     await delay(300);
-
     step("EB: filling signup form...");
 
-    const emailFilled = await _fillSignupInput(page, [
-      'input[aria-label="Email"]', 'input[name="emailOrPhone"]', 'input[type="email"]',
-      'input[placeholder*="email" i]', 'input[autocomplete="email"]',
-      'input[name="email"]', 'input[name="emailAddress"]',
-    ], email);
-    if (!emailFilled) {
+    // ── Fill each field: tap (synthesizeTapGesture) → JS clear → Input.insertText ──
+    const getFieldCoords = async (selectors: string[]) => {
+      return page.evaluate((sels: string[]) => {
+        for (const sel of sels) {
+          const el = document.querySelector<HTMLInputElement>(sel);
+          if (el) { const r = el.getBoundingClientRect(); if (r.width > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; }
+        }
+        return null;
+      }, selectors).catch(() => null);
+    };
+
+    const emailCoords = await getFieldCoords(['input[aria-label="Email"]', 'input[name="emailOrPhone"]', 'input[type="email"]', 'input[placeholder*="email" i]', 'input[name="email"]']);
+    if (!emailCoords) {
       step("EB: could not find email input — Instagram may have changed their form layout");
       await cleanup();
       return { status: "error", message: "Could not find email field on Instagram's signup page — the form layout may have changed", steps };
     }
-    // Tab out of the field to fire blur/change events — Instagram's React form
-    // only enables the Next button after the email field loses focus and validates.
-    await page.keyboard.press("Tab");
+    await clearAndType(emailCoords.x, emailCoords.y, email);
+    // Blur to trigger Instagram's validation — no Tab key, JS blur only
+    await page.evaluate(() => { if (document.activeElement) (document.activeElement as HTMLElement).blur(); }).catch(() => {});
     await delay(600);
     step("EB: email filled ✓");
-    await delay(200);
 
-    await _fillSignupInput(page, ['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]'], firstName);
-    step("EB: full name filled ✓");
-    await delay(400);
+    const nameCoords = await getFieldCoords(['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]']);
+    if (nameCoords) {
+      await clearAndType(nameCoords.x, nameCoords.y, firstName);
+      await page.evaluate(() => { if (document.activeElement) (document.activeElement as HTMLElement).blur(); }).catch(() => {});
+      step("EB: full name filled ✓");
+      await delay(400);
+    }
 
-    await _fillSignupInput(page, ['input[name="username"]', 'input[placeholder*="username" i]'], username);
-    step("EB: username filled ✓");
-    await delay(400);
+    const usernameCoords = await getFieldCoords(['input[name="username"]', 'input[placeholder*="username" i]']);
+    if (usernameCoords) {
+      await clearAndType(usernameCoords.x, usernameCoords.y, username);
+      await page.evaluate(() => { if (document.activeElement) (document.activeElement as HTMLElement).blur(); }).catch(() => {});
+      step("EB: username filled ✓");
+      await delay(400);
+    }
 
-    await _fillSignupInput(page, ['input[name="password"]', 'input[type="password"]', 'input[placeholder*="password" i]'], password);
-    step("EB: password filled ✓");
-    await delay(800);
+    const passwordCoords = await getFieldCoords(['input[name="password"]', 'input[type="password"]', 'input[placeholder*="password" i]']);
+    if (passwordCoords) {
+      await clearAndType(passwordCoords.x, passwordCoords.y, password);
+      await page.evaluate(() => { if (document.activeElement) (document.activeElement as HTMLElement).blur(); }).catch(() => {});
+      step("EB: password filled ✓");
+      await delay(800);
+    }
 
-    // Use real mouse click (page.mouse.click) — not btn.click() inside evaluate().
-    // React's controlled forms require real OS-level pointer events; synthetic DOM
-    // clicks dispatched from page.evaluate() are ignored by React for button submission.
-    await delay(500); // let Instagram's async email-validation debounce settle
+    // ── Next button — synthesizeTapGesture only, no mouse events ────────────
+    await delay(500);
     const nextBtnCoords = await page.evaluate(() => {
       const LABELS = ["next", "sign up", "register", "create account", "continue"];
-      for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
+      for (const btn of Array.from(document.querySelectorAll<HTMLElement>("button, [role='button']"))) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
         if (LABELS.some(l => txt === l || txt.startsWith(l))) {
           const r = btn.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
         }
       }
-      const sub = document.querySelector<HTMLElement>('button[type="submit"]');
-      if (sub) { const r = sub.getBoundingClientRect(); if (r.width > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+      const sub = document.querySelector<HTMLElement>("button[type='submit']");
+      if (sub) { const r = sub.getBoundingClientRect(); if (r.width > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; }
       return null;
     });
     const signUpClicked = !!nextBtnCoords;
     if (nextBtnCoords) {
-      await page.mouse.move(nextBtnCoords.x, nextBtnCoords.y);
-      await delay(100);
-      await page.mouse.click(nextBtnCoords.x, nextBtnCoords.y);
+      await tap(nextBtnCoords.x, nextBtnCoords.y);
     }
     if (!signUpClicked) {
       step("EB: could not find Sign Up button");

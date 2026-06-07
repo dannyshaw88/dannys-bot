@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.810",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Replit Ghost Browser signup: navigation now starts at the Instagram homepage and taps through — 'Sign up' link → phone gate → 'Sign up with email' — using synthesizeTapGesture (mobile touch only, no mouse events). All field input uses tap to focus, JS native setter to clear, and Input.insertText to type. Blur replaces Tab key. Identical to the Windows Electron implementation." },
+    ],
+  },
+  {
     version: "1.0.809",
     date: "7 Jun 2026",
     items: [
