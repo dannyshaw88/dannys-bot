@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.807",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: after accepting the cookie banner, Instagram sometimes redirects back to the homepage instead of the email signup form. The tool now detects this and automatically re-navigates to the email signup page, so account creation continues without getting stuck." },
+      { category: "Fix", text: "Ghost Browser: removed the yellow 'Waiting for verification code via IMAP' prompt — only the first step log balloon is shown while waiting for the code." },
+      { category: "Fix", text: "Ghost Browser: Nuke Environment button is now always clickable, even while the signup tool is running, so you can abort and reset at any time." },
+    ],
+  },
+  {
     version: "1.0.806",
     date: "7 Jun 2026",
     items: [

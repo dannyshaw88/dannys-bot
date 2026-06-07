@@ -1029,16 +1029,6 @@ export function CreateGhostPage() {
                     {signupStatus}
                   </div>
                 )}
-                {codePending && signupRunning && (
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-amber-600 font-medium">
-                      ⏳ Signup is waiting for the verification code — fetch via IMAP or enter it manually above, then click Submit Code.
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-mono">
-                      Elapsed: {Math.floor(codeWaitSecs / 60)}:{String(codeWaitSecs % 60).padStart(2, "0")} &nbsp;·&nbsp; Timeout: 5:00
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 
@@ -1063,12 +1053,12 @@ export function CreateGhostPage() {
                   : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
               </Button>
 
-              {/* Nuke Environment */}
+              {/* Nuke Environment — always clickable, even while signup is running */}
               <Button
                 variant="outline"
                 className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
                 onClick={handleFresh}
-                disabled={browserState === "opening" || browserState === "resetting" || signupRunning}
+                disabled={browserState === "opening" || browserState === "resetting"}
                 title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
               >
                 {browserState === "resetting"

@@ -4471,13 +4471,12 @@ export function startEbIpcServer(
                 }
               }
               // Extra settling time so any post-dismiss navigation completes
-              await sleep(1000);
+              await sleep(3000);
             }
 
             // ── Step 2: Handle phone gate or homepage redirect ───────────────
             // Instagram often redirects /accounts/emailsignup/ → /accounts/signup/phone/
-            // The URL still contains "signup" so the old single-condition check silently
-            // skipped the phone-gate click. Now we detect the phone gate explicitly.
+            // or back to the homepage after cookie acceptance.
             {
               const curUrl = wc.getURL();
               const onPhoneGate = curUrl.includes("signup/phone");
@@ -4493,14 +4492,22 @@ export function startEbIpcServer(
                 if (!foundEmail) { relay("❌ 'Sign up with email' not found on phone gate — stopping."); return; }
                 await sleep(2500);
               } else if (onHomepage) {
-                // Landed on homepage — click through to signup flow first
-                relay("Finding 'Create new account'…");
-                const foundCreate = await waitAndTap(["create new account", "sign up", "create account"], "Create new account");
-                if (!foundCreate) { relay("❌ 'Create new account' button not found — stopping. Please check the browser state."); return; }
-                await sleep(2000);
-                const foundEmail = await waitAndTap(["sign up with email", "use email", "use mobile number or email", "email"], "Sign up with email");
-                if (!foundEmail) { relay("❌ 'Sign up with email' option not found — stopping. Please check the browser state."); return; }
-                await sleep(2000);
+                // Cookie acceptance redirected to homepage — re-navigate directly to the
+                // email signup URL. The cookie banner will NOT reappear since we already
+                // accepted it, so we'll land straight on the email form.
+                relay("Redirected to homepage after cookie accept — re-navigating to email signup…");
+                await navAndWait("https://www.instagram.com/accounts/emailsignup/");
+                // Check again for phone gate after re-navigation
+                const url2 = wc.getURL();
+                if (url2.includes("signup/phone")) {
+                  relay("Phone gate after re-nav — tapping 'Sign up with email'…");
+                  const foundEmail = await waitAndTap(
+                    ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address", "email address"],
+                    "Sign up with email (phone gate)"
+                  );
+                  if (!foundEmail) { relay("❌ 'Sign up with email' not found on phone gate — stopping."); return; }
+                  await sleep(2500);
+                }
               }
               // else: already on emailsignup form — no action needed
             }
