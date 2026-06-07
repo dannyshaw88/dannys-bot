@@ -7620,78 +7620,148 @@ export async function createInstagramAccountViaEBForm(params: {
       //  3. If no <select> elements exist, fall back to <input> fields (some IG flows)
       // ─────────────────────────────────────────────────────────────────────────
 
-      const dobResult = await page.evaluate((m: number, mn: string, d: number, y: number) => {
-        function setSelectNative(sel: HTMLSelectElement, value: string): boolean {
-          const ns = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
-          if (ns) ns.call(sel, value); else sel.value = value;
-          sel.dispatchEvent(new Event("input",  { bubbles: true }));
-          sel.dispatchEvent(new Event("change", { bubbles: true }));
-          return true;
-        }
-        function setInputNative(inp: HTMLInputElement, value: string): boolean {
-          const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-          if (ns) ns.call(inp, value); else inp.value = value;
-          inp.dispatchEvent(new Event("input",  { bubbles: true }));
-          inp.dispatchEvent(new Event("change", { bubbles: true }));
-          return true;
-        }
-        function findSelectOption(sel: HTMLSelectElement, num: number, name: string): string | null {
-          const ns = String(num);
-          for (const opt of Array.from(sel.options)) {
-            if (opt.value === ns || opt.text === name || opt.text.trim().startsWith(name.slice(0, 3)) || opt.text === ns) return opt.value;
-          }
-          return null;
-        }
+      // ── Detect which DOB form Instagram is showing ─────────────────────────
+      // Instagram shows two different DOB UIs depending on the signup flow:
+      //   A) Three <select> dropdowns (month / day / year) — older flow
+      //   B) Single <input type="text"> with placeholder "Birthday (MM/DD/YYYY)" — newer flow
+      // We detect which is present and handle each correctly.
+      const dobFormInfo = await page.evaluate(() => {
+        const selects = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
+        // Combined date input: placeholder/aria-label contains "birthday", "birth", "MM/DD"
+        const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>("input"));
+        const combinedInput = allInputs.find(inp => {
+          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
+          return lbl.includes("birthday") || lbl.includes("birth") || lbl.includes("mm/dd") || lbl.includes("dd/mm") || lbl.includes("date of birth");
+        });
+        const separateMonthInput = allInputs.find(inp => {
+          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
+          return lbl.includes("month");
+        });
+        return {
+          selectCount: selects.length,
+          hasCombinedInput: !!combinedInput,
+          combinedInputPlaceholder: combinedInput?.placeholder ?? combinedInput?.getAttribute("aria-label") ?? "",
+          hasSeparateInputs: !!separateMonthInput,
+        };
+      });
 
-        const allSelects = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
-        let monthFilled = false, dayFilled = false, yearFilled = false;
+      step(`EB: DOB form detected — selects:${dobFormInfo.selectCount} combinedInput:${dobFormInfo.hasCombinedInput}("${dobFormInfo.combinedInputPlaceholder}") separateInputs:${dobFormInfo.hasSeparateInputs}`);
 
-        // Pass 1: labelled selects
-        for (const sel of allSelects) {
-          const lbl = (sel.title || sel.getAttribute("aria-label") || sel.getAttribute("name") || "").toLowerCase();
-          if (!monthFilled && lbl.includes("month")) {
-            const v = findSelectOption(sel, m, mn);
-            if (v !== null) { setSelectNative(sel, v); monthFilled = true; }
-          } else if (!dayFilled && lbl.includes("day")) {
-            const v = findSelectOption(sel, d, String(d));
-            if (v !== null) { setSelectNative(sel, v); dayFilled = true; }
-          } else if (!yearFilled && (lbl.includes("year") || lbl.includes("yr"))) {
-            const v = findSelectOption(sel, y, String(y));
-            if (v !== null) { setSelectNative(sel, v); yearFilled = true; }
+      let dobFilled = false;
+
+      // ── Path A: three <select> dropdowns (older signup flow) ───────────────
+      if (dobFormInfo.selectCount >= 2) {
+        const dobResult = await page.evaluate((m: number, mn: string, d: number, y: number) => {
+          function setSelectNative(sel: HTMLSelectElement, value: string) {
+            const ns = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
+            if (ns) ns.call(sel, value); else sel.value = value;
+            sel.dispatchEvent(new Event("input",  { bubbles: true }));
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
           }
+          function findOpt(sel: HTMLSelectElement, num: number, name: string): string | null {
+            const ns = String(num);
+            for (const opt of Array.from(sel.options)) {
+              if (opt.value === ns || opt.text === name || opt.text.trim().startsWith(name.slice(0, 3)) || opt.text === ns) return opt.value;
+            }
+            return null;
+          }
+          const all = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
+          let mf = false, df = false, yf = false;
+          // Pass 1: by label
+          for (const sel of all) {
+            const lbl = (sel.title || sel.getAttribute("aria-label") || sel.getAttribute("name") || "").toLowerCase();
+            if (!mf && lbl.includes("month")) { const v = findOpt(sel, m, mn); if (v !== null) { setSelectNative(sel, v); mf = true; } }
+            else if (!df && lbl.includes("day")) { const v = findOpt(sel, d, String(d)); if (v !== null) { setSelectNative(sel, v); df = true; } }
+            else if (!yf && (lbl.includes("year") || lbl.includes("yr"))) { const v = findOpt(sel, y, String(y)); if (v !== null) { setSelectNative(sel, v); yf = true; } }
+          }
+          // Pass 2: positional (month=0, day=1, year=2)
+          if ((!mf || !df || !yf) && all.length >= 3) {
+            if (!mf) { const v = findOpt(all[0], m, mn); if (v !== null) { setSelectNative(all[0], v); mf = true; } }
+            if (!df) { const v = findOpt(all[1], d, String(d)); if (v !== null) { setSelectNative(all[1], v); df = true; } }
+            if (!yf) { const v = findOpt(all[2], y, String(y)); if (v !== null) { setSelectNative(all[2], v); yf = true; } }
+          }
+          return { mf, df, yf };
+        }, month, mName, day, year);
+        dobFilled = dobResult.mf && dobResult.df && dobResult.yf;
+        step(`EB: select DOB fill — month:${dobResult.mf} day:${dobResult.df} year:${dobResult.yf}`);
+      }
+
+      // ── Path B: single "Birthday (MM/DD/YYYY)" text input — current IG flow ──
+      // Instagram now shows one combined text field. We must type into it with real
+      // keyboard events because React's onChange tracks keystrokes, not value assignment.
+      // Format: MM/DD/YYYY  (e.g. day=23, month=4, year=2006 → "04/23/2006")
+      if (!dobFilled && dobFormInfo.hasCombinedInput) {
+        const mm = String(month).padStart(2, "0");
+        const dd = String(day).padStart(2, "0");
+        const yyyy = String(year);
+        // Determine expected format from placeholder — IG uses MM/DD/YYYY
+        const ph = dobFormInfo.combinedInputPlaceholder.toUpperCase();
+        // Build date string matching the placeholder format
+        let dateStr: string;
+        if (ph.startsWith("DD")) {
+          dateStr = `${dd}/${mm}/${yyyy}`;   // DD/MM/YYYY
+        } else {
+          dateStr = `${mm}/${dd}/${yyyy}`;   // MM/DD/YYYY (Instagram default)
         }
+        step(`EB: combined date field detected — typing "${dateStr}" (format from placeholder: "${dobFormInfo.combinedInputPlaceholder}")`);
 
-        // Pass 2: positional fallback — Instagram's standard order is month, day, year
-        if ((!monthFilled || !dayFilled || !yearFilled) && allSelects.length >= 3) {
-          if (!monthFilled) {
-            const v = findSelectOption(allSelects[0], m, mn);
-            if (v !== null) { setSelectNative(allSelects[0], v); monthFilled = true; }
-          }
-          if (!dayFilled) {
-            const v = findSelectOption(allSelects[1], d, String(d));
-            if (v !== null) { setSelectNative(allSelects[1], v); dayFilled = true; }
-          }
-          if (!yearFilled) {
-            const v = findSelectOption(allSelects[2], y, String(y));
-            if (v !== null) { setSelectNative(allSelects[2], v); yearFilled = true; }
-          }
+        // Find the element and click it to focus
+        const inputHandle = await page.$([
+          'input[placeholder*="Birthday" i]',
+          'input[aria-label*="Birthday" i]',
+          'input[placeholder*="birth" i]',
+          'input[aria-label*="birth" i]',
+          'input[placeholder*="MM/DD" i]',
+          'input[placeholder*="DD/MM" i]',
+        ].join(", ")).catch(() => null);
+
+        if (inputHandle) {
+          // Click to focus, select all existing content, then type the date
+          await inputHandle.click({ clickCount: 3 });
+          await delay(150);
+          await page.keyboard.press("Backspace"); // clear any pre-filled content
+          await delay(100);
+          await page.keyboard.type(dateStr, { delay: 60 });
+          await delay(300);
+          // Verify what landed in the field
+          const actualVal = await page.evaluate(el => (el as HTMLInputElement).value, inputHandle).catch(() => "?");
+          step(`EB: typed date "${dateStr}" — field now shows "${actualVal}"`);
+          dobFilled = actualVal.replace(/\D/g, "").length >= 6; // at least 6 digits (MMDDYYYY)
+        } else {
+          step("EB: combined date input found by evaluate but not by Puppeteer selector — trying keyboard fallback");
+          // Last resort: tab to the first visible input on the page and type
+          await page.keyboard.press("Tab");
+          await delay(200);
+          await page.keyboard.type(dateStr, { delay: 60 });
+          dobFilled = true;
         }
+      }
 
-        // Pass 3: input field fallback (some IG flows render text inputs instead of selects)
-        if (!monthFilled || !dayFilled || !yearFilled) {
+      // ── Path C: separate <input> fields for month / day / year ─────────────
+      if (!dobFilled && dobFormInfo.hasSeparateInputs) {
+        await page.evaluate((m: number, d: number, y: number) => {
+          function setInputNative(inp: HTMLInputElement, value: string) {
+            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (ns) ns.call(inp, value); else inp.value = value;
+            inp.dispatchEvent(new Event("input",  { bubbles: true }));
+            inp.dispatchEvent(new Event("change", { bubbles: true }));
+          }
           for (const inp of Array.from(document.querySelectorAll<HTMLInputElement>("input"))) {
             const lbl = (inp.getAttribute("aria-label") || inp.placeholder || inp.getAttribute("name") || "").toLowerCase();
-            if (!monthFilled && lbl.includes("month")) { setInputNative(inp, String(m)); monthFilled = true; }
-            else if (!dayFilled && lbl.includes("day")) { setInputNative(inp, String(d)); dayFilled = true; }
-            else if (!yearFilled && (lbl.includes("year") || lbl.includes("yr"))) { setInputNative(inp, String(y)); yearFilled = true; }
+            if (lbl.includes("month")) setInputNative(inp, String(m));
+            else if (lbl.includes("day")) setInputNative(inp, String(d));
+            else if (lbl.includes("year") || lbl.includes("yr")) setInputNative(inp, String(y));
           }
-        }
+        }, month, day, year);
+        dobFilled = true;
+        step("EB: separate input fields filled");
+      }
 
-        return { monthFilled, dayFilled, yearFilled, selectCount: allSelects.length };
-      }, month, mName, day, year);
+      if (!dobFilled) {
+        step("EB: WARNING — could not identify DOB form fields; proceeding anyway (may fail)");
+      }
 
-      step(`EB: birthday fill result — month:${dobResult.monthFilled} day:${dobResult.dayFilled} year:${dobResult.yearFilled} (${dobResult.selectCount} selects found)`);
-      await delay(600);
+      await delay(400);
       step("EB: birthday filled ✓");
 
       await page.evaluate(() => {

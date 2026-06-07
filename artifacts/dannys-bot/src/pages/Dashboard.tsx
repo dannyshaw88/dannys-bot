@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.818",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: date of birth now correctly fills the single 'Birthday (MM/DD/YYYY)' text field that Instagram currently shows. Instagram changed its DOB page from three dropdown selects to one combined text input — the previous code looked for separate month/day/year fields which no longer exist, so nothing was entered. The fix detects which form type is showing (combined text input vs dropdowns) and types the date using real keyboard events in MM/DD/YYYY format so React's onChange handler registers each keystroke." },
+    ],
+  },
+  {
     version: "1.0.817",
     date: "7 Jun 2026",
     items: [
