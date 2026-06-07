@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.813",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: clicking 'Sign up' on the homepage now performs a real tap on the button — no more direct URL navigation (which Instagram detects and blocks). The app waits for the URL to reach /accounts/signup/phone before clicking 'Sign up with email'." },
+      { category: "Fix", text: "Ghost Browser signup: 'Sign up with email' is now only clicked after the URL is confirmed at /accounts/signup/phone. The email form step only runs once the URL confirms /accounts/signup/email." },
+      { category: "Improve", text: "Ghost Browser signup: added dense debug logging at every step — clickable element dumps, URL snapshots before and after each click, and clear error messages explaining why each step failed." },
+    ],
+  },
+  {
     version: "1.0.812",
     date: "7 Jun 2026",
     items: [

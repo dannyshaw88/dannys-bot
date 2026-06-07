@@ -4464,40 +4464,176 @@ export function startEbIpcServer(
               await sleep(3000);
             }
 
-            // ── Step 2: Handle phone gate or homepage ────────────────────────
-            // After accepting the cookie banner the browser stays on the homepage.
-            // From there we must click "Sign up" to reach the mobile signup page,
-            // then "Sign up with email" to reach the email form.
-            // If Instagram already redirected to the phone gate or email form, skip
-            // the relevant steps.
+            // ── Step 2: Homepage → phone gate → email form — CLICK ONLY, no URL teleporting ──
+            // Every navigation must happen by clicking a real on-screen element.
+            // navAndWait() (loadURL) is NEVER used here — Instagram detects programmatic
+            // navigation and treats it as suspicious. Each sub-step gates on the URL
+            // being CONFIRMED before the next step runs.
             {
+              // Helper: poll wc.getURL() until condition is true, with rich debug output
+              const waitForUrl = async (
+                condition: (url: string) => boolean,
+                label: string,
+                timeoutMs = 25000,
+              ): Promise<boolean> => {
+                const start = Date.now();
+                let lastUrl = "";
+                while (Date.now() - start < timeoutMs) {
+                  const url = wc.getURL();
+                  if (url !== lastUrl) {
+                    relay(`[url-gate] Waiting for "${label}" — URL: ${url}`);
+                    lastUrl = url;
+                  }
+                  if (condition(url)) {
+                    relay(`✅ [url-gate] Reached "${label}" — URL: ${url}`);
+                    return true;
+                  }
+                  await sleep(600);
+                }
+                relay(`❌ [url-gate] Timed out (${timeoutMs / 1000}s) waiting for "${label}" — last URL: ${wc.getURL()}`);
+                return false;
+              };
+
+              // Dump all clickable elements for debugging
+              const dumpClickables = async (tag: string) => {
+                const items = await js(`(function(){
+                  return Array.from(document.querySelectorAll('button,a,div[role="button"],span[role="button"]'))
+                    .map(function(e){return(e.innerText||e.textContent||'').trim().replace(/\\s+/g,' ').slice(0,80);})
+                    .filter(function(t){return t.length>1;})
+                    .slice(0,30);
+                })()`);
+                relay(`[debug/${tag}] Clickable elements: ${JSON.stringify(items)}`);
+              };
+
               const curUrl = wc.getURL();
-              const onEmailForm  = curUrl.includes("emailsignup");
-              const onPhoneGate  = !onEmailForm && curUrl.includes("signup");
-              const onHomepage   = !onEmailForm && !onPhoneGate;
+              relay(`[step2] URL at start of Step 2: ${curUrl}`);
 
+              const onEmailForm = curUrl.includes("emailsignup") || curUrl.includes("signup/email");
+              const onPhoneGate = !onEmailForm && (curUrl.includes("accounts/signup/phone") || (curUrl.includes("accounts/signup") && !curUrl.includes("email")));
+              const onHomepage  = !onEmailForm && !onPhoneGate;
+
+              relay(`[step2] onHomepage=${onHomepage}  onPhoneGate=${onPhoneGate}  onEmailForm=${onEmailForm}`);
+              await dumpClickables("step2-start");
+
+              // ── 2a: On homepage — CLICK "Sign up", wait for /accounts/signup/phone ──
               if (onHomepage) {
-                // ── 2a: Navigate directly to the phone gate ──────────────────
-                // Clicking the "Sign up" link on the homepage is unreliable —
-                // Instagram's homepage shows "Log in or sign up" (goes to login)
-                // not a standalone "Sign up" button. Navigating directly to
-                // /accounts/signup/ is reliable once the cookie banner is dismissed
-                // and the session cookies are in place.
-                relay("On homepage — navigating to signup page…");
-                await navAndWait("https://www.instagram.com/accounts/signup/");
+                relay("[step2a] On homepage — looking for 'Sign up' button to CLICK (no URL teleport)…");
+
+                const SIGNUP_LABELS = [
+                  "sign up", "create new account", "create account",
+                  "get started", "join now", "s'inscrire",
+                  "registrarse", "iscriviti", "registrieren",
+                ];
+
+                // Retry loop: click, then wait for URL gate. Up to 3 attempts.
+                let reachedPhone = false;
+                for (let attempt = 1; attempt <= 3 && !reachedPhone; attempt++) {
+                  relay(`[step2a] Attempt ${attempt}/3 — searching for Sign Up button…`);
+                  await dumpClickables(`step2a-attempt${attempt}`);
+
+                  const pos = await js(findByTextScript(SIGNUP_LABELS)) as {x:number;y:number}|null;
+                  relay(`[step2a] Sign Up button found: ${pos ? `x=${pos.x} y=${pos.y}` : "NOT FOUND"}`);
+
+                  if (!pos) {
+                    relay(`[step2a] ⚠ Sign Up button not found on attempt ${attempt} — waiting 2s before retry…`);
+                    await sleep(2000);
+                    continue;
+                  }
+
+                  relay(`[step2a] Tapping Sign Up at (${pos.x}, ${pos.y})…`);
+                  await tap(pos.x, pos.y);
+                  await sleep(1200);
+
+                  relay(`[step2a] Post-click URL: ${wc.getURL()}`);
+
+                  // Wait up to 20s for the URL to reach /accounts/signup/phone
+                  reachedPhone = await waitForUrl(
+                    url => url.includes("accounts/signup/phone") || (url.includes("accounts/signup") && !url.includes("email")),
+                    "/accounts/signup/phone",
+                    20000,
+                  );
+
+                  if (!reachedPhone) {
+                    relay(`[step2a] ⚠ URL did not reach phone gate after attempt ${attempt} — URL: ${wc.getURL()}`);
+                    // Dump page state to understand what went wrong
+                    const title = await js(`document.title`);
+                    const snippet = await js(`document.body?.innerText?.slice(0,400)`);
+                    relay(`[debug] Page title: ${title}`);
+                    relay(`[debug] Page snippet: ${snippet}`);
+                  }
+                }
+
+                if (!reachedPhone) {
+                  relay("❌ [step2a] Never reached /accounts/signup/phone after 3 click attempts — stopping.");
+                  relay("[debug] Possible causes: Sign Up button not found, Instagram redirected to login, or SPA routing blocked click.");
+                  return;
+                }
+
+                relay(`✅ [step2a] Confirmed on phone gate — URL: ${wc.getURL()}`);
+                await sleep(1500); // let page settle before next click
               }
 
+              // ── 2b: On phone gate — CLICK "Sign up with email", wait for /accounts/signup/email ──
+              // This step only runs if we are NOT already on the email form.
+              // We must be on /accounts/signup/phone (confirmed above) before clicking.
               if (!onEmailForm) {
-                // ── 2b: On phone gate — click "Sign up with email" ───────────
-                relay("On phone signup page — tapping 'Sign up with email'…");
-                const foundEmail = await waitAndTap(
-                  ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address"],
-                  "Sign up with email"
-                );
-                if (!foundEmail) { relay("❌ 'Sign up with email' not found — stopping."); return; }
-                await sleep(2500);
+                relay(`[step2b] On phone gate (URL: ${wc.getURL()}) — looking for 'Sign up with email' to CLICK…`);
+                await dumpClickables("step2b-phone-gate");
+
+                const EMAIL_LABELS = [
+                  "sign up with email", "sign up with email address",
+                  "use email", "use email address", "use your email address",
+                  "email address",
+                ];
+
+                let reachedEmail = false;
+                for (let attempt = 1; attempt <= 3 && !reachedEmail; attempt++) {
+                  relay(`[step2b] Attempt ${attempt}/3 — searching for 'Sign up with email'…`);
+
+                  const emailPos = await js(findByTextScript(EMAIL_LABELS)) as {x:number;y:number}|null;
+                  relay(`[step2b] 'Sign up with email' found: ${emailPos ? `x=${emailPos.x} y=${emailPos.y}` : "NOT FOUND"}`);
+
+                  if (!emailPos) {
+                    relay(`[step2b] ⚠ Not found on attempt ${attempt} — waiting 2s…`);
+                    await dumpClickables(`step2b-attempt${attempt}-not-found`);
+                    await sleep(2000);
+                    continue;
+                  }
+
+                  relay(`[step2b] Tapping 'Sign up with email' at (${emailPos.x}, ${emailPos.y})…`);
+                  await tap(emailPos.x, emailPos.y);
+                  await sleep(1200);
+
+                  relay(`[step2b] Post-click URL: ${wc.getURL()}`);
+
+                  // Wait up to 20s for the URL to reach /accounts/signup/email
+                  reachedEmail = await waitForUrl(
+                    url => url.includes("emailsignup") || url.includes("signup/email"),
+                    "/accounts/signup/email",
+                    20000,
+                  );
+
+                  if (!reachedEmail) {
+                    relay(`[step2b] ⚠ URL did not reach email form after attempt ${attempt} — URL: ${wc.getURL()}`);
+                    const title2 = await js(`document.title`);
+                    const snippet2 = await js(`document.body?.innerText?.slice(0,400)`);
+                    relay(`[debug] Page title: ${title2}`);
+                    relay(`[debug] Page snippet: ${snippet2}`);
+                    await dumpClickables(`step2b-attempt${attempt}-after-fail`);
+                  }
+                }
+
+                if (!reachedEmail) {
+                  relay("❌ [step2b] Never reached /accounts/signup/email after 3 click attempts — stopping.");
+                  relay("[debug] Possible causes: 'Sign up with email' not found, wrong element tapped, or Instagram SPA routing failed.");
+                  return;
+                }
+
+                relay(`✅ [step2b] Confirmed on email signup form — URL: ${wc.getURL()}`);
+                await sleep(1500); // let form settle before filling
               }
-              // else: already on emailsignup form — no action needed
+
+              relay(`[step2] Step 2 complete ✅ — URL: ${wc.getURL()}`);
             }
 
             // ── Step 3: Fill email address ────────────────────────────────────
