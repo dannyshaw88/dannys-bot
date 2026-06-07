@@ -4935,6 +4935,59 @@ export function startEbIpcServer(
               if (optPos) { await tap(optPos.x, optPos.y); await sleep(400); }
             }
 
+            // ── Fallback: single text input "Birthday (MM/DD/YYYY)" ─────────────
+            // Instagram currently shows ONE combined date field instead of three
+            // <select> dropdowns. If we didn't fill any selects above, detect the
+            // first visible text input on the page and type the date into it.
+            // Instagram expects MM/DD/YYYY; incoming dob is DD/MM/YYYY so we swap.
+            const dobDiag = await js(`(function(){
+              var selects=Array.from(document.querySelectorAll('select')).filter(function(s){var r=s.getBoundingClientRect();return r.width>0;});
+              var inputs=Array.from(document.querySelectorAll('input')).filter(function(i){
+                if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio') return false;
+                var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
+              });
+              return {
+                selectCount: selects.length,
+                inputs: inputs.map(function(i){return{type:i.type,placeholder:i.placeholder,aria:i.getAttribute('aria-label'),val:i.value};})
+              };
+            })()`);
+            relay(`[debug] DOB DOM — selects:${(dobDiag as any)?.selectCount} visibleInputs:${JSON.stringify((dobDiag as any)?.inputs)}`);
+
+            if (!monthBtnPos && ((dobDiag as any)?.selectCount ?? 0) === 0) {
+              // No selects and no custom dropdown found — must be the combined text field
+              const dobTextInputPos = await js(`(function(){
+                var inputs=Array.from(document.querySelectorAll('input'));
+                // Try label-matched first
+                var inp=inputs.find(function(i){
+                  var lbl=(i.getAttribute('aria-label')||i.placeholder||i.getAttribute('name')||'').toLowerCase();
+                  return lbl.includes('birthday')||lbl.includes('birth')||lbl.includes('mm/dd')||lbl.includes('dd/mm')||lbl.includes('date');
+                });
+                if(!inp){
+                  // Broad fallback: first visible non-hidden non-password input
+                  inp=inputs.find(function(i){
+                    if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio'||i.type==='password') return false;
+                    var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
+                  });
+                }
+                if(!inp) return null;
+                var r=inp.getBoundingClientRect();
+                return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),placeholder:inp.placeholder,aria:inp.getAttribute('aria-label')};
+              })()`);
+
+              if (dobTextInputPos) {
+                // Instagram expects MM/DD/YYYY; dob arrives as DD/MM/YYYY
+                const mm = String(dobMonth).padStart(2, "0");
+                const dd = String(dobDay).padStart(2, "0");
+                const yyyy = String(dobYear);
+                const dateStr = `${mm}/${dd}/${yyyy}`;
+                relay(`[debug] DOB combined input at (${(dobTextInputPos as any).x}, ${(dobTextInputPos as any).y}) placeholder="${(dobTextInputPos as any).placeholder}" aria="${(dobTextInputPos as any).aria}" — typing "${dateStr}"`);
+                await clearAndType((dobTextInputPos as any).x, (dobTextInputPos as any).y, dateStr);
+                await sleep(500);
+              } else {
+                relay("⚠ DOB: no input field found (no selects, no text input) — tapping Next anyway");
+              }
+            }
+
             await waitAndTap(["next", "continue"], "Next (after DOB)");
             await sleep(2800);
 

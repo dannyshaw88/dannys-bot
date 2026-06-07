@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.820",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: date of birth is now actually typed. Previous attempts were editing the wrong file — the ghost signup runs entirely in the Electron layer (ebManager.ts), not the server-side signup code that was being changed. The fix adds a fallback in the correct file: after the existing dropdown/select attempts, it detects Instagram's current single combined date field, logs a full diagnostic, and types the date (MM/DD/YYYY format) via the same CDP keyboard path used for all other fields." },
+    ],
+  },
+  {
     version: "1.0.819",
     date: "7 Jun 2026",
     items: [
