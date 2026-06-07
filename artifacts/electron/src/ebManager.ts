@@ -4474,40 +4474,83 @@ export function startEbIpcServer(
               await sleep(3000);
             }
 
-            // ── Step 2: Handle phone gate or homepage redirect ───────────────
-            // Instagram often redirects /accounts/emailsignup/ → /accounts/signup/phone/
-            // or back to the homepage after cookie acceptance.
+            // ── Step 2: Handle phone gate or homepage ────────────────────────
+            // After accepting the cookie banner the browser stays on the homepage.
+            // From there we must click "Sign up" to reach the mobile signup page,
+            // then "Sign up with email" to reach the email form.
+            // If Instagram already redirected to the phone gate or email form, skip
+            // the relevant steps.
             {
               const curUrl = wc.getURL();
-              const onPhoneGate = curUrl.includes("signup/phone");
-              const onHomepage  = !curUrl.includes("emailsignup") && !curUrl.includes("signup");
+              const onEmailForm  = curUrl.includes("emailsignup");
+              const onPhoneGate  = !onEmailForm && curUrl.includes("signup");
+              const onHomepage   = !onEmailForm && !onPhoneGate;
 
-              if (onPhoneGate) {
-                // Instagram redirected to phone gate — tap "Sign up with email" directly
-                relay("Phone gate detected — tapping 'Sign up with email'…");
-                const foundEmail = await waitAndTap(
-                  ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address", "email address"],
-                  "Sign up with email (phone gate)"
-                );
-                if (!foundEmail) { relay("❌ 'Sign up with email' not found on phone gate — stopping."); return; }
-                await sleep(2500);
-              } else if (onHomepage) {
-                // Cookie acceptance redirected to homepage — re-navigate directly to the
-                // email signup URL. The cookie banner will NOT reappear since we already
-                // accepted it, so we'll land straight on the email form.
-                relay("Redirected to homepage after cookie accept — re-navigating to email signup…");
-                await navAndWait("https://www.instagram.com/accounts/emailsignup/");
-                // Check again for phone gate after re-navigation
-                const url2 = wc.getURL();
-                if (url2.includes("signup/phone")) {
-                  relay("Phone gate after re-nav — tapping 'Sign up with email'…");
-                  const foundEmail = await waitAndTap(
-                    ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address", "email address"],
-                    "Sign up with email (phone gate)"
+              if (onHomepage) {
+                // ── 2a: Click "Sign up" on the homepage ──────────────────────
+                relay("On homepage — finding 'Sign up' link…");
+
+                // Primary: find link by href (reliable even if IG changes the label text)
+                const signupLinkPos = await js(`(function(){
+                  var links = Array.from(document.querySelectorAll('a'));
+                  // Prefer exact /accounts/signup/ href; fallback to any href containing "signup"
+                  var el = links.find(function(a){
+                    return a.href && (a.href.includes('/accounts/signup/') || a.href.endsWith('/accounts/signup'));
+                  });
+                  if (!el) el = links.find(function(a){ return a.href && a.href.includes('signup'); });
+                  if (el) {
+                    var r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
+                  }
+                  return null;
+                })()`) as {x:number;y:number}|null;
+
+                let signupClicked = false;
+                if (signupLinkPos) {
+                  relay(`Found 'Sign up' link — tapping at (${signupLinkPos.x}, ${signupLinkPos.y})…`);
+                  // Triple-click: touch + mouse events + JS .click()
+                  await tap(signupLinkPos.x, signupLinkPos.y);
+                  await sleep(150);
+                  try {
+                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: signupLinkPos.x, y: signupLinkPos.y, button: "none", modifiers: 0 });
+                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: signupLinkPos.x, y: signupLinkPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                    await sleep(60);
+                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: signupLinkPos.x, y: signupLinkPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                  } catch {}
+                  await sleep(100);
+                  try {
+                    await js(`(function(){
+                      var links=Array.from(document.querySelectorAll('a'));
+                      var el=links.find(function(a){return a.href&&(a.href.includes('/accounts/signup/')||a.href.endsWith('/accounts/signup'));});
+                      if(!el)el=links.find(function(a){return a.href&&a.href.includes('signup');});
+                      if(el)el.click();
+                    })()`);
+                  } catch {}
+                  signupClicked = true;
+                } else {
+                  // Fallback: text-based search
+                  signupClicked = await waitAndTap(
+                    ["sign up", "create account", "create new account", "sign up for instagram"],
+                    "Sign up (homepage text fallback)"
                   );
-                  if (!foundEmail) { relay("❌ 'Sign up with email' not found on phone gate — stopping."); return; }
-                  await sleep(2500);
                 }
+
+                if (!signupClicked) {
+                  relay("❌ 'Sign up' link not found on homepage — stopping.");
+                  return;
+                }
+                await sleep(3000); // wait for phone gate to load
+              }
+
+              if (!onEmailForm) {
+                // ── 2b: On phone gate — click "Sign up with email" ───────────
+                relay("On phone signup page — tapping 'Sign up with email'…");
+                const foundEmail = await waitAndTap(
+                  ["sign up with email", "sign up with email address", "use email", "use email address", "use your email address"],
+                  "Sign up with email"
+                );
+                if (!foundEmail) { relay("❌ 'Sign up with email' not found — stopping."); return; }
+                await sleep(2500);
               }
               // else: already on emailsignup form — no action needed
             }
