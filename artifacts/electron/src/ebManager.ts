@@ -4383,8 +4383,12 @@ export function startEbIpcServer(
           };
 
           try {
-            // ── Step 0: Navigate to the email signup page ────────────────────
-            await navAndWait("https://www.instagram.com/accounts/emailsignup/");
+            // ── Step 0: Navigate to Instagram homepage ───────────────────────
+            // Start from the homepage so Instagram's SPA can set device cookies
+            // naturally before we proceed. Direct navigation to emailsignup/ or
+            // accounts/signup/ is blocked/aborted by Instagram's redirect logic
+            // on fresh sessions — landing on the homepage first avoids code=-3.
+            await navAndWait("https://www.instagram.com/");
 
             // ── Step 1: Accept cookie banner — verify dismissed before continuing ─
             // Each step in the flow gates on the previous step being CONFIRMED done.
@@ -4473,53 +4477,14 @@ export function startEbIpcServer(
               const onHomepage   = !onEmailForm && !onPhoneGate;
 
               if (onHomepage) {
-                // ── 2a: Click "Sign up" on the homepage ──────────────────────
-                relay("On homepage — finding 'Sign up' link…");
-
-                // Primary: find link by href (reliable even if IG changes the label text)
-                const signupLinkPos = await js(`(function(){
-                  var links = Array.from(document.querySelectorAll('a'));
-                  // Prefer exact /accounts/signup/ href; fallback to any href containing "signup"
-                  var el = links.find(function(a){
-                    return a.href && (a.href.includes('/accounts/signup/') || a.href.endsWith('/accounts/signup'));
-                  });
-                  if (!el) el = links.find(function(a){ return a.href && a.href.includes('signup'); });
-                  if (el) {
-                    var r = el.getBoundingClientRect();
-                    if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
-                  }
-                  return null;
-                })()`) as {x:number;y:number}|null;
-
-                let signupClicked = false;
-                if (signupLinkPos) {
-                  relay(`Found 'Sign up' link — tapping at (${signupLinkPos.x}, ${signupLinkPos.y})…`);
-                  // Tap only (synthesizeTapGesture) — no mouse events
-                  await tap(signupLinkPos.x, signupLinkPos.y);
-                  await sleep(300);
-                  // JS .click() as coordinate-independent fallback — fires no mouse events
-                  try {
-                    await js(`(function(){
-                      var links=Array.from(document.querySelectorAll('a'));
-                      var el=links.find(function(a){return a.href&&(a.href.includes('/accounts/signup/')||a.href.endsWith('/accounts/signup'));});
-                      if(!el)el=links.find(function(a){return a.href&&a.href.includes('signup');});
-                      if(el)el.click();
-                    })()`);
-                  } catch {}
-                  signupClicked = true;
-                } else {
-                  // Fallback: text-based search
-                  signupClicked = await waitAndTap(
-                    ["sign up", "create account", "create new account", "sign up for instagram"],
-                    "Sign up (homepage text fallback)"
-                  );
-                }
-
-                if (!signupClicked) {
-                  relay("❌ 'Sign up' link not found on homepage — stopping.");
-                  return;
-                }
-                await sleep(3000); // wait for phone gate to load
+                // ── 2a: Navigate directly to the phone gate ──────────────────
+                // Clicking the "Sign up" link on the homepage is unreliable —
+                // Instagram's homepage shows "Log in or sign up" (goes to login)
+                // not a standalone "Sign up" button. Navigating directly to
+                // /accounts/signup/ is reliable once the cookie banner is dismissed
+                // and the session cookies are in place.
+                relay("On homepage — navigating to signup page…");
+                await navAndWait("https://www.instagram.com/accounts/signup/");
               }
 
               if (!onEmailForm) {

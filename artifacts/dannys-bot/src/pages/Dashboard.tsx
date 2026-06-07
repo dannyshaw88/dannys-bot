@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.812",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: the browser now starts on the Instagram homepage (not emailsignup/) so the session cookies are set before navigating to the signup page. Direct emailsignup/ navigation was being blocked by Instagram and dumping the browser back on the homepage." },
+      { category: "Fix", text: "Ghost Browser signup: after the cookie banner is dismissed, the app now navigates directly to instagram.com/accounts/signup/ (the phone gate) instead of trying to click the 'Sign up' link — the homepage 'Log in or sign up' link was being matched incorrectly and did not navigate to the right page." },
+    ],
+  },
+  {
     version: "1.0.811",
     date: "7 Jun 2026",
     items: [
