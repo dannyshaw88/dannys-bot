@@ -62,10 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.809",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: entire signup flow is now tap-only (synthesizeTapGesture). Removed all mouse events and keyboard key events from cookie click, Sign up link click, and text input. Fields are cleared via JS and text is inserted via Input.insertText — identical to how a real mobile virtual keyboard works, leaving no desktop fingerprint." },
+    ],
+  },
+  {
     version: "1.0.808",
     date: "7 Jun 2026",
     items: [
-      { category: "Fix", text: "Ghost Browser: 'Sign up' click on the Instagram homepage now uses href-based detection (finds the link by its URL, not just its text), with a triple-click method (touch + mouse events + JS click) for maximum reliability. Text matching is kept as a fallback. Removed yellow IMAP waiting prompt. Nuke Environment is always clickable even mid-signup." },
+      { category: "Fix", text: "Ghost Browser: 'Sign up' click uses href-based link detection (finds the link by its URL, not just label text) with tap + JS click fallback." },
     ],
   },
   {

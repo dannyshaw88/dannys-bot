@@ -4296,39 +4296,33 @@ export function startEbIpcServer(
           };
 
           // Tap element then clear existing content and type new text.
-          // Uses typeTextCDP (per-character key events) so React's synthetic onChange fires.
-          // modifiers: 2 = Ctrl on Windows (not 8 which is Shift).
+          // MOBILE-ONLY: synthesizeTapGesture to focus, JS to clear value (no Ctrl+A/Delete),
+          // Input.insertText to type — identical to how a mobile virtual keyboard delivers text.
+          // No mouse events, no hardware key events, no virtual key codes.
           const clearAndType = async (x: number, y: number, text: string) => {
-            // Click via mouse events — more reliable than touch gesture for input focus
+            // Tap to focus — fires touchstart/touchend/click with pointerType="touch"
+            await tap(x, y);
+            await sleep(400);
+            // Clear via JS using the native property setter so React's controlled state resets.
+            // Then fire input+change so React's onChange handler picks up the empty value.
             try {
-              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", modifiers: 0 });
-              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x, y, button: "left", clickCount: 1, modifiers: 0 });
-              await sleep(60);
-              await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 0 });
+              await js(`(function(){
+                var el = document.activeElement;
+                if (!el) return;
+                var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                if (setter && setter.set) { setter.set.call(el, ''); }
+                else { el.value = ''; }
+                el.dispatchEvent(new Event('input',  { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              })()`);
             } catch {}
-            await sleep(300);
-            // Ctrl+A (modifiers: 2 = Ctrl on Windows)
+            await sleep(120);
+            // Insert text via Input.insertText — this is the CDP equivalent of IME/virtual
+            // keyboard input on Android. Fires the input event on the focused element so
+            // React's synthetic onChange updates correctly. No key codes, no key events.
             try {
-              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
-              });
-              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyUp", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
-              });
+              await wc.debugger.sendCommand("Input.insertText", { text });
             } catch {}
-            await sleep(80);
-            // Delete selected
-            try {
-              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
-              });
-              await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
-                type: "keyUp", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
-              });
-            } catch {}
-            await sleep(100);
-            // Type via per-character key events so React onChange fires on every keystroke
-            await typeTextCDP(wc.debugger, text, { minDelay: 60, maxDelay: 160 });
           };
 
           // JS helper: find any button/link by text content, return centre coords
@@ -4403,20 +4397,12 @@ export function startEbIpcServer(
               "allow cookies", "alle cookies akzeptieren", "accepter tout",
               "aceptar todo", "accetta tutto", "tillåt alla", "alle accepteren",
             ];
-            // Helper: fire all 3 click layers at given coords
+            // Cookie banner click — tap only (no mouse events)
             const clickCookieAt = async (pos: {x:number;y:number}) => {
-              // L1: touch tap (synthesizeTapGesture)
+              // L1: touch tap (synthesizeTapGesture) — pointerType="touch", no mouse signature
               await tap(pos.x, pos.y);
-              await sleep(200);
-              // L2: mouse events (unambiguous CSS pixel coords — covers DPR mismatch)
-              try {
-                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: pos.x, y: pos.y, button: "none", modifiers: 0 });
-                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
-                await sleep(60);
-                await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0 });
-              } catch {}
-              await sleep(150);
-              // L3: direct JS click — no coordinate dependency at all
+              await sleep(300);
+              // L2: JS .click() — coordinate-independent fallback, fires no mouse events
               try {
                 await js(`(function(){
                   var A=${JSON.stringify(COOKIE_LABELS)};
@@ -4508,16 +4494,10 @@ export function startEbIpcServer(
                 let signupClicked = false;
                 if (signupLinkPos) {
                   relay(`Found 'Sign up' link — tapping at (${signupLinkPos.x}, ${signupLinkPos.y})…`);
-                  // Triple-click: touch + mouse events + JS .click()
+                  // Tap only (synthesizeTapGesture) — no mouse events
                   await tap(signupLinkPos.x, signupLinkPos.y);
-                  await sleep(150);
-                  try {
-                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved",   x: signupLinkPos.x, y: signupLinkPos.y, button: "none", modifiers: 0 });
-                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed",  x: signupLinkPos.x, y: signupLinkPos.y, button: "left", clickCount: 1, modifiers: 0 });
-                    await sleep(60);
-                    await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: signupLinkPos.x, y: signupLinkPos.y, button: "left", clickCount: 1, modifiers: 0 });
-                  } catch {}
-                  await sleep(100);
+                  await sleep(300);
+                  // JS .click() as coordinate-independent fallback — fires no mouse events
                   try {
                     await js(`(function(){
                       var links=Array.from(document.querySelectorAll('a'));
