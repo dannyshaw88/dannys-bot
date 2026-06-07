@@ -383,6 +383,91 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
   });
 })();`;
 
+// Ghost signup mobile fingerprint patch — injected AFTER the main _fpScript so it
+// can override the values the desktop-mode fp script set.
+//
+// WHY THIS IS NEEDED:
+//   The ghost browser window (profileId=-1) opens with no UA, so buildFingerprintScript
+//   runs with isMobile=false → desktop branch → sets screen.width=1920, maxTouchPoints=0,
+//   and skips navigator.connection / other mobile overrides.  CDP setDeviceMetricsOverride
+//   sets the *rendering* viewport to 393×851, but JS Object.defineProperty on screen.width
+//   takes precedence over the CDP override when Instagram's JS reads it.  Without this
+//   patch, screen.width=1920 contradicts the Android UA — an instant bot signal.
+//
+// WHAT THIS PATCH ADDS BEYOND THE MAIN FP SCRIPT:
+//   1. screen.width/height/availWidth/availHeight — corrected to Pixel 8 dimensions
+//   2. window.devicePixelRatio / innerWidth / innerHeight / outerWidth / outerHeight
+//   3. navigator.plugins → empty PluginArray  (Android Chrome has zero plugins;
+//      Desktop Chrome exposes "PDF Viewer" etc. — a hard desktop signal)
+//   4. navigator.connection.type → always "cellular" (the main fp script creates a
+//      connection object only if none exists; Chrome always has one, so the fp
+//      override was being skipped entirely, leaving type="wifi" from the OS)
+//   5. DeviceMotionEvent / DeviceOrientationEvent emissions — real phones
+//      continuously fire accelerometer/gyroscope data; desktop Chrome never does
+const GHOST_SIGNUP_FP_PATCH_JS = `(function(){
+  var _SW=393,_SH=851,_DPR=2.75;
+  // ── Screen dimensions ─────────────────────────────────────────────────────────
+  try{Object.defineProperty(screen,'width',{get:function(){return _SW;},configurable:true,enumerable:true});}catch(e){}
+  try{Object.defineProperty(screen,'height',{get:function(){return _SH;},configurable:true,enumerable:true});}catch(e){}
+  try{Object.defineProperty(screen,'availWidth',{get:function(){return _SW;},configurable:true,enumerable:true});}catch(e){}
+  try{Object.defineProperty(screen,'availHeight',{get:function(){return _SH-56;},configurable:true,enumerable:true});}catch(e){}
+  try{Object.defineProperty(screen,'colorDepth',{get:function(){return 24;},configurable:true});}catch(e){}
+  try{Object.defineProperty(screen,'pixelDepth',{get:function(){return 24;},configurable:true});}catch(e){}
+  try{Object.defineProperty(window,'devicePixelRatio',{get:function(){return _DPR;},configurable:true});}catch(e){}
+  try{Object.defineProperty(window,'innerWidth',{get:function(){return _SW;},configurable:true});}catch(e){}
+  try{Object.defineProperty(window,'innerHeight',{get:function(){return _SH;},configurable:true});}catch(e){}
+  try{Object.defineProperty(window,'outerWidth',{get:function(){return _SW;},configurable:true});}catch(e){}
+  try{Object.defineProperty(window,'outerHeight',{get:function(){return _SH;},configurable:true});}catch(e){}
+  // ── navigator: platform + touch (belt-and-suspenders on top of CDP) ───────────
+  try{Object.defineProperty(navigator,'platform',{get:function(){return 'Linux armv8l';},configurable:true});}catch(e){}
+  try{Object.defineProperty(navigator,'maxTouchPoints',{get:function(){return 10;},configurable:true});}catch(e){}
+  // ── navigator.plugins: empty on Android Chrome ────────────────────────────────
+  try{
+    var _ep=Object.create(PluginArray.prototype);
+    Object.defineProperty(_ep,'length',{get:function(){return 0;},configurable:true});
+    Object.defineProperty(navigator,'plugins',{get:function(){return _ep;},configurable:true});
+    var _em=Object.create(MimeTypeArray.prototype);
+    Object.defineProperty(_em,'length',{get:function(){return 0;},configurable:true});
+    Object.defineProperty(navigator,'mimeTypes',{get:function(){return _em;},configurable:true});
+    Object.defineProperty(navigator,'pdfViewerEnabled',{get:function(){return false;},configurable:true});
+  }catch(e){}
+  // ── navigator.connection: force cellular/4g (not random wifi) ─────────────────
+  try{
+    var _nc=navigator.connection;
+    if(_nc){
+      try{Object.defineProperty(_nc,'type',{get:function(){return 'cellular';},configurable:true});}catch(e2){}
+      try{Object.defineProperty(_nc,'effectiveType',{get:function(){return '4g';},configurable:true});}catch(e3){}
+      try{Object.defineProperty(_nc,'downlink',{get:function(){return 35+Math.round(Math.random()*25);},configurable:true});}catch(e4){}
+      try{Object.defineProperty(_nc,'rtt',{get:function(){return 35+Math.round(Math.random()*30);},configurable:true});}catch(e5){}
+    }
+  }catch(e){}
+  // ── DeviceMotionEvent: real phones always have active sensor emissions ─────────
+  // A phone held normally shows near-zero jitter on x/y and ~-9.81 on y gravity.
+  try{
+    var _ax=0,_ay=0,_az=0;
+    setInterval(function(){
+      _ax+=( Math.random()-0.5)*0.025;_ay+=(Math.random()-0.5)*0.025;_az+=(Math.random()-0.5)*0.015;
+      _ax=Math.max(-0.4,Math.min(0.4,_ax));_ay=Math.max(-0.4,Math.min(0.4,_ay));_az=Math.max(-0.2,Math.min(0.2,_az));
+      try{
+        var me=new DeviceMotionEvent('devicemotion');
+        Object.defineProperty(me,'acceleration',{get:function(){return{x:_ax,y:_ay,z:_az};}});
+        Object.defineProperty(me,'accelerationIncludingGravity',{get:function(){return{x:_ax,y:_ay-9.81,z:_az};}});
+        Object.defineProperty(me,'rotationRate',{get:function(){return{alpha:(Math.random()-0.5)*1.2,beta:(Math.random()-0.5)*1.2,gamma:(Math.random()-0.5)*0.6};}});
+        Object.defineProperty(me,'interval',{get:function(){return 16.67;}});
+        window.dispatchEvent(me);
+      }catch(e2){}
+      try{
+        var oe=new DeviceOrientationEvent('deviceorientation');
+        Object.defineProperty(oe,'alpha',{get:function(){return 180+(Math.random()-0.5)*10;}});
+        Object.defineProperty(oe,'beta',{get:function(){return (Math.random()-0.5)*5;}});
+        Object.defineProperty(oe,'gamma',{get:function(){return (Math.random()-0.5)*3;}});
+        Object.defineProperty(oe,'absolute',{get:function(){return false;}});
+        window.dispatchEvent(oe);
+      }catch(e3){}
+    },16+Math.round(Math.random()*5));
+  }catch(e){}
+})();`;
+
 // Hardware fingerprint spoofing script injected into every EB page via CDP.
 // Mirrors applyStealthScripts() in browserSession.ts exactly so the leak tool
 // reports the same values that Account Settings shows (battery %, CPU cores,
@@ -587,7 +672,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
            + `var _FN=_rI(1,99),_SP=_rI(0,7);`;
   }
 
-  return `(function(){try{
+  const _ebFpSrc = `(function(){try{
   var _M=${mf},_A=${af};
   var _ua=navigator.userAgent,_s=5381;
   for(var i=0;i<_ua.length;i++){_s=(((_s<<5)+_s)^_ua.charCodeAt(i))>>>0;}
@@ -864,6 +949,11 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     }
   }catch(e){}
 }catch(e){}})();`;
+  // Make every Object.defineProperty getter in the fp script configurable:true.
+  // Without this, the desktop-mode fp script (which runs when ghost browser
+  // opens without a mobile UA) locks screen.width=1920 etc. as non-configurable,
+  // and the ghost-signup mobile patch injected later cannot override them.
+  return _ebFpSrc.replace(/\{get:function\(\)/g, '{configurable:true,get:function()');
 }
 
 // ── Ghost Browser UA helpers ──────────────────────────────────────────────────
@@ -4284,19 +4374,30 @@ export function startEbIpcServer(
           // Attach debugger (no-op if already attached)
           try { wc.debugger.attach("1.3"); } catch {}
 
-          // Inject mouse-hover blocker: suppresses real PC mouse hover/move events
-          // before Instagram's scripts see them (runs in capture phase, isTrusted
-          // events from host input, but we block hover — NOT tap/click).
+          // Inject scripts before navigating to Instagram.
+          // addScriptToEvaluateOnNewDocument fires on every subsequent navigation in order:
+          //   1st: WEBRTC_BLOCKER_JS   (injected when ghost window opened)
+          //   2nd: _fpScript desktop   (injected when ghost window opened, isMobile=false)
+          //   3rd: MOUSE_HOVER_BLOCKER (injected here)
+          //   4th: GHOST_SIGNUP_FP_PATCH (injected here — overrides desktop fp values)
+          // buildFingerprintScript now emits configurable:true getters so step 4 can win.
           try {
             await wc.debugger.sendCommand("Page.enable");
           } catch {}
           try {
             await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: MOUSE_HOVER_BLOCKER_JS });
           } catch {}
+          try {
+            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: GHOST_SIGNUP_FP_PATCH_JS });
+          } catch {}
           // Also execute on the currently-loaded page (addScriptToEvaluateOnNewDocument
           // only applies to future navigations — we need it on the page that's already open)
           wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
-          wc.on("dom-ready", () => { wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {}); });
+          wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
+          wc.on("dom-ready", () => {
+            wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
+            wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
+          });
 
           const js = (script: string): Promise<any> =>
             wc.executeJavaScript(script).catch((err: any) => {

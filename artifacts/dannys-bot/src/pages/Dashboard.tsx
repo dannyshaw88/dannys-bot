@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.823",
+    date: "7 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: screen.width was reporting 1920 (Windows desktop) even though the UA said Pixel 8 Android — an instant bot signal. The ghost browser opens without a mobile UA so the fingerprint script ran in desktop mode and locked screen dimensions as non-configurable. Fixed by making all fingerprint property overrides configurable so a dedicated mobile patch injected at signup time can correct them to 393×851 Pixel 8 values." },
+      { category: "Fix", text: "Ghost Browser signup: navigator.plugins now returns an empty list. Desktop Chrome always exposes a PDF Viewer plugin — Android Chrome has zero plugins. This mismatch was detectable by Instagram's device classifier." },
+      { category: "Fix", text: "Ghost Browser signup: navigator.connection.type now always reports 'cellular' when signing up. Previously it randomly showed 'wifi' 75% of the time even when the 4G SIM was the active network." },
+      { category: "Fix", text: "Ghost Browser signup: the browser now emits fake DeviceMotionEvent and DeviceOrientationEvent data at ~60 Hz. Real phones continuously report accelerometer and gyroscope readings — a desktop Chrome never does. Instagram's risk engine may use sensor activity as a device signal." },
+    ],
+  },
+  {
     version: "1.0.822",
     date: "7 Jun 2026",
     items: [
