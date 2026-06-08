@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.835",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool now tells libimobiledevice to connect via Apple's USB socket (port 27015) — this was the root cause of the iPhone not being detected even when visible in Windows Explorer." },
+      { category: "Fix", text: "Added data cable and USB 2.0 port tip to the troubleshooting checklist — charge-only cables and USB 3.0 ports can prevent iPhone communication." },
+      { category: "Fix", text: "Troubleshooting panel now clearly states: no special app or setting needed on the iPhone itself." },
+      { category: "Fix", text: "Added collapsible 'Technical details' section to the troubleshooting panel for easier support diagnostics." },
+    ],
+  },
+  {
     version: "1.0.834",
     date: "8 Jun 2026",
     items: [

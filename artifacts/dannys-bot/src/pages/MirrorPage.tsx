@@ -147,6 +147,8 @@ interface DiagResult {
   suggestion: string;
   rawError: string;
   amdPath?: string;
+  debugOutput?: string;
+  binaryPath?: string;
 }
 
 interface SetupPanelProps {
@@ -261,13 +263,16 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
           {noConnection && !diagnosing && (
             <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
               <p className="text-sm font-semibold">iPhone connected — can't communicate yet</p>
-              <p className="text-[11px] text-muted-foreground">Work through these steps one by one, clicking Check again after each:</p>
+              <p className="text-[11px] text-muted-foreground">
+                You don't need to do anything special on your iPhone — no app to open, no setting to change. Just a USB cable connected to your PC is all that's needed. Work through these steps:
+              </p>
               <ol className="space-y-2">
                 {[
                   { n: 1, text: <>Make sure your iPhone screen is <strong>on and unlocked</strong> — swipe up and enter your passcode.</> },
-                  { n: 2, text: <>Look for a <strong>"Trust This Computer?"</strong> popup on your iPhone. Tap <strong>Trust</strong> and enter your passcode when prompted.</> },
-                  { n: 3, text: <>Unplug the cable and plug it back in, then wait 5 seconds.</> },
-                  { n: 4, text: <>Press <strong>Win + R</strong>, type <code className="bg-muted px-1 rounded text-[10px]">services.msc</code>, find <strong>Apple Mobile Device Service</strong>, right-click → <strong>Restart</strong>.</> },
+                  { n: 2, text: <>Look for a <strong>"Trust This Computer?"</strong> popup on your iPhone — tap <strong>Trust</strong> and enter your passcode. (Only appears on first connection.)</> },
+                  { n: 3, text: <>Make sure you're using a <strong>data cable</strong> (not a charge-only cable). Try a different USB port — prefer <strong>USB 2.0</strong> (black port) over USB 3.0 (blue port).</> },
+                  { n: 4, text: <>Unplug and replug the cable, then wait 5 seconds.</> },
+                  { n: 5, text: <>Press <strong>Win + R</strong>, type <code className="bg-muted px-1 rounded text-[10px]">services.msc</code>, find <strong>Apple Mobile Device Service</strong>, right-click → <strong>Restart</strong>.</> },
                 ].map(s => (
                   <li key={s.n} className="flex gap-2.5 items-start">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground mt-0.5">{s.n}</span>
@@ -275,6 +280,18 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
                   </li>
                 ))}
               </ol>
+              {diagnosis?.debugOutput && (
+                <details className="mt-1">
+                  <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">Technical details (share with support)</summary>
+                  <pre className="mt-1.5 text-[9px] font-mono bg-muted/60 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed text-muted-foreground">
+                    {[
+                      `binary: ${diagnosis.binaryPath ?? "unknown"}`,
+                      `amdPath: ${diagnosis.amdPath ?? "none"}`,
+                      `debug: ${diagnosis.debugOutput}`,
+                    ].join("\n")}
+                  </pre>
+                </details>
+              )}
             </div>
           )}
 

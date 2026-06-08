@@ -95,6 +95,11 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
   return {
     ...process.env,
     PATH: extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH,
+    // Tell libimobiledevice where Apple's usbmuxd TCP socket is.
+    // On Windows, Apple Mobile Device Service listens on 127.0.0.1:27015.
+    // Without this, idevice_id.exe may silently find zero devices even when
+    // the iPhone IS trusted and visible in Windows Explorer.
+    USBMUXD_SOCKET_ADDRESS: process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015",
   };
 }
 
@@ -145,6 +150,7 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
 
   let rawOutput = "";
   let rawError = "";
+  let debugOutput = "";
   if (binaryFound) {
     try {
       const result = await execAsync(`"${exe}" -l`, { timeout: 6000, env });
@@ -152,6 +158,16 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
       rawError = (result as any).stderr?.trim() ?? "";
     } catch (err: any) {
       rawError = String(err?.stderr ?? err?.message ?? err);
+    }
+
+    // If nothing came back, try with --debug to get verbose output for diagnosis
+    if (rawOutput === "" && rawError === "") {
+      try {
+        const dbg = await execAsync(`"${exe}" --debug -l`, { timeout: 6000, env });
+        debugOutput = [dbg.stdout, (dbg as any).stderr].filter(Boolean).join("\n").trim();
+      } catch (err: any) {
+        debugOutput = String(err?.stderr ?? err?.stdout ?? err?.message ?? "").trim();
+      }
     }
   }
 
@@ -161,10 +177,6 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
   } else if (rawOutput === "" && rawError === "") {
-    // idevice_id returned nothing — we cannot reliably distinguish "locked"
-    // from "not trusted yet" from Windows binary error output alone.
-    // Return a neutral "no_connection" signal and let the UI show a full
-    // troubleshooting checklist instead of a misleading "locked" message.
     suggestion = "no_connection";
   } else if (rawError) {
     suggestion = `error:${rawError}`;
@@ -172,7 +184,7 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
     suggestion = "ok";
   }
 
-  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, suggestion };
+  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, debugOutput, suggestion };
 }
 
 export async function listConnectedDevices(): Promise<IosDevice[]> {
