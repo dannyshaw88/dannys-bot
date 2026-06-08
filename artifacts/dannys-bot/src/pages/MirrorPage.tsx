@@ -1442,13 +1442,17 @@ export function MirrorPage() {
 
   useEffect(() => () => { if (installPollRef.current) clearInterval(installPollRef.current); }, []);
 
-  // ── Reinstall — stops iproxy tunnel and returns to install step ───────────
+  // ── Reinstall — stops iproxy tunnel then kicks off a fresh WDA install ─────
 
   const handleReinstall = async () => {
     try {
       await fetch("/api/mirror/iproxy/stop", { method: "POST" });
     } catch {}
     setIproxyRunning(false);
+    setInstallSessionId(null);
+    setInstallProgress(0);
+    setInstallMessage("");
+    await handleInstallWda();
   };
 
   // ── WDA control commands ───────────────────────────────────────────────────

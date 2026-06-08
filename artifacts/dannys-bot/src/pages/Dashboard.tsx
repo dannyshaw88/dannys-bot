@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.851",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: 'Reinstall Control Agent' button was broken — it stopped the connection but never actually started the reinstall. Now clicking it correctly stops the connection and immediately kicks off a fresh WDA install." },
+    ],
+  },
+  {
     version: "1.0.850",
     date: "8 Jun 2026",
     items: [
