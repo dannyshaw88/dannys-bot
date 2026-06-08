@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.832",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "iPhone still not detected after iTunes already installed: Equinox now injects Apple's USB driver path directly when talking to your iPhone, fixing a silent failure when iTunes is installed from the Microsoft Store." },
+      { category: "Fix", text: "If your iPhone is plugged in but screen is locked, Equinox now tells you clearly: 'Unlock your iPhone then check again'." },
+      { category: "Fix", text: "If detection fails with a real error, the exact error message now shows so you know exactly what's wrong." },
+    ],
+  },
+  {
     version: "1.0.831",
     date: "8 Jun 2026",
     items: [

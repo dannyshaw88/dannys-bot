@@ -146,6 +146,7 @@ interface DiagResult {
   appleDriverRunning: boolean;
   suggestion: string;
   rawError: string;
+  amdPath?: string;
 }
 
 interface SetupPanelProps {
@@ -170,6 +171,9 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
 
   const itunesRequired = diagnosis?.suggestion === "itunes_required";
   const binaryMissing  = diagnosis !== null && !diagnosis.binaryFound;
+  const needsUnlock    = diagnosis?.suggestion === "unlock";
+  const hasError       = diagnosis?.suggestion?.startsWith("error:") ?? false;
+  const errorText      = hasError ? diagnosis!.suggestion.slice(6) : "";
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-5">
@@ -251,17 +255,35 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             </div>
           )}
 
-          {/* Generic waiting message */}
-          {!itunesRequired && !binaryMissing && !diagnosing && (
-            <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
-              {diagnosis?.rawError
-                ? <span className="text-red-500 text-xs">{diagnosis.rawError}</span>
-                : "Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically."
-              }
+          {/* iPhone plugged in but screen is locked */}
+          {needsUnlock && !diagnosing && (
+            <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-2">
+              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">iPhone detected but locked</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Your iPhone is connected but the screen is off or locked. <strong>Unlock your iPhone</strong> — swipe up and enter your passcode — then click Check again.
+              </p>
             </div>
           )}
 
-          {/* Retry button when diagnosis is done but no iTunes issue */}
+          {/* Detection returned an actual error */}
+          {hasError && !diagnosing && (
+            <div className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 space-y-1">
+              <p className="text-sm font-semibold text-red-800 dark:text-red-300">Detection error</p>
+              <p className="text-xs font-mono text-red-600 dark:text-red-400 break-all">{errorText}</p>
+              {diagnosis?.amdPath && (
+                <p className="text-[10px] text-muted-foreground">Apple DLL path: {diagnosis.amdPath}</p>
+              )}
+            </div>
+          )}
+
+          {/* Generic waiting — no diagnosis yet or suggestion is empty */}
+          {!itunesRequired && !binaryMissing && !needsUnlock && !hasError && !diagnosing && (
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
+              Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
+            </div>
+          )}
+
+          {/* Retry button when diagnosis is done */}
           {!itunesRequired && !binaryMissing && diagnosis !== null && (
             <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={onRetry}>
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
@@ -698,9 +720,10 @@ export function MirrorPage() {
         appleDriverRunning: !!j.appleDriverRunning,
         suggestion: j.suggestion ?? "",
         rawError: j.rawError ?? "",
+        amdPath: j.amdPath ?? "",
       });
     } catch {
-      setDiagnosis({ binaryFound: false, appleDriverRunning: false, suggestion: "", rawError: "" });
+      setDiagnosis({ binaryFound: false, appleDriverRunning: false, suggestion: "", rawError: "", amdPath: "" });
     } finally {
       setDiagnosing(false);
     }

@@ -14,7 +14,6 @@ const execAsync = promisify(exec);
 
 function getBinDir(): string {
   if (process.env.IDEVICE_BIN_DIR) return process.env.IDEVICE_BIN_DIR;
-  // Fallback: look for resources/bin/win32 relative to the electron package
   const candidates = [
     path.join(process.cwd(), "..", "electron", "resources", "bin", "win32"),
     path.join(process.cwd(), "resources", "bin", "win32"),
@@ -27,8 +26,76 @@ function getBinDir(): string {
 
 function binPath(exe: string): string {
   const dir = getBinDir();
-  if (!dir) return exe; // fall back to PATH (dev environment)
+  if (!dir) return exe;
   return path.join(dir, exe);
+}
+
+// ── Apple Mobile Device DLL path resolver ─────────────────────────────────────
+// idevice_id.exe loads our bundled DLLs but also needs AppleMobileDeviceInterface.dll
+// from iTunes. That DLL is NOT in the system PATH when iTunes is installed from the
+// Microsoft Store (UWP sandboxed app). We query the service to find its directory
+// and inject it into PATH so every child_process spawn can load the DLL.
+
+let _amdPath: string | null | undefined = undefined; // undefined = not yet resolved
+
+async function getAppleMobileDevicePath(): Promise<string> {
+  if (_amdPath !== undefined) return _amdPath ?? "";
+
+  if (process.platform !== "win32") { _amdPath = ""; return ""; }
+
+  // Known static paths (iTunes from Apple's website)
+  const staticPaths = [
+    "C:\\Program Files\\Common Files\\Apple\\Mobile Device Support",
+    "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support",
+  ];
+  for (const p of staticPaths) {
+    if (fs.existsSync(path.join(p, "AppleMobileDeviceInterface.dll"))) {
+      _amdPath = p;
+      return p;
+    }
+  }
+
+  // Dynamic: query service binary path (works for Microsoft Store iTunes too)
+  try {
+    const { stdout } = await execAsync('sc qc "Apple Mobile Device Service"', { timeout: 4000 });
+    // Output contains: BINARY_PATH_NAME : "C:\Program Files\...\AppleMobileDeviceService.exe"
+    const m = stdout.match(/BINARY_PATH_NAME\s*:\s*"?([^"\r\n]+)/i);
+    if (m) {
+      const svcBin = m[1].trim().replace(/"/g, "").replace(/^"|"$/g, "");
+      const svcDir = path.dirname(svcBin);
+      // The interface DLL is usually one or two levels up from the service exe
+      const candidates = [
+        svcDir,
+        path.join(svcDir, ".."),
+        path.join(svcDir, "..", ".."),
+      ];
+      for (const c of candidates) {
+        const resolved = path.resolve(c);
+        if (fs.existsSync(path.join(resolved, "AppleMobileDeviceInterface.dll"))) {
+          _amdPath = resolved;
+          return resolved;
+        }
+      }
+      // Even if we didn't find the DLL, add the service directory itself —
+      // the DLL may have a different name on some versions
+      _amdPath = svcDir;
+      return svcDir;
+    }
+  } catch {}
+
+  _amdPath = "";
+  return "";
+}
+
+/** Build an env object that includes Apple's Mobile Device DLL directory in PATH */
+async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
+  const amdPath = await getAppleMobileDevicePath();
+  const binDir  = getBinDir();
+  const extra   = [binDir, amdPath].filter(Boolean).join(path.delimiter);
+  return {
+    ...process.env,
+    PATH: extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH,
+  };
 }
 
 // ── Device detection ──────────────────────────────────────────────────────────
@@ -50,7 +117,7 @@ export interface IphoneDiagnostics {
 }
 
 /** Run a full diagnostic: is the binary present? Is Apple's USB driver loaded? */
-export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics> {
+export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amdPath: string }> {
   const binDir = getBinDir();
   const exe = path.join(binDir, "idevice_id.exe");
   const binaryFound = binDir !== "" && fs.existsSync(exe);
@@ -59,13 +126,9 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics> {
   let appleDriverRunning = false;
   if (process.platform === "win32") {
     try {
-      const { stdout } = await execAsync(
-        'sc query "Apple Mobile Device Service"',
-        { timeout: 4000 },
-      );
+      const { stdout } = await execAsync('sc query "Apple Mobile Device Service"', { timeout: 4000 });
       appleDriverRunning = stdout.includes("RUNNING");
     } catch {
-      // Service not found or sc not available — also try checking via tasklist
       try {
         const { stdout: tl } = await execAsync(
           "tasklist /FI \"IMAGENAME eq AppleMobileDeviceService.exe\" /NH",
@@ -76,11 +139,15 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics> {
     }
   }
 
+  // Resolve Apple DLL path and build enriched env
+  const amdPath = await getAppleMobileDevicePath();
+  const env = await buildEnvWithApplePath();
+
   let rawOutput = "";
   let rawError = "";
   if (binaryFound) {
     try {
-      const result = await execAsync(`"${exe}" -l`, { timeout: 6000 });
+      const result = await execAsync(`"${exe}" -l`, { timeout: 6000, env });
       rawOutput = result.stdout.trim();
       rawError = (result as any).stderr?.trim() ?? "";
     } catch (err: any) {
@@ -94,21 +161,23 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics> {
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
   } else if (rawOutput === "" && rawError === "") {
-    suggestion = "No iPhone found. Make sure the cable is firmly connected and your iPhone is unlocked.";
+    suggestion = "unlock";
   } else if (rawError) {
-    suggestion = `Detection error: ${rawError}`;
+    suggestion = `error:${rawError}`;
   } else {
     suggestion = "ok";
   }
 
-  return { binaryFound, binaryPath: exe, appleDriverRunning, rawOutput, rawError, suggestion };
+  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, suggestion };
 }
 
 export async function listConnectedDevices(): Promise<IosDevice[]> {
-  // 1. Use bundled idevice_id.exe
+  const env = await buildEnvWithApplePath();
+
+  // 1. Use bundled idevice_id.exe with Apple DLL path injected
   try {
     const exe = binPath("idevice_id.exe");
-    const { stdout } = await execAsync(`"${exe}" -l`, { timeout: 5000 });
+    const { stdout } = await execAsync(`"${exe}" -l`, { timeout: 5000, env });
     const udids = stdout.trim().split("\n").filter(Boolean);
     if (udids.length === 0) return [];
     const devices: IosDevice[] = [];
@@ -117,9 +186,9 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
       let ios = "Unknown";
       try {
         const infoExe = binPath("ideviceinfo.exe");
-        const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3000 });
+        const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3000, env });
         name = nm.trim() || "iPhone";
-        const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000 });
+        const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000, env });
         ios = ver.trim() || "Unknown";
       } catch {}
       devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
@@ -129,16 +198,16 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
 
   // 2. Try idevice_id from PATH (dev environments with libimobiledevice)
   try {
-    const { stdout } = await execAsync("idevice_id -l", { timeout: 4000 });
+    const { stdout } = await execAsync("idevice_id -l", { timeout: 4000, env });
     const udids = stdout.trim().split("\n").filter(Boolean);
     const devices: IosDevice[] = [];
     for (const udid of udids) {
       let name = "iPhone";
       let ios = "Unknown";
       try {
-        const { stdout: nm } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k DeviceName`, { timeout: 3000 });
+        const { stdout: nm } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k DeviceName`, { timeout: 3000, env });
         name = nm.trim() || "iPhone";
-        const { stdout: ver } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000 });
+        const { stdout: ver } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000, env });
         ios = ver.trim() || "Unknown";
       } catch {}
       devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
