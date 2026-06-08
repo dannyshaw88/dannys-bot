@@ -4731,6 +4731,45 @@ export function startEbIpcServer(
               relay(`[mobile-setup] ⚠ Could not set mobile layout: ${mobileErr?.message ?? String(mobileErr)} — desktop layout may be active, signup flow may fail`);
             }
 
+          // ── Fingerprint diagnostic (logged to relay before first page load) ──
+          // This snapshot is taken AFTER all CDP overrides are applied and AFTER
+          // all addScriptToEvaluateOnNewDocument scripts are registered.
+          // The values shown here are what Instagram's JavaScript would read.
+          // Log it before navigation so we have a baseline even if the page fails.
+          try {
+            const _fpSnap = await wc.executeJavaScript(`(function(){
+              var c=navigator.connection;
+              return JSON.stringify({
+                'ua':           navigator.userAgent.slice(0,80),
+                'platform':     navigator.platform,
+                'maxTouch':     navigator.maxTouchPoints,
+                'hw':           navigator.hardwareConcurrency,
+                'mem':          navigator.deviceMemory,
+                'sw':           screen.width,
+                'sh':           screen.height,
+                'orientation':  screen.orientation?screen.orientation.type:'(none)',
+                'winOri':       window.orientation,
+                'dpr':          window.devicePixelRatio,
+                'iw':           window.innerWidth,
+                'ih':           window.innerHeight,
+                'pointer':      window.matchMedia('(pointer:coarse)').matches,
+                'hover':        window.matchMedia('(hover:none)').matches,
+                'conn':         c?c.type:'(none)',
+                'eff':          c?c.effectiveType:'(none)',
+                'perf.mem':     typeof performance.memory,
+                'kbd':          typeof navigator.keyboard,
+                'ontouchstart': window.ontouchstart,
+                'plugins':      navigator.plugins.length,
+                'pdfViewer':    navigator.pdfViewerEnabled,
+                'langs':        JSON.stringify(navigator.languages),
+                'vvpW':         window.visualViewport?window.visualViewport.width:'(none)',
+              });
+            })()`);
+            relay(`[fp-diag] ${_fpSnap}`);
+          } catch (fpErr: any) {
+            relay(`[fp-diag] snapshot failed: ${fpErr?.message}`);
+          }
+
             // ── Step 0: Navigate to Instagram homepage ───────────────────────
             // Start from the homepage so Instagram's SPA can set device cookies
             // naturally before we proceed. Direct navigation to emailsignup/ or
@@ -5345,12 +5384,41 @@ export function startEbIpcServer(
             await waitAndTap(["next", "continue"], "Next (after DOB)");
             await sleep(2800);
 
-            // ── Step 6: Full name (blank) ─────────────────────────────────────
-            relay("Name screen — leaving blank, clicking Next…");
-            // Just attempt Next without touching the name field
+            // ── Step 6: Full name ──────────────────────────────────────────────
+            // A real user ALWAYS fills in their name. An empty name field at
+            // account creation is a strong bot signal — Instagram's risk model
+            // sees blank-name accounts and flags them at the final submit step.
+            // Generate a random but realistic first + last name from common pools.
+            const _firstNames = ["Emma","Liam","Olivia","Noah","Ava","James","Sophia","William","Isabella","Oliver","Charlotte","Benjamin","Amelia","Elijah","Mia","Lucas","Harper","Mason","Evelyn","Logan","Abigail","Ethan","Emily","Aiden","Ella","Jackson","Elizabeth","Sebastian","Camila","Mateo","Luna","Jack","Sofia","Owen","Chloe","Samuel","Victoria","Ryan","Riley","Daniel","Aria","Luke","Madison","Gabriel","Layla","Alexander","Penelope","Jayden","Grace","Christopher"];
+            const _lastNames = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Wilson","Martinez","Anderson","Taylor","Thomas","Hernandez","Moore","Martin","Jackson","Thompson","White","Lopez","Lee","Gonzalez","Harris","Clark","Lewis","Robinson","Walker","Perez","Hall","Young","Allen","Sanchez","Wright","King","Scott","Green","Baker","Adams","Nelson","Hill","Ramirez","Campbell","Mitchell","Roberts","Carter","Phillips","Evans","Turner","Torres","Parker"];
+            const _randFirst = _firstNames[Math.floor(Math.random() * _firstNames.length)];
+            const _randLast  = _lastNames[Math.floor(Math.random() * _lastNames.length)];
+            const _fullName  = `${_randFirst} ${_randLast}`;
+            relay(`Name screen — filling "${_fullName}"…`);
+
+            // Wait for the name field to appear
+            const namePos = await js(`(function(){
+              var inputs = Array.from(document.querySelectorAll('input'));
+              var n = inputs.find(function(el){
+                var a=(el.getAttribute('aria-label')||'').toLowerCase();
+                var p=(el.placeholder||'').toLowerCase();
+                var nm=(el.name||'').toLowerCase();
+                return a.includes('name')||p.includes('name')||nm.includes('name')||nm==='fullName';
+              });
+              if(!n)return null;
+              var r=n.getBoundingClientRect();
+              return r.width>0&&r.height>0?{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}:null;
+            })()`);
+            if (namePos) {
+              await clearAndType(namePos.x, namePos.y, _fullName);
+              await sleep(800);
+            } else {
+              // Name field not found — skip gracefully (field may be optional or hidden)
+              relay("⚠ Name field not found — skipping name (field may not be present in this flow)");
+            }
+
             const nameNextOk = await waitAndTap(["next", "continue", "skip"], "Next (after name)", 8000);
             if (!nameNextOk) {
-              // Tap outside any overlay and try again
               await tap(400, 100);
               await sleep(500);
               await waitAndTap(["next", "continue"], "Next (after name, retry)");

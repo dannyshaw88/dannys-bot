@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.826",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: the name field was being left blank on every signup — 'leaving blank, clicking Next'. A blank name on account creation is one of the clearest bot signals Instagram's risk model looks for. The signup now generates and types a random realistic first and last name (e.g. 'Emma Johnson') instead of skipping the field." },
+      { category: "Debug", text: "Ghost Browser signup: a fingerprint diagnostic snapshot is now logged at the start of every signup session, showing exactly what navigator.platform, maxTouchPoints, screen dimensions, orientation, pointer type, connection type, plugins, and deviceMemory the browser reports. This lets you verify every signal before it reaches Instagram's servers." },
+    ],
+  },
+  {
     version: "1.0.825",
     date: "8 Jun 2026",
     items: [
