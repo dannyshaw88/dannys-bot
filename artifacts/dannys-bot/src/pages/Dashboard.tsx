@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.824",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: date of birth page now interacts with the mobile scroll-wheel drum picker using real touch swipe gestures (CDP synthesizeScrollGesture). Previously the code tried to find <select> elements or type into a text field — neither exist on the mobile UI. The drum picker requires swiping each column, which is now done correctly." },
+      { category: "Fix", text: "Ghost Browser signup: performance.memory (desktop-only Chrome API) is now hidden. Android Chrome does not expose this API and Instagram's device classifier checks for its presence to distinguish mobile from desktop." },
+      { category: "Fix", text: "Ghost Browser signup: navigator.keyboard (desktop Keyboard Lock API) is now hidden. Present in desktop Chrome, absent in Android Chrome — another device-type signal Instagram can read." },
+    ],
+  },
+  {
     version: "1.0.823",
     date: "7 Jun 2026",
     items: [

@@ -466,6 +466,18 @@ const GHOST_SIGNUP_FP_PATCH_JS = `(function(){
       }catch(e3){}
     },16+Math.round(Math.random()*5));
   }catch(e){}
+  // ── Remove desktop-only APIs absent from Android Chrome ───────────────────────
+  // performance.memory is a non-standard Chrome extension not available on Android.
+  // Instagram's device classifier checks "typeof performance.memory" to distinguish
+  // mobile from desktop. We make it undefined to match the Android Chrome baseline.
+  try{if(window.performance&&'memory' in window.performance){
+    Object.defineProperty(performance,'memory',{get:function(){return undefined;},configurable:true});
+  }}catch(e){}
+  // navigator.keyboard (Keyboard Lock / Keyboard Map API) is desktop-only.
+  // Present in desktop Chrome, absent in Android Chrome.
+  try{if(navigator.keyboard!==undefined){
+    Object.defineProperty(navigator,'keyboard',{get:function(){return undefined;},configurable:true});
+  }}catch(e){}
 })();`;
 
 // Hardware fingerprint spoofing script injected into every EB page via CDP.
@@ -5045,115 +5057,173 @@ export function startEbIpcServer(
             const dobMonth = parseInt(dobParts[1] ?? "6",  10);
             const dobYear  = parseInt(dobParts[2] ?? "1995", 10);
 
-            // Try native <select> dropdowns first, then React-custom dropdowns
-            await js(`(function(){
-              var selects=Array.from(document.querySelectorAll('select'));
-              for(var i=0;i<selects.length;i++){
-                var s=selects[i];
-                var opts=Array.from(s.options).map(function(o){return o.text||o.value;});
-                var hasMonthName=opts.some(function(o){return/january|february|march|april|may|june|july|august|september|october|november|december/i.test(o);});
-                var hasMonthNum=opts.some(function(o){return o.trim()==='1'||o.trim()==='01';});
-                if(hasMonthName||hasMonthNum){
-                  // Month select
-                  for(var k=0;k<s.options.length;k++){
-                    var ov=s.options[k].value;
-                    if(ov===${dobMonth}||ov==='${String(dobMonth).padStart(2,"0")}'){
-                      s.selectedIndex=k;s.dispatchEvent(new Event('change',{bubbles:true}));break;
-                    }
-                  }
-                } else if(opts.some(function(o){return parseInt(o)>1900&&parseInt(o)<2100;})){
-                  // Year select
-                  for(var k2=0;k2<s.options.length;k2++){
-                    if(s.options[k2].value=='${dobYear}'||s.options[k2].text=='${dobYear}'){
-                      s.selectedIndex=k2;s.dispatchEvent(new Event('change',{bubbles:true}));break;
-                    }
-                  }
-                } else if(opts.some(function(o){return parseInt(o)>0&&parseInt(o)<=31;})){
-                  // Day select
-                  for(var k3=0;k3<s.options.length;k3++){
-                    if(s.options[k3].value=='${dobDay}'||s.options[k3].value==='${String(dobDay).padStart(2,"0")}'){
-                      s.selectedIndex=k3;s.dispatchEvent(new Event('change',{bubbles:true}));break;
-                    }
-                  }
+            // ── Method 1: Drum / scroll-wheel picker (mobile Instagram UI) ──────
+            // Mobile Instagram shows a spinning drum picker — 3 scrollable columns
+            // (Month, Day, Year) where you SWIPE up/down to change the value.
+            // There are no <select> elements and no text inputs; the drums have
+            // role="listbox" / role="option" ARIA attributes.
+            // We scroll each column using CDP synthesizeScrollGesture (touch gesture)
+            // so it looks exactly like a human finger swiping the drum.
+            const drumProbe = await js(`(function(){
+              var cols=Array.from(document.querySelectorAll('[role="listbox"]'));
+              if(!cols.length) return null;
+              var result=[];
+              for(var i=0;i<cols.length;i++){
+                var col=cols[i];
+                var items=Array.from(col.querySelectorAll('[role="option"]'));
+                if(items.length<2) continue;
+                var rect=col.getBoundingClientRect();
+                if(!rect.width||!rect.height) continue;
+                var r0=items[0].getBoundingClientRect();
+                var r1=items.length>1?items[1].getBoundingClientRect():null;
+                var itemH=r1?Math.abs(r1.top-r0.top):44;
+                if(itemH<8) itemH=44;
+                // Find currently centered item (visible in the column window)
+                var midY=rect.top+rect.height/2,bestK=0,bestD=1e9;
+                for(var k=0;k<items.length;k++){
+                  var ir=items[k].getBoundingClientRect();
+                  var d=Math.abs((ir.top+ir.height/2)-midY);
+                  if(d<bestD){bestD=d;bestK=k;}
                 }
-              }
-              // Also try by aria-label
-              function setNativeVal(sel,val){var el=document.querySelector(sel);if(!el||el.tagName!=='SELECT')return;var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;nativeInputValueSetter.call(el,val);el.dispatchEvent(new Event('change',{bubbles:true}));}
-              setNativeVal('[aria-label*="Month"],[aria-label*="month"]','${dobMonth}');
-              setNativeVal('[aria-label*="Day"],[aria-label*="day"]','${dobDay}');
-              setNativeVal('[aria-label*="Year"],[aria-label*="year"]','${dobYear}');
-            })()`);
-            await sleep(800);
-
-            // Click custom DOB dropdowns if native selects didn't work
-            const monthBtnPos = await js(`(function(){
-              var el=document.querySelector('[aria-label*="Month"],[aria-label*="month"]');
-              if(el&&el.tagName!=='SELECT'){var r=el.getBoundingClientRect();if(r.width>0)return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}
-              return null;
-            })()`) as {x:number;y:number}|null;
-            if (monthBtnPos) {
-              await tap(monthBtnPos.x, monthBtnPos.y);
-              await sleep(600);
-              // Pick the month option
-              await js(`(function(){
-                var items=Array.from(document.querySelectorAll('[role="option"],[role="listbox"] li,ul li'));
-                var el=items.find(function(i){return parseInt((i.getAttribute('value')||i.dataset.value||''))===${dobMonth}||(i.innerText||'').trim().startsWith('${dobMonth}');});
-                if(el){var r=el.getBoundingClientRect();window._sgPos={x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};}
-              })()`);
-              const optPos = await js(`window._sgPos||null`) as {x:number;y:number}|null;
-              if (optPos) { await tap(optPos.x, optPos.y); await sleep(400); }
-            }
-
-            // ── Fallback: single text input "Birthday (MM/DD/YYYY)" ─────────────
-            // Instagram currently shows ONE combined date field instead of three
-            // <select> dropdowns. If we didn't fill any selects above, detect the
-            // first visible text input on the page and type the date into it.
-            // Instagram expects MM/DD/YYYY; incoming dob is DD/MM/YYYY so we swap.
-            const dobDiag = await js(`(function(){
-              var selects=Array.from(document.querySelectorAll('select')).filter(function(s){var r=s.getBoundingClientRect();return r.width>0;});
-              var inputs=Array.from(document.querySelectorAll('input')).filter(function(i){
-                if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio') return false;
-                var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
-              });
-              return {
-                selectCount: selects.length,
-                inputs: inputs.map(function(i){return{type:i.type,placeholder:i.placeholder,aria:i.getAttribute('aria-label'),val:i.value};})
-              };
-            })()`);
-            relay(`[debug] DOB DOM — selects:${(dobDiag as any)?.selectCount} visibleInputs:${JSON.stringify((dobDiag as any)?.inputs)}`);
-
-            if (!monthBtnPos && ((dobDiag as any)?.selectCount ?? 0) === 0) {
-              // No selects and no custom dropdown found — must be the combined text field
-              const dobTextInputPos = await js(`(function(){
-                var inputs=Array.from(document.querySelectorAll('input'));
-                // Try label-matched first
-                var inp=inputs.find(function(i){
-                  var lbl=(i.getAttribute('aria-label')||i.placeholder||i.getAttribute('name')||'').toLowerCase();
-                  return lbl.includes('birthday')||lbl.includes('birth')||lbl.includes('mm/dd')||lbl.includes('dd/mm')||lbl.includes('date');
+                result.push({
+                  label:(col.getAttribute('aria-label')||'').toLowerCase(),
+                  cx:Math.round(rect.left+rect.width/2),
+                  cy:Math.round(rect.top+rect.height/2),
+                  items:items.map(function(it){return(it.innerText||it.textContent||'').trim();}),
+                  curIdx:bestK,
+                  itemH:Math.round(itemH)
                 });
-                if(!inp){
-                  // Broad fallback: first visible non-hidden non-password input
-                  inp=inputs.find(function(i){
-                    if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio'||i.type==='password') return false;
-                    var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
-                  });
-                }
-                if(!inp) return null;
-                var r=inp.getBoundingClientRect();
-                return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),placeholder:inp.placeholder,aria:inp.getAttribute('aria-label')};
-              })()`);
+              }
+              return result.length>=2?result:null;
+            })()`) as {label:string;cx:number;cy:number;items:string[];curIdx:number;itemH:number}[]|null;
 
-              if (dobTextInputPos) {
-                // Instagram expects MM/DD/YYYY; dob arrives as DD/MM/YYYY
-                const mm = String(dobMonth).padStart(2, "0");
-                const dd = String(dobDay).padStart(2, "0");
-                const yyyy = String(dobYear);
-                const dateStr = `${mm}/${dd}/${yyyy}`;
-                relay(`[debug] DOB combined input at (${(dobTextInputPos as any).x}, ${(dobTextInputPos as any).y}) placeholder="${(dobTextInputPos as any).placeholder}" aria="${(dobTextInputPos as any).aria}" — typing "${dateStr}"`);
-                await clearAndType((dobTextInputPos as any).x, (dobTextInputPos as any).y, dateStr);
-                await sleep(500);
-              } else {
-                relay("⚠ DOB: no input field found (no selects, no text input) — tapping Next anyway");
+            if (drumProbe && drumProbe.length >= 2) {
+              relay(`[debug] DOB: drum picker detected (${drumProbe.length} columns)`);
+              const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+              for (const col of drumProbe) {
+                const lbl   = col.label;
+                const items = col.items;
+                let targetIdx = -1;
+
+                // Identify column type by label or item content
+                const isMonthCol = lbl.includes("month") || items.some(v => monthNames.includes(v.toLowerCase()));
+                const isYearCol  = lbl.includes("year")  || items.some(v => parseInt(v) > 1900 && parseInt(v) < 2100);
+                const isDayCol   = lbl.includes("day")   || (!isMonthCol && !isYearCol);
+
+                if (isMonthCol) {
+                  targetIdx = items.findIndex(v => {
+                    const n = parseInt(v);
+                    if (!isNaN(n)) return n === dobMonth;
+                    return monthNames.indexOf(v.toLowerCase()) + 1 === dobMonth;
+                  });
+                } else if (isYearCol) {
+                  targetIdx = items.findIndex(v => parseInt(v) === dobYear);
+                } else if (isDayCol) {
+                  targetIdx = items.findIndex(v => parseInt(v) === dobDay);
+                }
+
+                if (targetIdx === -1) {
+                  relay(`[debug] DOB drum: col="${lbl}" — target not found in items, skipping`);
+                  continue;
+                }
+                const delta = targetIdx - col.curIdx;
+                if (delta === 0) {
+                  relay(`[debug] DOB drum: col="${lbl}" already at target (idx=${targetIdx})`);
+                  continue;
+                }
+                // Swipe: yDistance negative = scroll UP = higher-indexed items come into view
+                const yDist = -(delta * col.itemH);
+                relay(`[debug] DOB drum: col="${lbl}" curIdx=${col.curIdx} targetIdx=${targetIdx} delta=${delta} yDist=${yDist} itemH=${col.itemH}`);
+                try {
+                  await wc.debugger.sendCommand("Input.synthesizeScrollGesture", {
+                    x: col.cx,
+                    y: col.cy,
+                    xDistance: 0,
+                    yDistance: yDist,
+                    speed: 350 + Math.round(Math.random() * 100),
+                    gestureSourceType: "touch",
+                  });
+                } catch (scrollErr: any) {
+                  relay(`[debug] DOB drum scroll err: ${scrollErr?.message}`);
+                }
+                await sleep(500 + Math.round(Math.random() * 300));
+              }
+              await sleep(800);
+            } else {
+              // ── Method 2: Native <select> dropdowns (desktop/hybrid UI) ────────
+              await js(`(function(){
+                var selects=Array.from(document.querySelectorAll('select'));
+                for(var i=0;i<selects.length;i++){
+                  var s=selects[i];
+                  var opts=Array.from(s.options).map(function(o){return o.text||o.value;});
+                  var hasMonthName=opts.some(function(o){return/january|february|march|april|may|june|july|august|september|october|november|december/i.test(o);});
+                  var hasMonthNum=opts.some(function(o){return o.trim()==='1'||o.trim()==='01';});
+                  if(hasMonthName||hasMonthNum){
+                    for(var k=0;k<s.options.length;k++){
+                      var ov=s.options[k].value;
+                      if(ov===${dobMonth}||ov==='${String(dobMonth).padStart(2,"0")}'){
+                        s.selectedIndex=k;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                      }
+                    }
+                  } else if(opts.some(function(o){return parseInt(o)>1900&&parseInt(o)<2100;})){
+                    for(var k2=0;k2<s.options.length;k2++){
+                      if(s.options[k2].value=='${dobYear}'||s.options[k2].text=='${dobYear}'){
+                        s.selectedIndex=k2;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                      }
+                    }
+                  } else if(opts.some(function(o){return parseInt(o)>0&&parseInt(o)<=31;})){
+                    for(var k3=0;k3<s.options.length;k3++){
+                      if(s.options[k3].value=='${dobDay}'||s.options[k3].value==='${String(dobDay).padStart(2,"0")}'){
+                        s.selectedIndex=k3;s.dispatchEvent(new Event('change',{bubbles:true}));break;
+                      }
+                    }
+                  }
+                }
+                function setNativeVal(sel,val){var el=document.querySelector(sel);if(!el||el.tagName!=='SELECT')return;var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;nativeInputValueSetter.call(el,val);el.dispatchEvent(new Event('change',{bubbles:true}));}
+                setNativeVal('[aria-label*="Month"],[aria-label*="month"]','${dobMonth}');
+                setNativeVal('[aria-label*="Day"],[aria-label*="day"]','${dobDay}');
+                setNativeVal('[aria-label*="Year"],[aria-label*="year"]','${dobYear}');
+              })()`);
+              await sleep(800);
+
+              // ── Method 3: Combined text input "Birthday (MM/DD/YYYY)" ──────────
+              const dobDiag = await js(`(function(){
+                var selects=Array.from(document.querySelectorAll('select')).filter(function(s){var r=s.getBoundingClientRect();return r.width>0;});
+                var inputs=Array.from(document.querySelectorAll('input')).filter(function(i){
+                  if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio') return false;
+                  var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
+                });
+                return {selectCount:selects.length,inputs:inputs.map(function(i){return{type:i.type,placeholder:i.placeholder,aria:i.getAttribute('aria-label'),val:i.value};})};
+              })()`);
+              relay(`[debug] DOB DOM — selects:${(dobDiag as any)?.selectCount} visibleInputs:${JSON.stringify((dobDiag as any)?.inputs)}`);
+
+              if (((dobDiag as any)?.selectCount ?? 0) === 0) {
+                const dobTextInputPos = await js(`(function(){
+                  var inputs=Array.from(document.querySelectorAll('input'));
+                  var inp=inputs.find(function(i){
+                    var lbl=(i.getAttribute('aria-label')||i.placeholder||i.getAttribute('name')||'').toLowerCase();
+                    return lbl.includes('birthday')||lbl.includes('birth')||lbl.includes('mm/dd')||lbl.includes('dd/mm')||lbl.includes('date');
+                  });
+                  if(!inp){
+                    inp=inputs.find(function(i){
+                      if(i.type==='hidden'||i.type==='submit'||i.type==='button'||i.type==='checkbox'||i.type==='radio'||i.type==='password') return false;
+                      var r=i.getBoundingClientRect(); return r.width>0&&r.height>0;
+                    });
+                  }
+                  if(!inp) return null;
+                  var r=inp.getBoundingClientRect();
+                  return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),placeholder:inp.placeholder,aria:inp.getAttribute('aria-label')};
+                })()`);
+                if (dobTextInputPos) {
+                  const mm = String(dobMonth).padStart(2, "0");
+                  const dd = String(dobDay).padStart(2, "0");
+                  const dateStr = `${mm}/${dd}/${dobYear}`;
+                  relay(`[debug] DOB combined input at (${(dobTextInputPos as any).x},${(dobTextInputPos as any).y}) — typing "${dateStr}"`);
+                  await clearAndType((dobTextInputPos as any).x, (dobTextInputPos as any).y, dateStr);
+                  await sleep(500);
+                } else {
+                  relay("⚠ DOB: no drum, no selects, no text input found — tapping Next anyway");
+                }
               }
             }
 
