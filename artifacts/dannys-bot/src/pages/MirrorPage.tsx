@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  Smartphone, Wifi, WifiOff, RefreshCw, Play, Pause, Home,
-  Volume2, VolumeX, Power, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Keyboard, UserPlus, Loader2, Copy, ClipboardPaste, CheckCircle2,
-  Mail, Lock, Calendar, Server, Key, Info,
+  Smartphone, RefreshCw, Home, Volume2, VolumeX, Power,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+  Keyboard, UserPlus, Loader2, Copy, CheckCircle2,
+  Mail, Lock, Calendar, Server, Key, Download, Zap,
+  Play, Pause, CircleDot,
 } from "lucide-react";
 
-// ── Helpers (ported from Ghost Browser) ──────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveSpintax(template: string): string {
   let result = template;
@@ -56,204 +57,63 @@ interface IosDevice {
   connected: "usb" | "wifi";
 }
 
-// iPhone screen logical dimensions (390×844 = standard iPhone 13/14/15)
+type SetupStage =
+  | "no_device"       // nothing plugged in
+  | "device_found"    // phone detected, need to check WDA
+  | "installing_wda"  // downloading + installing WDA
+  | "starting_iproxy" // iproxy launching
+  | "ready";          // WDA connected, full control active
+
 const IPHONE_W = 390;
 const IPHONE_H = 844;
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function ConnectionBadge({ connected }: { connected: boolean }) {
-  return (
-    <span className={cn(
-      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
-      connected
-        ? "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800"
-        : "text-muted-foreground bg-muted/60 border-border",
-    )}>
-      {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-      {connected ? "WDA Connected" : "WDA Offline"}
-    </span>
-  );
-}
-
-function CmdLine({ children }: { children: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-center gap-2 mt-1">
-      <code className="flex-1 bg-black/80 text-green-400 text-[11px] px-3 py-1.5 rounded font-mono select-all">
-        {children}
-      </code>
-      <button
-        onClick={() => { navigator.clipboard.writeText(children).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        className="shrink-0 px-2 py-1 text-[10px] rounded border border-border bg-muted hover:bg-accent transition-colors"
-      >
-        {copied ? "✓" : "Copy"}
-      </button>
-    </div>
-  );
-}
-
-function SetupPanel() {
-  const [tab, setTab] = useState<"screenshots" | "control">("screenshots");
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden text-xs">
-      <div className="flex border-b border-border">
-        <button
-          onClick={() => setTab("screenshots")}
-          className={cn("flex-1 py-2 text-[11px] font-semibold transition-colors",
-            tab === "screenshots" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
-          style={tab === "screenshots" ? { color: "#1AD2F2" } : {}}
-        >
-          📸 Screenshots only
-        </button>
-        <button
-          onClick={() => setTab("control")}
-          className={cn("flex-1 py-2 text-[11px] font-semibold transition-colors border-l border-border",
-            tab === "control" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
-          style={tab === "control" ? { color: "#1AD2F2" } : {}}
-        >
-          🖱 Full control (tap/type)
-        </button>
-      </div>
-
-      {tab === "screenshots" && (
-        <div className="p-3 space-y-3">
-          <p className="font-semibold text-foreground">See your iPhone screen in Equinox — 3 steps on your Windows PC:</p>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">1.</strong> Open Command Prompt on your PC</p>
-            <p className="text-muted-foreground text-[10px]">Press <strong>Win key</strong>, type <strong>cmd</strong>, press Enter</p>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">2.</strong> Paste this into Command Prompt and press Enter:</p>
-            <CmdLine>pip install tidevice</CmdLine>
-            <p className="text-muted-foreground text-[10px] mt-1">Wait for it to finish downloading (takes ~30 seconds)</p>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">3.</strong> Plug your iPhone into your PC with a USB cable</p>
-            <p className="text-muted-foreground text-[10px]">Your iPhone will ask <strong>"Trust This Computer?"</strong> — tap <strong>Trust</strong> and enter your passcode</p>
-          </div>
-
-          <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 text-green-800 dark:text-green-300">
-            ✅ That's it — press <strong>Start Mirror</strong> above and your iPhone screen will appear here.
-          </div>
-        </div>
-      )}
-
-      {tab === "control" && (
-        <div className="p-3 space-y-3">
-          <p className="font-semibold text-foreground">Tap, swipe and type on your iPhone from Equinox — Windows PC only, no Mac needed:</p>
-
-          <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2 text-blue-800 dark:text-blue-300 text-[10px]">
-            <strong>Do the Screenshots setup first</strong> (left tab) before doing this.
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">1.</strong> Download <strong>Sideloadly</strong> — free Windows app that installs apps on your iPhone</p>
-            <p className="text-muted-foreground text-[10px]">Go to <strong>sideloadly.io</strong> → click <strong>Download for Windows</strong> → install it</p>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">2.</strong> Download the WebDriverAgent IPA file</p>
-            <p className="text-muted-foreground text-[10px]">Go to: <strong>github.com/appium/WebDriverAgent/releases</strong> → download the latest <strong>.ipa</strong> file</p>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">3.</strong> Install WDA on your iPhone using Sideloadly</p>
-            <div className="text-muted-foreground text-[10px] space-y-0.5 ml-2">
-              <p>a) Open Sideloadly — your iPhone should appear automatically</p>
-              <p>b) Drag the WDA <strong>.ipa</strong> file into the Sideloadly window</p>
-              <p>c) Sign in with your <strong>Apple ID</strong> (your normal iCloud email — free account works)</p>
-              <p>d) Click <strong>Start</strong> and wait for it to finish</p>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">4.</strong> Trust the app on your iPhone</p>
-            <div className="text-muted-foreground text-[10px] space-y-0.5 ml-2">
-              <p>On your iPhone: <strong>Settings → General → VPN & Device Management</strong></p>
-              <p>Tap your Apple ID email → tap <strong>Trust</strong></p>
-              <p>Now open the <strong>WebDriverAgentRunner</strong> app on your iPhone</p>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-muted-foreground mb-1"><strong className="text-foreground">5.</strong> Connect WDA to Equinox — open Command Prompt on your PC and run:</p>
-            <CmdLine>python3 -m tidevice iproxy 8100 8100</CmdLine>
-            <p className="text-muted-foreground text-[10px] mt-1">Leave this Command Prompt window open while using Equinox</p>
-          </div>
-
-          <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 text-green-800 dark:text-green-300">
-            ✅ The <strong>WDA Connected</strong> badge at the top will turn green. You can now click the iPhone screen to tap, drag to swipe, and use the Controls tab to type.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── iPhone frame renderer ─────────────────────────────────────────────────────
+// ── Phone frame ───────────────────────────────────────────────────────────────
 
 interface PhoneFrameProps {
   jpeg: string | null;
   streaming: boolean;
+  fps: number;
   onTap: (x: number, y: number) => void;
-  onSwipeStart: (x: number, y: number) => void;
-  onSwipeEnd: (x: number, y: number) => void;
+  onSwipe: (fx: number, fy: number, tx: number, ty: number) => void;
 }
 
-function PhoneFrame({ jpeg, streaming, onTap, onSwipeStart, onSwipeEnd }: PhoneFrameProps) {
-  const imgRef = useRef<HTMLImageElement>(null);
+function PhoneFrame({ jpeg, streaming, fps, onTap, onSwipe }: PhoneFrameProps) {
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
-  const toPhoneCoords = (e: React.MouseEvent<HTMLElement>): { x: number; y: number } => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
-    const relY = (e.clientY - rect.top) / rect.height;
+  const toCoords = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
     return {
-      x: Math.round(relX * IPHONE_W),
-      y: Math.round(relY * IPHONE_H),
+      x: Math.round(((e.clientX - rect.left) / rect.width) * IPHONE_W),
+      y: Math.round(((e.clientY - rect.top) / rect.height) * IPHONE_H),
     };
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    swipeStart.current = toPhoneCoords(e);
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!swipeStart.current) return;
-    const end = toPhoneCoords(e);
-    const dx = Math.abs(end.x - swipeStart.current.x);
-    const dy = Math.abs(end.y - swipeStart.current.y);
-    if (dx < 8 && dy < 8) {
-      onTap(end.x, end.y);
-    } else {
-      onSwipeStart(swipeStart.current.x, swipeStart.current.y);
-      onSwipeEnd(end.x, end.y);
-    }
-    swipeStart.current = null;
-  };
-
   return (
-    <div className="flex flex-col items-center">
-      {/* Phone bezel */}
-      <div className="relative rounded-[38px] border-[6px] border-gray-800 dark:border-gray-600 bg-black shadow-2xl overflow-hidden select-none"
-        style={{ width: 270, height: 585 }}>
-        {/* Notch */}
+    <div className="flex flex-col items-center gap-2">
+      <div
+        className="relative rounded-[38px] border-[6px] border-gray-800 dark:border-gray-600 bg-black shadow-2xl overflow-hidden select-none"
+        style={{ width: 270, height: 585 }}
+      >
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-b-2xl z-10" />
-        {/* Home indicator */}
         <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-24 h-1 bg-white/30 rounded-full z-10" />
-        {/* Screen area */}
         <div
           className="w-full h-full cursor-crosshair"
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
+          onMouseDown={e => { swipeStart.current = toCoords(e); }}
+          onMouseUp={e => {
+            if (!swipeStart.current) return;
+            const end = toCoords(e);
+            const dx = Math.abs(end.x - swipeStart.current.x);
+            const dy = Math.abs(end.y - swipeStart.current.y);
+            if (dx < 8 && dy < 8) {
+              onTap(end.x, end.y);
+            } else {
+              onSwipe(swipeStart.current.x, swipeStart.current.y, end.x, end.y);
+            }
+            swipeStart.current = null;
+          }}
         >
           {jpeg ? (
             <img
-              ref={imgRef}
               src={`data:image/jpeg;base64,${jpeg}`}
               className="w-full h-full object-cover"
               draggable={false}
@@ -263,34 +123,145 @@ function PhoneFrame({ jpeg, streaming, onTap, onSwipeStart, onSwipeEnd }: PhoneF
             <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-900">
               <Smartphone className="w-10 h-10 text-gray-600" />
               <p className="text-xs text-gray-500 text-center px-4">
-                {streaming ? "Capturing screenshot…" : "Press Start to begin mirroring"}
+                {streaming ? "Capturing…" : "Plug in your iPhone to start"}
               </p>
             </div>
           )}
         </div>
       </div>
-      {/* Side buttons */}
-      <p className="text-[10px] text-muted-foreground mt-2">
-        Click to tap · Drag to swipe
-      </p>
+      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <span>Click to tap · Drag to swipe</span>
+        {streaming && (
+          <span className="font-mono text-primary" style={{ color: "#1AD2F2" }}>{fps} fps</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Setup progress panel ──────────────────────────────────────────────────────
+
+interface SetupPanelProps {
+  stage: SetupStage;
+  devices: IosDevice[];
+  selectedUdid: string | null;
+  installProgress: number;
+  installMessage: string;
+  onInstallWda: () => void;
+  onRetry: () => void;
+}
+
+function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, onInstallWda, onRetry }: SetupPanelProps) {
+  const steps = [
+    { id: "plug",    label: "Plug in iPhone",             done: stage !== "no_device" },
+    { id: "trust",   label: "Tap \"Trust\" on iPhone",    done: stage === "installing_wda" || stage === "starting_iproxy" || stage === "ready" },
+    { id: "agent",   label: "Install control agent",      done: stage === "starting_iproxy" || stage === "ready" },
+    { id: "connect", label: "Connect",                    done: stage === "ready" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+      <div className="flex items-center gap-2">
+        <Zap className="w-4 h-4" style={{ color: "#1AD2F2" }} />
+        <p className="text-sm font-bold">Getting started — plug in your iPhone</p>
+      </div>
+
+      {/* Step progress */}
+      <div className="space-y-3">
+        {steps.map((s, i) => (
+          <div key={s.id} className="flex items-center gap-3">
+            <div className={cn(
+              "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border",
+              s.done
+                ? "bg-green-500 border-green-500 text-white"
+                : "border-border bg-muted/40 text-muted-foreground",
+            )}>
+              {s.done ? "✓" : i + 1}
+            </div>
+            <span className={cn("text-sm", s.done ? "text-foreground line-through opacity-50" : "text-foreground font-medium")}>
+              {s.label}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Stage-specific action */}
+      {stage === "no_device" && (
+        <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
+          Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
+        </div>
+      )}
+
+      {stage === "device_found" && (
+        <div className="space-y-3">
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-300">
+            <strong>iPhone detected!</strong> If your iPhone shows <em>"Trust This Computer?"</em> — tap <strong>Trust</strong> and enter your passcode.
+          </div>
+          <Button
+            onClick={onInstallWda}
+            className="w-full h-10 font-semibold"
+            style={{ background: "#1AD2F2", color: "#000" }}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Install Control Agent (one-time)
+          </Button>
+          <p className="text-[11px] text-muted-foreground text-center">
+            This installs the control bridge on your iPhone — takes about 30 seconds. No Apple ID needed.
+          </p>
+        </div>
+      )}
+
+      {stage === "installing_wda" && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#1AD2F2" }} />
+              {installMessage || "Installing control agent…"}
+            </div>
+            {installProgress > 0 && installProgress < 100 && (
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${installProgress}%`, background: "#1AD2F2" }}
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground text-center">
+            Keep your iPhone unlocked and screen on while this runs.
+          </p>
+        </div>
+      )}
+
+      {stage === "starting_iproxy" && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
+          Connecting to your iPhone…
+        </div>
+      )}
+
+      {stage === "ready" && (
+        <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-sm text-green-800 dark:text-green-300 font-medium">
+          ✅ Connected — full control active. Click the screen to tap, drag to swipe.
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Control pad ───────────────────────────────────────────────────────────────
 
-function ControlPad({ onCommand }: { onCommand: (cmd: string, payload?: any) => void }) {
+function ControlPad({ onCommand, disabled }: { onCommand: (cmd: string, payload?: any) => void; disabled: boolean }) {
   const [typeText, setTypeText] = useState("");
 
   return (
-    <div className="space-y-4">
-      {/* Hardware buttons */}
+    <div className={cn("space-y-5", disabled && "opacity-40 pointer-events-none")}>
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Hardware Buttons</p>
         <div className="flex gap-2 flex-wrap">
           {[
-            { label: "Home", icon: Home, cmd: "pressButton", payload: "home" },
-            { label: "Power", icon: Power, cmd: "pressButton", payload: "power" },
+            { label: "Home",  icon: Home,    cmd: "pressButton", payload: "home" },
+            { label: "Power", icon: Power,   cmd: "pressButton", payload: "power" },
             { label: "Vol +", icon: Volume2, cmd: "pressButton", payload: "volumeUp" },
             { label: "Vol −", icon: VolumeX, cmd: "pressButton", payload: "volumeDown" },
           ].map(b => (
@@ -306,7 +277,6 @@ function ControlPad({ onCommand }: { onCommand: (cmd: string, payload?: any) => 
         </div>
       </div>
 
-      {/* Swipe shortcuts */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Swipe</p>
         <div className="grid grid-cols-3 gap-1 w-28">
@@ -336,7 +306,6 @@ function ControlPad({ onCommand }: { onCommand: (cmd: string, payload?: any) => 
         </div>
       </div>
 
-      {/* Text input */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Type Text</p>
         <div className="flex gap-2">
@@ -358,7 +327,6 @@ function ControlPad({ onCommand }: { onCommand: (cmd: string, payload?: any) => 
         </div>
       </div>
 
-      {/* Quick actions */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Quick Actions</p>
         <div className="flex gap-2 flex-wrap">
@@ -380,14 +348,13 @@ function ControlPad({ onCommand }: { onCommand: (cmd: string, payload?: any) => 
   );
 }
 
-// ── Signup panel ─────────────────────────────────────────────────────────────
+// ── Signup panel ──────────────────────────────────────────────────────────────
 
 const LS_KEY = "mirror-signup-fields-v1";
 const loadLS = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}"); } catch { return {}; } };
 
 function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
   const ls = loadLS();
-
   const [usernameSpin, setUsernameSpin] = useState(() => ls.usernameSpin ?? "");
   const [password, setPassword]         = useState(() => ls.password ?? generatePassword());
   const [emailAddr, setEmailAddr]       = useState(() => ls.emailAddr ?? "");
@@ -397,14 +364,13 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
   const [imapSecure, setImapSecure]     = useState(() => (ls.imapSecure ?? "true") === "true");
   const [dob, setDob]                   = useState(() => ls.dob ?? generateDob());
 
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId]     = useState<string | null>(null);
   const [signupRunning, setSignupRunning] = useState(false);
   const [signupStatus, setSignupStatus]   = useState("");
   const [manualCode, setManualCode]       = useState("");
   const [codePending, setCodePending]     = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Persist form fields
   useEffect(() => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({
@@ -414,7 +380,6 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
     } catch {}
   }, [usernameSpin, password, dob, emailAddr, emailPass, imapHost, imapPort, imapSecure]);
 
-  // Poll signup status while running
   useEffect(() => {
     if (!signupRunning || !sessionId) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -514,13 +479,12 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
     <div className="space-y-4">
       {!wdaConnected && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-2.5 text-xs text-amber-800 dark:text-amber-300">
-          <strong>WDA not connected.</strong> The iPhone Signup automation needs WDA running on your iPhone. Switch to the <strong>Controls</strong> tab for step-by-step Windows setup instructions.
+          <strong>Connect your iPhone first</strong> — use the Controls tab to set up the connection.
         </div>
       )}
 
       <div className="space-y-3">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Account Details</p>
-
         <div className="space-y-1">
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
             <UserPlus className="w-3 h-3" /> Username (Spintax OK)
@@ -532,17 +496,13 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
           </div>
           {username && <p className="text-[10px] text-muted-foreground">→ <span className="font-mono text-primary">{username}</span></p>}
         </div>
-
-        <Field label="Password" icon={Lock} value={password} onChange={setPassword}
-          type="password" placeholder="Password" />
-
+        <Field label="Password" icon={Lock} value={password} onChange={setPassword} type="password" placeholder="Password" />
         <div className="space-y-1">
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Date of Birth
           </label>
           <div className="flex gap-1.5">
-            <Input value={dob} onChange={e => setDob(e.target.value)}
-              placeholder="DD/MM/YYYY" className="h-8 text-xs flex-1" />
+            <Input value={dob} onChange={e => setDob(e.target.value)} placeholder="DD/MM/YYYY" className="h-8 text-xs flex-1" />
             <button onClick={() => setDob(generateDob())}
               className="flex items-center gap-1 px-2 h-8 rounded border border-input bg-muted/50 text-[10px] hover:bg-accent transition-colors">
               <RefreshCw className="w-3 h-3" />
@@ -553,42 +513,37 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
 
       <div className="space-y-3">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email / IMAP</p>
-        <Field label="Email Address" icon={Mail} value={emailAddr} onChange={setEmailAddr}
-          placeholder="example@gmail.com" />
-        <Field label="Email Password" icon={Key} value={emailPass} onChange={setEmailPass}
-          type="password" placeholder="For IMAP code fetch" />
+        <Field label="Email Address" icon={Mail} value={emailAddr} onChange={setEmailAddr} placeholder="example@gmail.com" />
+        <Field label="Email Password" icon={Key} value={emailPass} onChange={setEmailPass} type="password" placeholder="For IMAP code fetch" />
         <div className="grid grid-cols-3 gap-2">
           <div className="col-span-2 space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
               <Server className="w-3 h-3" /> IMAP Host
             </label>
-            <Input value={imapHost} onChange={e => setImapHost(e.target.value)}
-              placeholder="imap.gmail.com" className="h-8 text-xs" />
+            <Input value={imapHost} onChange={e => setImapHost(e.target.value)} placeholder="imap.gmail.com" className="h-8 text-xs" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Port</label>
-            <Input value={imapPort} onChange={e => setImapPort(e.target.value)}
-              placeholder="993" className="h-8 text-xs" />
+            <Input value={imapPort} onChange={e => setImapPort(e.target.value)} placeholder="993" className="h-8 text-xs" />
           </div>
         </div>
         <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
-          <input type="checkbox" checked={imapSecure} onChange={e => setImapSecure(e.target.checked)}
-            className="w-3.5 h-3.5" />
+          <input type="checkbox" checked={imapSecure} onChange={e => setImapSecure(e.target.checked)} className="w-3.5 h-3.5" />
           SSL/TLS
         </label>
       </div>
 
-      {/* Run button */}
       <Button
         onClick={handleSignup}
         disabled={signupRunning || !username || !password || !emailAddr || !dob}
         className="w-full h-9 text-sm font-semibold"
         style={{ background: "#1AD2F2", color: "#000" }}
       >
-        {signupRunning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing up…</> : <><UserPlus className="w-4 h-4 mr-2" />Auto Signup on iPhone</>}
+        {signupRunning
+          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing up…</>
+          : <><UserPlus className="w-4 h-4 mr-2" />Auto Signup on iPhone</>}
       </Button>
 
-      {/* Status */}
       {signupStatus && (
         <div className={cn(
           "rounded-lg p-2.5 text-xs font-medium border",
@@ -602,7 +557,6 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
         </div>
       )}
 
-      {/* Verification code input */}
       {codePending && signupRunning && (
         <div className="rounded-lg border border-border bg-card p-3 space-y-2">
           <p className="text-xs font-semibold">Enter verification code</p>
@@ -610,13 +564,10 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
             <Input value={manualCode} onChange={e => setManualCode(e.target.value)}
               placeholder="6-digit code" className="h-8 text-xs flex-1 font-mono tracking-widest" />
             <Button variant="outline" size="sm" onClick={handleFetchCode}
-              disabled={!emailAddr || !emailPass || !imapHost}
-              className="h-8 px-2 text-[10px]">
+              disabled={!emailAddr || !emailPass || !imapHost} className="h-8 px-2 text-[10px]">
               <Mail className="w-3 h-3 mr-1" /> IMAP
             </Button>
-            <Button size="sm" onClick={handleSubmitCode}
-              disabled={!manualCode.trim()}
-              className="h-8 px-3 text-[10px]">
+            <Button size="sm" onClick={handleSubmitCode} disabled={!manualCode.trim()} className="h-8 px-3 text-[10px]">
               Submit
             </Button>
           </div>
@@ -629,46 +580,101 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function MirrorPage() {
-  const [devices, setDevices]       = useState<IosDevice[]>([]);
+  const [devices, setDevices]           = useState<IosDevice[]>([]);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
   const [wdaConnected, setWdaConnected] = useState(false);
-  const [streaming, setStreaming]   = useState(false);
-  const [jpeg, setJpeg]             = useState<string | null>(null);
-  const [fps, setFps]               = useState(0);
-  const [tab, setTab]               = useState<"controls" | "signup">("controls");
-  const [toastMsg, setToastMsg]     = useState("");
+  const [iproxyRunning, setIproxyRunning] = useState(false);
+  const [stage, setStage]               = useState<SetupStage>("no_device");
+  const [streaming, setStreaming]       = useState(false);
+  const [jpeg, setJpeg]                 = useState<string | null>(null);
+  const [fps, setFps]                   = useState(0);
+  const [tab, setTab]                   = useState<"controls" | "signup">("controls");
+  const [toastMsg, setToastMsg]         = useState("");
+  const [installSessionId, setInstallSessionId] = useState<string | null>(null);
+  const [installProgress, setInstallProgress]   = useState(0);
+  const [installMessage, setInstallMessage]     = useState("");
 
   const streamRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const fpsCountRef = useRef(0);
   const fpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const installPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const toast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
 
-  // Fetch devices + WDA status on mount and every 10s
-  const refreshDevices = useCallback(async () => {
+  // ── Compute setup stage from state ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (wdaConnected) {
+      setStage("ready");
+    } else if (iproxyRunning) {
+      setStage("starting_iproxy");
+    } else if (installSessionId) {
+      setStage("installing_wda");
+    } else if (devices.length > 0) {
+      setStage("device_found");
+    } else {
+      setStage("no_device");
+    }
+  }, [devices, wdaConnected, iproxyRunning, installSessionId]);
+
+  // ── Auto-start iproxy when device detected ─────────────────────────────────
+
+  useEffect(() => {
+    if (selectedUdid && stage === "device_found" && !iproxyRunning && !installSessionId) {
+      // Don't auto-install — wait for user to click. But DO auto-start iproxy
+      // if WDA was already installed (from a previous session).
+      fetch("/api/mirror/iproxy/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ udid: selectedUdid }),
+      }).then(r => r.json()).then((j: any) => {
+        if (j.ok) setIproxyRunning(true);
+      }).catch(() => {});
+    }
+  }, [selectedUdid, stage, iproxyRunning, installSessionId]);
+
+  // ── Poll devices + WDA status ──────────────────────────────────────────────
+
+  const refreshStatus = useCallback(async () => {
     try {
       const [dr, wr] = await Promise.all([
         fetch("/api/mirror/devices").then(r => r.json()),
         fetch("/api/mirror/wda-status").then(r => r.json()),
       ]);
-      setDevices((dr as any).devices ?? []);
+      const devs: IosDevice[] = (dr as any).devices ?? [];
+      setDevices(devs);
       setWdaConnected(!!(wr as any).connected);
-      if ((dr as any).devices?.length && !selectedUdid) {
-        setSelectedUdid((dr as any).devices[0].udid);
+      setIproxyRunning(!!(wr as any).iproxy?.running);
+      if (devs.length && !selectedUdid) {
+        setSelectedUdid(devs[0].udid);
+      }
+      // If phone disconnected, stop stream
+      if (!devs.length) {
+        stopStream();
+        setJpeg(null);
       }
     } catch {}
   }, [selectedUdid]);
 
   useEffect(() => {
-    refreshDevices();
-    const t = setInterval(refreshDevices, 10_000);
+    refreshStatus();
+    const t = setInterval(refreshStatus, 5_000);
     return () => clearInterval(t);
-  }, [refreshDevices]);
+  }, [refreshStatus]);
 
-  // FPS counter
+  // ── Auto-start stream when WDA connects ───────────────────────────────────
+
+  useEffect(() => {
+    if (wdaConnected && !streaming && selectedUdid) {
+      startStream();
+    }
+  }, [wdaConnected, selectedUdid]);
+
+  // ── FPS counter ────────────────────────────────────────────────────────────
+
   useEffect(() => {
     fpsTimerRef.current = setInterval(() => {
       setFps(fpsCountRef.current);
@@ -676,6 +682,8 @@ export function MirrorPage() {
     }, 1000);
     return () => { if (fpsTimerRef.current) clearInterval(fpsTimerRef.current); };
   }, []);
+
+  // ── Screen stream ──────────────────────────────────────────────────────────
 
   const stopStream = useCallback(() => {
     if (streamRef.current) { clearInterval(streamRef.current); streamRef.current = null; }
@@ -706,7 +714,56 @@ export function MirrorPage() {
 
   useEffect(() => () => stopStream(), [stopStream]);
 
-  // Handle WDA commands from control pad
+  // ── WDA install flow ───────────────────────────────────────────────────────
+
+  const handleInstallWda = async () => {
+    if (!selectedUdid) return;
+    try {
+      const r = await fetch("/api/mirror/wda/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ udid: selectedUdid }),
+      });
+      const j = await r.json() as any;
+      if (!j.ok) { toast(`⚠ ${j.error}`); return; }
+      setInstallSessionId(j.sessionId);
+      setInstallProgress(0);
+      setInstallMessage("Starting…");
+
+      installPollRef.current = setInterval(async () => {
+        try {
+          const sr = await fetch(`/api/mirror/wda/install-status?sessionId=${encodeURIComponent(j.sessionId)}`);
+          const s = await sr.json() as any;
+          if (s.message) setInstallMessage(s.message);
+          if (s.progress != null) setInstallProgress(s.progress);
+          if (s.done) {
+            clearInterval(installPollRef.current!);
+            installPollRef.current = null;
+            setInstallSessionId(null);
+            if (s.step === "done") {
+              // Start iproxy now that WDA is installed
+              await fetch("/api/mirror/iproxy/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ udid: selectedUdid }),
+              });
+              setIproxyRunning(true);
+              refreshStatus();
+            } else {
+              toast(`⚠ Install failed: ${s.message}`);
+            }
+          }
+        } catch {}
+      }, 1500);
+    } catch (e: any) {
+      toast(`⚠ ${e.message}`);
+    }
+  };
+
+  useEffect(() => () => { if (installPollRef.current) clearInterval(installPollRef.current); }, []);
+
+  // ── WDA control commands ───────────────────────────────────────────────────
+
   const handleCommand = async (cmd: string, payload?: any) => {
     try {
       if (cmd === "pressButton") {
@@ -722,9 +779,7 @@ export function MirrorPage() {
         toast(`Typed: "${payload}"`);
       } else if (cmd === "swipe") {
         const dir = payload?.dir;
-        const cx = IPHONE_W / 2;
-        const cy = IPHONE_H / 2;
-        const d = 200;
+        const cx = IPHONE_W / 2, cy = IPHONE_H / 2, d = 200;
         const map: Record<string, [number, number, number, number]> = {
           up:    [cx, cy + d, cx, cy - d],
           down:  [cx, cy - d, cx, cy + d],
@@ -751,6 +806,7 @@ export function MirrorPage() {
   };
 
   const handleTap = async (x: number, y: number) => {
+    if (!wdaConnected) return;
     try {
       await fetch("/api/mirror/tap", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -759,25 +815,25 @@ export function MirrorPage() {
     } catch {}
   };
 
-  const handleSwipe = async (startX: number, startY: number, endX: number, endY: number) => {
+  const handleSwipe = async (fx: number, fy: number, tx: number, ty: number) => {
+    if (!wdaConnected) return;
     try {
       await fetch("/api/mirror/swipe", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromX: startX, fromY: startY, toX: endX, toY: endY }),
+        body: JSON.stringify({ fromX: fx, fromY: fy, toX: tx, toY: ty }),
       });
     } catch {}
   };
 
-  const selectedDevice = devices.find(d => d.udid === selectedUdid);
-
   return (
     <AppLayout>
       <div className="flex flex-col h-full overflow-hidden">
+
         {/* ── Header ── */}
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 flex-wrap">
           <div className="flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-primary" style={{ color: "#1AD2F2" }} />
-            <h1 className="text-base font-bold tracking-tight">iPhone Mirror</h1>
+            <Smartphone className="w-5 h-5" style={{ color: "#1AD2F2" }} />
+            <h1 className="text-base font-bold tracking-tight">iPhone Control</h1>
           </div>
 
           {devices.length > 0 ? (
@@ -793,55 +849,59 @@ export function MirrorPage() {
               ))}
             </select>
           ) : (
-            <span className="text-xs text-muted-foreground">No iPhone detected — connect via USB</span>
+            <span className="text-xs text-muted-foreground italic">No iPhone detected</span>
           )}
 
-          <ConnectionBadge connected={wdaConnected} />
+          <span className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+            wdaConnected
+              ? "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800"
+              : "text-muted-foreground bg-muted/60 border-border",
+          )}>
+            <CircleDot className="w-3 h-3" />
+            {wdaConnected ? "Connected" : stage === "no_device" ? "No device" : stage === "installing_wda" ? "Installing…" : stage === "starting_iproxy" ? "Connecting…" : "Not connected"}
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
-            {streaming && (
-              <span className="text-[10px] font-mono text-muted-foreground">{fps} fps</span>
-            )}
             <button
-              onClick={() => streaming ? stopStream() : startStream()}
-              disabled={devices.length === 0}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors",
-                streaming
-                  ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/30"
-                  : devices.length > 0
-                  ? "border-border bg-muted/40 text-foreground hover:bg-accent"
-                  : "border-border/40 bg-muted/20 text-muted-foreground/50 cursor-not-allowed",
-              )}
-            >
-              {streaming ? <><Pause className="w-3.5 h-3.5" />Stop</> : <><Play className="w-3.5 h-3.5" />Start Mirror</>}
-            </button>
-            <button
-              onClick={() => { setJpeg(null); startStream(); stopStream(); setTimeout(startStream, 100); }}
-              disabled={!streaming}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground hover:bg-accent transition-colors disabled:opacity-40"
+              onClick={refreshStatus}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground hover:bg-accent transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
+            {wdaConnected && (
+              <button
+                onClick={() => streaming ? stopStream() : startStream()}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors",
+                  streaming
+                    ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/30"
+                    : "border-border bg-muted/40 text-foreground hover:bg-accent",
+                )}
+              >
+                {streaming
+                  ? <><Pause className="w-3.5 h-3.5" />Pause</>
+                  : <><Play className="w-3.5 h-3.5" />Resume</>}
+              </button>
+            )}
           </div>
         </div>
 
         {/* ── Body ── */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left: phone frame */}
+          {/* Phone frame */}
           <div className="flex flex-col items-center justify-center w-[310px] shrink-0 py-6 px-4 border-r border-border bg-muted/10">
             <PhoneFrame
               jpeg={jpeg}
               streaming={streaming}
+              fps={fps}
               onTap={handleTap}
-              onSwipeStart={(x, y) => { /* captured inline */ }}
-              onSwipeEnd={(x, y) => { /* no-op, handled in handleSwipe */ }}
+              onSwipe={handleSwipe}
             />
           </div>
 
-          {/* Right: tabs */}
+          {/* Right panel */}
           <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Tab bar */}
             <div className="flex border-b border-border shrink-0">
               {[
                 { id: "controls" as const, label: "Controls" },
@@ -852,9 +912,7 @@ export function MirrorPage() {
                   onClick={() => setTab(t.id)}
                   className={cn(
                     "px-5 py-2.5 text-xs font-semibold border-b-2 transition-colors",
-                    tab === t.id
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
+                    tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                   style={tab === t.id ? { borderColor: "#1AD2F2", color: "#1AD2F2" } : {}}
                 >
@@ -863,12 +921,21 @@ export function MirrorPage() {
               ))}
             </div>
 
-            {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {tab === "controls" && (
                 <>
-                  {!wdaConnected && <SetupPanel />}
-                  <ControlPad onCommand={handleCommand} />
+                  {stage !== "ready" && (
+                    <SetupPanel
+                      stage={stage}
+                      devices={devices}
+                      selectedUdid={selectedUdid}
+                      installProgress={installProgress}
+                      installMessage={installMessage}
+                      onInstallWda={handleInstallWda}
+                      onRetry={refreshStatus}
+                    />
+                  )}
+                  <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />
                 </>
               )}
               {tab === "signup" && (
@@ -879,7 +946,6 @@ export function MirrorPage() {
         </div>
       </div>
 
-      {/* Toast */}
       {toastMsg && (
         <div className="fixed bottom-4 right-4 z-50 bg-card border border-border rounded-lg px-4 py-2.5 text-xs font-medium shadow-xl">
           {toastMsg}

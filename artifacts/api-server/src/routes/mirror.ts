@@ -12,11 +12,20 @@ import {
   wdaLaunchApp,
   wdaActivateApp,
   runIphoneSignup,
+  startIproxy,
+  stopIproxy,
+  getIproxyStatus,
+  installWdaOnDevice,
+  onWdaInstallStatus,
+  offWdaInstallStatus,
   type IphoneSignupParams,
 } from "../instagram/iphoneMirror";
 
 // Per-request signup status for polling
 const signupStatus: Map<string, { msg: string; done: boolean }> = new Map();
+
+// Per-request WDA install status for polling
+const wdaInstallStatus: Map<string, { step: string; progress?: number; message: string; done: boolean }> = new Map();
 
 export function registerMirrorRoutes(app: Express): void {
 
@@ -31,6 +40,67 @@ export function registerMirrorRoutes(app: Express): void {
     }
   });
 
+  // ── iproxy management (auto-started by Equinox — no CMD needed) ───────────
+
+  app.post("/api/mirror/iproxy/start", async (req, res) => {
+    try {
+      const { udid, localPort, devicePort } = req.body ?? {};
+      if (!udid) return res.status(400).json({ ok: false, error: "udid required" });
+      const result = await startIproxy(udid, localPort ?? 8100, devicePort ?? 8100);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  app.post("/api/mirror/iproxy/stop", (_req, res) => {
+    stopIproxy();
+    res.json({ ok: true });
+  });
+
+  app.get("/api/mirror/iproxy/status", (_req, res) => {
+    res.json({ ok: true, ...getIproxyStatus() });
+  });
+
+  // ── WDA install (downloads + installs — no Sideloadly, no CMD) ───────────
+
+  app.post("/api/mirror/wda/install", async (req, res) => {
+    try {
+      const { udid } = req.body ?? {};
+      if (!udid) return res.status(400).json({ ok: false, error: "udid required" });
+
+      const sessionId = `wdainstall_${Date.now()}`;
+      wdaInstallStatus.set(sessionId, { step: "downloading", progress: 0, message: "Starting…", done: false });
+
+      res.json({ ok: true, sessionId });
+
+      onWdaInstallStatus(sessionId, (s) => {
+        wdaInstallStatus.set(sessionId, {
+          step: s.step,
+          progress: s.progress,
+          message: s.message,
+          done: s.step === "done" || s.step === "error",
+        });
+      });
+
+      installWdaOnDevice(udid, sessionId).then(() => {
+        offWdaInstallStatus(sessionId);
+      }).catch((err) => {
+        wdaInstallStatus.set(sessionId, { step: "error", message: `⚠ ${String(err)}`, done: true });
+        offWdaInstallStatus(sessionId);
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  app.get("/api/mirror/wda/install-status", (req, res) => {
+    const sid = String(req.query.sessionId ?? "");
+    const entry = wdaInstallStatus.get(sid);
+    if (!entry) return res.status(404).json({ ok: false, error: "Unknown session" });
+    res.json({ ok: true, ...entry });
+  });
+
   // ── Screenshot ────────────────────────────────────────────────────────────
 
   app.post("/api/mirror/screenshot", async (req, res) => {
@@ -40,7 +110,7 @@ export function registerMirrorRoutes(app: Express): void {
       if (!jpeg) {
         return res.status(503).json({
           ok: false,
-          error: "Screenshot failed. Make sure your iPhone is unlocked and connected via USB, then install tidevice: pip install tidevice",
+          error: "Screenshot failed — make sure your iPhone is unlocked",
         });
       }
       res.json({ ok: true, jpeg });
@@ -54,19 +124,20 @@ export function registerMirrorRoutes(app: Express): void {
   app.get("/api/mirror/wda-status", async (_req, res) => {
     try {
       const connected = await wdaIsConnected();
-      res.json({ ok: true, connected });
+      const iproxy = getIproxyStatus();
+      res.json({ ok: true, connected, iproxy });
     } catch {
-      res.json({ ok: true, connected: false });
+      res.json({ ok: true, connected: false, iproxy: getIproxyStatus() });
     }
   });
 
-  // ── Touch controls (require WDA) ──────────────────────────────────────────
+  // ── Touch controls ────────────────────────────────────────────────────────
 
   app.post("/api/mirror/tap", async (req, res) => {
     try {
       const { x, y } = req.body ?? {};
       if (typeof x !== "number" || typeof y !== "number") {
-        return res.status(400).json({ ok: false, error: "x and y are required numbers" });
+        return res.status(400).json({ ok: false, error: "x and y required" });
       }
       await wdaTap(x, y);
       res.json({ ok: true });
@@ -198,10 +269,9 @@ export function registerMirrorRoutes(app: Express): void {
       if (!code) return res.status(400).json({ ok: false, error: "code required" });
       const status = signupStatus.get(sessionId) ?? { msg: "Submitting code…", done: false };
       signupStatus.set(sessionId, { ...status, msg: `Submitting code ${code}…` });
-      const { wdaTap: tap, wdaTypeText: type } = await import("../instagram/iphoneMirror");
-      await tap(195, 400);
-      await type(code);
-      await tap(195, 480);
+      await wdaTap(195, 400);
+      await wdaTypeText(code);
+      await wdaTap(195, 480);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });

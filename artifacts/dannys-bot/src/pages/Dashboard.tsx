@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.830",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Improvement", text: "iPhone Control is now fully built-in — no CMD prompts, no Sideloadly, no Python. Plug in your iPhone and Equinox handles everything automatically." },
+      { category: "Improvement", text: "libimobiledevice binaries (idevice_id, iproxy, ideviceinstaller) are now bundled inside the app — device detection and port forwarding happen internally with no external tools needed." },
+      { category: "Improvement", text: "iproxy now auto-starts inside Equinox when your iPhone is detected — you no longer need to run any background command." },
+      { category: "Improvement", text: "One-click 'Install Control Agent' button in Equinox downloads and installs the control bridge directly onto your iPhone — no Apple ID or Sideloadly required." },
+      { category: "Improvement", text: "Control tab now shows a clear step-by-step progress indicator (Plug in → Trust → Install → Connect) so you always know exactly where you are." },
+    ],
+  },
+  {
     version: "1.0.829",
     date: "8 Jun 2026",
     items: [

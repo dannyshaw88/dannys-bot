@@ -12,6 +12,13 @@
     "!dist/**/*.map",
     "node_modules/**"
   ],
+  "extraResources": [
+    {
+      "from": "resources/bin",
+      "to": "bin",
+      "filter": ["**/*"]
+    }
+  ],
   "npmRebuild": true,
   "publish": {
     "provider": "github",

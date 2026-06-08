@@ -1,10 +1,35 @@
-import { exec } from "child_process";
+import { exec, spawn, ChildProcess } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import https from "https";
 
 const execAsync = promisify(exec);
+
+// ── Bundled binary resolution ──────────────────────────────────────────────────
+// In packaged Electron the binaries live under resources/bin/win32/ next to app/.
+// In dev (Replit / macOS) the env var is not set, so we fall back to empty and
+// the functions that need the binaries will no-op gracefully.
+
+function getBinDir(): string {
+  if (process.env.IDEVICE_BIN_DIR) return process.env.IDEVICE_BIN_DIR;
+  // Fallback: look for resources/bin/win32 relative to the electron package
+  const candidates = [
+    path.join(process.cwd(), "..", "electron", "resources", "bin", "win32"),
+    path.join(process.cwd(), "resources", "bin", "win32"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, "idevice_id.exe"))) return c;
+  }
+  return "";
+}
+
+function binPath(exe: string): string {
+  const dir = getBinDir();
+  if (!dir) return exe; // fall back to PATH (dev environment)
+  return path.join(dir, exe);
+}
 
 // ── Device detection ──────────────────────────────────────────────────────────
 
@@ -16,42 +41,29 @@ export interface IosDevice {
 }
 
 export async function listConnectedDevices(): Promise<IosDevice[]> {
-  // 1. Try tidevice (pip install tidevice) — best cross-platform option
+  // 1. Use bundled idevice_id.exe
   try {
-    const { stdout } = await execAsync("python3 -m tidevice list --json", { timeout: 5000 });
-    const cleaned = stdout.trim();
-    if (cleaned.startsWith("[")) {
-      const parsed: any[] = JSON.parse(cleaned);
-      if (parsed.length > 0) {
-        return parsed.map(d => ({
-          udid: d.udid ?? "unknown",
-          name: d.name ?? "iPhone",
-          ios: d.ios_version ?? "Unknown",
-          connected: "usb" as const,
-        }));
-      }
+    const exe = binPath("idevice_id.exe");
+    const { stdout } = await execAsync(`"${exe}" -l`, { timeout: 5000 });
+    const udids = stdout.trim().split("\n").filter(Boolean);
+    if (udids.length === 0) return [];
+    const devices: IosDevice[] = [];
+    for (const udid of udids) {
+      let name = "iPhone";
+      let ios = "Unknown";
+      try {
+        const infoExe = binPath("ideviceinfo.exe");
+        const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3000 });
+        name = nm.trim() || "iPhone";
+        const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000 });
+        ios = ver.trim() || "Unknown";
+      } catch {}
+      devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
     }
+    return devices;
   } catch {}
 
-  // 2. Try pymobiledevice3 (pip install pymobiledevice3)
-  try {
-    const { stdout } = await execAsync(
-      "python3 -m pymobiledevice3 list-devices --json 2>/dev/null",
-      { timeout: 5000 },
-    );
-    const match = stdout.match(/\[.*\]/s);
-    if (match) {
-      const parsed: any[] = JSON.parse(match[0]);
-      return parsed.map(d => ({
-        udid: d.Identifier ?? d.udid ?? "unknown",
-        name: d.DeviceName ?? "iPhone",
-        ios: d.ProductVersion ?? "Unknown",
-        connected: "usb" as const,
-      }));
-    }
-  } catch {}
-
-  // 3. Try idevice_id from libimobiledevice
+  // 2. Try idevice_id from PATH (dev environments with libimobiledevice)
   try {
     const { stdout } = await execAsync("idevice_id -l", { timeout: 4000 });
     const udids = stdout.trim().split("\n").filter(Boolean);
@@ -60,12 +72,12 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
       let name = "iPhone";
       let ios = "Unknown";
       try {
-        const { stdout: nm } = await execAsync(`ideviceinfo -u "${udid}" -k DeviceName`, { timeout: 3000 });
+        const { stdout: nm } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k DeviceName`, { timeout: 3000 });
         name = nm.trim() || "iPhone";
-        const { stdout: ver } = await execAsync(`ideviceinfo -u "${udid}" -k ProductVersion`, { timeout: 3000 });
+        const { stdout: ver } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000 });
         ios = ver.trim() || "Unknown";
       } catch {}
-      devices.push({ udid, name, ios, connected: "usb" });
+      devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
     }
     return devices;
   } catch {}
@@ -73,7 +85,156 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
   return [];
 }
 
-// ── Screenshot capture ────────────────────────────────────────────────────────
+// ── iproxy auto-manager ───────────────────────────────────────────────────────
+// Equinox starts iproxy internally — no CMD prompt ever needed.
+
+let iproxyProc: ChildProcess | null = null;
+let iproxyUdid: string | null = null;
+let iproxyPort = 8100;
+
+export function getIproxyStatus(): { running: boolean; udid: string | null; port: number } {
+  return { running: iproxyProc !== null, udid: iproxyUdid, port: iproxyPort };
+}
+
+export async function startIproxy(udid: string, localPort = 8100, devicePort = 8100): Promise<{ ok: boolean; error?: string }> {
+  // Stop existing iproxy if for a different device
+  if (iproxyProc && iproxyUdid !== udid) {
+    stopIproxy();
+  }
+  if (iproxyProc) return { ok: true }; // already running for this device
+
+  iproxyPort = localPort;
+  iproxyUdid = udid;
+
+  const exe = binPath("iproxy.exe");
+
+  return new Promise((resolve) => {
+    try {
+      const args = [`${localPort}`, `${devicePort}`, "--udid", udid];
+      iproxyProc = spawn(exe, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: false,
+      });
+
+      iproxyProc.on("error", (err) => {
+        iproxyProc = null;
+        resolve({ ok: false, error: `iproxy failed to start: ${err.message}` });
+      });
+
+      iproxyProc.on("exit", (code) => {
+        iproxyProc = null;
+      });
+
+      // Give iproxy 800ms to either start or fail
+      setTimeout(() => {
+        if (iproxyProc) {
+          resolve({ ok: true });
+        } else {
+          resolve({ ok: false, error: "iproxy exited immediately" });
+        }
+      }, 800);
+    } catch (err: any) {
+      iproxyProc = null;
+      resolve({ ok: false, error: String(err.message ?? err) });
+    }
+  });
+}
+
+export function stopIproxy(): void {
+  if (iproxyProc) {
+    try { iproxyProc.kill(); } catch {}
+    iproxyProc = null;
+    iproxyUdid = null;
+  }
+}
+
+// ── WDA download + install ────────────────────────────────────────────────────
+// Downloads a pre-built WDA IPA from GitHub and installs it on the device
+// using bundled ideviceinstaller.exe. Zero CMD prompts required.
+
+const WDA_IPA_URL = "https://github.com/nicowillis/webdriveragent-ipa/releases/download/v1.0.0/WebDriverAgent.ipa";
+const WDA_BUNDLE_ID = "com.facebook.WebDriverAgentRunner.xctrunner";
+
+export type WdaInstallStatus = {
+  step: "downloading" | "installing" | "done" | "error";
+  progress?: number; // 0-100 for download
+  message: string;
+};
+
+const installListeners: Map<string, (s: WdaInstallStatus) => void> = new Map();
+
+export function onWdaInstallStatus(id: string, cb: (s: WdaInstallStatus) => void): void {
+  installListeners.set(id, cb);
+}
+export function offWdaInstallStatus(id: string): void {
+  installListeners.delete(id);
+}
+
+function emitStatus(id: string, s: WdaInstallStatus): void {
+  installListeners.get(id)?.(s);
+}
+
+function downloadFile(url: string, dest: string, onProgress?: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const req = https.get(url, { headers: { "User-Agent": "Equinox/1.0" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        file.close();
+        fs.unlink(dest, () => {});
+        downloadFile(res.headers.location!, dest, onProgress).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        file.close();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      const total = parseInt(res.headers["content-length"] ?? "0", 10);
+      let received = 0;
+      res.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        if (total > 0 && onProgress) onProgress(Math.round((received / total) * 100));
+      });
+      res.pipe(file);
+      file.on("finish", () => file.close(() => resolve()));
+      file.on("error", reject);
+    });
+    req.on("error", reject);
+  });
+}
+
+export async function installWdaOnDevice(
+  udid: string,
+  sessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const tmpIpa = path.join(os.tmpdir(), `wda_${Date.now()}.ipa`);
+
+  try {
+    // Step 1: Download IPA
+    emitStatus(sessionId, { step: "downloading", progress: 0, message: "Downloading control agent (one-time)…" });
+    await downloadFile(WDA_IPA_URL, tmpIpa, (pct) => {
+      emitStatus(sessionId, { step: "downloading", progress: pct, message: `Downloading control agent… ${pct}%` });
+    });
+    emitStatus(sessionId, { step: "downloading", progress: 100, message: "Download complete. Installing on iPhone…" });
+
+    // Step 2: Install via bundled ideviceinstaller.exe
+    const installer = binPath("ideviceinstaller.exe");
+    emitStatus(sessionId, { step: "installing", message: "Installing on iPhone — this takes ~30 seconds…" });
+
+    await execAsync(`"${installer}" -u "${udid}" -i "${tmpIpa}"`, { timeout: 120_000 });
+
+    emitStatus(sessionId, { step: "done", message: "✅ Control agent installed! Starting connection…" });
+    return { ok: true };
+  } catch (err: any) {
+    const msg = String(err?.message ?? err);
+    emitStatus(sessionId, { step: "error", message: `⚠ ${msg}` });
+    return { ok: false, error: msg };
+  } finally {
+    try { fs.unlinkSync(tmpIpa); } catch {}
+  }
+}
+
+// ── Screenshot capture (for the mirror display) ───────────────────────────────
 
 export async function takeScreenshot(udid?: string): Promise<string | null> {
   const tmpFile = path.join(os.tmpdir(), `eqx_mirror_${Date.now()}.jpg`);
@@ -89,26 +250,16 @@ export async function takeScreenshot(udid?: string): Promise<string | null> {
     return null;
   };
 
-  // 1. tidevice
+  // 1. Use bundled idevicescreenshot.exe
   try {
-    const uFlag = udid ? `--udid ${udid}` : "";
-    await execAsync(`python3 -m tidevice ${uFlag} screenshot "${tmpFile}"`, { timeout: 8000 });
+    const exe = binPath("idevicescreenshot.exe");
+    const uFlag = udid ? `-u "${udid}"` : "";
+    await execAsync(`"${exe}" ${uFlag} "${tmpFile}"`, { timeout: 8000 });
     const b64 = readAndClean();
     if (b64) return b64;
   } catch {}
 
-  // 2. pymobiledevice3
-  try {
-    const uFlag = udid ? `--udid ${udid}` : "";
-    await execAsync(
-      `python3 -c "import sys; from pymobiledevice3.services.screenshot import ScreenshotService; from pymobiledevice3.usbmux import select_devices_by_connection_type; from pymobiledevice3.lockdown import create_using_usbmux; l = create_using_usbmux(${udid ? `serial='${udid}'` : ""}); open('${tmpFile}','wb').write(ScreenshotService(l).take_screenshot())"`,
-      { timeout: 10000 },
-    );
-    const b64 = readAndClean();
-    if (b64) return b64;
-  } catch {}
-
-  // 3. idevicescreenshot (libimobiledevice)
+  // 2. Fall back to PATH version (dev)
   try {
     const uFlag = udid ? `-u "${udid}"` : "";
     await execAsync(`idevicescreenshot ${uFlag} "${tmpFile}"`, { timeout: 8000 });
@@ -120,8 +271,6 @@ export async function takeScreenshot(udid?: string): Promise<string | null> {
 }
 
 // ── WDA (WebDriverAgent) integration ─────────────────────────────────────────
-// WDA must be running on the iPhone before control is possible.
-// Install WDA via: https://github.com/appium/WebDriverAgent
 
 const WDA_BASE = process.env.WDA_HOST ?? "http://127.0.0.1:8100";
 let _cachedSessionId: string | null = null;
@@ -150,7 +299,6 @@ export async function wdaIsConnected(): Promise<boolean> {
 }
 
 async function getSession(): Promise<string> {
-  // Validate cached session
   if (_cachedSessionId) {
     try {
       await wdaFetch("GET", `/session/${_cachedSessionId}`);
@@ -159,7 +307,6 @@ async function getSession(): Promise<string> {
       _cachedSessionId = null;
     }
   }
-  // Create new session
   const resp = await wdaFetch("POST", "/session", {
     capabilities: {
       alwaysMatch: {
@@ -169,7 +316,7 @@ async function getSession(): Promise<string> {
     },
   });
   const sid: string | undefined = resp?.sessionId ?? resp?.value?.sessionId;
-  if (!sid) throw new Error("WDA: failed to create a new session. Ensure WebDriverAgent is running on your iPhone.");
+  if (!sid) throw new Error("WDA session creation failed");
   _cachedSessionId = sid;
   return sid;
 }
@@ -221,9 +368,6 @@ export async function wdaActivateApp(bundleId: string): Promise<void> {
 }
 
 // ── iPhone Instagram signup via WDA ──────────────────────────────────────────
-// Automates the Instagram signup form on the iPhone using WDA.
-// Coordinates are for iPhone 14/15 standard (390×844 points) and scale
-// proportionally to other resolutions via the 390-base normalisation below.
 
 const INSTAGRAM_BUNDLE = "com.burbn.instagram";
 
@@ -231,7 +375,7 @@ export interface IphoneSignupParams {
   email: string;
   password: string;
   username: string;
-  dob: string;             // DD/MM/YYYY
+  dob: string;
   verificationCode?: string;
   onStatus?: (msg: string) => void;
 }
@@ -248,57 +392,46 @@ export async function runIphoneSignup(params: IphoneSignupParams): Promise<{ ok:
     await wdaLaunchApp(INSTAGRAM_BUNDLE);
     await sleep(3000);
 
-    // Tap "Create new account" or "Sign up" — approximate position
     log("Looking for Sign Up button…");
     await wdaTap(195, 740);
     await sleep(1500);
 
-    // Email field — top of signup form
     log("Entering email address…");
     await wdaTap(195, 320);
     await sleep(500);
     await wdaTypeText(params.email);
     await sleep(400);
 
-    // Next
     await wdaTap(195, 420);
     await sleep(2000);
 
-    // Full name field
     log("Entering name…");
     await wdaTap(195, 280);
     await sleep(400);
     await wdaTypeText(params.username.replace(/_/g, " "));
     await sleep(400);
 
-    // Password field
     log("Entering password…");
     await wdaTap(195, 360);
     await sleep(400);
     await wdaTypeText(params.password);
     await sleep(400);
 
-    // Next
     await wdaTap(195, 440);
     await sleep(2000);
 
-    // DOB — parse DD/MM/YYYY
     log("Entering date of birth…");
-    const [dd, mm, yyyy] = params.dob.split("/");
     await wdaTap(195, 400);
     await sleep(1000);
-    // Swipe month/day/year pickers — simplified: just tap Next
     await wdaTap(195, 600);
     await sleep(2000);
 
-    // Username
     log("Entering username…");
     await wdaTap(195, 320);
     await sleep(500);
     await wdaTypeText(params.username);
     await sleep(500);
 
-    // Next
     await wdaTap(195, 420);
     await sleep(2000);
 

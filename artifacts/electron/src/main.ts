@@ -275,6 +275,9 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
       ...(ebIpcPort   ? { EB_IPC_PORT: String(ebIpcPort) } : {}),
+      IDEVICE_BIN_DIR: app.isPackaged
+        ? path.join(process.resourcesPath, "bin", "win32")
+        : path.join(__dirname, "..", "..", "resources", "bin", "win32"),
     },
   });
 
