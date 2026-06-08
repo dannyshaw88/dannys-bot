@@ -161,10 +161,11 @@ interface SetupPanelProps {
   diagnosis: DiagResult | null;
   diagnosing: boolean;
   onInstallWda: () => void;
+  onReinstall: () => void;
   onRetry: () => void;
 }
 
-function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onRetry }: SetupPanelProps) {
+function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onReinstall, onRetry }: SetupPanelProps) {
   const steps = [
     { id: "plug",    label: "Plug in iPhone",             done: stage !== "no_device" },
     { id: "trust",   label: "Tap \"Trust\" on iPhone",    done: stage === "installing_wda" || stage === "starting_iproxy" || stage === "ready" },
@@ -521,9 +522,19 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
               </ol>
             </div>
           </details>
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
-            Waiting for control agent to start…
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
+              Waiting for control agent to start…
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] shrink-0"
+              onClick={onReinstall}
+            >
+              ↺ Reinstall
+            </Button>
           </div>
         </div>
       )}
@@ -1393,6 +1404,15 @@ export function MirrorPage() {
 
   useEffect(() => () => { if (installPollRef.current) clearInterval(installPollRef.current); }, []);
 
+  // ── Reinstall — stops iproxy tunnel and returns to install step ───────────
+
+  const handleReinstall = async () => {
+    try {
+      await fetch("/api/mirror/iproxy/stop", { method: "POST" });
+    } catch {}
+    setIproxyRunning(false);
+  };
+
   // ── WDA control commands ───────────────────────────────────────────────────
 
   const handleCommand = async (cmd: string, payload?: any) => {
@@ -1566,6 +1586,7 @@ export function MirrorPage() {
                       diagnosis={diagnosis}
                       diagnosing={diagnosing}
                       onInstallWda={handleInstallWda}
+                      onReinstall={handleReinstall}
                       onRetry={() => { setDiagnosis(null); refreshStatus(); setTimeout(runDiagnose, 1500); }}
                     />
                   )}

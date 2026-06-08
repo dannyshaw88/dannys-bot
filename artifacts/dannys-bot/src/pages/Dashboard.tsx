@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.847",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: added a Reinstall button on the Connecting screen so you can go back and reinstall the control agent without restarting the app — useful when the old certificate was removed and a fresh install is needed to get a new one." },
+    ],
+  },
+  {
     version: "1.0.846",
     date: "8 Jun 2026",
     items: [
