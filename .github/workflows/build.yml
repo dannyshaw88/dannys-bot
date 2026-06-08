@@ -45,6 +45,39 @@ jobs:
           path: web-builds.tar.gz
           if-no-files-found: error
 
+  package-standalone:
+    name: Package Standalone Server (Windows-ready ZIP)
+    runs-on: ubuntu-latest
+    needs: build-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web builds
+        uses: actions/download-artifact@v4
+        with:
+          name: web-builds
+
+      - name: Extract build outputs
+        run: tar -xzf web-builds.tar.gz
+
+      - name: Assemble standalone package
+        run: |
+          mkdir -p equinox-standalone/server
+          mkdir -p equinox-standalone/public
+          cp artifacts/api-server/dist/index.mjs equinox-standalone/server/index.mjs
+          cp -r artifacts/dannys-bot/dist/public/. equinox-standalone/public/
+          cp artifacts/electron/standalone/start.bat equinox-standalone/start.bat
+
+      - name: Zip standalone package
+        run: zip -r Equinox-Standalone.zip equinox-standalone/
+
+      - name: Upload standalone package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Equinox-Standalone
+          path: Equinox-Standalone.zip
+          if-no-files-found: error
+
   package-windows:
     name: Package Windows Installer
     runs-on: windows-latest

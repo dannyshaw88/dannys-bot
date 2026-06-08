@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.850",
+    date: "8 Jun 2026",
+    items: [
+      { category: "New", text: "Added Equinox-Standalone artifact to every build — download the ZIP, double-click start.bat, and the full app runs in your browser instantly with no installer needed. Fast 2-3 min build instead of waiting for the full installer." },
+    ],
+  },
+  {
     version: "1.0.849",
     date: "8 Jun 2026",
     items: [
