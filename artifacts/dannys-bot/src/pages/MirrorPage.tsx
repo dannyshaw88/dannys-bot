@@ -76,19 +76,120 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
   );
 }
 
-function WdaHelpBox() {
+function CmdLine({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
-      <p className="font-semibold flex items-center gap-1.5"><Info className="w-3.5 h-3.5" /> WebDriverAgent not detected</p>
-      <p>To enable iPhone control, install WDA on your iPhone:</p>
-      <ol className="list-decimal ml-4 space-y-0.5">
-        <li>Clone <span className="font-mono">https://github.com/appium/WebDriverAgent</span></li>
-        <li>Open <span className="font-mono">WebDriverAgent.xcodeproj</span> in Xcode</li>
-        <li>Set your Apple ID as signing team</li>
-        <li>Build &amp; run <strong>WebDriverAgentRunner</strong> on your iPhone</li>
-        <li>Forward port: <span className="font-mono">iproxy 8100 8100</span></li>
-      </ol>
-      <p>For screenshots only: <span className="font-mono">pip install tidevice</span></p>
+    <div className="flex items-center gap-2 mt-1">
+      <code className="flex-1 bg-black/80 text-green-400 text-[11px] px-3 py-1.5 rounded font-mono select-all">
+        {children}
+      </code>
+      <button
+        onClick={() => { navigator.clipboard.writeText(children).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        className="shrink-0 px-2 py-1 text-[10px] rounded border border-border bg-muted hover:bg-accent transition-colors"
+      >
+        {copied ? "✓" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+function SetupPanel() {
+  const [tab, setTab] = useState<"screenshots" | "control">("screenshots");
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden text-xs">
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setTab("screenshots")}
+          className={cn("flex-1 py-2 text-[11px] font-semibold transition-colors",
+            tab === "screenshots" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
+          style={tab === "screenshots" ? { color: "#1AD2F2" } : {}}
+        >
+          📸 Screenshots only
+        </button>
+        <button
+          onClick={() => setTab("control")}
+          className={cn("flex-1 py-2 text-[11px] font-semibold transition-colors border-l border-border",
+            tab === "control" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
+          style={tab === "control" ? { color: "#1AD2F2" } : {}}
+        >
+          🖱 Full control (tap/type)
+        </button>
+      </div>
+
+      {tab === "screenshots" && (
+        <div className="p-3 space-y-3">
+          <p className="font-semibold text-foreground">See your iPhone screen in Equinox — 3 steps on your Windows PC:</p>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">1.</strong> Open Command Prompt on your PC</p>
+            <p className="text-muted-foreground text-[10px]">Press <strong>Win key</strong>, type <strong>cmd</strong>, press Enter</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">2.</strong> Paste this into Command Prompt and press Enter:</p>
+            <CmdLine>pip install tidevice</CmdLine>
+            <p className="text-muted-foreground text-[10px] mt-1">Wait for it to finish downloading (takes ~30 seconds)</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">3.</strong> Plug your iPhone into your PC with a USB cable</p>
+            <p className="text-muted-foreground text-[10px]">Your iPhone will ask <strong>"Trust This Computer?"</strong> — tap <strong>Trust</strong> and enter your passcode</p>
+          </div>
+
+          <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 text-green-800 dark:text-green-300">
+            ✅ That's it — press <strong>Start Mirror</strong> above and your iPhone screen will appear here.
+          </div>
+        </div>
+      )}
+
+      {tab === "control" && (
+        <div className="p-3 space-y-3">
+          <p className="font-semibold text-foreground">Tap, swipe and type on your iPhone from Equinox — Windows PC only, no Mac needed:</p>
+
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2 text-blue-800 dark:text-blue-300 text-[10px]">
+            <strong>Do the Screenshots setup first</strong> (left tab) before doing this.
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">1.</strong> Download <strong>Sideloadly</strong> — free Windows app that installs apps on your iPhone</p>
+            <p className="text-muted-foreground text-[10px]">Go to <strong>sideloadly.io</strong> → click <strong>Download for Windows</strong> → install it</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">2.</strong> Download the WebDriverAgent IPA file</p>
+            <p className="text-muted-foreground text-[10px]">Go to: <strong>github.com/appium/WebDriverAgent/releases</strong> → download the latest <strong>.ipa</strong> file</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">3.</strong> Install WDA on your iPhone using Sideloadly</p>
+            <div className="text-muted-foreground text-[10px] space-y-0.5 ml-2">
+              <p>a) Open Sideloadly — your iPhone should appear automatically</p>
+              <p>b) Drag the WDA <strong>.ipa</strong> file into the Sideloadly window</p>
+              <p>c) Sign in with your <strong>Apple ID</strong> (your normal iCloud email — free account works)</p>
+              <p>d) Click <strong>Start</strong> and wait for it to finish</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">4.</strong> Trust the app on your iPhone</p>
+            <div className="text-muted-foreground text-[10px] space-y-0.5 ml-2">
+              <p>On your iPhone: <strong>Settings → General → VPN & Device Management</strong></p>
+              <p>Tap your Apple ID email → tap <strong>Trust</strong></p>
+              <p>Now open the <strong>WebDriverAgentRunner</strong> app on your iPhone</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1"><strong className="text-foreground">5.</strong> Connect WDA to Equinox — open Command Prompt on your PC and run:</p>
+            <CmdLine>python3 -m tidevice iproxy 8100 8100</CmdLine>
+            <p className="text-muted-foreground text-[10px] mt-1">Leave this Command Prompt window open while using Equinox</p>
+          </div>
+
+          <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-2 text-green-800 dark:text-green-300">
+            ✅ The <strong>WDA Connected</strong> badge at the top will turn green. You can now click the iPhone screen to tap, drag to swipe, and use the Controls tab to type.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -413,7 +514,7 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
     <div className="space-y-4">
       {!wdaConnected && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-2.5 text-xs text-amber-800 dark:text-amber-300">
-          <strong>WDA required for automation.</strong> Screenshot mirroring still works without it.
+          <strong>WDA not connected.</strong> The iPhone Signup automation needs WDA running on your iPhone. Switch to the <strong>Controls</strong> tab for step-by-step Windows setup instructions.
         </div>
       )}
 
@@ -766,7 +867,7 @@ export function MirrorPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {tab === "controls" && (
                 <>
-                  {!wdaConnected && <WdaHelpBox />}
+                  {!wdaConnected && <SetupPanel />}
                   <ControlPad onCommand={handleCommand} />
                 </>
               )}

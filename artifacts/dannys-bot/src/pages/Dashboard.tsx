@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.829",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror setup instructions completely rewritten — Windows-specific, step-by-step, no Mac or Xcode required. Screenshots tab shows 3 steps (pip install tidevice, plug in, trust). Full control tab explains Sideloadly + WDA installation on Windows with copy-paste commands." },
+    ],
+  },
+  {
     version: "1.0.828",
     date: "8 Jun 2026",
     items: [
