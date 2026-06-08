@@ -172,6 +172,7 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
   const itunesRequired = diagnosis?.suggestion === "itunes_required";
   const binaryMissing  = diagnosis !== null && !diagnosis.binaryFound;
   const needsUnlock    = diagnosis?.suggestion === "unlock";
+  const needsTrust     = diagnosis?.suggestion === "needs_trust";
   const hasError       = diagnosis?.suggestion?.startsWith("error:") ?? false;
   const errorText      = hasError ? diagnosis!.suggestion.slice(6) : "";
 
@@ -260,7 +261,17 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-2">
               <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">iPhone detected but locked</p>
               <p className="text-xs text-blue-700 dark:text-blue-400">
-                Your iPhone is connected but the screen is off or locked. <strong>Unlock your iPhone</strong> — swipe up and enter your passcode — then click Check again.
+                Your iPhone is connected but the screen is off or locked. <strong>Unlock your iPhone</strong> — swipe up and enter your passcode — then click Check again. Also check if your iPhone is showing a <strong>"Trust This Computer?"</strong> prompt — tap Trust and enter your passcode.
+              </p>
+            </div>
+          )}
+
+          {/* iPhone plugged in and unlocked but hasn't tapped Trust yet */}
+          {needsTrust && !diagnosing && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Tap "Trust" on your iPhone</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Your iPhone is connected and unlocked, but it hasn't authorised this PC yet. Look for a <strong>"Trust This Computer?"</strong> popup on your iPhone screen — tap <strong>Trust</strong> and enter your passcode. Then click Check again.
               </p>
             </div>
           )}
@@ -277,7 +288,7 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
           )}
 
           {/* Generic waiting — no diagnosis yet or suggestion is empty */}
-          {!itunesRequired && !binaryMissing && !needsUnlock && !hasError && !diagnosing && (
+          {!itunesRequired && !binaryMissing && !needsUnlock && !needsTrust && !hasError && !diagnosing && (
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
               Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
             </div>

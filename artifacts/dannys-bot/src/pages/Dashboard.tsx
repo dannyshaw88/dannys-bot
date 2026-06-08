@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.833",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool no longer shows 'iPhone detected but locked' when your phone is actually unlocked — it now correctly detects when the issue is a missing 'Trust This Computer' confirmation instead." },
+      { category: "Fix", text: "New 'Tap Trust on your iPhone' message now appears with clear instructions when your phone is connected and unlocked but hasn't authorised this PC yet." },
+      { category: "Fix", text: "The 'screen is locked' message now also reminds you to check for the Trust popup in case that's the real issue." },
+    ],
+  },
+  {
     version: "1.0.832",
     date: "8 Jun 2026",
     items: [
