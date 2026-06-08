@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.842",
+    date: "8 Jun 2026",
+    items: [
+      { category: "New", text: "Mirror Controls tab now shows a green callout explaining that your phone stays on its 4G/cellular connection — USB only carries screen and touch, so Instagram always sees your phone's real mobile IP." },
+      { category: "New", text: "Wireless Mirror tab now includes a note that WiFi mirroring is not suitable for creating new Instagram accounts on 4G — use USB mode for signups." },
+      { category: "Fix", text: "Added a Windows Firewall fix to the Wireless Mirror tab — if your iPhone can't connect, a one-click PowerShell command opens port 7000 so the AirPlay receiver is reachable." },
+    ],
+  },
+  {
     version: "1.0.841",
     date: "8 Jun 2026",
     items: [
