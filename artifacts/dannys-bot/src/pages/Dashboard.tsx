@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.836",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Added full debug logging to the Mirror tool — every step (binary path, DLL path, exact command, stdout, stderr, exit code) now appears in the log file so connection failures can be diagnosed properly." },
+    ],
+  },
+  {
     version: "1.0.835",
     date: "8 Jun 2026",
     items: [

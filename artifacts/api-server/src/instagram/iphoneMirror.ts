@@ -4,8 +4,10 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import https from "https";
+import { logger } from "../lib/logger";
 
 const execAsync = promisify(exec);
+const mlog = logger.child({ component: "mirror" });
 
 // ── Bundled binary resolution ──────────────────────────────────────────────────
 // In packaged Electron the binaries live under resources/bin/win32/ next to app/.
@@ -13,14 +15,23 @@ const execAsync = promisify(exec);
 // the functions that need the binaries will no-op gracefully.
 
 function getBinDir(): string {
-  if (process.env.IDEVICE_BIN_DIR) return process.env.IDEVICE_BIN_DIR;
+  if (process.env.IDEVICE_BIN_DIR) {
+    mlog.info({ dir: process.env.IDEVICE_BIN_DIR }, "[mirror] getBinDir: using IDEVICE_BIN_DIR env");
+    return process.env.IDEVICE_BIN_DIR;
+  }
   const candidates = [
     path.join(process.cwd(), "..", "electron", "resources", "bin", "win32"),
     path.join(process.cwd(), "resources", "bin", "win32"),
   ];
   for (const c of candidates) {
-    if (fs.existsSync(path.join(c, "idevice_id.exe"))) return c;
+    const probe = path.join(c, "idevice_id.exe");
+    if (fs.existsSync(probe)) {
+      mlog.info({ dir: c }, "[mirror] getBinDir: found idevice_id.exe");
+      return c;
+    }
+    mlog.debug({ checked: probe }, "[mirror] getBinDir: not found at candidate");
   }
+  mlog.warn("[mirror] getBinDir: idevice_id.exe not found in any candidate — binaries missing?");
   return "";
 }
 
@@ -39,7 +50,10 @@ function binPath(exe: string): string {
 let _amdPath: string | null | undefined = undefined; // undefined = not yet resolved
 
 async function getAppleMobileDevicePath(): Promise<string> {
-  if (_amdPath !== undefined) return _amdPath ?? "";
+  if (_amdPath !== undefined) {
+    mlog.debug({ cached: _amdPath }, "[mirror] getAppleMobileDevicePath: returning cached value");
+    return _amdPath ?? "";
+  }
 
   if (process.platform !== "win32") { _amdPath = ""; return ""; }
 
@@ -49,8 +63,12 @@ async function getAppleMobileDevicePath(): Promise<string> {
     "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support",
   ];
   for (const p of staticPaths) {
-    if (fs.existsSync(path.join(p, "AppleMobileDeviceInterface.dll"))) {
+    const dll = path.join(p, "AppleMobileDeviceInterface.dll");
+    const exists = fs.existsSync(dll);
+    mlog.debug({ path: p, dllExists: exists }, "[mirror] getAppleMobileDevicePath: checking static path");
+    if (exists) {
       _amdPath = p;
+      mlog.info({ amdPath: p, source: "static" }, "[mirror] getAppleMobileDevicePath: DLL found (static iTunes install)");
       return p;
     }
   }
@@ -58,12 +76,12 @@ async function getAppleMobileDevicePath(): Promise<string> {
   // Dynamic: query service binary path (works for Microsoft Store iTunes too)
   try {
     const { stdout } = await execAsync('sc qc "Apple Mobile Device Service"', { timeout: 4000 });
-    // Output contains: BINARY_PATH_NAME : "C:\Program Files\...\AppleMobileDeviceService.exe"
+    mlog.debug({ scOutput: stdout.trim() }, "[mirror] getAppleMobileDevicePath: sc qc output");
     const m = stdout.match(/BINARY_PATH_NAME\s*:\s*"?([^"\r\n]+)/i);
     if (m) {
       const svcBin = m[1].trim().replace(/"/g, "").replace(/^"|"$/g, "");
       const svcDir = path.dirname(svcBin);
-      // The interface DLL is usually one or two levels up from the service exe
+      mlog.info({ svcBin, svcDir }, "[mirror] getAppleMobileDevicePath: service binary found");
       const candidates = [
         svcDir,
         path.join(svcDir, ".."),
@@ -71,18 +89,26 @@ async function getAppleMobileDevicePath(): Promise<string> {
       ];
       for (const c of candidates) {
         const resolved = path.resolve(c);
-        if (fs.existsSync(path.join(resolved, "AppleMobileDeviceInterface.dll"))) {
+        const dll = path.join(resolved, "AppleMobileDeviceInterface.dll");
+        const exists = fs.existsSync(dll);
+        mlog.debug({ candidate: resolved, dllExists: exists }, "[mirror] getAppleMobileDevicePath: checking candidate");
+        if (exists) {
           _amdPath = resolved;
+          mlog.info({ amdPath: resolved, source: "service-query" }, "[mirror] getAppleMobileDevicePath: DLL found (service query)");
           return resolved;
         }
       }
-      // Even if we didn't find the DLL, add the service directory itself —
-      // the DLL may have a different name on some versions
+      mlog.warn({ svcDir }, "[mirror] getAppleMobileDevicePath: DLL not found in service dir hierarchy — using svcDir as fallback");
       _amdPath = svcDir;
       return svcDir;
+    } else {
+      mlog.warn("[mirror] getAppleMobileDevicePath: could not parse BINARY_PATH_NAME from sc qc output");
     }
-  } catch {}
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] getAppleMobileDevicePath: sc qc failed");
+  }
 
+  mlog.warn("[mirror] getAppleMobileDevicePath: could not find Apple DLL path — idevice tools may fail to load DLLs");
   _amdPath = "";
   return "";
 }
@@ -92,14 +118,16 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
   const amdPath = await getAppleMobileDevicePath();
   const binDir  = getBinDir();
   const extra   = [binDir, amdPath].filter(Boolean).join(path.delimiter);
+  const usbmuxd = process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015";
+  const finalPath = extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH;
+  mlog.info(
+    { binDir, amdPath, usbmuxdSocket: usbmuxd, injectedPathPrefix: extra || "(none)" },
+    "[mirror] buildEnvWithApplePath: env ready",
+  );
   return {
     ...process.env,
-    PATH: extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH,
-    // Tell libimobiledevice where Apple's usbmuxd TCP socket is.
-    // On Windows, Apple Mobile Device Service listens on 127.0.0.1:27015.
-    // Without this, idevice_id.exe may silently find zero devices even when
-    // the iPhone IS trusted and visible in Windows Explorer.
-    USBMUXD_SOCKET_ADDRESS: process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015",
+    PATH: finalPath,
+    USBMUXD_SOCKET_ADDRESS: usbmuxd,
   };
 }
 
@@ -123,9 +151,11 @@ export interface IphoneDiagnostics {
 
 /** Run a full diagnostic: is the binary present? Is Apple's USB driver loaded? */
 export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amdPath: string }> {
+  mlog.info("[mirror] diagnoseIphoneSupport: starting");
   const binDir = getBinDir();
   const exe = path.join(binDir, "idevice_id.exe");
   const binaryFound = binDir !== "" && fs.existsSync(exe);
+  mlog.info({ binDir, exe, binaryFound }, "[mirror] diagnoseIphoneSupport: binary check");
 
   // Check if Apple Mobile Device Service is running (Windows only)
   let appleDriverRunning = false;
@@ -133,14 +163,19 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
     try {
       const { stdout } = await execAsync('sc query "Apple Mobile Device Service"', { timeout: 4000 });
       appleDriverRunning = stdout.includes("RUNNING");
-    } catch {
+      mlog.info({ appleDriverRunning, scOutput: stdout.trim() }, "[mirror] diagnoseIphoneSupport: AMDS service check (sc query)");
+    } catch (e1: any) {
+      mlog.warn({ err: String(e1?.message ?? e1) }, "[mirror] diagnoseIphoneSupport: sc query failed, trying tasklist");
       try {
         const { stdout: tl } = await execAsync(
           "tasklist /FI \"IMAGENAME eq AppleMobileDeviceService.exe\" /NH",
           { timeout: 4000 },
         );
         appleDriverRunning = tl.includes("AppleMobileDeviceService.exe");
-      } catch {}
+        mlog.info({ appleDriverRunning, tasklistOutput: tl.trim() }, "[mirror] diagnoseIphoneSupport: AMDS check via tasklist");
+      } catch (e2: any) {
+        mlog.warn({ err: String(e2?.message ?? e2) }, "[mirror] diagnoseIphoneSupport: tasklist also failed");
+      }
     }
   }
 
@@ -152,23 +187,33 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   let rawError = "";
   let debugOutput = "";
   if (binaryFound) {
+    const cmd = `"${exe}" -l`;
+    mlog.info({ cmd, usbmuxd: env.USBMUXD_SOCKET_ADDRESS }, "[mirror] diagnoseIphoneSupport: running idevice_id -l");
     try {
-      const result = await execAsync(`"${exe}" -l`, { timeout: 6000, env });
+      const result = await execAsync(cmd, { timeout: 6000, env });
       rawOutput = result.stdout.trim();
       rawError = (result as any).stderr?.trim() ?? "";
+      mlog.info({ rawOutput, rawError }, "[mirror] diagnoseIphoneSupport: idevice_id -l result");
     } catch (err: any) {
       rawError = String(err?.stderr ?? err?.message ?? err);
+      mlog.warn({ rawError, exitCode: (err as any)?.code }, "[mirror] diagnoseIphoneSupport: idevice_id -l threw error");
     }
 
     // If nothing came back, try with --debug to get verbose output for diagnosis
     if (rawOutput === "" && rawError === "") {
+      const dbgCmd = `"${exe}" --debug -l`;
+      mlog.info({ cmd: dbgCmd }, "[mirror] diagnoseIphoneSupport: idevice_id -l returned empty — retrying with --debug");
       try {
-        const dbg = await execAsync(`"${exe}" --debug -l`, { timeout: 6000, env });
+        const dbg = await execAsync(dbgCmd, { timeout: 8000, env });
         debugOutput = [dbg.stdout, (dbg as any).stderr].filter(Boolean).join("\n").trim();
+        mlog.info({ debugOutput }, "[mirror] diagnoseIphoneSupport: idevice_id --debug result");
       } catch (err: any) {
         debugOutput = String(err?.stderr ?? err?.stdout ?? err?.message ?? "").trim();
+        mlog.warn({ debugOutput, exitCode: (err as any)?.code }, "[mirror] diagnoseIphoneSupport: idevice_id --debug threw error");
       }
     }
+  } else {
+    mlog.warn("[mirror] diagnoseIphoneSupport: skipping idevice_id run — binary not found");
   }
 
   let suggestion = "";
@@ -184,38 +229,55 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
     suggestion = "ok";
   }
 
+  mlog.info({ suggestion, binaryFound, appleDriverRunning, amdPath }, "[mirror] diagnoseIphoneSupport: complete");
   return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, debugOutput, suggestion };
 }
 
 export async function listConnectedDevices(): Promise<IosDevice[]> {
+  mlog.info("[mirror] listConnectedDevices: starting");
   const env = await buildEnvWithApplePath();
 
   // 1. Use bundled idevice_id.exe with Apple DLL path injected
   try {
     const exe = binPath("idevice_id.exe");
-    const { stdout } = await execAsync(`"${exe}" -l`, { timeout: 5000, env });
+    const cmd = `"${exe}" -l`;
+    mlog.info({ cmd, usbmuxd: env.USBMUXD_SOCKET_ADDRESS }, "[mirror] listConnectedDevices: running bundled idevice_id.exe");
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 5000, env }) as any;
+    mlog.info({ stdout: stdout?.trim(), stderr: stderr?.trim() }, "[mirror] listConnectedDevices: idevice_id.exe result");
     const udids = stdout.trim().split("\n").filter(Boolean);
-    if (udids.length === 0) return [];
-    const devices: IosDevice[] = [];
-    for (const udid of udids) {
-      let name = "iPhone";
-      let ios = "Unknown";
-      try {
-        const infoExe = binPath("ideviceinfo.exe");
-        const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3000, env });
-        name = nm.trim() || "iPhone";
-        const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000, env });
-        ios = ver.trim() || "Unknown";
-      } catch {}
-      devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
+    if (udids.length === 0) {
+      mlog.warn("[mirror] listConnectedDevices: idevice_id.exe returned no UDIDs");
+      // fall through to PATH-based fallback
+    } else {
+      mlog.info({ udids }, "[mirror] listConnectedDevices: found UDIDs");
+      const devices: IosDevice[] = [];
+      for (const udid of udids) {
+        let name = "iPhone";
+        let ios = "Unknown";
+        try {
+          const infoExe = binPath("ideviceinfo.exe");
+          const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3000, env });
+          name = nm.trim() || "iPhone";
+          const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3000, env });
+          ios = ver.trim() || "Unknown";
+        } catch (e: any) {
+          mlog.warn({ udid, err: String(e?.message ?? e) }, "[mirror] listConnectedDevices: ideviceinfo failed for UDID");
+        }
+        devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
+      }
+      mlog.info({ count: devices.length }, "[mirror] listConnectedDevices: returning devices");
+      return devices;
     }
-    return devices;
-  } catch {}
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.stderr ?? err?.message ?? err), exitCode: (err as any)?.code }, "[mirror] listConnectedDevices: bundled idevice_id.exe threw");
+  }
 
   // 2. Try idevice_id from PATH (dev environments with libimobiledevice)
   try {
+    mlog.info("[mirror] listConnectedDevices: trying idevice_id from PATH");
     const { stdout } = await execAsync("idevice_id -l", { timeout: 4000, env });
     const udids = stdout.trim().split("\n").filter(Boolean);
+    mlog.info({ udids }, "[mirror] listConnectedDevices: PATH idevice_id result");
     const devices: IosDevice[] = [];
     for (const udid of udids) {
       let name = "iPhone";
@@ -229,8 +291,11 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
       devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
     }
     return devices;
-  } catch {}
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: PATH idevice_id also failed");
+  }
 
+  mlog.warn("[mirror] listConnectedDevices: all detection methods exhausted — returning empty");
   return [];
 }
 
