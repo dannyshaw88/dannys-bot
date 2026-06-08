@@ -8,7 +8,7 @@ import {
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
   Keyboard, UserPlus, Loader2, Copy, CheckCircle2,
   Mail, Lock, Calendar, Server, Key, Download, Zap,
-  Play, Pause, CircleDot,
+  Play, Pause, CircleDot, Wifi, WifiOff, Radio,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -809,6 +809,287 @@ function SignupPanel({ wdaConnected }: { wdaConnected: boolean }) {
   );
 }
 
+// ── AirPlay wireless mirror panel ─────────────────────────────────────────────
+
+type AirPlayState = "idle" | "starting" | "advertising" | "connected" | "streaming" | "error";
+
+interface AirPlayPanelProps {
+  onCanvasRef: (canvas: HTMLCanvasElement | null) => void;
+}
+
+function AirPlayPanel({ onCanvasRef }: AirPlayPanelProps) {
+  const [state, setState]       = useState<AirPlayState>("idle");
+  const [serverIp, setServerIp] = useState<string | null>(null);
+  const [device, setDevice]     = useState<string | null>(null);
+  const [encErr, setEncErr]     = useState<string | null>(null);
+  const [errMsg, setErrMsg]     = useState<string | null>(null);
+  const [resolution, setResolution] = useState<string | null>(null);
+
+  const wsRef       = useRef<WebSocket | null>(null);
+  const decoderRef  = useRef<any | null>(null); // VideoDecoder
+  const canvasRef   = useRef<HTMLCanvasElement | null>(null);
+  const frameTs     = useRef(0);
+
+  const stop = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    if (decoderRef.current) {
+      try { decoderRef.current.close(); } catch {}
+      decoderRef.current = null;
+    }
+    fetch("/api/mirror/airplay/stop", { method: "POST" }).catch(() => {});
+    setState("idle");
+    setDevice(null);
+    setEncErr(null);
+    setErrMsg(null);
+  }, []);
+
+  const start = useCallback(async () => {
+    setState("starting");
+    setEncErr(null);
+    setErrMsg(null);
+    try {
+      const r = await fetch("/api/mirror/airplay/start", { method: "POST" });
+      const j = await r.json() as any;
+      if (!j.ok) { setState("error"); setErrMsg(j.error ?? "Failed to start"); return; }
+      setServerIp(j.ip ?? null);
+      setState("advertising");
+
+      // Open WebSocket for H.264 frame stream + status events
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/api/mirror/airplay/video`);
+      wsRef.current = ws;
+      ws.binaryType = "arraybuffer";
+
+      ws.onmessage = async (ev) => {
+        if (typeof ev.data === "string") {
+          // JSON status message
+          try {
+            const msg = JSON.parse(ev.data) as any;
+            if (msg.type === "connected") {
+              setState("connected");
+              setDevice(msg.device ?? "iPhone");
+              if (msg.width && msg.height) setResolution(`${msg.width}×${msg.height}`);
+            } else if (msg.type === "disconnected") {
+              setState("advertising");
+              setDevice(null);
+              setResolution(null);
+            } else if (msg.type === "streaming") {
+              setState("streaming");
+              initDecoder(msg.profileLevelId ?? "42001e");
+            } else if (msg.type === "encryptionError") {
+              setEncErr(msg.message ?? "Encryption error");
+            }
+          } catch {}
+          return;
+        }
+
+        // Binary H.264 frame: [1 byte isKey][NAL data]
+        if (ev.data instanceof ArrayBuffer && ev.data.byteLength > 1) {
+          const arr    = new Uint8Array(ev.data);
+          const isKey  = arr[0] === 1;
+          const nalData = ev.data.slice(1);
+          feedDecoder(nalData, isKey);
+        }
+      };
+
+      ws.onerror = () => { setState("error"); setErrMsg("WebSocket connection failed"); };
+      ws.onclose = () => { if (state !== "idle") setState("advertising"); };
+
+    } catch (e: any) {
+      setState("error");
+      setErrMsg(String(e?.message ?? e));
+    }
+  }, []);
+
+  const initDecoder = (profileLevelId: string) => {
+    if (!(window as any).VideoDecoder) return; // WebCodecs not supported
+    if (decoderRef.current) { try { decoderRef.current.close(); } catch {} }
+
+    const codec = `avc1.${profileLevelId.padEnd(6, "0").slice(0, 6)}`;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    const decoder = new (window as any).VideoDecoder({
+      output: (frame: any) => {
+        if (!ctx) { frame.close(); return; }
+        if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+          canvas.width  = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+        }
+        ctx.drawImage(frame, 0, 0);
+        frame.close();
+      },
+      error: (e: any) => { console.warn("[airplay] VideoDecoder error:", e); },
+    });
+
+    try {
+      decoder.configure({
+        codec,
+        optimizeForLatency: true,
+        hardwareAcceleration: "prefer-hardware",
+      });
+      decoderRef.current = decoder;
+    } catch (e) {
+      console.warn("[airplay] VideoDecoder configure error:", e);
+    }
+  };
+
+  const feedDecoder = (data: ArrayBuffer, isKey: boolean) => {
+    const dec = decoderRef.current;
+    if (!dec || dec.state === "closed") return;
+    try {
+      frameTs.current += 33333; // ~30fps in microseconds
+      dec.decode(new (window as any).EncodedVideoChunk({
+        type: isKey ? "key" : "delta",
+        timestamp: frameTs.current,
+        data,
+      }));
+    } catch (e) {
+      console.debug("[airplay] decode error:", e);
+    }
+  };
+
+  useEffect(() => () => { stop(); }, [stop]);
+
+  const isActive = state !== "idle";
+
+  return (
+    <div className="space-y-5">
+      {/* Header card */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wifi className="w-4 h-4" style={{ color: "#1AD2F2" }} />
+            <p className="text-sm font-bold">Wireless Mirror</p>
+            <span className={cn(
+              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+              state === "streaming"  ? "bg-green-50 border-green-300 text-green-700 dark:bg-green-950/40 dark:border-green-700"
+            : state === "connected" ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-700"
+            : state === "advertising" ? "bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/40 dark:border-amber-700"
+            : "bg-muted/60 border-border text-muted-foreground",
+            )}>
+              {state === "streaming"   && <><Radio className="w-2.5 h-2.5" />Live</>}
+              {state === "connected"   && <><CircleDot className="w-2.5 h-2.5" />Connected</>}
+              {state === "advertising" && <><Loader2 className="w-2.5 h-2.5 animate-spin" />Waiting…</>}
+              {state === "starting"    && <><Loader2 className="w-2.5 h-2.5 animate-spin" />Starting…</>}
+              {state === "error"       && <>Error</>}
+              {state === "idle"        && <>Off</>}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant={isActive ? "outline" : "default"}
+            className="h-8 text-xs font-semibold"
+            style={isActive ? {} : { background: "#1AD2F2", color: "#000" }}
+            onClick={isActive ? stop : start}
+          >
+            {isActive
+              ? <><WifiOff className="w-3.5 h-3.5 mr-1.5" />Stop</>
+              : <><Wifi className="w-3.5 h-3.5 mr-1.5" />Start Wireless Mirror</>}
+          </Button>
+        </div>
+
+        {/* How it works */}
+        {!isActive && (
+          <div className="rounded-lg bg-muted/40 border border-border p-3.5 space-y-2">
+            <p className="text-xs font-semibold text-foreground">How it works — no USB cable needed</p>
+            <ol className="space-y-1.5">
+              {[
+                "Make sure your iPhone and this PC are on the same WiFi network.",
+                'Click "Start Wireless Mirror" above.',
+                "On your iPhone: swipe down from top-right corner to open Control Center.",
+                'Tap Screen Mirroring, then select "Equinox Mirror".',
+                "Your screen appears instantly — no app installation needed.",
+              ].map((s, i) => (
+                <li key={i} className="flex gap-2 items-start">
+                  <span className="shrink-0 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground mt-0.5">{i + 1}</span>
+                  <span className="text-xs text-muted-foreground leading-relaxed">{s}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {/* Active state — show instructions */}
+        {isActive && state === "advertising" && (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              Waiting for your iPhone…
+            </p>
+            {serverIp && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Server running on <span className="font-mono font-bold">{serverIp}</span> — make sure your iPhone is on the same WiFi network.
+              </p>
+            )}
+            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 p-3 space-y-2">
+              <p className="text-xs font-bold text-amber-900 dark:text-amber-200">On your iPhone:</p>
+              <ol className="space-y-1">
+                {[
+                  "Swipe down from the top-right corner (Control Center)",
+                  "Tap Screen Mirroring",
+                  'Select "Equinox Mirror"',
+                ].map((s, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-amber-800 dark:text-amber-300">
+                    <span className="font-bold">{i + 1}.</span>{s}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        )}
+
+        {(state === "connected" || state === "streaming") && (
+          <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3 space-y-1.5">
+            <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+              ✓ iPhone connected wirelessly{device ? ` — ${device}` : ""}
+            </p>
+            {resolution && (
+              <p className="text-xs text-green-700 dark:text-green-400">Resolution: {resolution}</p>
+            )}
+            {state === "streaming"
+              ? <p className="text-xs text-green-700 dark:text-green-400">Stream active — video playing below</p>
+              : <p className="text-xs text-green-700 dark:text-green-400">Connected — video stream starting…</p>
+            }
+          </div>
+        )}
+
+        {/* Encryption error */}
+        {encErr && (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Video decryption issue</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              {encErr.includes("RSA key needed")
+                ? "iOS encrypts the video stream using a private key. Equinox includes the standard ShairPort key — if this message appears, the key may need updating. The wireless connection itself is working."
+                : encErr}
+            </p>
+          </div>
+        )}
+
+        {/* Error */}
+        {state === "error" && errMsg && (
+          <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3">
+            <p className="text-xs font-semibold text-red-800 dark:text-red-300">Error</p>
+            <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{errMsg}</p>
+            <Button size="sm" variant="outline" className="mt-2 h-7 text-[10px]" onClick={start}>
+              <RefreshCw className="w-3 h-3 mr-1" />Retry
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Canvas for H.264 video output (hidden canvas used by WebCodecs) */}
+      <canvas
+        ref={el => { canvasRef.current = el; onCanvasRef(el); }}
+        className="hidden"
+        width={1920}
+        height={1080}
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function MirrorPage() {
@@ -820,7 +1101,8 @@ export function MirrorPage() {
   const [streaming, setStreaming]       = useState(false);
   const [jpeg, setJpeg]                 = useState<string | null>(null);
   const [fps, setFps]                   = useState(0);
-  const [tab, setTab]                   = useState<"controls" | "signup">("controls");
+  const [tab, setTab]                   = useState<"controls" | "wireless" | "signup">("controls");
+  const airplayCanvasRef                = useRef<HTMLCanvasElement | null>(null);
   const [toastMsg, setToastMsg]         = useState("");
   const [installSessionId, setInstallSessionId] = useState<string | null>(null);
   const [installProgress, setInstallProgress]   = useState(0);
@@ -1169,8 +1451,9 @@ export function MirrorPage() {
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="flex border-b border-border shrink-0">
               {[
-                { id: "controls" as const, label: "Controls" },
-                { id: "signup" as const, label: "iPhone Signup" },
+                { id: "controls"  as const, label: "Controls" },
+                { id: "wireless"  as const, label: "Wireless Mirror" },
+                { id: "signup"    as const, label: "iPhone Signup" },
               ].map(t => (
                 <button
                   key={t.id}
@@ -1204,6 +1487,9 @@ export function MirrorPage() {
                   )}
                   <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />
                 </>
+              )}
+              {tab === "wireless" && (
+                <AirPlayPanel onCanvasRef={el => { airplayCanvasRef.current = el; }} />
               )}
               {tab === "signup" && (
                 <SignupPanel wdaConnected={wdaConnected} />

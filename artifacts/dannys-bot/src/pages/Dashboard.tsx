@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.841",
+    date: "8 Jun 2026",
+    items: [
+      { category: "New", text: "Wireless Mirror — your iPhone can now mirror its screen to Equinox over WiFi with no USB cable, no iTunes drivers, and no app to install. Open the iPhone Mirror tool, go to the Wireless Mirror tab, click Start, then on your iPhone open Control Center → Screen Mirroring → Equinox Mirror." },
+      { category: "New", text: "AirPlay receiver built into Equinox — it advertises itself on your local network using the same mDNS protocol Apple TV uses, so it appears instantly in your iPhone's Screen Mirroring list." },
+      { category: "New", text: "H.264 video stream is decoded in hardware using the browser's built-in WebCodecs API — no extra software needed, works on any modern PC." },
+    ],
+  },
+  {
     version: "1.0.840",
     date: "8 Jun 2026",
     items: [

@@ -2163,7 +2163,11 @@ export async function registerInstagramRoutes(
 
     const match = url.pathname.match(/^\/api\/browser\/(\d+)\/stream$/);
     if (!match) {
-      socket.destroy();
+      // Let other registered upgrade handlers claim the socket for non-browser paths
+      // (e.g., /api/mirror/airplay/video handled by mirror routes)
+      if (url.pathname !== "/api/mirror/airplay/video") {
+        socket.destroy();
+      }
       return;
     }
     const profileId = Number(match[1]);
@@ -4447,6 +4451,6 @@ export async function registerInstagramRoutes(
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
 
-  registerMirrorRoutes(app);
+  registerMirrorRoutes(app, httpServer);
 
 }

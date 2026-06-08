@@ -1,4 +1,6 @@
 import type { Express } from "express";
+import type { Server } from "http";
+import { WebSocketServer } from "ws";
 import {
   listConnectedDevices,
   diagnoseIphoneSupport,
@@ -21,6 +23,12 @@ import {
   offWdaInstallStatus,
   type IphoneSignupParams,
 } from "../instagram/iphoneMirror";
+import {
+  startAirPlayMirror,
+  stopAirPlayMirror,
+  getAirPlayStatus,
+  getAirPlayServer,
+} from "../instagram/airplayMirror";
 
 // Per-request signup status for polling
 const signupStatus: Map<string, { msg: string; done: boolean }> = new Map();
@@ -28,7 +36,88 @@ const signupStatus: Map<string, { msg: string; done: boolean }> = new Map();
 // Per-request WDA install status for polling
 const wdaInstallStatus: Map<string, { step: string; progress?: number; message: string; done: boolean }> = new Map();
 
-export function registerMirrorRoutes(app: Express): void {
+export function registerMirrorRoutes(app: Express, httpServer?: Server): void {
+
+  // ── AirPlay wireless mirror ────────────────────────────────────────────────
+
+  app.post("/api/mirror/airplay/start", async (_req, res) => {
+    try {
+      const result = await startAirPlayMirror();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  app.post("/api/mirror/airplay/stop", (_req, res) => {
+    stopAirPlayMirror();
+    res.json({ ok: true });
+  });
+
+  app.get("/api/mirror/airplay/status", (_req, res) => {
+    res.json({ ok: true, ...getAirPlayStatus() });
+  });
+
+  // WebSocket upgrade for AirPlay H.264 frame stream.
+  // The frontend connects to /api/mirror/airplay/video and receives binary
+  // messages: [1 byte: isKeyFrame (0|1)] + [raw H.264 NAL unit bytes]
+  if (httpServer) {
+    const airplayWss = new WebSocketServer({ noServer: true });
+
+    httpServer.on("upgrade", (request, socket, head) => {
+      const url = new URL(request.url ?? "", "http://localhost");
+      if (url.pathname !== "/api/mirror/airplay/video") return;
+
+      airplayWss.handleUpgrade(request, socket, head, (ws) => {
+        const srv = getAirPlayServer();
+
+        // Forward H.264 frames to this WebSocket client
+        const onFrame = (data: Buffer, isKey: boolean) => {
+          if (ws.readyState !== ws.OPEN) return;
+          const prefix = Buffer.from([isKey ? 1 : 0]);
+          ws.send(Buffer.concat([prefix, data]), { binary: true });
+        };
+
+        // Forward status events to this client as JSON messages
+        const onConnected = (info: any) => {
+          if (ws.readyState !== ws.OPEN) return;
+          ws.send(JSON.stringify({ type: "connected", ...info }));
+        };
+        const onDisconnected = () => {
+          if (ws.readyState !== ws.OPEN) return;
+          ws.send(JSON.stringify({ type: "disconnected" }));
+        };
+        const onEncError = (msg: string) => {
+          if (ws.readyState !== ws.OPEN) return;
+          ws.send(JSON.stringify({ type: "encryptionError", message: msg }));
+        };
+        const onStreaming = () => {
+          if (ws.readyState !== ws.OPEN) return;
+          ws.send(JSON.stringify({ type: "streaming" }));
+        };
+
+        srv.on("h264frame",       onFrame);
+        srv.on("connected",       onConnected);
+        srv.on("disconnected",    onDisconnected);
+        srv.on("encryptionError", onEncError);
+        srv.on("streaming",       onStreaming);
+
+        // Send current status immediately
+        const status = getAirPlayStatus();
+        ws.send(JSON.stringify({ type: "status", ...status }));
+
+        ws.on("close", () => {
+          srv.off("h264frame",       onFrame);
+          srv.off("connected",       onConnected);
+          srv.off("disconnected",    onDisconnected);
+          srv.off("encryptionError", onEncError);
+          srv.off("streaming",       onStreaming);
+        });
+
+        ws.on("error", () => {});
+      });
+    });
+  }
 
   // ── Device detection ──────────────────────────────────────────────────────
 
