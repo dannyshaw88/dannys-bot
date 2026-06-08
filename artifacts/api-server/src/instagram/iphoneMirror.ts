@@ -268,24 +268,24 @@ function parseDeviceListResponse(xml: string): UsbmuxdDevice[] {
 
 /** List connected iOS devices by talking directly to Apple's AMDS TCP socket.
  *  No DLL dependencies — works even when usbmuxd.dll is absent (modern iTunes). */
-export async function listDevicesViaUsbmuxdTcp(): Promise<UsbmuxdDevice[]> {
-  if (process.platform !== "win32") return [];
+export async function listDevicesViaUsbmuxdTcp(): Promise<UsbmuxdDevice[] | null> {
+  if (process.platform !== "win32") return null;
   return new Promise((resolve) => {
     const sock = net.createConnection({ host: USBMUXD_HOST, port: USBMUXD_TCP_PORT });
     let buf = Buffer.alloc(0);
     let done = false;
-    const finish = (val: UsbmuxdDevice[]) => {
+    const finish = (val: UsbmuxdDevice[] | null) => {
       if (done) return; done = true;
       try { sock.destroy(); } catch {}
       resolve(val);
     };
     sock.setTimeout(3000, () => {
       mlog.warn("[mirror] usbmuxd TCP: timeout — AMDS not responding");
-      finish([]);
+      finish(null);
     });
     sock.on("error", (e) => {
       mlog.warn({ err: String(e) }, "[mirror] usbmuxd TCP: connection error");
-      finish([]);
+      finish(null);
     });
     sock.on("connect", () => {
       mlog.info("[mirror] usbmuxd TCP: connected to Apple AMDS 127.0.0.1:27015");
@@ -321,7 +321,7 @@ async function startIproxyViaTcp(
   if (_tcpTunnelServer && _tcpTunnelUdid === udid) return { ok: true };
   stopIproxyTcp();
 
-  const devs = await listDevicesViaUsbmuxdTcp();
+  const devs = (await listDevicesViaUsbmuxdTcp()) ?? [];
   const dev  = devs.find(d => d.udid === udid);
   if (!dev) return { ok: false, error: `usbmuxd TCP: device ${udid} not found` };
 
@@ -514,15 +514,20 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
 
   // When idevice_id.exe crashes (usbmuxd.dll missing), attempt TCP device detection
   // so we can still report whether a device is actually connected.
+  let tcpServiceOk = false;
   let tcpDetectedCount = 0;
   if (dllCrash) {
     try {
       const tcpDevs = await listDevicesViaUsbmuxdTcp();
-      tcpDetectedCount = tcpDevs.length;
-      if (tcpDevs.length > 0) {
-        mlog.info({ count: tcpDevs.length }, "[mirror] diagnoseIphoneSupport: TCP usbmuxd found devices despite DLL crash");
+      // null = connection failed; [] = connected but no phone yet; [...] = phone found
+      tcpServiceOk = tcpDevs !== null;
+      tcpDetectedCount = tcpDevs?.length ?? 0;
+      if (tcpDetectedCount > 0) {
+        mlog.info({ count: tcpDetectedCount }, "[mirror] diagnoseIphoneSupport: TCP usbmuxd found devices despite DLL crash");
+      } else if (tcpServiceOk) {
+        mlog.info("[mirror] diagnoseIphoneSupport: TCP usbmuxd connected — no device plugged in yet");
       } else {
-        mlog.info("[mirror] diagnoseIphoneSupport: TCP usbmuxd also found no devices");
+        mlog.info("[mirror] diagnoseIphoneSupport: TCP usbmuxd could not connect — AMDS not running");
       }
     } catch {}
   }
@@ -537,7 +542,7 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   } else if (dllCrash) {
     // imobiledevice.dll imports usbmuxd.dll which Apple stopped shipping with modern iTunes.
     // We fall back to TCP usbmuxd — report whether that also works.
-    suggestion = tcpDetectedCount > 0 ? "usbmuxd_dll_missing_tcp_ok" : "usbmuxd_dll_missing";
+    suggestion = tcpServiceOk ? "usbmuxd_dll_missing_tcp_ok" : "usbmuxd_dll_missing";
   } else if (rawOutput === "" && rawError === "") {
     suggestion = "no_connection";
   } else if (rawError) {
@@ -620,7 +625,7 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
   //    Apple's AMDS service still listens on 127.0.0.1:27015 using the standard usbmuxd protocol.
   mlog.info("[mirror] listConnectedDevices: trying direct TCP usbmuxd (no DLL required)");
   try {
-    const tcpDevs = await listDevicesViaUsbmuxdTcp();
+    const tcpDevs = (await listDevicesViaUsbmuxdTcp()) ?? [];
     if (tcpDevs.length > 0) {
       mlog.info({ count: tcpDevs.length }, "[mirror] listConnectedDevices: devices found via TCP usbmuxd");
       return tcpDevs.map(d => ({ udid: d.udid, name: "iPhone", ios: "Unknown", connected: "usb" as const }));

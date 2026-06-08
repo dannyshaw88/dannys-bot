@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.843",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror Controls tab now correctly shows 'Direct connection active — plug in your iPhone' (green) instead of the amber 'USB bridge not available' warning when modern iTunes is installed but your iPhone isn't plugged in yet. The previous version confused 'no phone connected' with 'connection broken'." },
+    ],
+  },
+  {
     version: "1.0.842",
     date: "8 Jun 2026",
     items: [
