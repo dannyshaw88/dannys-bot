@@ -174,7 +174,9 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
 
   const itunesRequired  = diagnosis?.suggestion === "itunes_required";
   const msStoreItunes   = diagnosis?.suggestion === "ms_store_itunes";
-  const dllMissing      = diagnosis?.suggestion === "dll_missing";
+  const usbmuxdDllMissing = diagnosis?.suggestion === "usbmuxd_dll_missing";
+  const usbmuxdDllMissingTcpOk = diagnosis?.suggestion === "usbmuxd_dll_missing_tcp_ok";
+  const dllMissing      = usbmuxdDllMissing || usbmuxdDllMissingTcpOk;
   const binaryMissing   = diagnosis !== null && !diagnosis.binaryFound;
   const noConnection    = diagnosis?.suggestion === "no_connection"
     || diagnosis?.suggestion === "unlock"
@@ -298,46 +300,55 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             </div>
           )}
 
-          {/* Apple DLL not loading — iTunes installed but driver not accessible from PATH */}
+          {/* usbmuxd.dll absent — modern iTunes no longer ships it.
+              Equinox automatically falls back to direct TCP usbmuxd protocol.
+              If TCP ok, show green info. If TCP also fails, show steps. */}
           {dllMissing && !diagnosing && (
-            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+            <div className={cn(
+              "rounded-lg border p-4 space-y-3",
+              usbmuxdDllMissingTcpOk
+                ? "border-green-400 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
+                : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30",
+            )}>
               <div className="flex items-start gap-2">
-                <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⚠</span>
+                <span className={cn("text-base leading-none mt-0.5",
+                  usbmuxdDllMissingTcpOk
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-amber-600 dark:text-amber-400",
+                )}>
+                  {usbmuxdDllMissingTcpOk ? "✓" : "⚠"}
+                </span>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">iTunes driver not loading correctly</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                    iTunes is installed and the Apple service is running, but the required Apple DLL
-                    (<strong>AppleMobileDeviceInterface.dll</strong>) isn't accessible. This usually
-                    happens after a fresh iTunes install before a reboot, or if the installer didn't
-                    finish cleanly.
-                  </p>
+                  {usbmuxdDllMissingTcpOk ? (
+                    <>
+                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+                        Direct connection active — plug in your iPhone
+                      </p>
+                      <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
+                        Modern iTunes no longer ships <strong>usbmuxd.dll</strong>, which the bundled tool needs. Equinox has automatically switched to talking directly to Apple's service over TCP — no DLLs required. Device detection is fully working. Plug in your iPhone to continue.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        USB bridge not available — plug in your iPhone first
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                        Modern iTunes no longer ships <strong>usbmuxd.dll</strong>, which the bundled tool needs. Equinox tried switching to a direct TCP connection to Apple's service — but no device was found yet.
+                        <strong> This is not an iTunes problem.</strong> Plug in your iPhone and click Check again.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
-              <ol className="space-y-1.5">
-                {[
-                  <><strong>Restart your PC</strong> — most common fix. A fresh iTunes install often needs a reboot before its DLLs register in Windows' path.</>,
-                  <>If restarting doesn't help, open <strong>Start → Settings → Apps</strong>, find <strong>iTunes</strong>, click → <strong>Modify</strong> → <strong>Repair</strong>.</>,
-                  <>After repairing, <strong>restart your PC again</strong>, then reopen Equinox and plug in your iPhone.</>,
-                  <>Still stuck? Uninstall iTunes completely, restart, then reinstall from <strong>apple.com/itunes</strong> (not the Microsoft Store).</>,
-                ].map((text, i) => (
-                  <li key={i} className="flex gap-2 items-start">
-                    <span className="shrink-0 w-4 h-4 rounded-full bg-amber-200 dark:bg-amber-900 flex items-center justify-center text-[9px] font-bold text-amber-700 dark:text-amber-300 mt-0.5">{i + 1}</span>
-                    <span className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">{text}</span>
-                  </li>
-                ))}
-              </ol>
-              <div className="flex gap-2 pt-1">
-                <a href="https://www.apple.com/itunes/download/win64" target="_blank" rel="noreferrer" className="flex-1">
-                  <Button variant="outline" size="sm" className="w-full h-9 text-xs">
-                    <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Download iTunes (Apple)
+              {usbmuxdDllMissing && (
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                    Check again
                   </Button>
-                </a>
-                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
-                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
-                  Check again
-                </Button>
-              </div>
+                </div>
+              )}
             </div>
           )}
 

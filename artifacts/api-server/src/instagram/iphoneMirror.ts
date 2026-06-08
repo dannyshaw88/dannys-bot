@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import https from "https";
+import net from "net";
 import { logger } from "../lib/logger";
 
 const execAsync = promisify(exec);
@@ -184,8 +185,205 @@ async function getAppleMobileDevicePath(): Promise<string> {
 }
 
 // Windows exit code 0xC0000135 — STATUS_DLL_NOT_FOUND
-// idevice_id.exe crashes immediately on load when the Apple DLL path is not in PATH
+// Root cause: imobiledevice.dll imports usbmuxd.dll, which Apple stopped shipping
+// with modern iTunes (post-2021). No PATH injection can fix a DLL that simply doesn't exist.
 const DLL_NOT_FOUND_EXIT_CODE = 3221225781;
+
+// ── usbmuxd TCP direct protocol ───────────────────────────────────────────────
+// Apple's AMDS service on Windows still listens on TCP 127.0.0.1:27015 using the
+// standard usbmuxd plist protocol. We talk to it directly from Node.js — zero DLLs,
+// zero binaries, works on any iTunes version that has AMDS installed and running.
+
+const USBMUXD_HOST       = "127.0.0.1";
+const USBMUXD_TCP_PORT   = 27015;
+const USBMUXD_PROTO_PLIST = 1;
+const USBMUXD_MSG_PLIST   = 8;
+
+export interface UsbmuxdDevice {
+  deviceId: number;
+  udid: string;
+  connectionType: "USB" | "Network";
+}
+
+function buildUsbmuxdMsg(plistXml: string, tag = 1): Buffer {
+  const body = Buffer.from(plistXml, "utf8");
+  const hdr  = Buffer.allocUnsafe(16);
+  hdr.writeUInt32LE(16 + body.length, 0);
+  hdr.writeUInt32LE(USBMUXD_PROTO_PLIST,  4);
+  hdr.writeUInt32LE(USBMUXD_MSG_PLIST,    8);
+  hdr.writeUInt32LE(tag,                 12);
+  return Buffer.concat([hdr, body]);
+}
+
+const LIST_DEVICES_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>MessageType</key><string>ListDevices</string>
+  <key>ClientVersionString</key><string>Equinox/1.0</string>
+  <key>ProgName</key><string>Equinox</string>
+</dict></plist>`;
+
+function makeConnectPlist(deviceId: number, devicePort: number): string {
+  // usbmuxd PortNumber must be the port in network byte order (htons)
+  const netPort = ((devicePort & 0xff) << 8) | ((devicePort >> 8) & 0xff);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>MessageType</key><string>Connect</string>
+  <key>DeviceID</key><integer>${deviceId}</integer>
+  <key>PortNumber</key><integer>${netPort}</integer>
+  <key>ProgName</key><string>Equinox</string>
+</dict></plist>`;
+}
+
+function parseUsbmuxdKV(xml: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /<key>([^<]+)<\/key>\s*<(?:string|integer)>([^<]*)<\/(?:string|integer)>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) out[m[1]] = m[2];
+  return out;
+}
+
+function parseDeviceListResponse(xml: string): UsbmuxdDevice[] {
+  const devices: UsbmuxdDevice[] = [];
+  // Scan for outer <dict> blocks that contain a DeviceID and a Properties sub-dict
+  const outerRe = /<dict>([\s\S]*?)<\/dict>/g;
+  let dm;
+  while ((dm = outerRe.exec(xml)) !== null) {
+    const block = dm[1];
+    const idM   = /<key>DeviceID<\/key>\s*<integer>(\d+)<\/integer>/.exec(block);
+    const propM = /<key>Properties<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(block);
+    if (!idM || !propM) continue;
+    const udidM = /<key>SerialNumber<\/key>\s*<string>([^<]+)<\/string>/.exec(propM[1]);
+    const connM = /<key>ConnectionType<\/key>\s*<string>([^<]+)<\/string>/.exec(propM[1]);
+    if (!udidM) continue;
+    devices.push({
+      deviceId:       parseInt(idM[1], 10),
+      udid:           udidM[1],
+      connectionType: (connM?.[1] ?? "USB") as "USB" | "Network",
+    });
+  }
+  return devices;
+}
+
+/** List connected iOS devices by talking directly to Apple's AMDS TCP socket.
+ *  No DLL dependencies — works even when usbmuxd.dll is absent (modern iTunes). */
+export async function listDevicesViaUsbmuxdTcp(): Promise<UsbmuxdDevice[]> {
+  if (process.platform !== "win32") return [];
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host: USBMUXD_HOST, port: USBMUXD_TCP_PORT });
+    let buf = Buffer.alloc(0);
+    let done = false;
+    const finish = (val: UsbmuxdDevice[]) => {
+      if (done) return; done = true;
+      try { sock.destroy(); } catch {}
+      resolve(val);
+    };
+    sock.setTimeout(3000, () => {
+      mlog.warn("[mirror] usbmuxd TCP: timeout — AMDS not responding");
+      finish([]);
+    });
+    sock.on("error", (e) => {
+      mlog.warn({ err: String(e) }, "[mirror] usbmuxd TCP: connection error");
+      finish([]);
+    });
+    sock.on("connect", () => {
+      mlog.info("[mirror] usbmuxd TCP: connected to Apple AMDS 127.0.0.1:27015");
+      sock.write(buildUsbmuxdMsg(LIST_DEVICES_PLIST, 1));
+    });
+    sock.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (buf.length < 16) return;
+      const total = buf.readUInt32LE(0);
+      if (buf.length < total) return;
+      const xml = buf.slice(16, total).toString("utf8");
+      mlog.info({ plistLen: xml.length }, "[mirror] usbmuxd TCP: ListDevices response received");
+      const devs = parseDeviceListResponse(xml);
+      mlog.info({ count: devs.length, udids: devs.map(d => d.udid) }, "[mirror] usbmuxd TCP: parsed devices");
+      finish(devs);
+    });
+  });
+}
+
+// ── TCP iproxy tunnel ─────────────────────────────────────────────────────────
+// Replaces iproxy.exe when it can't load (same usbmuxd.dll problem).
+// Opens a local TCP server; each incoming connection sends a usbmuxd Connect
+// message and then pipes the socket transparently to the device port.
+
+let _tcpTunnelServer: net.Server | null = null;
+let _tcpTunnelUdid:   string | null = null;
+
+async function startIproxyViaTcp(
+  udid: string,
+  localPort: number,
+  devicePort: number,
+): Promise<{ ok: boolean; error?: string }> {
+  if (_tcpTunnelServer && _tcpTunnelUdid === udid) return { ok: true };
+  stopIproxyTcp();
+
+  const devs = await listDevicesViaUsbmuxdTcp();
+  const dev  = devs.find(d => d.udid === udid);
+  if (!dev) return { ok: false, error: `usbmuxd TCP: device ${udid} not found` };
+
+  const connectPlist = makeConnectPlist(dev.deviceId, devicePort);
+
+  return new Promise((resolve) => {
+    const server = net.createServer((client) => {
+      const usb = net.createConnection({ host: USBMUXD_HOST, port: USBMUXD_TCP_PORT });
+      let hdrBuf   = Buffer.alloc(0);
+      let bridged  = false;
+
+      usb.once("connect", () => usb.write(buildUsbmuxdMsg(connectPlist, 1)));
+      usb.on("error",  (e) => { mlog.warn({ err: String(e) }, "[mirror] tcp-tunnel: usb err"); client.destroy(); });
+      client.on("error", () => usb.destroy());
+      client.on("close",  () => usb.destroy());
+      usb.on("close",     () => client.destroy());
+
+      usb.on("data", (chunk) => {
+        if (bridged) return; // already piping
+        hdrBuf = Buffer.concat([hdrBuf, chunk]);
+        if (hdrBuf.length < 16) return;
+        const total = hdrBuf.readUInt32LE(0);
+        if (hdrBuf.length < total) return;
+        // Parse result plist
+        const xml  = hdrBuf.slice(16, total).toString("utf8");
+        const kv   = parseUsbmuxdKV(xml);
+        const code = Number(kv["Number"] ?? kv["NumberCode"] ?? 1);
+        if (code !== 0) {
+          mlog.warn({ code, xml }, "[mirror] tcp-tunnel: Connect refused");
+          client.destroy(); usb.destroy(); return;
+        }
+        bridged = true;
+        mlog.info({ udid, localPort, devicePort }, "[mirror] tcp-tunnel: bridge established");
+        // Flush any remaining bytes past the response header, then pipe
+        const tail = hdrBuf.slice(total);
+        if (tail.length > 0) client.write(tail);
+        usb.removeAllListeners("data");
+        usb.pipe(client);
+        client.pipe(usb);
+      });
+    });
+
+    server.listen(localPort, "127.0.0.1", () => {
+      mlog.info({ localPort }, "[mirror] tcp-tunnel: server listening");
+      _tcpTunnelServer = server;
+      _tcpTunnelUdid   = udid;
+      resolve({ ok: true });
+    });
+    server.on("error", (e) => {
+      mlog.warn({ err: String(e) }, "[mirror] tcp-tunnel: server error");
+      resolve({ ok: false, error: String(e) });
+    });
+  });
+}
+
+function stopIproxyTcp(): void {
+  if (_tcpTunnelServer) {
+    try { _tcpTunnelServer.close(); } catch {}
+    _tcpTunnelServer = null;
+    _tcpTunnelUdid   = null;
+  }
+}
 
 /** Build an env object that includes ALL known Apple DLL directories in PATH.
  *  Fresh iTunes installs spread DLLs across Mobile Device Support, Apple Application Support,
@@ -314,6 +512,21 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
     mlog.warn("[mirror] diagnoseIphoneSupport: skipping idevice_id run — binary not found");
   }
 
+  // When idevice_id.exe crashes (usbmuxd.dll missing), attempt TCP device detection
+  // so we can still report whether a device is actually connected.
+  let tcpDetectedCount = 0;
+  if (dllCrash) {
+    try {
+      const tcpDevs = await listDevicesViaUsbmuxdTcp();
+      tcpDetectedCount = tcpDevs.length;
+      if (tcpDevs.length > 0) {
+        mlog.info({ count: tcpDevs.length }, "[mirror] diagnoseIphoneSupport: TCP usbmuxd found devices despite DLL crash");
+      } else {
+        mlog.info("[mirror] diagnoseIphoneSupport: TCP usbmuxd also found no devices");
+      }
+    } catch {}
+  }
+
   let suggestion = "";
   if (!binaryFound) {
     suggestion = "Equinox binaries are missing. Try reinstalling the app.";
@@ -322,8 +535,9 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
   } else if (dllCrash) {
-    // Binary found, service running, but idevice_id.exe immediately crashes — Apple DLL not in PATH
-    suggestion = "dll_missing";
+    // imobiledevice.dll imports usbmuxd.dll which Apple stopped shipping with modern iTunes.
+    // We fall back to TCP usbmuxd — report whether that also works.
+    suggestion = tcpDetectedCount > 0 ? "usbmuxd_dll_missing_tcp_ok" : "usbmuxd_dll_missing";
   } else if (rawOutput === "" && rawError === "") {
     suggestion = "no_connection";
   } else if (rawError) {
@@ -402,6 +616,20 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
     mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: PATH idevice_id also failed");
   }
 
+  // 3. Direct TCP usbmuxd — works when usbmuxd.dll is absent (modern iTunes no longer ships it).
+  //    Apple's AMDS service still listens on 127.0.0.1:27015 using the standard usbmuxd protocol.
+  mlog.info("[mirror] listConnectedDevices: trying direct TCP usbmuxd (no DLL required)");
+  try {
+    const tcpDevs = await listDevicesViaUsbmuxdTcp();
+    if (tcpDevs.length > 0) {
+      mlog.info({ count: tcpDevs.length }, "[mirror] listConnectedDevices: devices found via TCP usbmuxd");
+      return tcpDevs.map(d => ({ udid: d.udid, name: "iPhone", ios: "Unknown", connected: "usb" as const }));
+    }
+    mlog.info("[mirror] listConnectedDevices: TCP usbmuxd returned no devices");
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: TCP usbmuxd threw");
+  }
+
   mlog.warn("[mirror] listConnectedDevices: all detection methods exhausted — returning empty");
   return [];
 }
@@ -414,22 +642,23 @@ let iproxyUdid: string | null = null;
 let iproxyPort = 8100;
 
 export function getIproxyStatus(): { running: boolean; udid: string | null; port: number } {
-  return { running: iproxyProc !== null, udid: iproxyUdid, port: iproxyPort };
+  return { running: iproxyProc !== null || _tcpTunnelServer !== null, udid: iproxyUdid ?? _tcpTunnelUdid, port: iproxyPort };
 }
 
 export async function startIproxy(udid: string, localPort = 8100, devicePort = 8100): Promise<{ ok: boolean; error?: string }> {
   // Stop existing iproxy if for a different device
-  if (iproxyProc && iproxyUdid !== udid) {
+  if ((iproxyProc && iproxyUdid !== udid) || (_tcpTunnelServer && _tcpTunnelUdid !== udid)) {
     stopIproxy();
   }
-  if (iproxyProc) return { ok: true }; // already running for this device
+  if (iproxyProc || _tcpTunnelServer) return { ok: true }; // already running for this device
 
   iproxyPort = localPort;
   iproxyUdid = udid;
 
   const exe = binPath("iproxy.exe");
 
-  return new Promise((resolve) => {
+  // Try iproxy.exe first
+  const exeResult = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
     try {
       const args = [`${localPort}`, `${devicePort}`, "--udid", udid];
       iproxyProc = spawn(exe, args, {
@@ -439,19 +668,19 @@ export async function startIproxy(udid: string, localPort = 8100, devicePort = 8
 
       iproxyProc.on("error", (err) => {
         iproxyProc = null;
-        resolve({ ok: false, error: `iproxy failed to start: ${err.message}` });
+        resolve({ ok: false, error: `iproxy.exe error: ${err.message}` });
       });
 
       iproxyProc.on("exit", (code) => {
         iproxyProc = null;
+        // If it exited before our 800ms check fires, report failure
       });
 
-      // Give iproxy 800ms to either start or fail
       setTimeout(() => {
         if (iproxyProc) {
           resolve({ ok: true });
         } else {
-          resolve({ ok: false, error: "iproxy exited immediately" });
+          resolve({ ok: false, error: "iproxy.exe exited immediately" });
         }
       }, 800);
     } catch (err: any) {
@@ -459,6 +688,13 @@ export async function startIproxy(udid: string, localPort = 8100, devicePort = 8
       resolve({ ok: false, error: String(err.message ?? err) });
     }
   });
+
+  if (exeResult.ok) return exeResult;
+
+  // iproxy.exe failed (most likely usbmuxd.dll missing) — fall back to TCP tunnel
+  mlog.warn({ exeError: exeResult.error }, "[mirror] iproxy.exe failed — falling back to TCP usbmuxd tunnel");
+  iproxyUdid = null;
+  return startIproxyViaTcp(udid, localPort, devicePort);
 }
 
 export function stopIproxy(): void {
@@ -467,6 +703,7 @@ export function stopIproxy(): void {
     iproxyProc = null;
     iproxyUdid = null;
   }
+  stopIproxyTcp();
 }
 
 // ── WDA download + install ────────────────────────────────────────────────────

@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.840",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool now detects iPhones without needing any Apple DLLs — it talks directly to Apple's device service over TCP, completely bypassing the usbmuxd.dll that modern iTunes no longer ships." },
+      { category: "Fix", text: "Mirror tool USB tunnel (iproxy) now also uses direct TCP when the iproxy.exe tool can't load, so both detection and connection work even without the old Apple DLLs." },
+      { category: "Fix", text: "Mirror diagnose panel now shows the correct message — 'Direct connection active' in green when TCP detection is working, or a clear 'plug in your iPhone' prompt if no device is found yet. No more misleading iTunes repair instructions." },
+    ],
+  },
+  {
     version: "1.0.839",
     date: "8 Jun 2026",
     items: [
