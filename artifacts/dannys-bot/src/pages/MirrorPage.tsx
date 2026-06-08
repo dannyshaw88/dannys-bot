@@ -475,23 +475,22 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
 
       {stage === "starting_iproxy" && (
         <div className="space-y-3">
+          {/* Primary action — open the WDA app */}
           <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
             <div className="flex items-start gap-2">
               <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⚠</span>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">One more step on your iPhone</p>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Start the control agent on your iPhone</p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                  The control agent is installed but iOS won't let it run until you trust the developer certificate. This is a one-time step.
+                  The app is installed — you need to open it once so it starts listening. Look for it on your iPhone home screen.
                 </p>
               </div>
             </div>
             <ol className="space-y-2">
               {[
-                <><strong>Open Settings</strong> on your iPhone.</>,
-                <>Go to <strong>General → VPN &amp; Device Management</strong>.</>,
-                <>Under "Developer App", tap the entry (it may say <em>Apple Development</em> or a developer name).</>,
-                <>Tap <strong>Trust</strong> and confirm with your passcode.</>,
-                <>The control agent will start and Equinox will connect automatically.</>,
+                <>On your iPhone home screen, find the <strong>WebDriverAgent</strong> app — it has a <strong>plain white or blank icon</strong>. You can also search for it in Spotlight (swipe down on home screen → type <em>WebDriver</em>).</>,
+                <>Tap it to open. The screen will go white or show nothing — <strong>that's normal</strong>. It's running in the background.</>,
+                <>Equinox will connect automatically within a few seconds.</>,
               ].map((text, i) => (
                 <li key={i} className="flex gap-2.5 items-start">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-amber-200 dark:bg-amber-900 flex items-center justify-center text-[10px] font-bold text-amber-800 dark:text-amber-300 mt-0.5">{i + 1}</span>
@@ -500,6 +499,28 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
               ))}
             </ol>
           </div>
+          {/* Secondary — if they haven't trusted the cert yet */}
+          <details className="rounded-lg border border-border overflow-hidden">
+            <summary className="px-3 py-2.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/40 transition-colors">
+              Don't see the WebDriverAgent app? — Trust the developer certificate first ▸
+            </summary>
+            <div className="px-3 pb-3 pt-2 space-y-2 bg-muted/20">
+              <p className="text-xs text-muted-foreground">If this is the first time installing the control agent, iOS blocks it until you trust the certificate once:</p>
+              <ol className="space-y-1.5">
+                {[
+                  <>Open <strong>Settings → General → VPN &amp; Device Management</strong>.</>,
+                  <>Under "Developer App", tap the developer entry.</>,
+                  <>Tap <strong>Trust</strong> and enter your passcode.</>,
+                  <>The WebDriverAgent app will now be launchable from the home screen.</>,
+                ].map((text, i) => (
+                  <li key={i} className="flex gap-2 items-start">
+                    <span className="shrink-0 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground mt-0.5">{i + 1}</span>
+                    <span className="text-xs text-muted-foreground leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </details>
           <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
             Waiting for control agent to start…

@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.846",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: the 'Connecting' screen now shows the correct instructions — find the WebDriverAgent app on your iPhone home screen (plain white icon, or search for it in Spotlight) and tap it to start. The old trust-certificate instructions are still there as a collapsible section for first-time installs." },
+    ],
+  },
+  {
     version: "1.0.845",
     date: "8 Jun 2026",
     items: [
