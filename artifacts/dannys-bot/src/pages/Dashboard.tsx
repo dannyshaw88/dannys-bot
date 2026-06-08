@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.839",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool now injects ALL known Apple directories into PATH when running the iPhone communication tool — Mobile Device Support, Apple Application Support, and the iTunes app folder — so a fresh iTunes install works regardless of which directory Apple chose for each DLL." },
+      { category: "Fix", text: "Mirror tool DLL detection now also checks for iTunesMobileDevice.dll, CoreFoundation.dll, and the Apple service executable — covering what fresh iTunes actually ships instead of only looking for older DLL names." },
+    ],
+  },
+  {
     version: "1.0.838",
     date: "8 Jun 2026",
     items: [

@@ -50,11 +50,27 @@ function binPath(exe: string): string {
 let _amdPath: string | null | undefined = undefined; // undefined = not yet resolved
 let _isStoreItunes = false; // true when iTunes is the sandboxed Microsoft Store version
 
-// The DLL names idevice_id.exe may require — checked in order
+// All known Apple DLL directories — always injected into PATH regardless of which DLL is found.
+// Fresh iTunes installs spread DLLs across several directories; injecting all ensures any
+// transitively-required DLL (CoreFoundation.dll, iTunesMobileDevice.dll, etc.) is loadable.
+const APPLE_STATIC_DIRS = [
+  "C:\\Program Files\\Common Files\\Apple\\Mobile Device Support",
+  "C:\\Program Files\\Common Files\\Apple\\Apple Application Support",
+  "C:\\Program Files\\iTunes",
+  "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support",
+  "C:\\Program Files (x86)\\Common Files\\Apple\\Apple Application Support",
+  "C:\\Program Files (x86)\\iTunes",
+];
+
+// DLL names used ONLY to confirm a directory is a real Apple install (for MS Store detection).
+// Must include names present on both old and fresh iTunes installs.
 const APPLE_DLL_NAMES = [
-  "AppleMobileDeviceInterface.dll",
-  "AppleMobileDeviceLibrary.dll",
+  "AppleMobileDeviceInterface.dll",  // iTunes < 12.x
+  "AppleMobileDeviceLibrary.dll",    // some variants
+  "iTunesMobileDevice.dll",          // standard fresh iTunes install
+  "CoreFoundation.dll",              // Apple Application Support
   "libimobiledevice-1.0.dll",
+  "AppleMobileDeviceService.exe",    // service exe — always present when AMDS is installed
 ];
 
 function findAppleDllInDir(dir: string): boolean {
@@ -171,15 +187,27 @@ async function getAppleMobileDevicePath(): Promise<string> {
 // idevice_id.exe crashes immediately on load when the Apple DLL path is not in PATH
 const DLL_NOT_FOUND_EXIT_CODE = 3221225781;
 
-/** Build an env object that includes Apple's Mobile Device DLL directory in PATH */
+/** Build an env object that includes ALL known Apple DLL directories in PATH.
+ *  Fresh iTunes installs spread DLLs across Mobile Device Support, Apple Application Support,
+ *  and the iTunes app dir. We inject all of them so any transitively-required DLL is loadable
+ *  regardless of which exact directory Apple chose for a given version.
+ */
 async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
-  const amdPath = await getAppleMobileDevicePath();
+  const amdPath = await getAppleMobileDevicePath(); // still needed for MS-Store detection side-effect
   const binDir  = getBinDir();
-  const extra   = [binDir, amdPath].filter(Boolean).join(path.delimiter);
-  const usbmuxd = process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015";
-  const finalPath = extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH;
+
+  // Build the injection list: our bin dir first, then every known Apple directory.
+  // Unknown/non-existent dirs are harmless in PATH and future-proof against iTunes layout changes.
+  const extraDirs = [
+    binDir,
+    ...APPLE_STATIC_DIRS,
+    ...(amdPath && !APPLE_STATIC_DIRS.includes(amdPath) ? [amdPath] : []),
+  ].filter(Boolean);
+
+  const usbmuxd   = process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015";
+  const finalPath = `${extraDirs.join(path.delimiter)}${path.delimiter}${process.env.PATH ?? ""}`;
   mlog.info(
-    { binDir, amdPath, usbmuxdSocket: usbmuxd, injectedPathPrefix: extra || "(none)" },
+    { binDir, amdPath, usbmuxdSocket: usbmuxd, injectedDirs: extraDirs },
     "[mirror] buildEnvWithApplePath: env ready",
   );
   return {
