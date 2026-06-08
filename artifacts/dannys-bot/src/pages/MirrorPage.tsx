@@ -515,23 +515,24 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             </ol>
           </div>
 
-          {/* No white icon / no certificate — reinstall path */}
-          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-            <p className="text-xs font-semibold text-foreground">Don't see the white icon on your phone?</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              The install may not have completed. The white icon only appears <em>after</em> a successful install — and the developer certificate in Settings only appears at the same time. If neither is there, the app was never installed on your phone.
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Click <strong>Reinstall</strong> below with your iPhone plugged in and unlocked, then wait about 30 seconds for the install to finish.
-            </p>
-            <Button
-              className="w-full h-9 font-semibold"
-              style={{ background: "#1AD2F2", color: "#000" }}
-              onClick={onReinstall}
-            >
-              ↺ Reinstall Control Agent
-            </Button>
-          </div>
+          {/* No white icon / no certificate — reinstall path (collapsible) */}
+          <details className="rounded-lg border border-border overflow-hidden">
+            <summary className="px-3 py-2.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/40 transition-colors">
+              Don't see the white icon on your phone? — Reinstall control agent ▸
+            </summary>
+            <div className="px-3 pb-3 pt-2 space-y-2.5 bg-muted/20">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The white icon only appears after a successful install. If it's not there, the app was never fully installed. Make sure your iPhone is <strong>plugged in and unlocked</strong>, then click below.
+              </p>
+              <Button
+                className="w-full h-9 font-semibold text-xs"
+                style={{ background: "#1AD2F2", color: "#000" }}
+                onClick={onReinstall}
+              >
+                ↺ Reinstall Control Agent
+              </Button>
+            </div>
+          </details>
 
           {/* Secondary — certificate trust (only relevant after a successful install) */}
           <details className="rounded-lg border border-border overflow-hidden">
@@ -1445,6 +1446,10 @@ export function MirrorPage() {
   // ── Reinstall — stops iproxy tunnel then kicks off a fresh WDA install ─────
 
   const handleReinstall = async () => {
+    if (!selectedUdid) {
+      toast("⚠ iPhone not detected — plug in your iPhone and wait for it to appear before reinstalling.");
+      return;
+    }
     try {
       await fetch("/api/mirror/iproxy/stop", { method: "POST" });
     } catch {}

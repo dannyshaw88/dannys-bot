@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.852",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: 'Reinstall Control Agent' no longer silently fails with HTTP 404 — it now checks for a bundled control agent first, and gives a clear message if the download is unavailable instead of a cryptic error code." },
+      { category: "Fix", text: "Mirror: Reinstall now correctly injects Apple's DLL paths when running the installer — fixes a crash where ideviceinstaller.exe couldn't find Apple's libraries even though iTunes was installed." },
+      { category: "Fix", text: "Mirror: Reinstall now shows a clear message if your iPhone isn't detected yet, instead of silently doing nothing." },
+      { category: "Fix", text: "Mirror: Moved 'Reinstall' into a collapsed section so the primary 'open WDA on your iPhone' instruction is more obvious." },
+    ],
+  },
+  {
     version: "1.0.851",
     date: "8 Jun 2026",
     items: [

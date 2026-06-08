@@ -812,25 +812,69 @@ function downloadFile(url: string, dest: string, onProgress?: (pct: number) => v
   });
 }
 
+/** Resolve path to a bundled WebDriverAgent.ipa baked into the Electron resources.
+ *  The IPA lives at resources/WebDriverAgent.ipa (two levels above bin/win32). */
+function getBundledIpaPath(): string | null {
+  const binDir = getBinDir();
+  // packaged Electron: resources/bin/win32 → go up two levels to resources/
+  // dev layout: artifacts/electron/resources/bin/win32 → same
+  const candidates = [
+    path.join(binDir, "..", "..", "WebDriverAgent.ipa"),
+    path.join(binDir, "..", "WebDriverAgent.ipa"),
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return null;
+}
+
 export async function installWdaOnDevice(
   udid: string,
   sessionId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const env = await buildEnvWithApplePath(); // inject Apple DLLs for ideviceinstaller.exe
   const tmpIpa = path.join(os.tmpdir(), `wda_${Date.now()}.ipa`);
+  let ipaPath: string | null = null;
+  let usedTmp = false;
 
   try {
-    // Step 1: Download IPA
-    emitStatus(sessionId, { step: "downloading", progress: 0, message: "Downloading control agent (one-time)…" });
-    await downloadFile(WDA_IPA_URL, tmpIpa, (pct) => {
-      emitStatus(sessionId, { step: "downloading", progress: pct, message: `Downloading control agent… ${pct}%` });
-    });
-    emitStatus(sessionId, { step: "downloading", progress: 100, message: "Download complete. Installing on iPhone…" });
+    // Step 1: use bundled IPA if present, otherwise download
+    const bundled = getBundledIpaPath();
+    if (bundled) {
+      ipaPath = bundled;
+      emitStatus(sessionId, { step: "downloading", progress: 100, message: "Using bundled control agent. Installing on iPhone…" });
+    } else {
+      emitStatus(sessionId, { step: "downloading", progress: 0, message: "Downloading control agent (one-time)…" });
+      let downloaded = false;
+      const urls = [WDA_IPA_URL];
+      for (const url of urls) {
+        try {
+          await downloadFile(url, tmpIpa, (pct) => {
+            emitStatus(sessionId, { step: "downloading", progress: pct, message: `Downloading control agent… ${pct}%` });
+          });
+          downloaded = true;
+          usedTmp = true;
+          ipaPath = tmpIpa;
+          break;
+        } catch (dlErr: any) {
+          mlog.warn({ url, err: String(dlErr?.message ?? dlErr) }, "[mirror] installWdaOnDevice: download failed");
+        }
+      }
+      if (!downloaded) {
+        emitStatus(sessionId, {
+          step: "error",
+          message: "⚠ Could not download the control agent. The download URL is unavailable. A newer version of Equinox will include the control agent bundled — please update.",
+        });
+        return { ok: false, error: "IPA download failed — no bundled IPA and all download URLs returned errors" };
+      }
+      emitStatus(sessionId, { step: "downloading", progress: 100, message: "Download complete. Installing on iPhone…" });
+    }
 
-    // Step 2: Install via bundled ideviceinstaller.exe
+    // Step 2: Install via bundled ideviceinstaller.exe (with Apple DLL env injected)
     const installer = binPath("ideviceinstaller.exe");
-    emitStatus(sessionId, { step: "installing", message: "Installing on iPhone — this takes ~30 seconds…" });
+    emitStatus(sessionId, { step: "installing", message: "Installing on iPhone — keep it unlocked, this takes ~30 seconds…" });
 
-    await execAsync(`"${installer}" -u "${udid}" -i "${tmpIpa}"`, { timeout: 120_000 });
+    await execAsync(`"${installer}" -u "${udid}" -i "${ipaPath}"`, { timeout: 120_000, env });
 
     emitStatus(sessionId, { step: "done", message: "✅ Control agent installed! Starting connection…" });
     return { ok: true };
@@ -839,7 +883,9 @@ export async function installWdaOnDevice(
     emitStatus(sessionId, { step: "error", message: `⚠ ${msg}` });
     return { ok: false, error: msg };
   } finally {
-    try { fs.unlinkSync(tmpIpa); } catch {}
+    if (usedTmp) {
+      try { fs.unlinkSync(tmpIpa); } catch {}
+    }
   }
 }
 
