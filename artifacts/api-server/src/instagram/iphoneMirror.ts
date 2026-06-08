@@ -246,22 +246,42 @@ function parseUsbmuxdKV(xml: string): Record<string, string> {
 
 function parseDeviceListResponse(xml: string): UsbmuxdDevice[] {
   const devices: UsbmuxdDevice[] = [];
-  // Scan for outer <dict> blocks that contain a DeviceID and a Properties sub-dict
-  const outerRe = /<dict>([\s\S]*?)<\/dict>/g;
-  let dm;
-  while ((dm = outerRe.exec(xml)) !== null) {
-    const block = dm[1];
-    const idM   = /<key>DeviceID<\/key>\s*<integer>(\d+)<\/integer>/.exec(block);
-    const propM = /<key>Properties<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(block);
-    if (!idM || !propM) continue;
-    const udidM = /<key>SerialNumber<\/key>\s*<string>([^<]+)<\/string>/.exec(propM[1]);
-    const connM = /<key>ConnectionType<\/key>\s*<string>([^<]+)<\/string>/.exec(propM[1]);
-    if (!udidM) continue;
+  // Each device entry in the AMDS plist has a nested structure:
+  //   <dict>                         ← outer device dict
+  //     <key>DeviceID</key><integer>N</integer>
+  //     <key>Properties</key>
+  //     <dict>                       ← inner Properties dict
+  //       <key>ConnectionType</key><string>USB</string>
+  //       <key>DeviceID</key><integer>N</integer>
+  //       <key>SerialNumber</key><string>UDID</string>
+  //     </dict>
+  //   </dict>
+  //
+  // A non-greedy /<dict>([\s\S]*?)<\/dict>/g always matches the innermost
+  // Properties dict first (it stops at the first </dict>), so it never sees the
+  // outer dict that has both DeviceID and the Properties key.  Fix: scan for
+  // SerialNumber (one per device), then look backwards in context for DeviceID
+  // and ConnectionType which always appear before it in the same Properties block.
+  const serialRe = /<key>SerialNumber<\/key>\s*<string>([^<]+)<\/string>/g;
+  let m: RegExpExecArray | null;
+  while ((m = serialRe.exec(xml)) !== null) {
+    const udid = m[1];
+    // Scan the ~800 chars preceding (and including) the SerialNumber tag.
+    // Both DeviceID and ConnectionType appear in the Properties dict just before it.
+    const ctx   = xml.slice(Math.max(0, m.index - 800), m.index + m[0].length);
+    const idAll = [...ctx.matchAll(/<key>DeviceID<\/key>\s*<integer>(\d+)<\/integer>/g)];
+    const idM   = idAll[idAll.length - 1]; // take the last (innermost) DeviceID
+    const connM = /<key>ConnectionType<\/key>\s*<string>([^<]+)<\/string>/.exec(ctx);
     devices.push({
-      deviceId:       parseInt(idM[1], 10),
-      udid:           udidM[1],
+      deviceId:       idM ? parseInt(idM[1], 10) : devices.length + 1,
+      udid,
       connectionType: (connM?.[1] ?? "USB") as "USB" | "Network",
     });
+  }
+  // Log a snippet of the raw XML when no devices were found — helps diagnose
+  // unexpected AMDS response formats without flooding the log on every call.
+  if (devices.length === 0 && xml.length > 0) {
+    mlog.debug({ xmlSnippet: xml.slice(0, 500) }, "[mirror] usbmuxd TCP: parseDeviceListResponse found 0 devices — raw XML snippet");
   }
   return devices;
 }

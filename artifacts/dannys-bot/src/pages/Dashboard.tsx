@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.844",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: iPhone was never detected even when plugged in and trusted. The device list parser had a bug where it always read the wrong part of Apple's response and found zero devices. Fixed — your phone should now appear automatically once plugged in and the Install Control Agent button will show up." },
+    ],
+  },
+  {
     version: "1.0.843",
     date: "8 Jun 2026",
     items: [
