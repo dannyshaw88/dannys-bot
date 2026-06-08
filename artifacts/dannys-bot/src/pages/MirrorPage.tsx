@@ -191,6 +191,14 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
         <p className="text-sm font-bold">Getting started — plug in your iPhone</p>
       </div>
 
+      {/* 4G stays active over USB */}
+      <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 p-3 flex items-start gap-2">
+        <span className="text-green-600 dark:text-green-400 text-sm leading-none mt-0.5">✓</span>
+        <p className="text-xs text-green-800 dark:text-green-300 leading-relaxed">
+          <strong>Your phone stays on 4G/cellular.</strong> USB only carries screen and touch signals — your iPhone's mobile data connection is completely untouched, so Instagram sees a genuine 4G IP.
+        </p>
+      </div>
+
       {/* Step progress */}
       <div className="space-y-3">
         {steps.map((s, i) => (
@@ -991,6 +999,20 @@ function AirPlayPanel({ onCanvasRef }: AirPlayPanelProps) {
           </Button>
         </div>
 
+        {/* 4G / Instagram signup warning */}
+        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3.5 space-y-1.5">
+          <div className="flex items-start gap-2">
+            <span className="text-amber-600 dark:text-amber-400 text-sm leading-none mt-0.5">⚠</span>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Not suitable for Instagram signups on 4G</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                Wireless mirror requires your iPhone to be on the <strong>same WiFi as this PC</strong> — which means Instagram sees your home broadband IP, not a 4G mobile IP.
+                For Instagram signups, use the <strong>Controls tab (USB cable)</strong> instead — USB only carries screen and touch signals, your iPhone's 4G cellular connection is completely untouched.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* How it works */}
         {!isActive && (
           <div className="rounded-lg bg-muted/40 border border-border p-3.5 space-y-2">
@@ -1014,28 +1036,42 @@ function AirPlayPanel({ onCanvasRef }: AirPlayPanelProps) {
 
         {/* Active state — show instructions */}
         {isActive && state === "advertising" && (
-          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
-            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-              Waiting for your iPhone…
-            </p>
-            {serverIp && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Server running on <span className="font-mono font-bold">{serverIp}</span> — make sure your iPhone is on the same WiFi network.
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Waiting for your iPhone…
               </p>
-            )}
-            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 p-3 space-y-2">
-              <p className="text-xs font-bold text-amber-900 dark:text-amber-200">On your iPhone:</p>
-              <ol className="space-y-1">
-                {[
-                  "Swipe down from the top-right corner (Control Center)",
-                  "Tap Screen Mirroring",
-                  'Select "Equinox Mirror"',
-                ].map((s, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-amber-800 dark:text-amber-300">
-                    <span className="font-bold">{i + 1}.</span>{s}
-                  </li>
-                ))}
-              </ol>
+              {serverIp && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Server running on <span className="font-mono font-bold">{serverIp}</span> — make sure your iPhone is on the same WiFi network.
+                </p>
+              )}
+              <div className="rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 p-3 space-y-2">
+                <p className="text-xs font-bold text-amber-900 dark:text-amber-200">On your iPhone:</p>
+                <ol className="space-y-1">
+                  {[
+                    "Swipe down from the top-right corner (Control Center)",
+                    "Tap Screen Mirroring",
+                    'Select "Equinox Mirror"',
+                  ].map((s, i) => (
+                    <li key={i} className="flex gap-2 text-xs text-amber-800 dark:text-amber-300">
+                      <span className="font-bold">{i + 1}.</span>{s}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+
+            {/* "Unable to connect" firewall fix */}
+            <div className="rounded-lg border border-border bg-muted/40 p-3.5 space-y-2">
+              <p className="text-xs font-semibold text-foreground">Getting "Unable to connect to Equinox Mirror"?</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your iPhone can see Equinox Mirror but can't reach it — almost always a <strong>Windows Firewall</strong> block on port 7000. Run this once in PowerShell (Admin) to fix it:
+              </p>
+              <pre className="text-[10px] font-mono bg-muted border border-border rounded px-2.5 py-2 overflow-x-auto text-foreground whitespace-pre-wrap break-all leading-relaxed">
+{`New-NetFirewallRule -DisplayName "Equinox Mirror" -Direction Inbound -Protocol TCP -LocalPort 7000 -Action Allow`}
+              </pre>
+              <p className="text-[10px] text-muted-foreground">Open Start → search <strong>PowerShell</strong> → right-click → <strong>Run as administrator</strong> → paste the command → press Enter. Then try Screen Mirroring again.</p>
             </div>
           </div>
         )}
