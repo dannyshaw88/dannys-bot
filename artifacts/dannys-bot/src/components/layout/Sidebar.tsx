@@ -57,6 +57,24 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
   );
 }
 
+function FilledMirrorIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      {/* iPhone outline */}
+      <rect fill="none" stroke="currentColor" strokeWidth="1.6" x="7" y="1" width="10" height="19" rx="2.5"/>
+      {/* Screen */}
+      <rect fill="currentColor" opacity="0.25" x="8.5" y="3.5" width="7" height="13" rx="0.8"/>
+      {/* Notch */}
+      <rect fill="currentColor" x="10" y="2" width="4" height="1.2" rx="0.6"/>
+      {/* Home bar */}
+      <rect fill="currentColor" x="10.5" y="18" width="3" height="0.9" rx="0.45"/>
+      {/* Mirror arrows */}
+      <path fill="currentColor" d="M3 10.5 L1 12 L3 13.5 V12.5 H5 V11.5 H3 Z"/>
+      <path fill="currentColor" d="M21 10.5 L23 12 L21 13.5 V12.5 H19 V11.5 H21 Z"/>
+    </svg>
+  );
+}
+
 function FilledSettingsIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -91,6 +109,7 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",  icon: FilledGhostIcon       },
+    { name: "Mirror",          shortLabel: "MIRROR",         path: "/mirror",        icon: FilledMirrorIcon      },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
   ];
 

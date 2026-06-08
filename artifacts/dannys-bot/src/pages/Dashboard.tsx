@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.828",
+    date: "8 Jun 2026",
+    items: [
+      { category: "New", text: "Mirror tool added — connect your iPhone via USB and mirror its screen directly inside Equinox. Click anywhere on the preview to tap, or drag to swipe." },
+      { category: "New", text: "Mirror tool: iPhone Signup tab imports the Ghost Browser signup flow so you can auto-fill Instagram registration forms directly on your real iPhone using WebDriverAgent." },
+      { category: "New", text: "Mirror tool: built-in control pad with hardware button shortcuts (Home, Power, Volume), swipe D-pad, and a text input field for typing on the iPhone keyboard." },
+    ],
+  },
+  {
     version: "1.0.827",
     date: "8 Jun 2026",
     items: [

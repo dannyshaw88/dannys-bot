@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import { registerMirrorRoutes } from "./mirror";
 import { WebSocketServer } from "ws";
 import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
@@ -4445,5 +4446,7 @@ export async function registerInstagramRoutes(
       res.json({ ok: true });
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
+
+  registerMirrorRoutes(app);
 
 }
