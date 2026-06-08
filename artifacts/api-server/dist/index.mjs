@@ -165,46 +165,46 @@ var require_ms = __commonJS({
 var require_common = __commonJS({
   "../../node_modules/.pnpm/debug@4.4.3/node_modules/debug/src/common.js"(exports2, module2) {
     function setup(env2) {
-      createDebug4.debug = createDebug4;
-      createDebug4.default = createDebug4;
-      createDebug4.coerce = coerce;
-      createDebug4.disable = disable;
-      createDebug4.enable = enable;
-      createDebug4.enabled = enabled;
-      createDebug4.humanize = require_ms();
-      createDebug4.destroy = destroy;
+      createDebug3.debug = createDebug3;
+      createDebug3.default = createDebug3;
+      createDebug3.coerce = coerce;
+      createDebug3.disable = disable;
+      createDebug3.enable = enable;
+      createDebug3.enabled = enabled;
+      createDebug3.humanize = require_ms();
+      createDebug3.destroy = destroy;
       Object.keys(env2).forEach((key) => {
-        createDebug4[key] = env2[key];
+        createDebug3[key] = env2[key];
       });
-      createDebug4.names = [];
-      createDebug4.skips = [];
-      createDebug4.formatters = {};
+      createDebug3.names = [];
+      createDebug3.skips = [];
+      createDebug3.formatters = {};
       function selectColor(namespace) {
         let hash = 0;
         for (let i2 = 0; i2 < namespace.length; i2++) {
           hash = (hash << 5) - hash + namespace.charCodeAt(i2);
           hash |= 0;
         }
-        return createDebug4.colors[Math.abs(hash) % createDebug4.colors.length];
+        return createDebug3.colors[Math.abs(hash) % createDebug3.colors.length];
       }
-      createDebug4.selectColor = selectColor;
-      function createDebug4(namespace) {
+      createDebug3.selectColor = selectColor;
+      function createDebug3(namespace) {
         let prevTime;
         let enableOverride = null;
         let namespacesCache;
         let enabledCache;
-        function debug4(...args) {
-          if (!debug4.enabled) {
+        function debug3(...args) {
+          if (!debug3.enabled) {
             return;
           }
-          const self2 = debug4;
+          const self2 = debug3;
           const curr = Number(/* @__PURE__ */ new Date());
           const ms = curr - (prevTime || curr);
           self2.diff = ms;
           self2.prev = prevTime;
           self2.curr = curr;
           prevTime = curr;
-          args[0] = createDebug4.coerce(args[0]);
+          args[0] = createDebug3.coerce(args[0]);
           if (typeof args[0] !== "string") {
             args.unshift("%O");
           }
@@ -214,7 +214,7 @@ var require_common = __commonJS({
               return "%";
             }
             index++;
-            const formatter = createDebug4.formatters[format];
+            const formatter = createDebug3.formatters[format];
             if (typeof formatter === "function") {
               const val = args[index];
               match = formatter.call(self2, val);
@@ -223,25 +223,25 @@ var require_common = __commonJS({
             }
             return match;
           });
-          createDebug4.formatArgs.call(self2, args);
-          const logFn = self2.log || createDebug4.log;
+          createDebug3.formatArgs.call(self2, args);
+          const logFn = self2.log || createDebug3.log;
           logFn.apply(self2, args);
         }
-        debug4.namespace = namespace;
-        debug4.useColors = createDebug4.useColors();
-        debug4.color = createDebug4.selectColor(namespace);
-        debug4.extend = extend2;
-        debug4.destroy = createDebug4.destroy;
-        Object.defineProperty(debug4, "enabled", {
+        debug3.namespace = namespace;
+        debug3.useColors = createDebug3.useColors();
+        debug3.color = createDebug3.selectColor(namespace);
+        debug3.extend = extend2;
+        debug3.destroy = createDebug3.destroy;
+        Object.defineProperty(debug3, "enabled", {
           enumerable: true,
           configurable: false,
           get: () => {
             if (enableOverride !== null) {
               return enableOverride;
             }
-            if (namespacesCache !== createDebug4.namespaces) {
-              namespacesCache = createDebug4.namespaces;
-              enabledCache = createDebug4.enabled(namespace);
+            if (namespacesCache !== createDebug3.namespaces) {
+              namespacesCache = createDebug3.namespaces;
+              enabledCache = createDebug3.enabled(namespace);
             }
             return enabledCache;
           },
@@ -249,27 +249,27 @@ var require_common = __commonJS({
             enableOverride = v3;
           }
         });
-        if (typeof createDebug4.init === "function") {
-          createDebug4.init(debug4);
+        if (typeof createDebug3.init === "function") {
+          createDebug3.init(debug3);
         }
-        return debug4;
+        return debug3;
       }
       function extend2(namespace, delimiter) {
-        const newDebug = createDebug4(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
+        const newDebug = createDebug3(this.namespace + (typeof delimiter === "undefined" ? ":" : delimiter) + namespace);
         newDebug.log = this.log;
         return newDebug;
       }
       function enable(namespaces) {
-        createDebug4.save(namespaces);
-        createDebug4.namespaces = namespaces;
-        createDebug4.names = [];
-        createDebug4.skips = [];
+        createDebug3.save(namespaces);
+        createDebug3.namespaces = namespaces;
+        createDebug3.names = [];
+        createDebug3.skips = [];
         const split2 = (typeof namespaces === "string" ? namespaces : "").trim().replace(/\s+/g, ",").split(",").filter(Boolean);
         for (const ns of split2) {
           if (ns[0] === "-") {
-            createDebug4.skips.push(ns.slice(1));
+            createDebug3.skips.push(ns.slice(1));
           } else {
-            createDebug4.names.push(ns);
+            createDebug3.names.push(ns);
           }
         }
       }
@@ -303,19 +303,19 @@ var require_common = __commonJS({
       }
       function disable() {
         const namespaces = [
-          ...createDebug4.names,
-          ...createDebug4.skips.map((namespace) => "-" + namespace)
+          ...createDebug3.names,
+          ...createDebug3.skips.map((namespace) => "-" + namespace)
         ].join(",");
-        createDebug4.enable("");
+        createDebug3.enable("");
         return namespaces;
       }
       function enabled(name) {
-        for (const skip of createDebug4.skips) {
+        for (const skip of createDebug3.skips) {
           if (matchesTemplate(name, skip)) {
             return false;
           }
         }
-        for (const ns of createDebug4.names) {
+        for (const ns of createDebug3.names) {
           if (matchesTemplate(name, ns)) {
             return true;
           }
@@ -331,8 +331,8 @@ var require_common = __commonJS({
       function destroy() {
         console.warn("Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.");
       }
-      createDebug4.enable(createDebug4.load());
-      return createDebug4;
+      createDebug3.enable(createDebug3.load());
+      return createDebug3;
     }
     module2.exports = setup;
   }
@@ -525,7 +525,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "../../node_modules/.pnpm/supports-color@7.2.0/node_modules/supports-color/index.js"(exports2, module2) {
     "use strict";
-    var os = __require("os");
+    var os2 = __require("os");
     var tty = __require("tty");
     var hasFlag = require_has_flag();
     var { env: env2 } = process;
@@ -573,7 +573,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os.release().split(".");
+        const osRelease = os2.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -777,11 +777,11 @@ var require_node = __commonJS({
     function load() {
       return process.env.DEBUG;
     }
-    function init(debug4) {
-      debug4.inspectOpts = {};
+    function init(debug3) {
+      debug3.inspectOpts = {};
       const keys = Object.keys(exports2.inspectOpts);
       for (let i2 = 0; i2 < keys.length; i2++) {
-        debug4.inspectOpts[keys[i2]] = exports2.inspectOpts[keys[i2]];
+        debug3.inspectOpts[keys[i2]] = exports2.inspectOpts[keys[i2]];
       }
     }
     module2.exports = require_common()(exports2);
@@ -15274,7 +15274,7 @@ var require_mime_types = __commonJS({
     exports2.contentType = contentType;
     exports2.extension = extension2;
     exports2.extensions = /* @__PURE__ */ Object.create(null);
-    exports2.lookup = lookup2;
+    exports2.lookup = lookup;
     exports2.types = /* @__PURE__ */ Object.create(null);
     exports2._extensionConflicts = [];
     populateMaps(exports2.extensions, exports2.types);
@@ -15317,11 +15317,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path6) {
-      if (!path6 || typeof path6 !== "string") {
+    function lookup(path7) {
+      if (!path7 || typeof path7 !== "string") {
         return false;
       }
-      var extension3 = extname2("x." + path6).toLowerCase().slice(1);
+      var extension3 = extname2("x." + path7).toLowerCase().slice(1);
       if (!extension3) {
         return false;
       }
@@ -15593,9 +15593,9 @@ var require_read = __commonJS({
     var hasBody = require_type_is().hasBody;
     var { getCharset } = require_utils();
     module2.exports = read;
-    function read(req, res, next, parse3, debug4, options) {
+    function read(req, res, next, parse3, debug3, options) {
       if (onFinished.isFinished(req)) {
-        debug4("body already parsed");
+        debug3("body already parsed");
         next();
         return;
       }
@@ -15603,13 +15603,13 @@ var require_read = __commonJS({
         req.body = void 0;
       }
       if (!hasBody(req)) {
-        debug4("skip empty body");
+        debug3("skip empty body");
         next();
         return;
       }
-      debug4("content-type %j", req.headers["content-type"]);
+      debug3("content-type %j", req.headers["content-type"]);
       if (!options.shouldParse(req)) {
-        debug4("skip parsing");
+        debug3("skip parsing");
         next();
         return;
       }
@@ -15617,7 +15617,7 @@ var require_read = __commonJS({
       if (options?.skipCharset !== true) {
         encoding = getCharset(req) || options.defaultCharset;
         if (!!options?.isValidCharset && !options.isValidCharset(encoding)) {
-          debug4("invalid charset");
+          debug3("invalid charset");
           next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
             charset: encoding,
             type: "charset.unsupported"
@@ -15630,7 +15630,7 @@ var require_read = __commonJS({
       var stream;
       var verify = opts.verify;
       try {
-        stream = contentstream(req, debug4, opts.inflate);
+        stream = contentstream(req, debug3, opts.inflate);
         length = stream.length;
         stream.length = void 0;
       } catch (err) {
@@ -15644,7 +15644,7 @@ var require_read = __commonJS({
           type: "charset.unsupported"
         }));
       }
-      debug4("read body");
+      debug3("read body");
       getBody(stream, opts, function(error40, body) {
         if (error40) {
           var _error;
@@ -15667,7 +15667,7 @@ var require_read = __commonJS({
         }
         if (verify) {
           try {
-            debug4("verify body");
+            debug3("verify body");
             verify(req, res, body, encoding);
           } catch (err) {
             next(createError(403, err, {
@@ -15679,7 +15679,7 @@ var require_read = __commonJS({
         }
         var str = body;
         try {
-          debug4("parse body");
+          debug3("parse body");
           str = typeof body !== "string" && encoding !== null ? iconv.decode(body, encoding) : body;
           req.body = parse3(str, encoding);
         } catch (err) {
@@ -15692,10 +15692,10 @@ var require_read = __commonJS({
         next();
       });
     }
-    function contentstream(req, debug4, inflate) {
+    function contentstream(req, debug3, inflate) {
       var encoding = (req.headers["content-encoding"] || "identity").toLowerCase();
       var length = req.headers["content-length"];
-      debug4('content-encoding "%s"', encoding);
+      debug3('content-encoding "%s"', encoding);
       if (inflate === false && encoding !== "identity") {
         throw createError(415, "content encoding unsupported", {
           encoding,
@@ -15706,20 +15706,20 @@ var require_read = __commonJS({
         req.length = length;
         return req;
       }
-      var stream = createDecompressionStream(encoding, debug4);
+      var stream = createDecompressionStream(encoding, debug3);
       req.pipe(stream);
       return stream;
     }
-    function createDecompressionStream(encoding, debug4) {
+    function createDecompressionStream(encoding, debug3) {
       switch (encoding) {
         case "deflate":
-          debug4("inflate body");
+          debug3("inflate body");
           return zlib.createInflate();
         case "gzip":
-          debug4("gunzip body");
+          debug3("gunzip body");
           return zlib.createGunzip();
         case "br":
-          debug4("brotli decompress body");
+          debug3("brotli decompress body");
           return zlib.createBrotliDecompress();
         default:
           throw createError(415, 'unsupported content encoding "' + encoding + '"', {
@@ -15743,7 +15743,7 @@ var require_read = __commonJS({
 var require_json = __commonJS({
   "../../node_modules/.pnpm/body-parser@2.2.2/node_modules/body-parser/lib/types/json.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("body-parser:json");
+    var debug3 = require_src()("body-parser:json");
     var read = require_read();
     var { normalizeOptions } = require_utils();
     module2.exports = json2;
@@ -15761,12 +15761,12 @@ var require_json = __commonJS({
         if (strict) {
           var first = firstchar(body);
           if (first !== "{" && first !== "[") {
-            debug4("strict violation");
+            debug3("strict violation");
             throw createStrictSyntaxError(body, first);
           }
         }
         try {
-          debug4("parse json");
+          debug3("parse json");
           return JSON.parse(body, reviver);
         } catch (e) {
           throw normalizeJsonSyntaxError(e, {
@@ -15781,7 +15781,7 @@ var require_json = __commonJS({
         isValidCharset: (charset) => charset.slice(0, 4) === "utf-"
       };
       return function jsonParser(req, res, next) {
-        read(req, res, next, parse3, debug4, readOptions);
+        read(req, res, next, parse3, debug3, readOptions);
       };
     }
     function createStrictSyntaxError(str, char) {
@@ -15825,7 +15825,7 @@ var require_json = __commonJS({
 var require_raw = __commonJS({
   "../../node_modules/.pnpm/body-parser@2.2.2/node_modules/body-parser/lib/types/raw.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("body-parser:raw");
+    var debug3 = require_src()("body-parser:raw");
     var read = require_read();
     var { normalizeOptions, passthrough } = require_utils();
     module2.exports = raw;
@@ -15837,7 +15837,7 @@ var require_raw = __commonJS({
         skipCharset: true
       };
       return function rawParser(req, res, next) {
-        read(req, res, next, passthrough, debug4, readOptions);
+        read(req, res, next, passthrough, debug3, readOptions);
       };
     }
   }
@@ -15847,14 +15847,14 @@ var require_raw = __commonJS({
 var require_text = __commonJS({
   "../../node_modules/.pnpm/body-parser@2.2.2/node_modules/body-parser/lib/types/text.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("body-parser:text");
+    var debug3 = require_src()("body-parser:text");
     var read = require_read();
     var { normalizeOptions, passthrough } = require_utils();
     module2.exports = text2;
     function text2(options) {
       const normalizedOptions = normalizeOptions(options, "text/plain");
       return function textParser(req, res, next) {
-        read(req, res, next, passthrough, debug4, normalizedOptions);
+        read(req, res, next, passthrough, debug3, normalizedOptions);
       };
     }
   }
@@ -18378,7 +18378,7 @@ var require_urlencoded = __commonJS({
   "../../node_modules/.pnpm/body-parser@2.2.2/node_modules/body-parser/lib/types/urlencoded.js"(exports2, module2) {
     "use strict";
     var createError = require_http_errors();
-    var debug4 = require_src()("body-parser:urlencoded");
+    var debug3 = require_src()("body-parser:urlencoded");
     var read = require_read();
     var qs = require_lib2();
     var { normalizeOptions } = require_utils();
@@ -18398,7 +18398,7 @@ var require_urlencoded = __commonJS({
         isValidCharset: (charset) => charset === "utf-8" || charset === "iso-8859-1"
       };
       return function urlencodedParser(req, res, next) {
-        read(req, res, next, parse3, debug4, readOptions);
+        read(req, res, next, parse3, debug3, readOptions);
       };
     }
     function createQueryParser(options) {
@@ -18419,13 +18419,13 @@ var require_urlencoded = __commonJS({
       return function queryparse(body, encoding) {
         var paramCount = parameterCount(body, parameterLimit);
         if (paramCount === void 0) {
-          debug4("too many parameters");
+          debug3("too many parameters");
           throw createError(413, "too many parameters", {
             type: "parameters.too.many"
           });
         }
         var arrayLimit = extended ? Math.max(100, paramCount) : paramCount;
-        debug4("parse " + (extended ? "extended " : "") + "urlencoding");
+        debug3("parse " + (extended ? "extended " : "") + "urlencoding");
         try {
           return qs.parse(body, {
             allowPrototypes: true,
@@ -18665,7 +18665,7 @@ var require_parseurl = __commonJS({
 var require_finalhandler = __commonJS({
   "../../node_modules/.pnpm/finalhandler@2.1.1/node_modules/finalhandler/index.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("finalhandler");
+    var debug3 = require_src()("finalhandler");
     var encodeUrl = require_encodeurl();
     var escapeHtml = require_escape_html();
     var onFinished = require_on_finished();
@@ -18686,7 +18686,7 @@ var require_finalhandler = __commonJS({
         var msg;
         var status;
         if (!err && res.headersSent) {
-          debug4("cannot 404 after headers sent");
+          debug3("cannot 404 after headers sent");
           return;
         }
         if (err) {
@@ -18701,12 +18701,12 @@ var require_finalhandler = __commonJS({
           status = 404;
           msg = "Cannot " + req.method + " " + encodeUrl(getResourceName(req));
         }
-        debug4("default %s", status);
+        debug3("default %s", status);
         if (err && onerror) {
           setImmediate(onerror, err, req, res);
         }
         if (res.headersSent) {
-          debug4("cannot %d after headers sent", status);
+          debug3("cannot %d after headers sent", status);
           if (req.socket) {
             req.socket.destroy();
           }
@@ -18792,14 +18792,14 @@ var require_finalhandler = __commonJS({
 var require_view = __commonJS({
   "../../node_modules/.pnpm/express@5.2.1/node_modules/express/lib/view.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("express:view");
-    var path6 = __require("node:path");
-    var fs6 = __require("node:fs");
-    var dirname2 = path6.dirname;
-    var basename = path6.basename;
-    var extname2 = path6.extname;
-    var join4 = path6.join;
-    var resolve = path6.resolve;
+    var debug3 = require_src()("express:view");
+    var path7 = __require("node:path");
+    var fs7 = __require("node:fs");
+    var dirname2 = path7.dirname;
+    var basename = path7.basename;
+    var extname2 = path7.extname;
+    var join4 = path7.join;
+    var resolve = path7.resolve;
     module2.exports = View2;
     function View2(name, options) {
       var opts = options || {};
@@ -18817,7 +18817,7 @@ var require_view = __commonJS({
       }
       if (!opts.engines[this.ext]) {
         var mod = this.ext.slice(1);
-        debug4('require "%s"', mod);
+        debug3('require "%s"', mod);
         var fn = __require(mod).__express;
         if (typeof fn !== "function") {
           throw new Error('Module "' + mod + '" does not provide a view engine.');
@@ -18827,22 +18827,22 @@ var require_view = __commonJS({
       this.engine = opts.engines[this.ext];
       this.path = this.lookup(fileName);
     }
-    View2.prototype.lookup = function lookup2(name) {
-      var path7;
+    View2.prototype.lookup = function lookup(name) {
+      var path8;
       var roots = [].concat(this.root);
-      debug4('lookup "%s"', name);
-      for (var i2 = 0; i2 < roots.length && !path7; i2++) {
+      debug3('lookup "%s"', name);
+      for (var i2 = 0; i2 < roots.length && !path8; i2++) {
         var root = roots[i2];
         var loc = resolve(root, name);
         var dir = dirname2(loc);
         var file2 = basename(loc);
-        path7 = this.resolve(dir, file2);
+        path8 = this.resolve(dir, file2);
       }
-      return path7;
+      return path8;
     };
     View2.prototype.render = function render(options, callback) {
       var sync = true;
-      debug4('render "%s"', this.path);
+      debug3('render "%s"', this.path);
       this.engine(this.path, options, function onRender() {
         if (!sync) {
           return callback.apply(this, arguments);
@@ -18860,21 +18860,21 @@ var require_view = __commonJS({
     };
     View2.prototype.resolve = function resolve2(dir, file2) {
       var ext = this.ext;
-      var path7 = join4(dir, file2);
-      var stat = tryStat(path7);
+      var path8 = join4(dir, file2);
+      var stat = tryStat(path8);
       if (stat && stat.isFile()) {
-        return path7;
+        return path8;
       }
-      path7 = join4(dir, basename(file2, ext), "index" + ext);
-      stat = tryStat(path7);
+      path8 = join4(dir, basename(file2, ext), "index" + ext);
+      stat = tryStat(path8);
       if (stat && stat.isFile()) {
-        return path7;
+        return path8;
       }
     };
-    function tryStat(path7) {
-      debug4('stat "%s"', path7);
+    function tryStat(path8) {
+      debug3('stat "%s"', path8);
       try {
-        return fs6.statSync(path7);
+        return fs7.statSync(path8);
       } catch (e) {
         return void 0;
       }
@@ -20010,15 +20010,15 @@ var require_dist = __commonJS({
       let index = 0;
       function consumeUntil(end) {
         const output = [];
-        let path6 = "";
+        let path7 = "";
         function writePath() {
-          if (!path6)
+          if (!path7)
             return;
           output.push({
             type: "text",
-            value: encodePath(path6)
+            value: encodePath(path7)
           });
-          path6 = "";
+          path7 = "";
         }
         while (index < chars.length) {
           const value = chars[index++];
@@ -20030,7 +20030,7 @@ var require_dist = __commonJS({
             if (index === chars.length) {
               throw new PathError(`Unexpected end after \\ at index ${index}`, str);
             }
-            path6 += chars[index++];
+            path7 += chars[index++];
             continue;
           }
           if (value === ":" || value === "*") {
@@ -20074,7 +20074,7 @@ var require_dist = __commonJS({
           if (value === "}" || value === "(" || value === ")" || value === "[" || value === "]" || value === "+" || value === "?" || value === "!") {
             throw new PathError(`Unexpected ${value} at index ${index - 1}`, str);
           }
-          path6 += value;
+          path7 += value;
         }
         if (end) {
           throw new PathError(`Unexpected end at index ${index}, expected ${end}`, str);
@@ -20084,17 +20084,17 @@ var require_dist = __commonJS({
       }
       return new TokenData(consumeUntil(""), str);
     }
-    function compile(path6, options = {}) {
+    function compile(path7, options = {}) {
       const { encode = encodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const data = typeof path6 === "object" ? path6 : parse3(path6, options);
+      const data = typeof path7 === "object" ? path7 : parse3(path7, options);
       const fn = tokensToFunction(data.tokens, delimiter, encode);
-      return function path7(params = {}) {
+      return function path8(params = {}) {
         const missing = [];
-        const path8 = fn(params, missing);
+        const path9 = fn(params, missing);
         if (missing.length) {
           throw new TypeError(`Missing parameters: ${missing.join(", ")}`);
         }
-        return path8;
+        return path9;
       };
     }
     function tokensToFunction(tokens, delimiter, encode) {
@@ -20156,9 +20156,9 @@ var require_dist = __commonJS({
         return encodeValue(value);
       };
     }
-    function match(path6, options = {}) {
+    function match(path7, options = {}) {
       const { decode = decodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const { regexp, keys } = pathToRegexp(path6, options);
+      const { regexp, keys } = pathToRegexp(path7, options);
       const decoders = keys.map((key) => {
         if (decode === false)
           return NOOP_VALUE;
@@ -20170,7 +20170,7 @@ var require_dist = __commonJS({
         const m2 = regexp.exec(input);
         if (!m2)
           return false;
-        const path7 = m2[0];
+        const path8 = m2[0];
         const params = /* @__PURE__ */ Object.create(null);
         for (let i2 = 1; i2 < m2.length; i2++) {
           if (m2[i2] === void 0)
@@ -20179,21 +20179,21 @@ var require_dist = __commonJS({
           const decoder = decoders[i2 - 1];
           params[key.name] = decoder(m2[i2]);
         }
-        return { path: path7, params };
+        return { path: path8, params };
       };
     }
-    function pathToRegexp(path6, options = {}) {
+    function pathToRegexp(path7, options = {}) {
       const { delimiter = DEFAULT_DELIMITER, end = true, sensitive = false, trailing = true } = options;
       const keys = [];
       let source = "";
       let combinations = 0;
-      function process2(path7) {
-        if (Array.isArray(path7)) {
-          for (const p of path7)
+      function process2(path8) {
+        if (Array.isArray(path8)) {
+          for (const p of path8)
             process2(p);
           return;
         }
-        const data = typeof path7 === "object" ? path7 : parse3(path7, options);
+        const data = typeof path8 === "object" ? path8 : parse3(path8, options);
         flatten(data.tokens, 0, [], (tokens) => {
           if (combinations >= 256) {
             throw new PathError("Too many path combinations", data.originalPath);
@@ -20204,7 +20204,7 @@ var require_dist = __commonJS({
           combinations++;
         });
       }
-      process2(path6);
+      process2(path7);
       let pattern = `^(?:${source})`;
       if (trailing)
         pattern += "(?:" + escape2(delimiter) + "$)?";
@@ -20339,23 +20339,23 @@ var require_layer = __commonJS({
     "use strict";
     var isPromise = require_is_promise();
     var pathRegexp = require_dist();
-    var debug4 = require_src()("router:layer");
+    var debug3 = require_src()("router:layer");
     var deprecate = require_depd()("router");
     var TRAILING_SLASH_REGEXP = /\/+$/;
     var MATCHING_GROUP_REGEXP = /\((?:\?<(.*?)>)?(?!\?)/g;
     module2.exports = Layer;
-    function Layer(path6, options, fn) {
+    function Layer(path7, options, fn) {
       if (!(this instanceof Layer)) {
-        return new Layer(path6, options, fn);
+        return new Layer(path7, options, fn);
       }
-      debug4("new %o", path6);
+      debug3("new %o", path7);
       const opts = options || {};
       this.handle = fn;
       this.keys = [];
       this.name = fn.name || "<anonymous>";
       this.params = void 0;
       this.path = void 0;
-      this.slash = path6 === "/" && opts.end === false;
+      this.slash = path7 === "/" && opts.end === false;
       function matcher(_path) {
         if (_path instanceof RegExp) {
           const keys = [];
@@ -20394,7 +20394,7 @@ var require_layer = __commonJS({
           decode: decodeParam
         });
       }
-      this.matchers = Array.isArray(path6) ? path6.map(matcher) : [matcher(path6)];
+      this.matchers = Array.isArray(path7) ? path7.map(matcher) : [matcher(path7)];
     }
     Layer.prototype.handleError = function handleError(error40, req, res, next) {
       const fn = this.handle;
@@ -20434,9 +20434,9 @@ var require_layer = __commonJS({
         next(err);
       }
     };
-    Layer.prototype.match = function match(path6) {
+    Layer.prototype.match = function match(path7) {
       let match2;
-      if (path6 != null) {
+      if (path7 != null) {
         if (this.slash) {
           this.params = {};
           this.path = "";
@@ -20444,7 +20444,7 @@ var require_layer = __commonJS({
         }
         let i2 = 0;
         while (!match2 && i2 < this.matchers.length) {
-          match2 = this.matchers[i2](path6);
+          match2 = this.matchers[i2](path7);
           i2++;
         }
       }
@@ -20472,13 +20472,13 @@ var require_layer = __commonJS({
         throw err;
       }
     }
-    function loosen(path6) {
-      if (path6 instanceof RegExp || path6 === "/") {
-        return path6;
+    function loosen(path7) {
+      if (path7 instanceof RegExp || path7 === "/") {
+        return path7;
       }
-      return Array.isArray(path6) ? path6.map(function(p) {
+      return Array.isArray(path7) ? path7.map(function(p) {
         return loosen(p);
-      }) : String(path6).replace(TRAILING_SLASH_REGEXP, "");
+      }) : String(path7).replace(TRAILING_SLASH_REGEXP, "");
     }
   }
 });
@@ -20487,16 +20487,16 @@ var require_layer = __commonJS({
 var require_route = __commonJS({
   "../../node_modules/.pnpm/router@2.2.0/node_modules/router/lib/route.js"(exports2, module2) {
     "use strict";
-    var debug4 = require_src()("router:route");
+    var debug3 = require_src()("router:route");
     var Layer = require_layer();
     var { METHODS } = __require("node:http");
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
     module2.exports = Route;
-    function Route(path6) {
-      debug4("new %o", path6);
-      this.path = path6;
+    function Route(path7) {
+      debug3("new %o", path7);
+      this.path = path7;
       this.stack = [];
       this.methods = /* @__PURE__ */ Object.create(null);
     }
@@ -20591,7 +20591,7 @@ var require_route = __commonJS({
           if (typeof fn !== "function") {
             throw new TypeError("argument handler must be a function");
           }
-          debug4("%s %s", method, this.path);
+          debug3("%s %s", method, this.path);
           const layer = Layer("/", {}, fn);
           layer.method = method;
           this.methods[method] = true;
@@ -20612,7 +20612,7 @@ var require_router = __commonJS({
     var { METHODS } = __require("node:http");
     var parseUrl = require_parseurl();
     var Route = require_route();
-    var debug4 = require_src()("router");
+    var debug3 = require_src()("router");
     var deprecate = require_depd()("router");
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
@@ -20661,7 +20661,7 @@ var require_router = __commonJS({
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
-      debug4("dispatching %s %s", req.method, req.url);
+      debug3("dispatching %s %s", req.method, req.url);
       let idx = 0;
       let methods2;
       const protohost = getProtohost(req.url) || "";
@@ -20704,8 +20704,8 @@ var require_router = __commonJS({
         if (++sync > 100) {
           return setImmediate(next, err);
         }
-        const path6 = getPathname(req);
-        if (path6 == null) {
+        const path7 = getPathname(req);
+        if (path7 == null) {
           return done(layerError);
         }
         let layer;
@@ -20713,7 +20713,7 @@ var require_router = __commonJS({
         let route;
         while (match !== true && idx < stack.length) {
           layer = stack[idx++];
-          match = matchLayer(layer, path6);
+          match = matchLayer(layer, path7);
           route = layer.route;
           if (typeof match !== "boolean") {
             layerError = layerError || match;
@@ -20751,23 +20751,23 @@ var require_router = __commonJS({
           } else if (route) {
             layer.handleRequest(req, res, next);
           } else {
-            trimPrefix(layer, layerError, layerPath, path6);
+            trimPrefix(layer, layerError, layerPath, path7);
           }
           sync = 0;
         });
       }
-      function trimPrefix(layer, layerError, layerPath, path6) {
+      function trimPrefix(layer, layerError, layerPath, path7) {
         if (layerPath.length !== 0) {
-          if (layerPath !== path6.substring(0, layerPath.length)) {
+          if (layerPath !== path7.substring(0, layerPath.length)) {
             next(layerError);
             return;
           }
-          const c3 = path6[layerPath.length];
+          const c3 = path7[layerPath.length];
           if (c3 && c3 !== "/") {
             next(layerError);
             return;
           }
-          debug4("trim prefix (%s) from url %s", layerPath, req.url);
+          debug3("trim prefix (%s) from url %s", layerPath, req.url);
           removed = layerPath;
           req.url = protohost + req.url.slice(protohost.length + removed.length);
           if (!protohost && req.url[0] !== "/") {
@@ -20776,7 +20776,7 @@ var require_router = __commonJS({
           }
           req.baseUrl = parentUrl + (removed[removed.length - 1] === "/" ? removed.substring(0, removed.length - 1) : removed);
         }
-        debug4("%s %s : %s", layer.name, layerPath, req.originalUrl);
+        debug3("%s %s : %s", layer.name, layerPath, req.originalUrl);
         if (layerError) {
           layer.handleError(layerError, req, res, next);
         } else {
@@ -20786,7 +20786,7 @@ var require_router = __commonJS({
     };
     Router4.prototype.use = function use(handler) {
       let offset = 0;
-      let path6 = "/";
+      let path7 = "/";
       if (typeof handler !== "function") {
         let arg = handler;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -20794,7 +20794,7 @@ var require_router = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path6 = handler;
+          path7 = handler;
         }
       }
       const callbacks = flatten.call(slice.call(arguments, offset), Infinity);
@@ -20806,8 +20806,8 @@ var require_router = __commonJS({
         if (typeof fn !== "function") {
           throw new TypeError("argument handler must be a function");
         }
-        debug4("use %o %s", path6, fn.name || "<anonymous>");
-        const layer = new Layer(path6, {
+        debug3("use %o %s", path7, fn.name || "<anonymous>");
+        const layer = new Layer(path7, {
           sensitive: this.caseSensitive,
           strict: false,
           end: false
@@ -20817,9 +20817,9 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router4.prototype.route = function route(path6) {
-      const route2 = new Route(path6);
-      const layer = new Layer(path6, {
+    Router4.prototype.route = function route(path7) {
+      const route2 = new Route(path7);
+      const layer = new Layer(path7, {
         sensitive: this.caseSensitive,
         strict: this.strict,
         end: true
@@ -20832,8 +20832,8 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router4.prototype[method] = function(path6) {
-        const route = this.route(path6);
+      Router4.prototype[method] = function(path7) {
+        const route = this.route(path7);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
@@ -20862,9 +20862,9 @@ var require_router = __commonJS({
       const fqdnIndex = url2.substring(0, pathLength).indexOf("://");
       return fqdnIndex !== -1 ? url2.substring(0, url2.indexOf("/", 3 + fqdnIndex)) : void 0;
     }
-    function matchLayer(layer, path6) {
+    function matchLayer(layer, path7) {
       try {
-        return layer.match(path6);
+        return layer.match(path7);
       } catch (err) {
         return err;
       }
@@ -21006,7 +21006,7 @@ var require_application = __commonJS({
   "../../node_modules/.pnpm/express@5.2.1/node_modules/express/lib/application.js"(exports2, module2) {
     "use strict";
     var finalhandler = require_finalhandler();
-    var debug4 = require_src()("express:application");
+    var debug3 = require_src()("express:application");
     var View2 = require_view();
     var http3 = __require("node:http");
     var methods = require_utils3().methods;
@@ -21052,7 +21052,7 @@ var require_application = __commonJS({
         configurable: true,
         value: true
       });
-      debug4("booting in %s mode", env2);
+      debug3("booting in %s mode", env2);
       this.on("mount", function onmount(parent) {
         if (this.settings[trustProxyDefaultSymbol] === true && typeof parent.settings["trust proxy fn"] === "function") {
           delete this.settings["trust proxy"];
@@ -21092,7 +21092,7 @@ var require_application = __commonJS({
     };
     app2.use = function use(fn) {
       var offset = 0;
-      var path6 = "/";
+      var path7 = "/";
       if (typeof fn !== "function") {
         var arg = fn;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -21100,7 +21100,7 @@ var require_application = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path6 = fn;
+          path7 = fn;
         }
       }
       var fns = flatten.call(slice.call(arguments, offset), Infinity);
@@ -21110,12 +21110,12 @@ var require_application = __commonJS({
       var router3 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router3.use(path6, fn2);
+          return router3.use(path7, fn2);
         }
-        debug4(".use app under %s", path6);
-        fn2.mountpath = path6;
+        debug3(".use app under %s", path7);
+        fn2.mountpath = path7;
         fn2.parent = this;
-        router3.use(path6, function mounted_app(req, res, next) {
+        router3.use(path7, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -21127,8 +21127,8 @@ var require_application = __commonJS({
       }, this);
       return this;
     };
-    app2.route = function route(path6) {
-      return this.router.route(path6);
+    app2.route = function route(path7) {
+      return this.router.route(path7);
     };
     app2.engine = function engine(ext, fn) {
       if (typeof fn !== "function") {
@@ -21152,7 +21152,7 @@ var require_application = __commonJS({
       if (arguments.length === 1) {
         return this.settings[setting];
       }
-      debug4('set "%s" to %o', setting, val);
+      debug3('set "%s" to %o', setting, val);
       this.settings[setting] = val;
       switch (setting) {
         case "etag":
@@ -21171,7 +21171,7 @@ var require_application = __commonJS({
       }
       return this;
     };
-    app2.path = function path6() {
+    app2.path = function path7() {
       return this.parent ? this.parent.path() + this.mountpath : "";
     };
     app2.enabled = function enabled(setting) {
@@ -21187,17 +21187,17 @@ var require_application = __commonJS({
       return this.set(setting, false);
     };
     methods.forEach(function(method) {
-      app2[method] = function(path6) {
+      app2[method] = function(path7) {
         if (method === "get" && arguments.length === 1) {
-          return this.set(path6);
+          return this.set(path7);
         }
-        var route = this.route(path6);
+        var route = this.route(path7);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
     });
-    app2.all = function all(path6) {
-      var route = this.route(path6);
+    app2.all = function all(path7) {
+      var route = this.route(path7);
       var args = slice.call(arguments, 1);
       for (var i2 = 0; i2 < methods.length; i2++) {
         route[methods[i2]].apply(route, args);
@@ -22014,7 +22014,7 @@ var require_request = __commonJS({
   "../../node_modules/.pnpm/express@5.2.1/node_modules/express/lib/request.js"(exports2, module2) {
     "use strict";
     var accepts = require_accepts();
-    var isIP3 = __require("node:net").isIP;
+    var isIP2 = __require("node:net").isIP;
     var typeis = require_type_is();
     var http3 = __require("node:http");
     var fresh = require_fresh();
@@ -22104,10 +22104,10 @@ var require_request = __commonJS({
       var hostname2 = this.hostname;
       if (!hostname2) return [];
       var offset = this.app.get("subdomain offset");
-      var subdomains2 = !isIP3(hostname2) ? hostname2.split(".").reverse() : [hostname2];
+      var subdomains2 = !isIP2(hostname2) ? hostname2.split(".").reverse() : [hostname2];
       return subdomains2.slice(offset);
     });
-    defineGetter(req, "path", function path6() {
+    defineGetter(req, "path", function path7() {
       return parse3(this).pathname;
     });
     defineGetter(req, "host", function host() {
@@ -22509,37 +22509,37 @@ var require_send = __commonJS({
   "../../node_modules/.pnpm/send@1.2.1/node_modules/send/index.js"(exports2, module2) {
     "use strict";
     var createError = require_http_errors();
-    var debug4 = require_src()("send");
+    var debug3 = require_src()("send");
     var encodeUrl = require_encodeurl();
     var escapeHtml = require_escape_html();
     var etag = require_etag();
     var fresh = require_fresh();
-    var fs6 = __require("fs");
+    var fs7 = __require("fs");
     var mime = require_mime_types();
     var ms = require_ms();
     var onFinished = require_on_finished();
     var parseRange = require_range_parser();
-    var path6 = __require("path");
+    var path7 = __require("path");
     var statuses = require_statuses();
     var Stream = __require("stream");
     var util2 = __require("util");
-    var extname2 = path6.extname;
-    var join4 = path6.join;
-    var normalize = path6.normalize;
-    var resolve = path6.resolve;
-    var sep = path6.sep;
+    var extname2 = path7.extname;
+    var join4 = path7.join;
+    var normalize = path7.normalize;
+    var resolve = path7.resolve;
+    var sep = path7.sep;
     var BYTES_RANGE_REGEXP = /^ *bytes=/;
     var MAX_MAXAGE = 60 * 60 * 24 * 365 * 1e3;
     var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
     module2.exports = send;
-    function send(req, path7, options) {
-      return new SendStream(req, path7, options);
+    function send(req, path8, options) {
+      return new SendStream(req, path8, options);
     }
-    function SendStream(req, path7, options) {
+    function SendStream(req, path8, options) {
       Stream.call(this);
       var opts = options || {};
       this.options = opts;
-      this.path = path7;
+      this.path = path8;
       this.req = req;
       this._acceptRanges = opts.acceptRanges !== void 0 ? Boolean(opts.acceptRanges) : true;
       this._cacheControl = opts.cacheControl !== void 0 ? Boolean(opts.cacheControl) : true;
@@ -22609,14 +22609,14 @@ var require_send = __commonJS({
     };
     SendStream.prototype.notModified = function notModified() {
       var res = this.res;
-      debug4("not modified");
+      debug3("not modified");
       this.removeContentHeaderFields();
       res.statusCode = 304;
       res.end();
     };
     SendStream.prototype.headersAlreadySent = function headersAlreadySent() {
       var err = new Error("Can't set headers after they are sent.");
-      debug4("headers already sent");
+      debug3("headers already sent");
       this.error(500, err);
     };
     SendStream.prototype.isCachable = function isCachable() {
@@ -22653,10 +22653,10 @@ var require_send = __commonJS({
       var lastModified = this.res.getHeader("Last-Modified");
       return parseHttpDate(lastModified) <= parseHttpDate(ifRange);
     };
-    SendStream.prototype.redirect = function redirect(path7) {
+    SendStream.prototype.redirect = function redirect(path8) {
       var res = this.res;
       if (hasListeners(this, "directory")) {
-        this.emit("directory", res, path7);
+        this.emit("directory", res, path8);
         return;
       }
       if (this.hasTrailingSlash()) {
@@ -22676,38 +22676,38 @@ var require_send = __commonJS({
     SendStream.prototype.pipe = function pipe2(res) {
       var root = this._root;
       this.res = res;
-      var path7 = decode(this.path);
-      if (path7 === -1) {
+      var path8 = decode(this.path);
+      if (path8 === -1) {
         this.error(400);
         return res;
       }
-      if (~path7.indexOf("\0")) {
+      if (~path8.indexOf("\0")) {
         this.error(400);
         return res;
       }
       var parts;
       if (root !== null) {
-        if (path7) {
-          path7 = normalize("." + sep + path7);
+        if (path8) {
+          path8 = normalize("." + sep + path8);
         }
-        if (UP_PATH_REGEXP.test(path7)) {
-          debug4('malicious path "%s"', path7);
+        if (UP_PATH_REGEXP.test(path8)) {
+          debug3('malicious path "%s"', path8);
           this.error(403);
           return res;
         }
-        parts = path7.split(sep);
-        path7 = normalize(join4(root, path7));
+        parts = path8.split(sep);
+        path8 = normalize(join4(root, path8));
       } else {
-        if (UP_PATH_REGEXP.test(path7)) {
-          debug4('malicious path "%s"', path7);
+        if (UP_PATH_REGEXP.test(path8)) {
+          debug3('malicious path "%s"', path8);
           this.error(403);
           return res;
         }
-        parts = normalize(path7).split(sep);
-        path7 = resolve(path7);
+        parts = normalize(path8).split(sep);
+        path8 = resolve(path8);
       }
       if (containsDotFile(parts)) {
-        debug4('%s dotfile "%s"', this._dotfiles, path7);
+        debug3('%s dotfile "%s"', this._dotfiles, path8);
         switch (this._dotfiles) {
           case "allow":
             break;
@@ -22721,13 +22721,13 @@ var require_send = __commonJS({
         }
       }
       if (this._index.length && this.hasTrailingSlash()) {
-        this.sendIndex(path7);
+        this.sendIndex(path8);
         return res;
       }
-      this.sendFile(path7);
+      this.sendFile(path8);
       return res;
     };
-    SendStream.prototype.send = function send2(path7, stat) {
+    SendStream.prototype.send = function send2(path8, stat) {
       var len = stat.size;
       var options = this.options;
       var opts = {};
@@ -22739,9 +22739,9 @@ var require_send = __commonJS({
         this.headersAlreadySent();
         return;
       }
-      debug4('pipe "%s"', path7);
-      this.setHeader(path7, stat);
-      this.type(path7);
+      debug3('pipe "%s"', path8);
+      this.setHeader(path8, stat);
+      this.type(path8);
       if (this.isConditionalGET()) {
         if (this.isPreconditionFailure()) {
           this.error(412);
@@ -22762,18 +22762,18 @@ var require_send = __commonJS({
           combine: true
         });
         if (!this.isRangeFresh()) {
-          debug4("range stale");
+          debug3("range stale");
           ranges = -2;
         }
         if (ranges === -1) {
-          debug4("range unsatisfiable");
+          debug3("range unsatisfiable");
           res.setHeader("Content-Range", contentRange("bytes", len));
           return this.error(416, {
             headers: { "Content-Range": res.getHeader("Content-Range") }
           });
         }
         if (ranges !== -2 && ranges.length === 1) {
-          debug4("range %j", ranges);
+          debug3("range %j", ranges);
           res.statusCode = 206;
           res.setHeader("Content-Range", contentRange("bytes", len, ranges[0]));
           offset += ranges[0].start;
@@ -22790,30 +22790,30 @@ var require_send = __commonJS({
         res.end();
         return;
       }
-      this.stream(path7, opts);
+      this.stream(path8, opts);
     };
-    SendStream.prototype.sendFile = function sendFile(path7) {
+    SendStream.prototype.sendFile = function sendFile(path8) {
       var i2 = 0;
       var self2 = this;
-      debug4('stat "%s"', path7);
-      fs6.stat(path7, function onstat(err, stat) {
-        var pathEndsWithSep = path7[path7.length - 1] === sep;
-        if (err && err.code === "ENOENT" && !extname2(path7) && !pathEndsWithSep) {
+      debug3('stat "%s"', path8);
+      fs7.stat(path8, function onstat(err, stat) {
+        var pathEndsWithSep = path8[path8.length - 1] === sep;
+        if (err && err.code === "ENOENT" && !extname2(path8) && !pathEndsWithSep) {
           return next(err);
         }
         if (err) return self2.onStatError(err);
-        if (stat.isDirectory()) return self2.redirect(path7);
+        if (stat.isDirectory()) return self2.redirect(path8);
         if (pathEndsWithSep) return self2.error(404);
-        self2.emit("file", path7, stat);
-        self2.send(path7, stat);
+        self2.emit("file", path8, stat);
+        self2.send(path8, stat);
       });
       function next(err) {
         if (self2._extensions.length <= i2) {
           return err ? self2.onStatError(err) : self2.error(404);
         }
-        var p = path7 + "." + self2._extensions[i2++];
-        debug4('stat "%s"', p);
-        fs6.stat(p, function(err2, stat) {
+        var p = path8 + "." + self2._extensions[i2++];
+        debug3('stat "%s"', p);
+        fs7.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self2.emit("file", p, stat);
@@ -22821,7 +22821,7 @@ var require_send = __commonJS({
         });
       }
     };
-    SendStream.prototype.sendIndex = function sendIndex(path7) {
+    SendStream.prototype.sendIndex = function sendIndex(path8) {
       var i2 = -1;
       var self2 = this;
       function next(err) {
@@ -22829,9 +22829,9 @@ var require_send = __commonJS({
           if (err) return self2.onStatError(err);
           return self2.error(404);
         }
-        var p = join4(path7, self2._index[i2]);
-        debug4('stat "%s"', p);
-        fs6.stat(p, function(err2, stat) {
+        var p = join4(path8, self2._index[i2]);
+        debug3('stat "%s"', p);
+        fs7.stat(p, function(err2, stat) {
           if (err2) return next(err2);
           if (stat.isDirectory()) return next();
           self2.emit("file", p, stat);
@@ -22840,10 +22840,10 @@ var require_send = __commonJS({
       }
       next();
     };
-    SendStream.prototype.stream = function stream(path7, options) {
+    SendStream.prototype.stream = function stream(path8, options) {
       var self2 = this;
       var res = this.res;
-      var stream2 = fs6.createReadStream(path7, options);
+      var stream2 = fs7.createReadStream(path8, options);
       this.emit("stream", stream2);
       stream2.pipe(res);
       function cleanup() {
@@ -22858,19 +22858,19 @@ var require_send = __commonJS({
         self2.emit("end");
       });
     };
-    SendStream.prototype.type = function type(path7) {
+    SendStream.prototype.type = function type(path8) {
       var res = this.res;
       if (res.getHeader("Content-Type")) return;
-      var ext = extname2(path7);
+      var ext = extname2(path8);
       var type2 = mime.contentType(ext) || "application/octet-stream";
-      debug4("content-type %s", type2);
+      debug3("content-type %s", type2);
       res.setHeader("Content-Type", type2);
     };
-    SendStream.prototype.setHeader = function setHeader(path7, stat) {
+    SendStream.prototype.setHeader = function setHeader(path8, stat) {
       var res = this.res;
-      this.emit("headers", res, path7, stat);
+      this.emit("headers", res, path8, stat);
       if (this._acceptRanges && !res.getHeader("Accept-Ranges")) {
-        debug4("accept ranges");
+        debug3("accept ranges");
         res.setHeader("Accept-Ranges", "bytes");
       }
       if (this._cacheControl && !res.getHeader("Cache-Control")) {
@@ -22878,17 +22878,17 @@ var require_send = __commonJS({
         if (this._immutable) {
           cacheControl += ", immutable";
         }
-        debug4("cache-control %s", cacheControl);
+        debug3("cache-control %s", cacheControl);
         res.setHeader("Cache-Control", cacheControl);
       }
       if (this._lastModified && !res.getHeader("Last-Modified")) {
         var modified = stat.mtime.toUTCString();
-        debug4("modified %s", modified);
+        debug3("modified %s", modified);
         res.setHeader("Last-Modified", modified);
       }
       if (this._etag && !res.getHeader("ETag")) {
         var val = etag(stat);
-        debug4("etag %s", val);
+        debug3("etag %s", val);
         res.setHeader("ETag", val);
       }
     };
@@ -22926,9 +22926,9 @@ var require_send = __commonJS({
       }
       return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
     }
-    function decode(path7) {
+    function decode(path8) {
       try {
-        return decodeURIComponent(path7);
+        return decodeURIComponent(path8);
       } catch (err) {
         return -1;
       }
@@ -23072,7 +23072,7 @@ var require_response = __commonJS({
     var http3 = __require("node:http");
     var onFinished = require_on_finished();
     var mime = require_mime_types();
-    var path6 = __require("node:path");
+    var path7 = __require("node:path");
     var pathIsAbsolute = __require("node:path").isAbsolute;
     var statuses = require_statuses();
     var sign = require_cookie_signature().sign;
@@ -23081,8 +23081,8 @@ var require_response = __commonJS({
     var setCharset = require_utils3().setCharset;
     var cookie = require_cookie();
     var send = require_send();
-    var extname2 = path6.extname;
-    var resolve = path6.resolve;
+    var extname2 = path7.extname;
+    var resolve = path7.resolve;
     var vary = require_vary();
     var { Buffer: Buffer2 } = __require("node:buffer");
     var res = Object.create(http3.ServerResponse.prototype);
@@ -23228,26 +23228,26 @@ var require_response = __commonJS({
       this.type("txt");
       return this.send(body);
     };
-    res.sendFile = function sendFile(path7, options, callback) {
+    res.sendFile = function sendFile(path8, options, callback) {
       var done = callback;
       var req = this.req;
       var res2 = this;
       var next = req.next;
       var opts = options || {};
-      if (!path7) {
+      if (!path8) {
         throw new TypeError("path argument is required to res.sendFile");
       }
-      if (typeof path7 !== "string") {
+      if (typeof path8 !== "string") {
         throw new TypeError("path must be a string to res.sendFile");
       }
       if (typeof options === "function") {
         done = options;
         opts = {};
       }
-      if (!opts.root && !pathIsAbsolute(path7)) {
+      if (!opts.root && !pathIsAbsolute(path8)) {
         throw new TypeError("path must be absolute or specify root to res.sendFile");
       }
-      var pathname = encodeURI(path7);
+      var pathname = encodeURI(path8);
       opts.etag = this.app.enabled("etag");
       var file2 = send(req, pathname, opts);
       sendfile(res2, file2, opts, function(err) {
@@ -23258,7 +23258,7 @@ var require_response = __commonJS({
         }
       });
     };
-    res.download = function download(path7, filename, options, callback) {
+    res.download = function download(path8, filename, options, callback) {
       var done = callback;
       var name = filename;
       var opts = options || null;
@@ -23275,7 +23275,7 @@ var require_response = __commonJS({
         opts = filename;
       }
       var headers = {
-        "Content-Disposition": contentDisposition(name || path7)
+        "Content-Disposition": contentDisposition(name || path8)
       };
       if (opts && opts.headers) {
         var keys = Object.keys(opts.headers);
@@ -23288,7 +23288,7 @@ var require_response = __commonJS({
       }
       opts = Object.create(opts);
       opts.headers = headers;
-      var fullPath = !opts.root ? resolve(path7) : path7;
+      var fullPath = !opts.root ? resolve(path8) : path8;
       return this.sendFile(fullPath, opts, done);
     };
     res.contentType = res.type = function contentType(type) {
@@ -23571,11 +23571,11 @@ var require_serve_static = __commonJS({
         }
         var forwardError = !fallthrough;
         var originalUrl = parseUrl.original(req);
-        var path6 = parseUrl(req).pathname;
-        if (path6 === "/" && originalUrl.pathname.substr(-1) !== "/") {
-          path6 = "";
+        var path7 = parseUrl(req).pathname;
+        if (path7 === "/" && originalUrl.pathname.substr(-1) !== "/") {
+          path7 = "";
         }
-        var stream = send(req, path6, opts);
+        var stream = send(req, path7, opts);
         stream.on("directory", onDirectory);
         if (setHeaders) {
           stream.on("headers", setHeaders);
@@ -24223,8 +24223,8 @@ var require_req = __commonJS({
       if (req.originalUrl) {
         _req.url = req.originalUrl;
       } else {
-        const path6 = req.path;
-        _req.url = typeof path6 === "string" ? path6 : req.url ? req.url.path || req.url : void 0;
+        const path7 = req.path;
+        _req.url = typeof path7 === "string" ? path7 : req.url ? req.url.path || req.url : void 0;
       }
       if (req.query) {
         _req.query = req.query;
@@ -24389,14 +24389,14 @@ var require_redact = __commonJS({
       }
       return obj2;
     }
-    function parsePath(path6) {
+    function parsePath(path7) {
       const parts = [];
       let current = "";
       let inBrackets = false;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i2 = 0; i2 < path6.length; i2++) {
-        const char = path6[i2];
+      for (let i2 = 0; i2 < path7.length; i2++) {
+        const char = path7[i2];
         if (!inBrackets && char === ".") {
           if (current) {
             parts.push(current);
@@ -24527,10 +24527,10 @@ var require_redact = __commonJS({
       return current;
     }
     function redactPaths(obj2, paths, censor, remove = false) {
-      for (const path6 of paths) {
-        const parts = parsePath(path6);
+      for (const path7 of paths) {
+        const parts = parsePath(path7);
         if (parts.includes("*")) {
-          redactWildcardPath(obj2, parts, censor, path6, remove);
+          redactWildcardPath(obj2, parts, censor, path7, remove);
         } else {
           if (remove) {
             removeKey(obj2, parts);
@@ -24615,8 +24615,8 @@ var require_redact = __commonJS({
           }
         } else {
           if (afterWildcard.includes("*")) {
-            const wrappedCensor = typeof censor === "function" ? (value, path6) => {
-              const fullPath = [...pathArray.slice(0, pathLength), ...path6];
+            const wrappedCensor = typeof censor === "function" ? (value, path7) => {
+              const fullPath = [...pathArray.slice(0, pathLength), ...path7];
               return censor(value, fullPath);
             } : censor;
             redactWildcardPath(current, afterWildcard, wrappedCensor, originalPath, remove);
@@ -24651,8 +24651,8 @@ var require_redact = __commonJS({
         return null;
       }
       const pathStructure = /* @__PURE__ */ new Map();
-      for (const path6 of pathsToClone) {
-        const parts = parsePath(path6);
+      for (const path7 of pathsToClone) {
+        const parts = parsePath(path7);
         let current = pathStructure;
         for (let i2 = 0; i2 < parts.length; i2++) {
           const part = parts[i2];
@@ -24704,24 +24704,24 @@ var require_redact = __commonJS({
       }
       return cloneSelectively(obj2, pathStructure);
     }
-    function validatePath(path6) {
-      if (typeof path6 !== "string") {
+    function validatePath(path7) {
+      if (typeof path7 !== "string") {
         throw new Error("Paths must be (non-empty) strings");
       }
-      if (path6 === "") {
+      if (path7 === "") {
         throw new Error("Invalid redaction path ()");
       }
-      if (path6.includes("..")) {
-        throw new Error(`Invalid redaction path (${path6})`);
+      if (path7.includes("..")) {
+        throw new Error(`Invalid redaction path (${path7})`);
       }
-      if (path6.includes(",")) {
-        throw new Error(`Invalid redaction path (${path6})`);
+      if (path7.includes(",")) {
+        throw new Error(`Invalid redaction path (${path7})`);
       }
       let bracketCount = 0;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i2 = 0; i2 < path6.length; i2++) {
-        const char = path6[i2];
+      for (let i2 = 0; i2 < path7.length; i2++) {
+        const char = path7[i2];
         if ((char === '"' || char === "'") && bracketCount > 0) {
           if (!inQuotes) {
             inQuotes = true;
@@ -24735,20 +24735,20 @@ var require_redact = __commonJS({
         } else if (char === "]" && !inQuotes) {
           bracketCount--;
           if (bracketCount < 0) {
-            throw new Error(`Invalid redaction path (${path6})`);
+            throw new Error(`Invalid redaction path (${path7})`);
           }
         }
       }
       if (bracketCount !== 0) {
-        throw new Error(`Invalid redaction path (${path6})`);
+        throw new Error(`Invalid redaction path (${path7})`);
       }
     }
     function validatePaths(paths) {
       if (!Array.isArray(paths)) {
         throw new TypeError("paths must be an array");
       }
-      for (const path6 of paths) {
-        validatePath(path6);
+      for (const path7 of paths) {
+        validatePath(path7);
       }
     }
     function slowRedact(options = {}) {
@@ -24916,8 +24916,8 @@ var require_redaction = __commonJS({
         if (shape[k2] === null) {
           o[k2] = (value) => topCensor(value, [k2]);
         } else {
-          const wrappedCensor = typeof censor === "function" ? (value, path6) => {
-            return censor(value, [k2, ...path6]);
+          const wrappedCensor = typeof censor === "function" ? (value, path7) => {
+            return censor(value, [k2, ...path7]);
           } : censor;
           o[k2] = Redact({
             paths: shape[k2],
@@ -25101,7 +25101,7 @@ var require_atomic_sleep = __commonJS({
   "../../node_modules/.pnpm/atomic-sleep@1.0.0/node_modules/atomic-sleep/index.js"(exports2, module2) {
     "use strict";
     if (typeof SharedArrayBuffer !== "undefined" && typeof Atomics !== "undefined") {
-      let sleep2 = function(ms) {
+      let sleep3 = function(ms) {
         const valid = ms > 0 && ms < Infinity;
         if (valid === false) {
           if (typeof ms !== "number" && typeof ms !== "bigint") {
@@ -25112,9 +25112,9 @@ var require_atomic_sleep = __commonJS({
         Atomics.wait(nil, 0, 0, Number(ms));
       };
       const nil = new Int32Array(new SharedArrayBuffer(4));
-      module2.exports = sleep2;
+      module2.exports = sleep3;
     } else {
-      let sleep2 = function(ms) {
+      let sleep3 = function(ms) {
         const valid = ms > 0 && ms < Infinity;
         if (valid === false) {
           if (typeof ms !== "number" && typeof ms !== "bigint") {
@@ -25126,7 +25126,7 @@ var require_atomic_sleep = __commonJS({
         while (target > Date.now()) {
         }
       };
-      module2.exports = sleep2;
+      module2.exports = sleep3;
     }
   }
 });
@@ -25135,11 +25135,11 @@ var require_atomic_sleep = __commonJS({
 var require_sonic_boom = __commonJS({
   "../../node_modules/.pnpm/sonic-boom@4.2.1/node_modules/sonic-boom/index.js"(exports2, module2) {
     "use strict";
-    var fs6 = __require("fs");
+    var fs7 = __require("fs");
     var EventEmitter2 = __require("events");
     var inherits2 = __require("util").inherits;
-    var path6 = __require("path");
-    var sleep2 = require_atomic_sleep();
+    var path7 = __require("path");
+    var sleep3 = require_atomic_sleep();
     var assert3 = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
     var kEmptyBuffer = Buffer.allocUnsafe(0);
@@ -25192,20 +25192,20 @@ var require_sonic_boom = __commonJS({
       const mode = sonic.mode;
       if (sonic.sync) {
         try {
-          if (sonic.mkdir) fs6.mkdirSync(path6.dirname(file2), { recursive: true });
-          const fd = fs6.openSync(file2, flags, mode);
+          if (sonic.mkdir) fs7.mkdirSync(path7.dirname(file2), { recursive: true });
+          const fd = fs7.openSync(file2, flags, mode);
           fileOpened(null, fd);
         } catch (err) {
           fileOpened(err);
           throw err;
         }
       } else if (sonic.mkdir) {
-        fs6.mkdir(path6.dirname(file2), { recursive: true }, (err) => {
+        fs7.mkdir(path7.dirname(file2), { recursive: true }, (err) => {
           if (err) return fileOpened(err);
-          fs6.open(file2, flags, mode, fileOpened);
+          fs7.open(file2, flags, mode, fileOpened);
         });
       } else {
-        fs6.open(file2, flags, mode, fileOpened);
+        fs7.open(file2, flags, mode, fileOpened);
       }
     }
     function SonicBoom(opts) {
@@ -25246,8 +25246,8 @@ var require_sonic_boom = __commonJS({
         this.flush = flushBuffer;
         this.flushSync = flushBufferSync;
         this._actualWrite = actualWriteBuffer;
-        fsWriteSync = () => fs6.writeSync(this.fd, this._writingBuf);
-        fsWrite = () => fs6.write(this.fd, this._writingBuf, this.release);
+        fsWriteSync = () => fs7.writeSync(this.fd, this._writingBuf);
+        fsWrite = () => fs7.write(this.fd, this._writingBuf, this.release);
       } else if (contentMode === void 0 || contentMode === kContentModeUtf8) {
         this._writingBuf = "";
         this.write = write;
@@ -25256,15 +25256,15 @@ var require_sonic_boom = __commonJS({
         this._actualWrite = actualWrite;
         fsWriteSync = () => {
           if (Buffer.isBuffer(this._writingBuf)) {
-            return fs6.writeSync(this.fd, this._writingBuf);
+            return fs7.writeSync(this.fd, this._writingBuf);
           }
-          return fs6.writeSync(this.fd, this._writingBuf, "utf8");
+          return fs7.writeSync(this.fd, this._writingBuf, "utf8");
         };
         fsWrite = () => {
           if (Buffer.isBuffer(this._writingBuf)) {
-            return fs6.write(this.fd, this._writingBuf, this.release);
+            return fs7.write(this.fd, this._writingBuf, this.release);
           }
-          return fs6.write(this.fd, this._writingBuf, "utf8", this.release);
+          return fs7.write(this.fd, this._writingBuf, "utf8", this.release);
         };
       } else {
         throw new Error(`SonicBoom supports "${kContentModeUtf8}" and "${kContentModeBuffer}", but passed ${contentMode}`);
@@ -25285,7 +25285,7 @@ var require_sonic_boom = __commonJS({
           if ((err.code === "EAGAIN" || err.code === "EBUSY") && this.retryEAGAIN(err, this._writingBuf.length, this._len - this._writingBuf.length)) {
             if (this.sync) {
               try {
-                sleep2(BUSY_WRITE_TIMEOUT);
+                sleep3(BUSY_WRITE_TIMEOUT);
                 this.release(void 0, 0);
               } catch (err2) {
                 this.release(err2);
@@ -25321,7 +25321,7 @@ var require_sonic_boom = __commonJS({
           }
         }
         if (this._fsync) {
-          fs6.fsyncSync(this.fd);
+          fs7.fsyncSync(this.fd);
         }
         const len = this._len;
         if (this._reopening) {
@@ -25435,7 +25435,7 @@ var require_sonic_boom = __commonJS({
       const onDrain = () => {
         if (!this._fsync) {
           try {
-            fs6.fsync(this.fd, (err) => {
+            fs7.fsync(this.fd, (err) => {
               this._flushPending = false;
               cb(err);
             });
@@ -25537,7 +25537,7 @@ var require_sonic_boom = __commonJS({
       const fd = this.fd;
       this.once("ready", () => {
         if (fd !== this.fd) {
-          fs6.close(fd, (err) => {
+          fs7.close(fd, (err) => {
             if (err) {
               return this.emit("error", err);
             }
@@ -25586,7 +25586,7 @@ var require_sonic_boom = __commonJS({
           buf = this._bufs[0];
         }
         try {
-          const n = Buffer.isBuffer(buf) ? fs6.writeSync(this.fd, buf) : fs6.writeSync(this.fd, buf, "utf8");
+          const n = Buffer.isBuffer(buf) ? fs7.writeSync(this.fd, buf) : fs7.writeSync(this.fd, buf, "utf8");
           const releasedBufObj = releaseWritingBuf(buf, this._len, n);
           buf = releasedBufObj.writingBuf;
           this._len = releasedBufObj.len;
@@ -25598,11 +25598,11 @@ var require_sonic_boom = __commonJS({
           if (shouldRetry && !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
             throw err;
           }
-          sleep2(BUSY_WRITE_TIMEOUT);
+          sleep3(BUSY_WRITE_TIMEOUT);
         }
       }
       try {
-        fs6.fsyncSync(this.fd);
+        fs7.fsyncSync(this.fd);
       } catch {
       }
     }
@@ -25623,7 +25623,7 @@ var require_sonic_boom = __commonJS({
           buf = mergeBuf(this._bufs[0], this._lens[0]);
         }
         try {
-          const n = fs6.writeSync(this.fd, buf);
+          const n = fs7.writeSync(this.fd, buf);
           buf = buf.subarray(n);
           this._len = Math.max(this._len - n, 0);
           if (buf.length <= 0) {
@@ -25635,7 +25635,7 @@ var require_sonic_boom = __commonJS({
           if (shouldRetry && !this.retryEAGAIN(err, buf.length, this._len - buf.length)) {
             throw err;
           }
-          sleep2(BUSY_WRITE_TIMEOUT);
+          sleep3(BUSY_WRITE_TIMEOUT);
         }
       }
     }
@@ -25651,13 +25651,13 @@ var require_sonic_boom = __commonJS({
       this._writingBuf = this._writingBuf.length ? this._writingBuf : this._bufs.shift() || "";
       if (this.sync) {
         try {
-          const written = Buffer.isBuffer(this._writingBuf) ? fs6.writeSync(this.fd, this._writingBuf) : fs6.writeSync(this.fd, this._writingBuf, "utf8");
+          const written = Buffer.isBuffer(this._writingBuf) ? fs7.writeSync(this.fd, this._writingBuf) : fs7.writeSync(this.fd, this._writingBuf, "utf8");
           release(null, written);
         } catch (err) {
           release(err);
         }
       } else {
-        fs6.write(this.fd, this._writingBuf, release);
+        fs7.write(this.fd, this._writingBuf, release);
       }
     }
     function actualWriteBuffer() {
@@ -25666,7 +25666,7 @@ var require_sonic_boom = __commonJS({
       this._writingBuf = this._writingBuf.length ? this._writingBuf : mergeBuf(this._bufs.shift(), this._lens.shift());
       if (this.sync) {
         try {
-          const written = fs6.writeSync(this.fd, this._writingBuf);
+          const written = fs7.writeSync(this.fd, this._writingBuf);
           release(null, written);
         } catch (err) {
           release(err);
@@ -25675,7 +25675,7 @@ var require_sonic_boom = __commonJS({
         if (kCopyBuffer) {
           this._writingBuf = Buffer.from(this._writingBuf);
         }
-        fs6.write(this.fd, this._writingBuf, release);
+        fs7.write(this.fd, this._writingBuf, release);
       }
     }
     function actualClose(sonic) {
@@ -25691,12 +25691,12 @@ var require_sonic_boom = __commonJS({
       sonic._lens = [];
       assert3(typeof sonic.fd === "number", `sonic.fd must be a number, got ${typeof sonic.fd}`);
       try {
-        fs6.fsync(sonic.fd, closeWrapped);
+        fs7.fsync(sonic.fd, closeWrapped);
       } catch {
       }
       function closeWrapped() {
         if (sonic.fd !== 1 && sonic.fd !== 2) {
-          fs6.close(sonic.fd, done);
+          fs7.close(sonic.fd, done);
         } else {
           done();
         }
@@ -26376,7 +26376,7 @@ var require_transport = __commonJS({
     var { createRequire } = __require("module");
     var getCallers = require_caller();
     var { join: join4, isAbsolute, sep } = __require("node:path");
-    var sleep2 = require_atomic_sleep();
+    var sleep3 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
     function setupOnExit(stream) {
@@ -26410,7 +26410,7 @@ var require_transport = __commonJS({
           return;
         }
         stream.flushSync();
-        sleep2(100);
+        sleep3(100);
         stream.end();
       }
       return stream;
@@ -28060,16 +28060,16 @@ var require_pino = __commonJS({
   "../../node_modules/.pnpm/pino@9.14.0/node_modules/pino/pino.js"(exports2, module2) {
     function pinoBundlerAbsolutePath(p) {
       try {
-        const path6 = __require("path");
+        const path7 = __require("path");
         const outputDir = "/home/runner/workspace/artifacts/api-server/dist";
-        return path6.resolve(outputDir, p.replace(/^\.\//, ""));
+        return path7.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
         return f(p);
       }
     }
     globalThis.__bundlerPathsOverrides = { ...globalThis.__bundlerPathsOverrides || {}, "thread-stream-worker": pinoBundlerAbsolutePath("./thread-stream-worker.mjs"), "pino-worker": pinoBundlerAbsolutePath("./pino-worker.mjs"), "pino/file": pinoBundlerAbsolutePath("./pino-file.mjs"), "pino-pretty": pinoBundlerAbsolutePath("./pino-pretty.mjs") };
-    var os = __require("node:os");
+    var os2 = __require("node:os");
     var stdSerializers = require_pino_std_serializers();
     var caller = require_caller();
     var redaction = require_redaction();
@@ -28116,7 +28116,7 @@ var require_pino = __commonJS({
     } = symbols;
     var { epochTime, nullTime } = time3;
     var { pid } = process;
-    var hostname2 = os.hostname();
+    var hostname2 = os2.hostname();
     var defaultErrorSerializer = stdSerializers.err;
     var defaultOptions = {
       level: "info",
@@ -33043,13 +33043,13 @@ var require_websocket = __commonJS({
   "../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/websocket.js"(exports2, module2) {
     "use strict";
     var EventEmitter2 = __require("events");
-    var https4 = __require("https");
+    var https5 = __require("https");
     var http3 = __require("http");
-    var net5 = __require("net");
-    var tls4 = __require("tls");
+    var net4 = __require("net");
+    var tls3 = __require("tls");
     var { randomBytes: randomBytes6, createHash } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
-    var { URL: URL4 } = __require("url");
+    var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
     var Receiver2 = require_receiver();
     var Sender2 = require_sender();
@@ -33542,11 +33542,11 @@ var require_websocket = __commonJS({
         );
       }
       let parsedUrl;
-      if (address instanceof URL4) {
+      if (address instanceof URL3) {
         parsedUrl = address;
       } else {
         try {
-          parsedUrl = new URL4(address);
+          parsedUrl = new URL3(address);
         } catch {
           throw new SyntaxError(`Invalid URL: ${address}`);
         }
@@ -33578,7 +33578,7 @@ var require_websocket = __commonJS({
       }
       const defaultPort = isSecure ? 443 : 80;
       const key = randomBytes6(16).toString("base64");
-      const request3 = isSecure ? https4.request : http3.request;
+      const request3 = isSecure ? https5.request : http3.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
       opts.createConnection = opts.createConnection || (isSecure ? tlsConnect : netConnect);
@@ -33683,7 +33683,7 @@ var require_websocket = __commonJS({
           req.abort();
           let addr;
           try {
-            addr = new URL4(location, address);
+            addr = new URL3(location, address);
           } catch (e) {
             const err = new SyntaxError(`Invalid URL: ${location}`);
             emitErrorAndClose(websocket, err);
@@ -33779,14 +33779,14 @@ var require_websocket = __commonJS({
     }
     function netConnect(options) {
       options.path = options.socketPath;
-      return net5.connect(options);
+      return net4.connect(options);
     }
     function tlsConnect(options) {
       options.path = void 0;
       if (!options.servername && options.servername !== "") {
-        options.servername = net5.isIP(options.host) ? "" : options.host;
+        options.servername = net4.isIP(options.host) ? "" : options.host;
       }
-      return tls4.connect(options);
+      return tls3.connect(options);
     }
     function abortHandshake(websocket, stream, message) {
       websocket._readyState = WebSocket2.CLOSING;
@@ -36590,11 +36590,11 @@ var require_lodash = __commonJS({
             return isFunction(object2[key]);
           });
         }
-        function baseGet(object2, path6) {
-          path6 = castPath(path6, object2);
-          var index = 0, length = path6.length;
+        function baseGet(object2, path7) {
+          path7 = castPath(path7, object2);
+          var index = 0, length = path7.length;
           while (object2 != null && index < length) {
-            object2 = object2[toKey(path6[index++])];
+            object2 = object2[toKey(path7[index++])];
           }
           return index && index == length ? object2 : undefined2;
         }
@@ -36658,10 +36658,10 @@ var require_lodash = __commonJS({
           });
           return accumulator;
         }
-        function baseInvoke(object2, path6, args) {
-          path6 = castPath(path6, object2);
-          object2 = parent(object2, path6);
-          var func = object2 == null ? object2 : object2[toKey(last(path6))];
+        function baseInvoke(object2, path7, args) {
+          path7 = castPath(path7, object2);
+          object2 = parent(object2, path7);
+          var func = object2 == null ? object2 : object2[toKey(last(path7))];
           return func == null ? undefined2 : apply(func, object2, args);
         }
         function baseIsArguments(value) {
@@ -36817,13 +36817,13 @@ var require_lodash = __commonJS({
             return object2 === source || baseIsMatch(object2, source, matchData);
           };
         }
-        function baseMatchesProperty(path6, srcValue) {
-          if (isKey(path6) && isStrictComparable(srcValue)) {
-            return matchesStrictComparable(toKey(path6), srcValue);
+        function baseMatchesProperty(path7, srcValue) {
+          if (isKey(path7) && isStrictComparable(srcValue)) {
+            return matchesStrictComparable(toKey(path7), srcValue);
           }
           return function(object2) {
-            var objValue = get3(object2, path6);
-            return objValue === undefined2 && objValue === srcValue ? hasIn(object2, path6) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
+            var objValue = get3(object2, path7);
+            return objValue === undefined2 && objValue === srcValue ? hasIn(object2, path7) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
           };
         }
         function baseMerge(object2, source, srcIndex, customizer, stack) {
@@ -36920,23 +36920,23 @@ var require_lodash = __commonJS({
           });
         }
         function basePick(object2, paths) {
-          return basePickBy(object2, paths, function(value, path6) {
-            return hasIn(object2, path6);
+          return basePickBy(object2, paths, function(value, path7) {
+            return hasIn(object2, path7);
           });
         }
         function basePickBy(object2, paths, predicate) {
           var index = -1, length = paths.length, result2 = {};
           while (++index < length) {
-            var path6 = paths[index], value = baseGet(object2, path6);
-            if (predicate(value, path6)) {
-              baseSet(result2, castPath(path6, object2), value);
+            var path7 = paths[index], value = baseGet(object2, path7);
+            if (predicate(value, path7)) {
+              baseSet(result2, castPath(path7, object2), value);
             }
           }
           return result2;
         }
-        function basePropertyDeep(path6) {
+        function basePropertyDeep(path7) {
           return function(object2) {
-            return baseGet(object2, path6);
+            return baseGet(object2, path7);
           };
         }
         function basePullAll(array2, values2, iteratee2, comparator) {
@@ -37010,14 +37010,14 @@ var require_lodash = __commonJS({
           var array2 = values(collection);
           return shuffleSelf(array2, baseClamp(n, 0, array2.length));
         }
-        function baseSet(object2, path6, value, customizer) {
+        function baseSet(object2, path7, value, customizer) {
           if (!isObject3(object2)) {
             return object2;
           }
-          path6 = castPath(path6, object2);
-          var index = -1, length = path6.length, lastIndex = length - 1, nested = object2;
+          path7 = castPath(path7, object2);
+          var index = -1, length = path7.length, lastIndex = length - 1, nested = object2;
           while (nested != null && ++index < length) {
-            var key = toKey(path6[index]), newValue = value;
+            var key = toKey(path7[index]), newValue = value;
             if (key === "__proto__" || key === "constructor" || key === "prototype") {
               return object2;
             }
@@ -37025,7 +37025,7 @@ var require_lodash = __commonJS({
               var objValue = nested[key];
               newValue = customizer ? customizer(objValue, key, nested) : undefined2;
               if (newValue === undefined2) {
-                newValue = isObject3(objValue) ? objValue : isIndex(path6[index + 1]) ? [] : {};
+                newValue = isObject3(objValue) ? objValue : isIndex(path7[index + 1]) ? [] : {};
               }
             }
             assignValue(nested, key, newValue);
@@ -37191,14 +37191,14 @@ var require_lodash = __commonJS({
             }
           return result2;
         }
-        function baseUnset(object2, path6) {
-          path6 = castPath(path6, object2);
-          var index = -1, length = path6.length;
+        function baseUnset(object2, path7) {
+          path7 = castPath(path7, object2);
+          var index = -1, length = path7.length;
           if (!length) {
             return true;
           }
           while (++index < length) {
-            var key = toKey(path6[index]);
+            var key = toKey(path7[index]);
             if (key === "__proto__" && !hasOwnProperty.call(object2, "__proto__")) {
               return false;
             }
@@ -37206,11 +37206,11 @@ var require_lodash = __commonJS({
               return false;
             }
           }
-          var obj2 = parent(object2, path6);
-          return obj2 == null || delete obj2[toKey(last(path6))];
+          var obj2 = parent(object2, path7);
+          return obj2 == null || delete obj2[toKey(last(path7))];
         }
-        function baseUpdate(object2, path6, updater, customizer) {
-          return baseSet(object2, path6, updater(baseGet(object2, path6)), customizer);
+        function baseUpdate(object2, path7, updater, customizer) {
+          return baseSet(object2, path7, updater(baseGet(object2, path7)), customizer);
         }
         function baseWhile(array2, predicate, isDrop, fromRight) {
           var length = array2.length, index = fromRight ? length : -1;
@@ -38093,11 +38093,11 @@ var require_lodash = __commonJS({
           var match = source.match(reWrapDetails);
           return match ? match[1].split(reSplitDetails) : [];
         }
-        function hasPath(object2, path6, hasFunc) {
-          path6 = castPath(path6, object2);
-          var index = -1, length = path6.length, result2 = false;
+        function hasPath(object2, path7, hasFunc) {
+          path7 = castPath(path7, object2);
+          var index = -1, length = path7.length, result2 = false;
           while (++index < length) {
-            var key = toKey(path6[index]);
+            var key = toKey(path7[index]);
             if (!(result2 = object2 != null && hasFunc(object2, key))) {
               break;
             }
@@ -38299,8 +38299,8 @@ var require_lodash = __commonJS({
             return apply(func, this, otherArgs);
           };
         }
-        function parent(object2, path6) {
-          return path6.length < 2 ? object2 : baseGet(object2, baseSlice(path6, 0, -1));
+        function parent(object2, path7) {
+          return path7.length < 2 ? object2 : baseGet(object2, baseSlice(path7, 0, -1));
         }
         function reorder(array2, indexes) {
           var arrLength = array2.length, length = nativeMin(indexes.length, arrLength), oldArray = copyArray(array2);
@@ -38935,10 +38935,10 @@ var require_lodash = __commonJS({
           }
           return isString(collection) ? fromIndex <= length && collection.indexOf(value, fromIndex) > -1 : !!length && baseIndexOf(collection, value, fromIndex) > -1;
         }
-        var invokeMap = baseRest(function(collection, path6, args) {
-          var index = -1, isFunc = typeof path6 == "function", result2 = isArrayLike(collection) ? Array2(collection.length) : [];
+        var invokeMap = baseRest(function(collection, path7, args) {
+          var index = -1, isFunc = typeof path7 == "function", result2 = isArrayLike(collection) ? Array2(collection.length) : [];
           baseEach(collection, function(value) {
-            result2[++index] = isFunc ? apply(path6, value, args) : baseInvoke(value, path6, args);
+            result2[++index] = isFunc ? apply(path7, value, args) : baseInvoke(value, path7, args);
           });
           return result2;
         });
@@ -39590,15 +39590,15 @@ var require_lodash = __commonJS({
         function functionsIn(object2) {
           return object2 == null ? [] : baseFunctions(object2, keysIn(object2));
         }
-        function get3(object2, path6, defaultValue) {
-          var result2 = object2 == null ? undefined2 : baseGet(object2, path6);
+        function get3(object2, path7, defaultValue) {
+          var result2 = object2 == null ? undefined2 : baseGet(object2, path7);
           return result2 === undefined2 ? defaultValue : result2;
         }
-        function has(object2, path6) {
-          return object2 != null && hasPath(object2, path6, baseHas);
+        function has(object2, path7) {
+          return object2 != null && hasPath(object2, path7, baseHas);
         }
-        function hasIn(object2, path6) {
-          return object2 != null && hasPath(object2, path6, baseHasIn);
+        function hasIn(object2, path7) {
+          return object2 != null && hasPath(object2, path7, baseHasIn);
         }
         var invert = createInverter(function(result2, value, key) {
           if (value != null && typeof value.toString != "function") {
@@ -39645,16 +39645,16 @@ var require_lodash = __commonJS({
         var mergeWith = createAssigner(function(object2, source, srcIndex, customizer) {
           baseMerge(object2, source, srcIndex, customizer);
         });
-        var omit4 = flatRest(function(object2, paths) {
+        var omit3 = flatRest(function(object2, paths) {
           var result2 = {};
           if (object2 == null) {
             return result2;
           }
           var isDeep = false;
-          paths = arrayMap(paths, function(path6) {
-            path6 = castPath(path6, object2);
-            isDeep || (isDeep = path6.length > 1);
-            return path6;
+          paths = arrayMap(paths, function(path7) {
+            path7 = castPath(path7, object2);
+            isDeep || (isDeep = path7.length > 1);
+            return path7;
           });
           copyObject(object2, getAllKeysIn(object2), result2);
           if (isDeep) {
@@ -39680,19 +39680,19 @@ var require_lodash = __commonJS({
             return [prop];
           });
           predicate = getIteratee(predicate);
-          return basePickBy(object2, props, function(value, path6) {
-            return predicate(value, path6[0]);
+          return basePickBy(object2, props, function(value, path7) {
+            return predicate(value, path7[0]);
           });
         }
-        function result(object2, path6, defaultValue) {
-          path6 = castPath(path6, object2);
-          var index = -1, length = path6.length;
+        function result(object2, path7, defaultValue) {
+          path7 = castPath(path7, object2);
+          var index = -1, length = path7.length;
           if (!length) {
             length = 1;
             object2 = undefined2;
           }
           while (++index < length) {
-            var value = object2 == null ? undefined2 : object2[toKey(path6[index])];
+            var value = object2 == null ? undefined2 : object2[toKey(path7[index])];
             if (value === undefined2) {
               index = length;
               value = defaultValue;
@@ -39701,12 +39701,12 @@ var require_lodash = __commonJS({
           }
           return object2;
         }
-        function set2(object2, path6, value) {
-          return object2 == null ? object2 : baseSet(object2, path6, value);
+        function set2(object2, path7, value) {
+          return object2 == null ? object2 : baseSet(object2, path7, value);
         }
-        function setWith(object2, path6, value, customizer) {
+        function setWith(object2, path7, value, customizer) {
           customizer = typeof customizer == "function" ? customizer : undefined2;
-          return object2 == null ? object2 : baseSet(object2, path6, value, customizer);
+          return object2 == null ? object2 : baseSet(object2, path7, value, customizer);
         }
         var toPairs = createToPairs(keys);
         var toPairsIn = createToPairs(keysIn);
@@ -39728,15 +39728,15 @@ var require_lodash = __commonJS({
           });
           return accumulator;
         }
-        function unset(object2, path6) {
-          return object2 == null ? true : baseUnset(object2, path6);
+        function unset(object2, path7) {
+          return object2 == null ? true : baseUnset(object2, path7);
         }
-        function update(object2, path6, updater) {
-          return object2 == null ? object2 : baseUpdate(object2, path6, castFunction(updater));
+        function update(object2, path7, updater) {
+          return object2 == null ? object2 : baseUpdate(object2, path7, castFunction(updater));
         }
-        function updateWith(object2, path6, updater, customizer) {
+        function updateWith(object2, path7, updater, customizer) {
           customizer = typeof customizer == "function" ? customizer : undefined2;
-          return object2 == null ? object2 : baseUpdate(object2, path6, castFunction(updater), customizer);
+          return object2 == null ? object2 : baseUpdate(object2, path7, castFunction(updater), customizer);
         }
         function values(object2) {
           return object2 == null ? [] : baseValues(object2, keys(object2));
@@ -40122,17 +40122,17 @@ var require_lodash = __commonJS({
         function matches(source) {
           return baseMatches(baseClone(source, CLONE_DEEP_FLAG));
         }
-        function matchesProperty(path6, srcValue) {
-          return baseMatchesProperty(path6, baseClone(srcValue, CLONE_DEEP_FLAG));
+        function matchesProperty(path7, srcValue) {
+          return baseMatchesProperty(path7, baseClone(srcValue, CLONE_DEEP_FLAG));
         }
-        var method = baseRest(function(path6, args) {
+        var method = baseRest(function(path7, args) {
           return function(object2) {
-            return baseInvoke(object2, path6, args);
+            return baseInvoke(object2, path7, args);
           };
         });
         var methodOf = baseRest(function(object2, args) {
-          return function(path6) {
-            return baseInvoke(object2, path6, args);
+          return function(path7) {
+            return baseInvoke(object2, path7, args);
           };
         });
         function mixin(object2, source, options) {
@@ -40179,12 +40179,12 @@ var require_lodash = __commonJS({
         var over = createOver(arrayMap);
         var overEvery = createOver(arrayEvery);
         var overSome = createOver(arraySome);
-        function property(path6) {
-          return isKey(path6) ? baseProperty(toKey(path6)) : basePropertyDeep(path6);
+        function property(path7) {
+          return isKey(path7) ? baseProperty(toKey(path7)) : basePropertyDeep(path7);
         }
         function propertyOf(object2) {
-          return function(path6) {
-            return object2 == null ? undefined2 : baseGet(object2, path6);
+          return function(path7) {
+            return object2 == null ? undefined2 : baseGet(object2, path7);
           };
         }
         var range = createRange();
@@ -40341,7 +40341,7 @@ var require_lodash = __commonJS({
         lodash.mixin = mixin;
         lodash.negate = negate;
         lodash.nthArg = nthArg;
-        lodash.omit = omit4;
+        lodash.omit = omit3;
         lodash.omitBy = omitBy;
         lodash.once = once;
         lodash.orderBy = orderBy;
@@ -40637,12 +40637,12 @@ var require_lodash = __commonJS({
         LazyWrapper.prototype.findLast = function(predicate) {
           return this.reverse().find(predicate);
         };
-        LazyWrapper.prototype.invokeMap = baseRest(function(path6, args) {
-          if (typeof path6 == "function") {
+        LazyWrapper.prototype.invokeMap = baseRest(function(path7, args) {
+          if (typeof path7 == "function") {
             return new LazyWrapper(this);
           }
           return this.map(function(value) {
-            return baseInvoke(value, path6, args);
+            return baseInvoke(value, path7, args);
           });
         });
         LazyWrapper.prototype.reject = function(predicate) {
@@ -43086,7 +43086,7 @@ var require_nodeback = __commonJS({
 var require_method = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/method.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, INTERNAL2, tryConvertToPromise, apiRejection, debug4) {
+    module2.exports = function(Promise2, INTERNAL2, tryConvertToPromise, apiRejection, debug3) {
       var util2 = require_util();
       var tryCatch2 = util2.tryCatch;
       Promise2.method = function(fn) {
@@ -43099,7 +43099,7 @@ var require_method = __commonJS({
           ret2._pushContext();
           var value = tryCatch2(fn).apply(this, arguments);
           var promiseCreated = ret2._popContext();
-          debug4.checkForgottenReturns(
+          debug3.checkForgottenReturns(
             value,
             promiseCreated,
             "Promise.method",
@@ -43118,7 +43118,7 @@ var require_method = __commonJS({
         ret2._pushContext();
         var value;
         if (arguments.length > 1) {
-          debug4.deprecated("calling Promise.try with more than 1 argument");
+          debug3.deprecated("calling Promise.try with more than 1 argument");
           var arg = arguments[1];
           var ctx = arguments[2];
           value = util2.isArray(arg) ? tryCatch2(fn).apply(ctx, arg) : tryCatch2(fn).call(ctx, arg);
@@ -43126,7 +43126,7 @@ var require_method = __commonJS({
           value = tryCatch2(fn)();
         }
         var promiseCreated = ret2._popContext();
-        debug4.checkForgottenReturns(
+        debug3.checkForgottenReturns(
           value,
           promiseCreated,
           "Promise.try",
@@ -43150,7 +43150,7 @@ var require_method = __commonJS({
 var require_bind = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/bind.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, INTERNAL2, tryConvertToPromise, debug4) {
+    module2.exports = function(Promise2, INTERNAL2, tryConvertToPromise, debug3) {
       var calledBind = false;
       var rejectThis = function(_2, e) {
         this._reject(e);
@@ -43170,8 +43170,8 @@ var require_bind = __commonJS({
       Promise2.prototype.bind = function(thisArg) {
         if (!calledBind) {
           calledBind = true;
-          Promise2.prototype._propagateFrom = debug4.propagateFromFunction();
-          Promise2.prototype._boundValue = debug4.boundValueFunction();
+          Promise2.prototype._propagateFrom = debug3.propagateFromFunction();
+          Promise2.prototype._boundValue = debug3.boundValueFunction();
         }
         var maybePromise = tryConvertToPromise(thisArg);
         var ret2 = new Promise2(INTERNAL2);
@@ -43221,13 +43221,13 @@ var require_bind = __commonJS({
 var require_cancel = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/cancel.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, PromiseArray, apiRejection, debug4) {
+    module2.exports = function(Promise2, PromiseArray, apiRejection, debug3) {
       var util2 = require_util();
       var tryCatch2 = util2.tryCatch;
       var errorObj2 = util2.errorObj;
       var async = Promise2._async;
       Promise2.prototype["break"] = Promise2.prototype.cancel = function() {
-        if (!debug4.cancellation()) return this._warn("cancellation is disabled");
+        if (!debug3.cancellation()) return this._warn("cancellation is disabled");
         var promise2 = this;
         var child = promise2;
         while (promise2._isCancellable()) {
@@ -43723,7 +43723,7 @@ var require_call_get = __commonJS({
 var require_generators = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/generators.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, apiRejection, INTERNAL2, tryConvertToPromise, Proxyable, debug4) {
+    module2.exports = function(Promise2, apiRejection, INTERNAL2, tryConvertToPromise, Proxyable, debug3) {
       var errors = require_errors();
       var TypeError2 = errors.TypeError;
       var util2 = require_util();
@@ -43747,7 +43747,7 @@ var require_generators = __commonJS({
         return null;
       }
       function PromiseSpawn(generatorFunction, receiver2, yieldHandler, stack) {
-        if (debug4.cancellation()) {
+        if (debug3.cancellation()) {
           var internal = new Promise2(INTERNAL2);
           var _finallyPromise = this._finallyPromise = new Promise2(INTERNAL2);
           this._promise = internal.lastly(function() {
@@ -43773,7 +43773,7 @@ var require_generators = __commonJS({
       };
       PromiseSpawn.prototype._cleanup = function() {
         this._promise = this._generator = null;
-        if (debug4.cancellation() && this._finallyPromise !== null) {
+        if (debug3.cancellation() && this._finallyPromise !== null) {
           this._finallyPromise._fulfill();
           this._finallyPromise = null;
         }
@@ -43903,15 +43903,15 @@ var require_generators = __commonJS({
         var stack = new Error().stack;
         return function() {
           var generator = generatorFunction.apply(this, arguments);
-          var spawn = new PromiseSpawn$(
+          var spawn2 = new PromiseSpawn$(
             void 0,
             void 0,
             yieldHandler,
             stack
           );
-          var ret2 = spawn.promise();
-          spawn._generator = generator;
-          spawn._promiseFulfilled(void 0);
+          var ret2 = spawn2.promise();
+          spawn2._generator = generator;
+          spawn2._promiseFulfilled(void 0);
           return ret2;
         };
       };
@@ -43922,13 +43922,13 @@ var require_generators = __commonJS({
         yieldHandlers.push(fn);
       };
       Promise2.spawn = function(generatorFunction) {
-        debug4.deprecated("Promise.spawn()", "Promise.coroutine()");
+        debug3.deprecated("Promise.spawn()", "Promise.coroutine()");
         if (typeof generatorFunction !== "function") {
           return apiRejection("generatorFunction must be a function\n\n    See http://goo.gl/MqrFmX\n");
         }
-        var spawn = new PromiseSpawn(generatorFunction, this);
-        var ret2 = spawn.promise();
-        spawn._run(Promise2.spawn);
+        var spawn2 = new PromiseSpawn(generatorFunction, this);
+        var ret2 = spawn2.promise();
+        spawn2._run(Promise2.spawn);
         return ret2;
       };
     };
@@ -43939,7 +43939,7 @@ var require_generators = __commonJS({
 var require_map = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/map.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug4) {
+    module2.exports = function(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug3) {
       var util2 = require_util();
       var tryCatch2 = util2.tryCatch;
       var errorObj2 = util2.errorObj;
@@ -43995,7 +43995,7 @@ var require_map = __commonJS({
           promise2._pushContext();
           var ret2 = tryCatch2(callback).call(receiver2, value, index, length);
           var promiseCreated = promise2._popContext();
-          debug4.checkForgottenReturns(
+          debug3.checkForgottenReturns(
             ret2,
             promiseCreated,
             preservedValues !== null ? "Promise.filter" : "Promise.map",
@@ -44361,7 +44361,7 @@ var require_promisify = __commonJS({
         util2.toFastProperties(obj2);
         return obj2;
       }
-      function promisify(callback, receiver2, multiArgs) {
+      function promisify2(callback, receiver2, multiArgs) {
         return makeNodePromisified(
           callback,
           receiver2,
@@ -44381,7 +44381,7 @@ var require_promisify = __commonJS({
         options = Object(options);
         var receiver2 = options.context === void 0 ? THIS : options.context;
         var multiArgs = !!options.multiArgs;
-        var ret2 = promisify(fn, receiver2, multiArgs);
+        var ret2 = promisify2(fn, receiver2, multiArgs);
         util2.copyDescriptors(fn, ret2, propsFilter);
         return ret2;
       };
@@ -44584,7 +44584,7 @@ var require_race = __commonJS({
 var require_reduce = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/reduce.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug4) {
+    module2.exports = function(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug3) {
       var util2 = require_util();
       var tryCatch2 = util2.tryCatch;
       function ReductionPromiseArray(promises, fn, initialValue, _each) {
@@ -44733,7 +44733,7 @@ var require_reduce = __commonJS({
           array2._currentCancellable = ret2;
         }
         var promiseCreated = promise2._popContext();
-        debug4.checkForgottenReturns(
+        debug3.checkForgottenReturns(
           ret2,
           promiseCreated,
           array2._eachValues !== void 0 ? "Promise.each" : "Promise.reduce",
@@ -44749,7 +44749,7 @@ var require_reduce = __commonJS({
 var require_settle = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/settle.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, PromiseArray, debug4) {
+    module2.exports = function(Promise2, PromiseArray, debug3) {
       var PromiseInspection = Promise2.PromiseInspection;
       var util2 = require_util();
       function SettledPromiseArray(values) {
@@ -44778,7 +44778,7 @@ var require_settle = __commonJS({
         return this._promiseResolved(index, ret2);
       };
       Promise2.settle = function(promises) {
-        debug4.deprecated(".settle()", ".reflect()");
+        debug3.deprecated(".settle()", ".reflect()");
         return new SettledPromiseArray(promises).promise();
       };
       Promise2.allSettled = function(promises) {
@@ -44923,7 +44923,7 @@ var require_some = __commonJS({
 var require_timers = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/timers.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, INTERNAL2, debug4) {
+    module2.exports = function(Promise2, INTERNAL2, debug3) {
       var util2 = require_util();
       var TimeoutError = Promise2.TimeoutError;
       function HandleWrapper(handle) {
@@ -44940,7 +44940,7 @@ var require_timers = __commonJS({
         var handle;
         if (value !== void 0) {
           ret2 = Promise2.resolve(value)._then(afterValue, null, null, ms, void 0);
-          if (debug4.cancellation() && value instanceof Promise2) {
+          if (debug3.cancellation() && value instanceof Promise2) {
             ret2._setOnCancel(value);
           }
         } else {
@@ -44948,7 +44948,7 @@ var require_timers = __commonJS({
           handle = setTimeout(function() {
             ret2._fulfill();
           }, +ms);
-          if (debug4.cancellation()) {
+          if (debug3.cancellation()) {
             ret2._setOnCancel(new HandleWrapper(handle));
           }
           ret2._captureStackTrace();
@@ -44993,7 +44993,7 @@ var require_timers = __commonJS({
             afterTimeout(ret2, message, parent);
           }
         }, ms));
-        if (debug4.cancellation()) {
+        if (debug3.cancellation()) {
           parent = this.then();
           ret2 = parent._then(
             successClear,
@@ -45022,7 +45022,7 @@ var require_timers = __commonJS({
 var require_using = __commonJS({
   "../../node_modules/.pnpm/bluebird@3.7.2/node_modules/bluebird/js/release/using.js"(exports2, module2) {
     "use strict";
-    module2.exports = function(Promise2, apiRejection, tryConvertToPromise, createContext, INTERNAL2, debug4) {
+    module2.exports = function(Promise2, apiRejection, tryConvertToPromise, createContext, INTERNAL2, debug3) {
       var util2 = require_util();
       var TypeError2 = require_errors().TypeError;
       var inherits2 = require_util().inherits;
@@ -45188,7 +45188,7 @@ var require_using = __commonJS({
           fn = tryCatch2(fn);
           var ret2 = spreadArgs ? fn.apply(void 0, inspections) : fn(inspections);
           var promiseCreated = promise2._popContext();
-          debug4.checkForgottenReturns(
+          debug3.checkForgottenReturns(
             ret2,
             promiseCreated,
             "Promise.using",
@@ -45373,13 +45373,13 @@ var require_promise = __commonJS({
       );
       var Context = require_context()(Promise2);
       var createContext = Context.create;
-      var debug4 = require_debuggability()(
+      var debug3 = require_debuggability()(
         Promise2,
         Context,
         enableAsyncHooks,
         disableAsyncHooks
       );
-      var CapturedTrace = debug4.CapturedTrace;
+      var CapturedTrace = debug3.CapturedTrace;
       var PassThroughHandlerContext = require_finally()(Promise2, tryConvertToPromise, NEXT_FILTER);
       var catchFilter = require_catch_filter()(NEXT_FILTER);
       var nodebackForPromise = require_nodeback();
@@ -45440,7 +45440,7 @@ var require_promise = __commonJS({
         );
       };
       Promise2.prototype.then = function(didFulfill, didReject) {
-        if (debug4.warnings() && arguments.length > 0 && typeof didFulfill !== "function" && typeof didReject !== "function") {
+        if (debug3.warnings() && arguments.length > 0 && typeof didFulfill !== "function" && typeof didReject !== "function") {
           var msg = ".then() only accepts functions but was passed: " + util2.classString(didFulfill);
           if (arguments.length > 1) {
             msg += ", " + util2.classString(didReject);
@@ -45727,7 +45727,7 @@ var require_promise = __commonJS({
       Promise2.prototype._rejectCallback = function(reason, synchronous, ignoreNonErrorWarnings) {
         var trace = util2.ensureErrorObject(reason);
         var hasStack = trace === reason;
-        if (!hasStack && !ignoreNonErrorWarnings && debug4.warnings()) {
+        if (!hasStack && !ignoreNonErrorWarnings && debug3.warnings()) {
           var message = "a promise was rejected with a non-error: " + util2.classString(reason);
           this._warn(message, true);
         }
@@ -45774,7 +45774,7 @@ var require_promise = __commonJS({
         } else if (x3 === errorObj2) {
           promise2._rejectCallback(x3.e, false);
         } else {
-          debug4.checkForgottenReturns(x3, promiseCreated, "", promise2, this);
+          debug3.checkForgottenReturns(x3, promiseCreated, "", promise2, this);
           promise2._resolveCallback(x3);
         }
       };
@@ -45952,7 +45952,7 @@ var require_promise = __commonJS({
         this.promise._rejectCallback(v3, false);
       }
       Promise2.defer = Promise2.pending = function() {
-        debug4.deprecated("Promise.defer", "new Promise");
+        debug3.deprecated("Promise.defer", "new Promise");
         var promise2 = new Promise2(INTERNAL2);
         return {
           promise: promise2,
@@ -45970,10 +45970,10 @@ var require_promise = __commonJS({
         INTERNAL2,
         tryConvertToPromise,
         apiRejection,
-        debug4
+        debug3
       );
-      require_bind()(Promise2, INTERNAL2, tryConvertToPromise, debug4);
-      require_cancel()(Promise2, PromiseArray, apiRejection, debug4);
+      require_bind()(Promise2, INTERNAL2, tryConvertToPromise, debug3);
+      require_cancel()(Promise2, PromiseArray, apiRejection, debug3);
       require_direct_resolve()(Promise2);
       require_synchronous_inspection()(Promise2);
       require_join()(
@@ -45986,17 +45986,17 @@ var require_promise = __commonJS({
       Promise2.Promise = Promise2;
       Promise2.version = "3.7.2";
       require_call_get()(Promise2);
-      require_generators()(Promise2, apiRejection, INTERNAL2, tryConvertToPromise, Proxyable, debug4);
-      require_map()(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug4);
+      require_generators()(Promise2, apiRejection, INTERNAL2, tryConvertToPromise, Proxyable, debug3);
+      require_map()(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug3);
       require_nodeify()(Promise2);
       require_promisify()(Promise2, INTERNAL2);
       require_props()(Promise2, PromiseArray, tryConvertToPromise, apiRejection);
       require_race()(Promise2, INTERNAL2, tryConvertToPromise, apiRejection);
-      require_reduce()(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug4);
-      require_settle()(Promise2, PromiseArray, debug4);
+      require_reduce()(Promise2, PromiseArray, apiRejection, tryConvertToPromise, INTERNAL2, debug3);
+      require_settle()(Promise2, PromiseArray, debug3);
       require_some()(Promise2, PromiseArray, apiRejection);
-      require_timers()(Promise2, INTERNAL2, debug4);
-      require_using()(Promise2, apiRejection, tryConvertToPromise, createContext, INTERNAL2, debug4);
+      require_timers()(Promise2, INTERNAL2, debug3);
+      require_using()(Promise2, apiRejection, tryConvertToPromise, createContext, INTERNAL2, debug3);
       require_any()(Promise2);
       require_each()(Promise2, INTERNAL2);
       require_filter()(Promise2, INTERNAL2);
@@ -46018,7 +46018,7 @@ var require_promise = __commonJS({
       fillTypes(void 0);
       fillTypes(false);
       fillTypes(new Promise2(INTERNAL2));
-      debug4.setBounds(Async.firstLineError, util2.lastLineError);
+      debug3.setBounds(Async.firstLineError, util2.lastLineError);
       return Promise2;
     };
   }
@@ -58454,22 +58454,22 @@ var require_url_parse = __commonJS({
     }
     function resolve(relative, base) {
       if (relative === "") return base;
-      var path6 = (base || "/").split("/").slice(0, -1).concat(relative.split("/")), i2 = path6.length, last = path6[i2 - 1], unshift = false, up = 0;
+      var path7 = (base || "/").split("/").slice(0, -1).concat(relative.split("/")), i2 = path7.length, last = path7[i2 - 1], unshift = false, up = 0;
       while (i2--) {
-        if (path6[i2] === ".") {
-          path6.splice(i2, 1);
-        } else if (path6[i2] === "..") {
-          path6.splice(i2, 1);
+        if (path7[i2] === ".") {
+          path7.splice(i2, 1);
+        } else if (path7[i2] === "..") {
+          path7.splice(i2, 1);
           up++;
         } else if (up) {
           if (i2 === 0) unshift = true;
-          path6.splice(i2, 1);
+          path7.splice(i2, 1);
           up--;
         }
       }
-      if (unshift) path6.unshift("");
-      if (last === "." || last === "..") path6.push("");
-      return path6.join("/");
+      if (unshift) path7.unshift("");
+      if (last === "." || last === "..") path7.push("");
+      return path7.join("/");
     }
     function Url(address, location, parser) {
       address = trimLeft(address);
@@ -58863,10 +58863,10 @@ var require_store = __commonJS({
       constructor() {
         this.synchronous = false;
       }
-      findCookie(domain2, path6, key, cb) {
+      findCookie(domain2, path7, key, cb) {
         throw new Error("findCookie is not implemented");
       }
-      findCookies(domain2, path6, allowSpecialUseDomain, cb) {
+      findCookies(domain2, path7, allowSpecialUseDomain, cb) {
         throw new Error("findCookies is not implemented");
       }
       putCookie(cookie, cb) {
@@ -58875,10 +58875,10 @@ var require_store = __commonJS({
       updateCookie(oldCookie, newCookie, cb) {
         throw new Error("updateCookie is not implemented");
       }
-      removeCookie(domain2, path6, key, cb) {
+      removeCookie(domain2, path7, key, cb) {
         throw new Error("removeCookie is not implemented");
       }
-      removeCookies(domain2, path6, cb) {
+      removeCookies(domain2, path7, cb) {
         throw new Error("removeCookies is not implemented");
       }
       removeAllCookies(cb) {
@@ -59037,16 +59037,16 @@ var require_memstore = __commonJS({
         const util2 = { inspect: getUtilInspect(inspectFallback) };
         return `{ idx: ${util2.inspect(this.idx, false, 2)} }`;
       }
-      findCookie(domain2, path6, key, cb) {
+      findCookie(domain2, path7, key, cb) {
         if (!this.idx[domain2]) {
           return cb(null, void 0);
         }
-        if (!this.idx[domain2][path6]) {
+        if (!this.idx[domain2][path7]) {
           return cb(null, void 0);
         }
-        return cb(null, this.idx[domain2][path6][key] || null);
+        return cb(null, this.idx[domain2][path7][key] || null);
       }
-      findCookies(domain2, path6, allowSpecialUseDomain, cb) {
+      findCookies(domain2, path7, allowSpecialUseDomain, cb) {
         const results = [];
         if (typeof allowSpecialUseDomain === "function") {
           cb = allowSpecialUseDomain;
@@ -59056,7 +59056,7 @@ var require_memstore = __commonJS({
           return cb(null, []);
         }
         let pathMatcher;
-        if (!path6) {
+        if (!path7) {
           pathMatcher = function matchAll(domainIndex) {
             for (const curPath in domainIndex) {
               const pathIndex = domainIndex[curPath];
@@ -59068,7 +59068,7 @@ var require_memstore = __commonJS({
         } else {
           pathMatcher = function matchRFC(domainIndex) {
             Object.keys(domainIndex).forEach((cookiePath2) => {
-              if (pathMatch(path6, cookiePath2)) {
+              if (pathMatch(path7, cookiePath2)) {
                 const pathIndex = domainIndex[cookiePath2];
                 for (const key in pathIndex) {
                   results.push(pathIndex[key]);
@@ -59101,16 +59101,16 @@ var require_memstore = __commonJS({
       updateCookie(oldCookie, newCookie, cb) {
         this.putCookie(newCookie, cb);
       }
-      removeCookie(domain2, path6, key, cb) {
-        if (this.idx[domain2] && this.idx[domain2][path6] && this.idx[domain2][path6][key]) {
-          delete this.idx[domain2][path6][key];
+      removeCookie(domain2, path7, key, cb) {
+        if (this.idx[domain2] && this.idx[domain2][path7] && this.idx[domain2][path7][key]) {
+          delete this.idx[domain2][path7][key];
         }
         cb(null);
       }
-      removeCookies(domain2, path6, cb) {
+      removeCookies(domain2, path7, cb) {
         if (this.idx[domain2]) {
-          if (path6) {
-            delete this.idx[domain2][path6];
+          if (path7) {
+            delete this.idx[domain2][path7];
           } else {
             delete this.idx[domain2];
           }
@@ -59127,11 +59127,11 @@ var require_memstore = __commonJS({
         const domains = Object.keys(idx);
         domains.forEach((domain2) => {
           const paths = Object.keys(idx[domain2]);
-          paths.forEach((path6) => {
-            const keys = Object.keys(idx[domain2][path6]);
+          paths.forEach((path7) => {
+            const keys = Object.keys(idx[domain2][path7]);
             keys.forEach((key) => {
               if (key !== null) {
-                cookies.push(idx[domain2][path6][key]);
+                cookies.push(idx[domain2][path7][key]);
               }
             });
           });
@@ -59177,8 +59177,8 @@ var require_memstore = __commonJS({
       const indent = "  ";
       let result = `${indent}'${domainName}': [Object: null prototype] {
 `;
-      Object.keys(domainValue).forEach((path6, i2, paths) => {
-        result += formatPath(path6, domainValue[path6]);
+      Object.keys(domainValue).forEach((path7, i2, paths) => {
+        result += formatPath(path7, domainValue[path7]);
         if (i2 < paths.length - 1) {
           result += ",";
         }
@@ -59485,18 +59485,18 @@ var require_cookie2 = __commonJS({
       }
       return true;
     }
-    function defaultPath(path6) {
-      if (!path6 || path6.substr(0, 1) !== "/") {
+    function defaultPath(path7) {
+      if (!path7 || path7.substr(0, 1) !== "/") {
         return "/";
       }
-      if (path6 === "/") {
-        return path6;
+      if (path7 === "/") {
+        return path7;
       }
-      const rightSlash = path6.lastIndexOf("/");
+      const rightSlash = path7.lastIndexOf("/");
       if (rightSlash === 0) {
         return "/";
       }
-      return path6.slice(0, rightSlash);
+      return path7.slice(0, rightSlash);
     }
     function trimTerminator(str) {
       if (validators.isEmptyString(str)) return str;
@@ -59704,19 +59704,19 @@ var require_cookie2 = __commonJS({
       cmp = a2.creationIndex - b3.creationIndex;
       return cmp;
     }
-    function permutePath(path6) {
-      validators.validate(validators.isString(path6));
-      if (path6 === "/") {
+    function permutePath(path7) {
+      validators.validate(validators.isString(path7));
+      if (path7 === "/") {
         return ["/"];
       }
-      const permutations = [path6];
-      while (path6.length > 1) {
-        const lindex = path6.lastIndexOf("/");
+      const permutations = [path7];
+      while (path7.length > 1) {
+        const lindex = path7.lastIndexOf("/");
         if (lindex === 0) {
           break;
         }
-        path6 = path6.substr(0, lindex);
-        permutations.push(path6);
+        path7 = path7.substr(0, lindex);
+        permutations.push(path7);
       }
       permutations.push("/");
       return permutations;
@@ -60129,7 +60129,7 @@ var require_cookie2 = __commonJS({
         validators.validate(validators.isObject(options), cb, options);
         validators.validate(validators.isFunction(cb), cb);
         const host = canonicalDomain(context.hostname);
-        const path6 = context.pathname || "/";
+        const path7 = context.pathname || "/";
         let secure = options.secure;
         if (secure == null && context.protocol && (context.protocol == "https:" || context.protocol == "wss:")) {
           secure = true;
@@ -60160,7 +60160,7 @@ var require_cookie2 = __commonJS({
               return false;
             }
           }
-          if (!allPaths && !pathMatch(path6, c3.path)) {
+          if (!allPaths && !pathMatch(path7, c3.path)) {
             return false;
           }
           if (c3.secure && !secure) {
@@ -60184,7 +60184,7 @@ var require_cookie2 = __commonJS({
         }
         store.findCookies(
           host,
-          allPaths ? null : path6,
+          allPaths ? null : path7,
           this.allowSpecialUseDomain,
           (err, cookies) => {
             if (err) {
@@ -60706,13 +60706,13 @@ var require_aws_sign2 = __commonJS({
     }
     module2.exports.canonicalizeHeaders = canonicalizeHeaders;
     function canonicalizeResource(resource) {
-      var url2 = parse3(resource, true), path6 = url2.pathname, buf = [];
+      var url2 = parse3(resource, true), path7 = url2.pathname, buf = [];
       Object.keys(url2.query).forEach(function(key) {
         if (!~keys.indexOf(key)) return;
         var val = "" == url2.query[key] ? "" : "=" + encodeURIComponent(url2.query[key]);
         buf.push(key + val);
       });
-      return path6 + (buf.length ? "?" + buf.sort().join("&") : "");
+      return path7 + (buf.length ? "?" + buf.sort().join("&") : "");
     }
     module2.exports.canonicalizeResource = canonicalizeResource;
   }
@@ -60998,14 +60998,14 @@ var require_aws4 = __commonJS({
       }
       if (pathStr !== "/") {
         if (normalizePath) pathStr = pathStr.replace(/\/{2,}/g, "/");
-        pathStr = pathStr.split("/").reduce(function(path6, piece) {
+        pathStr = pathStr.split("/").reduce(function(path7, piece) {
           if (normalizePath && piece === "..") {
-            path6.pop();
+            path7.pop();
           } else if (!normalizePath || piece !== ".") {
             if (decodePath) piece = decodeURIComponent(piece.replace(/\+/g, " "));
-            path6.push(encodeRfc3986Full(piece));
+            path7.push(encodeRfc3986Full(piece));
           }
-          return path6;
+          return path7;
         }, []).join("/");
         if (pathStr[0] !== "/") pathStr = "/" + pathStr;
         if (decodeSlashesInPath) pathStr = pathStr.replace(/%2F/g, "/");
@@ -61058,25 +61058,25 @@ var require_aws4 = __commonJS({
       };
     };
     RequestSigner.prototype.parsePath = function() {
-      var path6 = this.request.path || "/";
-      if (/[^0-9A-Za-z;,/?:@&=+$\-_.!~*'()#%]/.test(path6)) {
-        path6 = encodeURI(decodeURI(path6));
+      var path7 = this.request.path || "/";
+      if (/[^0-9A-Za-z;,/?:@&=+$\-_.!~*'()#%]/.test(path7)) {
+        path7 = encodeURI(decodeURI(path7));
       }
-      var queryIx = path6.indexOf("?"), query = null;
+      var queryIx = path7.indexOf("?"), query = null;
       if (queryIx >= 0) {
-        query = querystring.parse(path6.slice(queryIx + 1));
-        path6 = path6.slice(0, queryIx);
+        query = querystring.parse(path7.slice(queryIx + 1));
+        path7 = path7.slice(0, queryIx);
       }
       this.parsedPath = {
-        path: path6,
+        path: path7,
         query
       };
     };
     RequestSigner.prototype.formatPath = function() {
-      var path6 = this.parsedPath.path, query = this.parsedPath.query;
-      if (!query) return path6;
+      var path7 = this.parsedPath.path, query = this.parsedPath.query;
+      if (!query) return path7;
       if (query[""] != null) delete query[""];
-      return path6 + "?" + encodeRfc3986(querystring.stringify(query));
+      return path7 + "?" + encodeRfc3986(querystring.stringify(query));
     };
     aws4.RequestSigner = RequestSigner;
     aws4.sign = function(request3, credentials) {
@@ -73701,13 +73701,13 @@ var require_validate = __commonJS({
           return schema2.type || primitiveConstructors[schema2.name] == schema2 && schema2.name.toLowerCase();
         }
         var errors = [];
-        function checkProp(value, schema2, path6, i2) {
+        function checkProp(value, schema2, path7, i2) {
           var l2;
-          path6 += path6 ? typeof i2 == "number" ? "[" + i2 + "]" : typeof i2 == "undefined" ? "" : "." + i2 : i2;
+          path7 += path7 ? typeof i2 == "number" ? "[" + i2 + "]" : typeof i2 == "undefined" ? "" : "." + i2 : i2;
           function addError(message) {
-            errors.push({ property: path6, message });
+            errors.push({ property: path7, message });
           }
-          if ((typeof schema2 != "object" || schema2 instanceof Array) && (path6 || typeof schema2 != "function") && !(schema2 && getType(schema2))) {
+          if ((typeof schema2 != "object" || schema2 instanceof Array) && (path7 || typeof schema2 != "function") && !(schema2 && getType(schema2))) {
             if (typeof schema2 == "function") {
               if (!(value instanceof schema2)) {
                 addError("is not an instance of the class/constructor " + schema2.name);
@@ -73721,12 +73721,12 @@ var require_validate = __commonJS({
             addError("is a readonly field, it can not be changed");
           }
           if (schema2["extends"]) {
-            checkProp(value, schema2["extends"], path6, i2);
+            checkProp(value, schema2["extends"], path7, i2);
           }
           function checkType(type, value2) {
             if (type) {
               if (typeof type == "string" && type != "any" && (type == "null" ? value2 !== null : typeof value2 != type) && !(value2 instanceof Array && type == "array") && !(value2 instanceof Date && type == "date") && !(type == "integer" && value2 % 1 === 0)) {
-                return [{ property: path6, message: value2 + " - " + typeof value2 + " value found, but a " + type + " is required" }];
+                return [{ property: path7, message: value2 + " - " + typeof value2 + " value found, but a " + type + " is required" }];
               }
               if (type instanceof Array) {
                 var unionErrors = [];
@@ -73741,7 +73741,7 @@ var require_validate = __commonJS({
               } else if (typeof type == "object") {
                 var priorErrors = errors;
                 errors = [];
-                checkProp(value2, type, path6);
+                checkProp(value2, type, path7);
                 var theseErrors = errors;
                 errors = priorErrors;
                 return theseErrors;
@@ -73768,7 +73768,7 @@ var require_validate = __commonJS({
                       propDef = schema2.items[i2];
                     if (options.coerce)
                       value[i2] = options.coerce(value[i2], propDef);
-                    errors.concat(checkProp(value[i2], propDef, path6, i2));
+                    errors.concat(checkProp(value[i2], propDef, path7, i2));
                   }
                 }
                 if (schema2.minItems && value.length < schema2.minItems) {
@@ -73778,7 +73778,7 @@ var require_validate = __commonJS({
                   addError("There must be a maximum of " + schema2.maxItems + " in the array");
                 }
               } else if (schema2.properties || schema2.additionalProperties) {
-                errors.concat(checkObj(value, schema2.properties, path6, schema2.additionalProperties));
+                errors.concat(checkObj(value, schema2.properties, path7, schema2.additionalProperties));
               }
               if (schema2.pattern && typeof value == "string" && !value.match(schema2.pattern)) {
                 addError("does not match the regex pattern " + schema2.pattern);
@@ -73816,10 +73816,10 @@ var require_validate = __commonJS({
           }
           return null;
         }
-        function checkObj(instance2, objTypeDef, path6, additionalProp) {
+        function checkObj(instance2, objTypeDef, path7, additionalProp) {
           if (typeof objTypeDef == "object") {
             if (typeof instance2 != "object" || instance2 instanceof Array) {
-              errors.push({ property: path6, message: "an object is required" });
+              errors.push({ property: path7, message: "an object is required" });
             }
             for (var i2 in objTypeDef) {
               if (objTypeDef.hasOwnProperty(i2) && i2 != "__proto__" && i2 != "constructor") {
@@ -73832,7 +73832,7 @@ var require_validate = __commonJS({
                 if (options.coerce && i2 in instance2) {
                   value = instance2[i2] = options.coerce(value, propDef);
                 }
-                checkProp(value, propDef, path6, i2);
+                checkProp(value, propDef, path7, i2);
               }
             }
           }
@@ -73842,22 +73842,22 @@ var require_validate = __commonJS({
                 delete instance2[i2];
                 continue;
               } else {
-                errors.push({ property: path6, message: "The property " + i2 + " is not defined in the schema and the schema does not allow additional properties" });
+                errors.push({ property: path7, message: "The property " + i2 + " is not defined in the schema and the schema does not allow additional properties" });
               }
             }
             var requires = objTypeDef && objTypeDef[i2] && objTypeDef[i2].requires;
             if (requires && !(requires in instance2)) {
-              errors.push({ property: path6, message: "the presence of the property " + i2 + " requires that " + requires + " also be present" });
+              errors.push({ property: path7, message: "the presence of the property " + i2 + " requires that " + requires + " also be present" });
             }
             value = instance2[i2];
             if (additionalProp && (!(objTypeDef && typeof objTypeDef == "object") || !(i2 in objTypeDef))) {
               if (options.coerce) {
                 value = instance2[i2] = options.coerce(value, additionalProp);
               }
-              checkProp(value, additionalProp, path6, i2);
+              checkProp(value, additionalProp, path7, i2);
             }
             if (!_changing && value && value.$schema) {
-              errors = errors.concat(checkProp(value, value.$schema, path6, i2));
+              errors = errors.concat(checkProp(value, value.$schema, path7, i2));
             }
           }
           return errors;
@@ -74464,11 +74464,11 @@ var require_signer = __commonJS({
     RequestSigner.prototype.writeDateHeader = function() {
       return this.writeHeader("date", jsprim.rfc1123(/* @__PURE__ */ new Date()));
     };
-    RequestSigner.prototype.writeTarget = function(method, path6) {
+    RequestSigner.prototype.writeTarget = function(method, path7) {
       assert3.string(method, "method");
-      assert3.string(path6, "path");
+      assert3.string(path7, "path");
       method = method.toLowerCase();
-      this.writeHeader("(request-target)", method + " " + path6);
+      this.writeHeader("(request-target)", method + " " + path7);
     };
     RequestSigner.prototype.sign = function(cb) {
       assert3.func(cb, "callback");
@@ -83310,7 +83310,7 @@ var require_mime_types2 = __commonJS({
     exports2.contentType = contentType;
     exports2.extension = extension2;
     exports2.extensions = /* @__PURE__ */ Object.create(null);
-    exports2.lookup = lookup2;
+    exports2.lookup = lookup;
     exports2.types = /* @__PURE__ */ Object.create(null);
     populateMaps(exports2.extensions, exports2.types);
     function charset(type) {
@@ -83352,11 +83352,11 @@ var require_mime_types2 = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path6) {
-      if (!path6 || typeof path6 !== "string") {
+    function lookup(path7) {
+      if (!path7 || typeof path7 !== "string") {
         return false;
       }
-      var extension3 = extname2("x." + path6).toLowerCase().substr(1);
+      var extension3 = extname2("x." + path7).toLowerCase().substr(1);
       if (!extension3) {
         return false;
       }
@@ -83465,8 +83465,8 @@ var require_forever_agent = __commonJS({
     ForeverAgent.SSL = ForeverAgentSSL;
     var util2 = __require("util");
     var Agent3 = __require("http").Agent;
-    var net5 = __require("net");
-    var tls4 = __require("tls");
+    var net4 = __require("net");
+    var tls3 = __require("tls");
     var AgentSSL = __require("https").Agent;
     function getConnectionName(host, port2) {
       var name = "";
@@ -83504,7 +83504,7 @@ var require_forever_agent = __commonJS({
     }
     util2.inherits(ForeverAgent, Agent3);
     ForeverAgent.defaultMinSockets = 5;
-    ForeverAgent.prototype.createConnection = net5.createConnection;
+    ForeverAgent.prototype.createConnection = net4.createConnection;
     ForeverAgent.prototype.addRequestNoreuse = Agent3.prototype.addRequest;
     ForeverAgent.prototype.addRequest = function(req, host, port2) {
       var name = getConnectionName(host, port2);
@@ -83568,7 +83568,7 @@ var require_forever_agent = __commonJS({
       if (typeof host === "string") {
         options.host = host;
       }
-      return tls4.connect(options);
+      return tls3.connect(options);
     }
   }
 });
@@ -84104,11 +84104,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util2 = __require("util");
-    var path6 = __require("path");
+    var path7 = __require("path");
     var http3 = __require("http");
-    var https4 = __require("https");
+    var https5 = __require("https");
     var parseUrl = __require("url").parse;
-    var fs6 = __require("fs");
+    var fs7 = __require("fs");
     var crypto3 = __require("crypto");
     var mime = require_mime_types2();
     var asynckit = require_asynckit();
@@ -84175,7 +84175,7 @@ var require_form_data = __commonJS({
         if (value.end != null && value.end !== Infinity && value.start != null) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs6.stat(value.path, function(err, stat) {
+          fs7.stat(value.path, function(err, stat) {
             var fileSize;
             if (err) {
               callback(err);
@@ -84233,11 +84233,11 @@ var require_form_data = __commonJS({
     FormData.prototype._getContentDisposition = function(value, options) {
       var filename, contentDisposition;
       if (typeof options.filepath === "string") {
-        filename = path6.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path7.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path6.basename(options.filename || value && (value.name || value.path));
+        filename = path7.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path6.basename(value.client._httpMessage.path || "");
+        filename = path7.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         contentDisposition = 'filename="' + filename + '"';
@@ -84377,7 +84377,7 @@ var require_form_data = __commonJS({
       }
       options.headers = this.getHeaders(params.headers);
       if (options.protocol === "https:") {
-        request3 = https4.request(options);
+        request3 = https5.request(options);
       } else {
         request3 = http3.request(options);
       }
@@ -85381,8 +85381,8 @@ var require_uri_all = __commonJS({
             wsComponents.secure = void 0;
           }
           if (wsComponents.resourceName) {
-            var _wsComponents$resourc = wsComponents.resourceName.split("?"), _wsComponents$resourc2 = slicedToArray(_wsComponents$resourc, 2), path6 = _wsComponents$resourc2[0], query = _wsComponents$resourc2[1];
-            wsComponents.path = path6 && path6 !== "/" ? path6 : void 0;
+            var _wsComponents$resourc = wsComponents.resourceName.split("?"), _wsComponents$resourc2 = slicedToArray(_wsComponents$resourc, 2), path7 = _wsComponents$resourc2[0], query = _wsComponents$resourc2[1];
+            wsComponents.path = path7 && path7 !== "/" ? path7 : void 0;
             wsComponents.query = query;
             wsComponents.resourceName = void 0;
           }
@@ -85755,12 +85755,12 @@ var require_util3 = __commonJS({
       return "'" + escapeQuotes(str) + "'";
     }
     function getPathExpr(currentPath, expr, jsonPointers, isNumber) {
-      var path6 = jsonPointers ? "'/' + " + expr + (isNumber ? "" : ".replace(/~/g, '~0').replace(/\\//g, '~1')") : isNumber ? "'[' + " + expr + " + ']'" : "'[\\'' + " + expr + " + '\\']'";
-      return joinPaths(currentPath, path6);
+      var path7 = jsonPointers ? "'/' + " + expr + (isNumber ? "" : ".replace(/~/g, '~0').replace(/\\//g, '~1')") : isNumber ? "'[' + " + expr + " + ']'" : "'[\\'' + " + expr + " + '\\']'";
+      return joinPaths(currentPath, path7);
     }
     function getPath(currentPath, prop, jsonPointers) {
-      var path6 = jsonPointers ? toQuotedString("/" + escapeJsonPointer(prop)) : toQuotedString(getProperty(prop));
-      return joinPaths(currentPath, path6);
+      var path7 = jsonPointers ? toQuotedString("/" + escapeJsonPointer(prop)) : toQuotedString(getProperty(prop));
+      return joinPaths(currentPath, path7);
     }
     var JSON_POINTER = /^\/(?:[^~]|~0|~1)*$/;
     var RELATIVE_JSON_POINTER = /^([0-9]+)(#|\/(?:[^~]|~0|~1)*)?$/;
@@ -86991,7 +86991,7 @@ var require_formats2 = __commonJS({
     var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
     var URIREF = /^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'"()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
     var URITEMPLATE = /^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i;
-    var URL4 = /^(?:(?:http[s\u017F]?|ftp):\/\/)(?:(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+(?::(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])*)?@)?(?:(?!10(?:\.[0-9]{1,3}){3})(?!127(?:\.[0-9]{1,3}){3})(?!169\.254(?:\.[0-9]{1,3}){2})(?!192\.168(?:\.[0-9]{1,3}){2})(?!172\.(?:1[6-9]|2[0-9]|3[01])(?:\.[0-9]{1,3}){2})(?:[1-9][0-9]?|1[0-9][0-9]|2[01][0-9]|22[0-3])(?:\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])){2}(?:\.(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-4]))|(?:(?:(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+-)*(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+)(?:\.(?:(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+-)*(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+)*(?:\.(?:(?:[a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]){2,})))(?::[0-9]{2,5})?(?:\/(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])*)?$/i;
+    var URL3 = /^(?:(?:http[s\u017F]?|ftp):\/\/)(?:(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+(?::(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])*)?@)?(?:(?!10(?:\.[0-9]{1,3}){3})(?!127(?:\.[0-9]{1,3}){3})(?!169\.254(?:\.[0-9]{1,3}){2})(?!192\.168(?:\.[0-9]{1,3}){2})(?!172\.(?:1[6-9]|2[0-9]|3[01])(?:\.[0-9]{1,3}){2})(?:[1-9][0-9]?|1[0-9][0-9]|2[01][0-9]|22[0-3])(?:\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])){2}(?:\.(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-4]))|(?:(?:(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+-)*(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+)(?:\.(?:(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+-)*(?:[0-9a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])+)*(?:\.(?:(?:[a-z\xA1-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]){2,})))(?::[0-9]{2,5})?(?:\/(?:[\0-\x08\x0E-\x1F!-\x9F\xA1-\u167F\u1681-\u1FFF\u200B-\u2027\u202A-\u202E\u2030-\u205E\u2060-\u2FFF\u3001-\uD7FF\uE000-\uFEFE\uFF00-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])*)?$/i;
     var UUID = /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
     var JSON_POINTER = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
     var JSON_POINTER_URI_FRAGMENT = /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i;
@@ -87011,7 +87011,7 @@ var require_formats2 = __commonJS({
       uri: /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i,
       "uri-reference": /^(?:(?:[a-z][a-z0-9+\-.]*:)?\/?\/)?(?:[^\\\s#][^\s#]*)?(?:#[^\\\s]*)?$/i,
       "uri-template": URITEMPLATE,
-      url: URL4,
+      url: URL3,
       // email (sources from jsen validator):
       // http://stackoverflow.com/questions/201323/using-a-regular-expression-to-validate-an-email-address#answer-8829363
       // http://www.w3.org/TR/html5/forms.html#valid-e-mail-address (search for 'willful violation')
@@ -87038,7 +87038,7 @@ var require_formats2 = __commonJS({
       uri,
       "uri-reference": URIREF,
       "uri-template": URITEMPLATE,
-      url: URL4,
+      url: URL3,
       email: /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i,
       hostname: HOSTNAME,
       ipv4: /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/,
@@ -91761,7 +91761,7 @@ var require_promise2 = __commonJS({
 var require_har2 = __commonJS({
   "../../node_modules/.pnpm/request@2.88.2/node_modules/request/lib/har.js"(exports2) {
     "use strict";
-    var fs6 = __require("fs");
+    var fs7 = __require("fs");
     var qs = __require("querystring");
     var validate = require_promise2();
     var extend2 = require_extend();
@@ -91895,7 +91895,7 @@ var require_har2 = __commonJS({
             return;
           }
           if (param.fileName && !param.value) {
-            attachment.value = fs6.createReadStream(param.fileName);
+            attachment.value = fs7.createReadStream(param.fileName);
           } else if (param.value) {
             attachment.value = param.value;
           }
@@ -92037,7 +92037,7 @@ var require_auth = __commonJS({
         return authHeader;
       }
     };
-    Auth.prototype.digest = function(method, path6, authHeader) {
+    Auth.prototype.digest = function(method, path7, authHeader) {
       var self2 = this;
       var challenge = {};
       var re = /([a-z0-9_-]+)=(?:"([^"]+)"|([a-z0-9_-]+))/gi;
@@ -92060,13 +92060,13 @@ var require_auth = __commonJS({
       var nc = qop && "00000001";
       var cnonce = qop && uuid3().replace(/-/g, "");
       var ha1 = ha1Compute(challenge.algorithm, self2.user, challenge.realm, self2.pass, challenge.nonce, cnonce);
-      var ha2 = md5(method + ":" + path6);
+      var ha2 = md5(method + ":" + path7);
       var digestResponse = qop ? md5(ha1 + ":" + challenge.nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2) : md5(ha1 + ":" + challenge.nonce + ":" + ha2);
       var authValues = {
         username: self2.user,
         realm: challenge.realm,
         nonce: challenge.nonce,
-        uri: path6,
+        uri: path7,
         qop,
         response: digestResponse,
         nc,
@@ -92655,10 +92655,10 @@ var require_redirect = __commonJS({
 var require_tunnel_agent = __commonJS({
   "../../node_modules/.pnpm/tunnel-agent@0.6.0/node_modules/tunnel-agent/index.js"(exports2) {
     "use strict";
-    var net5 = __require("net");
-    var tls4 = __require("tls");
+    var net4 = __require("net");
+    var tls3 = __require("tls");
     var http3 = __require("http");
-    var https4 = __require("https");
+    var https5 = __require("https");
     var events = __require("events");
     var assert3 = __require("assert");
     var util2 = __require("util");
@@ -92681,12 +92681,12 @@ var require_tunnel_agent = __commonJS({
     }
     function httpOverHttps(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https4.request;
+      agent.request = https5.request;
       return agent;
     }
     function httpsOverHttps(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https4.request;
+      agent.request = https5.request;
       agent.createSocket = createSecureSocket;
       agent.defaultPort = 443;
       return agent;
@@ -92762,7 +92762,7 @@ var require_tunnel_agent = __commonJS({
         connectOptions.headers = connectOptions.headers || {};
         connectOptions.headers["Proxy-Authorization"] = "Basic " + Buffer2.from(connectOptions.proxyAuth).toString("base64");
       }
-      debug4("making CONNECT request");
+      debug3("making CONNECT request");
       var connectReq = self2.request(connectOptions);
       connectReq.useChunkedEncodingByDefault = false;
       connectReq.once("response", onResponse);
@@ -92783,11 +92783,11 @@ var require_tunnel_agent = __commonJS({
         socket.removeAllListeners();
         if (res.statusCode === 200) {
           assert3.equal(head.length, 0);
-          debug4("tunneling connection has established");
+          debug3("tunneling connection has established");
           self2.sockets[self2.sockets.indexOf(placeholder)] = socket;
           cb(socket);
         } else {
-          debug4("tunneling socket could not be established, statusCode=%d", res.statusCode);
+          debug3("tunneling socket could not be established, statusCode=%d", res.statusCode);
           var error40 = new Error("tunneling socket could not be established, statusCode=" + res.statusCode);
           error40.code = "ECONNRESET";
           options.request.emit("error", error40);
@@ -92796,7 +92796,7 @@ var require_tunnel_agent = __commonJS({
       }
       function onError(cause) {
         connectReq.removeAllListeners();
-        debug4("tunneling socket could not be established, cause=%s\n", cause.message, cause.stack);
+        debug3("tunneling socket could not be established, cause=%s\n", cause.message, cause.stack);
         var error40 = new Error("tunneling socket could not be established, cause=" + cause.message);
         error40.code = "ECONNRESET";
         options.request.emit("error", error40);
@@ -92815,7 +92815,7 @@ var require_tunnel_agent = __commonJS({
     function createSecureSocket(options, cb) {
       var self2 = this;
       TunnelingAgent.prototype.createSocket.call(self2, options, function(socket) {
-        var secureSocket = tls4.connect(0, mergeOptions(
+        var secureSocket = tls3.connect(0, mergeOptions(
           {},
           self2.options,
           {
@@ -92842,9 +92842,9 @@ var require_tunnel_agent = __commonJS({
       }
       return target;
     }
-    var debug4;
+    var debug3;
     if (process.env.NODE_DEBUG && /\btunnel\b/.test(process.env.NODE_DEBUG)) {
-      debug4 = function() {
+      debug3 = function() {
         var args = Array.prototype.slice.call(arguments);
         if (typeof args[0] === "string") {
           args[0] = "TUNNEL: " + args[0];
@@ -92854,10 +92854,10 @@ var require_tunnel_agent = __commonJS({
         console.error.apply(console, args);
       };
     } else {
-      debug4 = function() {
+      debug3 = function() {
       };
     }
-    exports2.debug = debug4;
+    exports2.debug = debug3;
   }
 });
 
@@ -93044,7 +93044,7 @@ var require_request3 = __commonJS({
   "../../node_modules/.pnpm/request@2.88.2/node_modules/request/request.js"(exports2, module2) {
     "use strict";
     var http3 = __require("http");
-    var https4 = __require("https");
+    var https5 = __require("https");
     var url2 = __require("url");
     var util2 = __require("util");
     var stream = __require("stream");
@@ -93144,12 +93144,12 @@ var require_request3 = __commonJS({
     }
     util2.inherits(Request, stream.Stream);
     Request.debug = process.env.NODE_DEBUG && /\brequest\b/.test(process.env.NODE_DEBUG);
-    function debug4() {
+    function debug3() {
       if (Request.debug) {
         console.error("REQUEST %s", util2.format.apply(util2, arguments));
       }
     }
-    Request.prototype.debug = debug4;
+    Request.prototype.debug = debug3;
     Request.prototype.init = function(options) {
       var self2 = this;
       if (!options) {
@@ -93169,7 +93169,7 @@ var require_request3 = __commonJS({
         self2.localAddress = options.localAddress;
       }
       self2._qs.init(options);
-      debug4(options);
+      debug3(options);
       if (!self2.pool && self2.pool !== false) {
         self2.pool = globalPool;
       }
@@ -93398,7 +93398,7 @@ var require_request3 = __commonJS({
         self2.oauth(self2._oauth.params);
       }
       var protocol = self2.proxy && !self2.tunnel ? self2.proxy.protocol : self2.uri.protocol;
-      var defaultModules = { "http:": http3, "https:": https4 };
+      var defaultModules = { "http:": http3, "https:": https5 };
       var httpModules = self2.httpModules || {};
       self2.httpModule = httpModules[protocol] || defaultModules[protocol];
       if (!self2.httpModule) {
@@ -93632,7 +93632,7 @@ var require_request3 = __commonJS({
       }
       var reqOptions = copy(self2);
       delete reqOptions.auth;
-      debug4("make request", self2.uri.href);
+      debug3("make request", self2.uri.href);
       delete reqOptions.timeout;
       try {
         self2.req = self2.httpModule.request(reqOptions);
@@ -93734,7 +93734,7 @@ var require_request3 = __commonJS({
       if (self2.timing) {
         self2.timings.response = now() - self2.startTimeNow;
       }
-      debug4("onRequestResponse", self2.uri.href, response.statusCode, response.headers);
+      debug3("onRequestResponse", self2.uri.href, response.statusCode, response.headers);
       response.on("end", function() {
         if (self2.timing) {
           self2.timings.end = now() - self2.startTimeNow;
@@ -93751,7 +93751,7 @@ var require_request3 = __commonJS({
           if (!self2.timings.response) {
             self2.timings.response = self2.timings.connect;
           }
-          debug4("elapsed time", self2.timings.end);
+          debug3("elapsed time", self2.timings.end);
           self2.elapsedTime += Math.round(self2.timings.end);
           response.elapsedTime = self2.elapsedTime;
           response.timings = self2.timings;
@@ -93764,18 +93764,18 @@ var require_request3 = __commonJS({
             total: self2.timings.end
           };
         }
-        debug4("response end", self2.uri.href, response.statusCode, response.headers);
+        debug3("response end", self2.uri.href, response.statusCode, response.headers);
       });
       if (self2._aborted) {
-        debug4("aborted", self2.uri.href);
+        debug3("aborted", self2.uri.href);
         response.resume();
         return;
       }
       self2.response = response;
       response.request = self2;
       response.toJSON = responseToJSON;
-      if (self2.httpModule === https4 && self2.strictSSL && (!response.hasOwnProperty("socket") || !response.socket.authorized)) {
-        debug4("strict ssl error", self2.uri.href);
+      if (self2.httpModule === https5 && self2.strictSSL && (!response.hasOwnProperty("socket") || !response.socket.authorized)) {
+        debug3("strict ssl error", self2.uri.href);
         var sslErr = response.hasOwnProperty("socket") ? response.socket.authorizationError : self2.uri.href + " does not support SSL";
         self2.emit("error", new Error("SSL Error: " + sslErr));
         return;
@@ -93838,7 +93838,7 @@ var require_request3 = __commonJS({
             response.pipe(responseContent);
           } else {
             if (contentEncoding !== "identity") {
-              debug4("ignoring unrecognized Content-Encoding " + contentEncoding);
+              debug3("ignoring unrecognized Content-Encoding " + contentEncoding);
             }
             responseContent = response;
           }
@@ -93882,18 +93882,18 @@ var require_request3 = __commonJS({
         } else {
           self2.on("end", function() {
             if (self2._aborted) {
-              debug4("aborted", self2.uri.href);
+              debug3("aborted", self2.uri.href);
               return;
             }
             self2.emit("complete", response);
           });
         }
       }
-      debug4("finish init function", self2.uri.href);
+      debug3("finish init function", self2.uri.href);
     };
     Request.prototype.readResponseBody = function(response) {
       var self2 = this;
-      debug4("reading response's body");
+      debug3("reading response's body");
       var buffers = [];
       var bufferLength = 0;
       var strings = [];
@@ -93906,15 +93906,15 @@ var require_request3 = __commonJS({
         }
       });
       self2.on("end", function() {
-        debug4("end event", self2.uri.href);
+        debug3("end event", self2.uri.href);
         if (self2._aborted) {
-          debug4("aborted", self2.uri.href);
+          debug3("aborted", self2.uri.href);
           buffers = [];
           bufferLength = 0;
           return;
         }
         if (bufferLength) {
-          debug4("has body", self2.uri.href, bufferLength);
+          debug3("has body", self2.uri.href, bufferLength);
           response.body = Buffer2.concat(buffers, bufferLength);
           if (self2.encoding !== null) {
             response.body = response.body.toString(self2.encoding);
@@ -93931,10 +93931,10 @@ var require_request3 = __commonJS({
           try {
             response.body = JSON.parse(response.body, self2._jsonReviver);
           } catch (e) {
-            debug4("invalid JSON received", self2.uri.href);
+            debug3("invalid JSON received", self2.uri.href);
           }
         }
-        debug4("emitting complete", self2.uri.href);
+        debug3("emitting complete", self2.uri.href);
         if (typeof response.body === "undefined" && !self2._json) {
           response.body = self2.encoding === null ? Buffer2.alloc(0) : "";
         }
@@ -94085,10 +94085,10 @@ var require_request3 = __commonJS({
     Request.prototype.enableUnixSocket = function() {
       var unixParts = this.uri.path.split(":");
       var host = unixParts[0];
-      var path6 = unixParts[1];
+      var path7 = unixParts[1];
       this.socketPath = host;
-      this.uri.pathname = path6;
-      this.uri.path = path6;
+      this.uri.pathname = path7;
+      this.uri.path = path7;
       this.uri.host = host;
       this.uri.hostname = host;
       this.uri.isUnix = true;
@@ -94137,14 +94137,14 @@ var require_request3 = __commonJS({
           md5: self2.getHeader("content-md5") || "",
           amazonHeaders: aws2.canonicalizeHeaders(self2.headers)
         };
-        var path6 = self2.uri.path;
-        if (opts.bucket && path6) {
-          auth.resource = "/" + opts.bucket + path6;
-        } else if (opts.bucket && !path6) {
+        var path7 = self2.uri.path;
+        if (opts.bucket && path7) {
+          auth.resource = "/" + opts.bucket + path7;
+        } else if (opts.bucket && !path7) {
           auth.resource = "/" + opts.bucket;
-        } else if (!opts.bucket && path6) {
-          auth.resource = path6;
-        } else if (!opts.bucket && !path6) {
+        } else if (!opts.bucket && path7) {
+          auth.resource = path7;
+        } else if (!opts.bucket && !path7) {
           auth.resource = "/";
         }
         auth.resource = aws2.canonicalizeResource(auth.resource);
@@ -94164,7 +94164,7 @@ var require_request3 = __commonJS({
         method: self2.method,
         path: self2.path
       }, opts);
-      debug4("httpSignature authorization", self2.getHeader("authorization"));
+      debug3("httpSignature authorization", self2.getHeader("authorization"));
       return self2;
     };
     Request.prototype.hawk = function(opts) {
@@ -94391,8 +94391,8 @@ var require_request4 = __commonJS({
       get: function() {
         return request3.Request.debug;
       },
-      set: function(debug4) {
-        request3.Request.debug = debug4;
+      set: function(debug3) {
+        request3.Request.debug = debug3;
       }
     });
   }
@@ -100692,10 +100692,10 @@ var require_src2 = __commonJS({
         calculateDelay: options.calculateDelay === void 0 ? null : options.calculateDelay
       };
     }
-    async function sleep2(delay) {
+    async function sleep3(delay) {
       return new Promise((resolve) => setTimeout(resolve, delay));
     }
-    exports2.sleep = sleep2;
+    exports2.sleep = sleep3;
     function defaultCalculateDelay(context, options) {
       let delay = options.delay;
       if (delay === 0) {
@@ -100764,7 +100764,7 @@ var require_src2 = __commonJS({
           context.attemptNum++;
           const delay = calculateDelay(context, options);
           if (delay) {
-            await sleep2(delay);
+            await sleep3(delay);
           }
           return makeAttempt();
         };
@@ -100800,12 +100800,12 @@ var require_src2 = __commonJS({
       }
       const initialDelay = options.calculateDelay ? options.calculateDelay(context, options) : options.initialDelay;
       if (initialDelay) {
-        await sleep2(initialDelay);
+        await sleep3(initialDelay);
       }
       if (context.attemptNum < 1 && options.initialJitter) {
         const delay = calculateDelay(context, options);
         if (delay) {
-          await sleep2(delay);
+          await sleep3(delay);
         }
       }
       return makeAttempt();
@@ -105138,7 +105138,7 @@ var require_svg = __commonJS({
 var require_tiff = __commonJS({
   "../../node_modules/.pnpm/image-size@0.7.5/node_modules/image-size/lib/types/tiff.js"(exports2, module2) {
     "use strict";
-    var fs6 = __require("fs");
+    var fs7 = __require("fs");
     var readUInt = require_readUInt();
     function isTIFF(buffer) {
       var hex4 = buffer.toString("hex", 0, 4);
@@ -105147,13 +105147,13 @@ var require_tiff = __commonJS({
     function readIFD(buffer, filepath, isBigEndian) {
       var ifdOffset = readUInt(buffer, 32, 4, isBigEndian);
       var bufferSize = 1024;
-      var fileSize = fs6.statSync(filepath).size;
+      var fileSize = fs7.statSync(filepath).size;
       if (ifdOffset + bufferSize > fileSize) {
         bufferSize = fileSize - ifdOffset - 10;
       }
       var endBuffer = Buffer.alloc(bufferSize);
-      var descriptor = fs6.openSync(filepath, "r");
-      fs6.readSync(descriptor, endBuffer, 0, bufferSize, ifdOffset);
+      var descriptor = fs7.openSync(filepath, "r");
+      fs7.readSync(descriptor, endBuffer, 0, bufferSize, ifdOffset);
       var ifdBuffer = endBuffer.slice(2);
       return ifdBuffer;
     }
@@ -105317,12 +105317,12 @@ var require_detector = __commonJS({
 var require_lib9 = __commonJS({
   "../../node_modules/.pnpm/image-size@0.7.5/node_modules/image-size/lib/index.js"(exports2, module2) {
     "use strict";
-    var fs6 = __require("fs");
-    var path6 = __require("path");
+    var fs7 = __require("fs");
+    var path7 = __require("path");
     var typeHandlers = require_types3();
     var detector = require_detector();
     var MaxBufferSize = 512 * 1024;
-    function lookup2(buffer, filepath) {
+    function lookup(buffer, filepath) {
       var type = detector(buffer, filepath);
       if (type in typeHandlers) {
         var size = typeHandlers[type].calculate(buffer, filepath);
@@ -105334,11 +105334,11 @@ var require_lib9 = __commonJS({
       throw new TypeError("unsupported file type: " + type + " (file: " + filepath + ")");
     }
     function asyncFileToBuffer(filepath, callback) {
-      fs6.open(filepath, "r", function(err, descriptor) {
+      fs7.open(filepath, "r", function(err, descriptor) {
         if (err) {
           return callback(err);
         }
-        fs6.fstat(descriptor, function(err2, stats2) {
+        fs7.fstat(descriptor, function(err2, stats2) {
           if (err2) {
             return callback(err2);
           }
@@ -105348,11 +105348,11 @@ var require_lib9 = __commonJS({
           }
           var bufferSize = Math.min(size, MaxBufferSize);
           var buffer = Buffer.alloc(bufferSize);
-          fs6.read(descriptor, buffer, 0, bufferSize, 0, function(err3) {
+          fs7.read(descriptor, buffer, 0, bufferSize, 0, function(err3) {
             if (err3) {
               return callback(err3);
             }
-            fs6.close(descriptor, function(err4) {
+            fs7.close(descriptor, function(err4) {
               callback(err4, buffer);
             });
           });
@@ -105360,22 +105360,22 @@ var require_lib9 = __commonJS({
       });
     }
     function syncFileToBuffer(filepath) {
-      var descriptor = fs6.openSync(filepath, "r");
-      var size = fs6.fstatSync(descriptor).size;
+      var descriptor = fs7.openSync(filepath, "r");
+      var size = fs7.fstatSync(descriptor).size;
       var bufferSize = Math.min(size, MaxBufferSize);
       var buffer = Buffer.alloc(bufferSize);
-      fs6.readSync(descriptor, buffer, 0, bufferSize, 0);
-      fs6.closeSync(descriptor);
+      fs7.readSync(descriptor, buffer, 0, bufferSize, 0);
+      fs7.closeSync(descriptor);
       return buffer;
     }
     module2.exports = function(input, callback) {
       if (Buffer.isBuffer(input)) {
-        return lookup2(input);
+        return lookup(input);
       }
       if (typeof input !== "string") {
         throw new TypeError("invalid invocation");
       }
-      var filepath = path6.resolve(input);
+      var filepath = path7.resolve(input);
       if (typeof callback === "function") {
         asyncFileToBuffer(filepath, function(err, buffer2) {
           if (err) {
@@ -105383,7 +105383,7 @@ var require_lib9 = __commonJS({
           }
           var dimensions;
           try {
-            dimensions = lookup2(buffer2, filepath);
+            dimensions = lookup(buffer2, filepath);
           } catch (e) {
             err = e;
           }
@@ -105391,7 +105391,7 @@ var require_lib9 = __commonJS({
         });
       } else {
         var buffer = syncFileToBuffer(filepath);
-        return lookup2(buffer, filepath);
+        return lookup(buffer, filepath);
       }
     };
     module2.exports.types = Object.keys(typeHandlers);
@@ -108173,12 +108173,12 @@ var require_lib10 = __commonJS({
         return b3.length - a2.length;
       }).join("|"), ")"), ")").concat(options.trailingPeriod ? "\\.?" : "");
       var port2 = "(?::\\d{2,5})?";
-      var path6 = options.parens ? options.apostrophes ? '(?:[/?#][^\\s"]*)?' : `(?:[/?#][^\\s"']*)?` : options.apostrophes ? '(?:[/?#][^\\s"\\)]*)?' : `(?:[/?#][^\\s"\\)']*)?`;
+      var path7 = options.parens ? options.apostrophes ? '(?:[/?#][^\\s"]*)?' : `(?:[/?#][^\\s"']*)?` : options.apostrophes ? '(?:[/?#][^\\s"\\)]*)?' : `(?:[/?#][^\\s"\\)']*)?`;
       var regex = "(?:".concat(protocol, "|www\\.)").concat(auth, "(?:");
       if (options.localhost) regex += "localhost|";
       if (options.ipv4) regex += "".concat(ipv43, "|");
       if (options.ipv6) regex += "".concat(ipv63, "|");
-      regex += "".concat(host).concat(domain2).concat(tld, ")").concat(port2).concat(path6);
+      regex += "".concat(host).concat(domain2).concat(tld, ")").concat(port2).concat(path7);
       if (options.returnString) return regex;
       return options.exact ? new SafeRegExp("(?:^".concat(regex, "$)"), "i") : new SafeRegExp(regex, "ig");
     };
@@ -120677,10 +120677,10 @@ var init_dist2 = __esm({
         const proxyResponsePromise = parseProxyResponse(socket);
         socket.write(`${payload}\r
 `);
-        const { connect: connect4, buffered } = await proxyResponsePromise;
-        req.emit("proxyConnect", connect4);
-        this.emit("proxyConnect", connect4, req);
-        if (connect4.statusCode === 200) {
+        const { connect: connect3, buffered } = await proxyResponsePromise;
+        req.emit("proxyConnect", connect3);
+        this.emit("proxyConnect", connect3, req);
+        if (connect3.statusCode === 200) {
           req.once("socket", resume);
           if (opts.secureEndpoint) {
             debug2("Upgrading socket connection to TLS");
@@ -120713,13 +120713,13 @@ __export(hikerApiClient_exports, {
   HikerApiClient: () => HikerApiClient,
   HikerCacheMissError: () => HikerCacheMissError
 });
-import * as https2 from "https";
-function hikerGet(path6, token) {
+import * as https3 from "https";
+function hikerGet(path7, token) {
   return new Promise((resolve, reject) => {
-    const req = https2.request(
+    const req = https3.request(
       {
         hostname: HIKER_HOST,
-        path: path6,
+        path: path7,
         method: "GET",
         headers: {
           "x-access-key": token,
@@ -120757,6 +120757,14 @@ function _getSeenReelSet() {
 function _markReelSeen(sc) {
   _seenReels.push({ sc, addedAt: Date.now() });
 }
+function resolveUserObj(j) {
+  if (!j || typeof j !== "object") return null;
+  const candidates = [j, j.user, j.response, j.data, j.result];
+  for (const c3 of candidates) {
+    if (c3 && typeof c3 === "object" && (c3.pk || c3.id)) return c3;
+  }
+  return null;
+}
 var HIKER_HOST, HikerCacheMissError, SEEN_REELS_TTL_MS, _seenReels, USERNAME_CACHE_TTL_MS, usernameCache, HikerApiClient;
 var init_hikerApiClient = __esm({
   "src/instagram/hikerApiClient.ts"() {
@@ -120777,12 +120785,39 @@ var init_hikerApiClient = __esm({
         this.token = token;
       }
       async testConnection() {
-        try {
-          const j = await hikerGet(`/v1/user/by/username?username=instagram`, this.token);
-          return !!j?.pk;
-        } catch {
-          return false;
+        const testUsernames = ["instagram", "cristiano", "leomessi"];
+        for (const username of testUsernames) {
+          try {
+            const j = await hikerGet(`/v1/user/by/username?username=${username}`, this.token);
+            const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
+            console.log(`[hikerApi] testConnection @${username} raw keys: ${JSON.stringify(topKeys)}`);
+            if (j && typeof j === "object" && !Array.isArray(j)) {
+              const msg = (j.detail ?? j.error ?? j.message ?? "").toString().toLowerCase();
+              if (/invalid.*token|unauthorized|forbidden|not.*authenticat|api.?key/i.test(msg)) {
+                console.error(`[hikerApi] testConnection: auth error \u2014 "${msg}"`);
+                return false;
+              }
+              if (j.state === false && j.error) {
+                console.log(`[hikerApi] testConnection @${username}: service error "${j.error}", trying next username`);
+                continue;
+              }
+            }
+            const u = resolveUserObj(j);
+            console.log(`[hikerApi] testConnection @${username} resolved pk=${u?.pk ?? u?.id ?? "null"}`);
+            if (u?.pk || u?.id) return true;
+            if (j && typeof j === "object" && !Array.isArray(j) && topKeys.length > 0) {
+              console.log(`[hikerApi] testConnection @${username}: got ${topKeys.length} keys \u2014 treating as connected`);
+              return true;
+            }
+            if (Array.isArray(j)) {
+              console.log(`[hikerApi] testConnection @${username}: got empty array \u2014 API reachable, token valid`);
+              return true;
+            }
+          } catch (e) {
+            console.error(`[hikerApi] testConnection @${username} error: ${e?.message}`);
+          }
         }
+        return false;
       }
       async getUserByUsername(username) {
         const cacheKey = username.toLowerCase();
@@ -120792,8 +120827,9 @@ var init_hikerApiClient = __esm({
         }
         try {
           const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-          if (!j?.pk) return null;
-          const data = { pk: String(j.pk), username: String(j.username) };
+          const u = resolveUserObj(j);
+          if (!u?.pk && !u?.id) return null;
+          const data = { pk: String(u.pk ?? u.id), username: String(u.username) };
           usernameCache.set(cacheKey, { data, expiresAt: Date.now() + USERNAME_CACHE_TTL_MS });
           return data;
         } catch (e) {
@@ -120804,11 +120840,12 @@ var init_hikerApiClient = __esm({
       async getProfileStats(username) {
         try {
           const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-          if (!j?.pk) return null;
+          const u = resolveUserObj(j);
+          if (!u?.pk && !u?.id) return null;
           return {
-            followersCount: Number(j.follower_count ?? j.edge_followed_by?.count ?? 0),
-            followingCount: Number(j.following_count ?? j.edge_follow?.count ?? 0),
-            postsCount: Number(j.media_count ?? j.edge_owner_to_timeline_media?.count ?? 0)
+            followersCount: Number(u.follower_count ?? u.edge_followed_by?.count ?? 0),
+            followingCount: Number(u.following_count ?? u.edge_follow?.count ?? 0),
+            postsCount: Number(u.media_count ?? u.edge_owner_to_timeline_media?.count ?? 0)
           };
         } catch (e) {
           console.error(`[hikerApi] getProfileStats @${username} error: ${e?.message}`);
@@ -120818,10 +120855,11 @@ var init_hikerApiClient = __esm({
       async getUserProfile(username) {
         try {
           const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-          if (!j?.pk) return null;
+          const u = resolveUserObj(j);
+          if (!u?.pk && !u?.id) return null;
           return {
-            biography: j.biography ?? null,
-            fullName: j.full_name ?? null
+            biography: u.biography ?? null,
+            fullName: u.full_name ?? null
           };
         } catch (e) {
           console.error(`[hikerApi] getUserProfile @${username} error: ${e?.message}`);
@@ -121135,37 +121173,86 @@ var init_hikerApiClient = __esm({
         }
       }
       async getHashtagUsers(hashtag, max = 50, cursor = "") {
-        try {
-          const tag = hashtag.replace(/^#/, "");
-          const amount = Math.min(Math.max(max, 1), 200);
-          const qs = new URLSearchParams({ name: tag, amount: String(amount) });
-          if (cursor) qs.set("next_max_id", cursor);
-          const j = await hikerGet(`/v2/hashtag/medias/recent?${qs}`, this.token);
-          const response = j?.response ?? j;
-          const sections = Array.isArray(response?.sections) ? response.sections : [];
+        const tag = hashtag.replace(/^#/, "");
+        const amount = Math.min(Math.max(max, 1), 200);
+        const extractFromResponse = (j, endpointLabel) => {
+          const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
+          console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} raw keys: ${JSON.stringify(topKeys).slice(0, 200)}`);
+          const envelope = j?.response && typeof j.response === "object" ? j.response : j;
+          const envKeys = envelope && typeof envelope === "object" && !Array.isArray(envelope) ? Object.keys(envelope) : [];
+          if (envKeys.length > 0 && envelope !== j) {
+            console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} envelope keys: ${JSON.stringify(envKeys).slice(0, 200)}`);
+          }
+          const flatItems = Array.isArray(envelope) ? envelope : Array.isArray(envelope?.items) ? envelope.items : Array.isArray(envelope?.medias) ? envelope.medias : Array.isArray(envelope?.data) ? envelope.data : Array.isArray(envelope?.results) ? envelope.results : Array.isArray(envelope?.feed_items) ? envelope.feed_items : Array.isArray(j?.items) ? j.items : Array.isArray(j?.medias) ? j.medias : Array.isArray(j?.data) ? j.data : [];
+          if (flatItems.length > 0) {
+            const sample = flatItems[0];
+            const sampleKeys = sample && typeof sample === "object" ? Object.keys(sample) : [];
+            console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} first item keys: ${JSON.stringify(sampleKeys).slice(0, 200)}`);
+            if (sample?.user) console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} first item.user keys: ${JSON.stringify(Object.keys(sample.user)).slice(0, 100)}`);
+          } else {
+            console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} no flat items found \u2014 raw sample: ${JSON.stringify(j)?.slice(0, 300)}`);
+          }
           const seen = /* @__PURE__ */ new Set();
           const users = [];
-          for (const section of sections) {
-            const lc = section?.layout_content ?? {};
-            const medias = lc.medias ?? lc.fill_items ?? [];
-            for (const item of medias) {
-              const media = item?.media ?? item;
-              const u = media?.user ?? media?.owner;
-              if (!u?.pk || !u?.username) continue;
-              if (seen.has(String(u.pk))) continue;
-              seen.add(String(u.pk));
-              users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
-              if (users.length >= max) break;
-            }
+          for (const item of flatItems) {
             if (users.length >= max) break;
+            const media = item?.media ?? item;
+            const u = media?.user ?? media?.owner ?? (media?.pk && media?.username ? media : null);
+            if (!u?.pk || !u?.username) continue;
+            if (seen.has(String(u.pk))) continue;
+            seen.add(String(u.pk));
+            users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
           }
-          const nextCursor = response?.more_available && response?.next_max_id ? String(response.next_max_id) : null;
-          console.error(`[hikerApi] getHashtagUsers #${tag}: ${users.length} users, nextCursor=${nextCursor ?? "none"}`);
+          if (users.length === 0) {
+            const sections = Array.isArray(envelope?.sections) ? envelope.sections : [];
+            for (const section of sections) {
+              if (users.length >= max) break;
+              const lc = section?.layout_content ?? {};
+              const medias = lc.medias ?? lc.fill_items ?? [];
+              for (const item of medias) {
+                if (users.length >= max) break;
+                const media = item?.media ?? item;
+                const u = media?.user ?? media?.owner ?? (media?.pk && media?.username ? media : null);
+                if (!u?.pk || !u?.username) continue;
+                if (seen.has(String(u.pk))) continue;
+                seen.add(String(u.pk));
+                users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+              }
+            }
+          }
+          const nextCursor = envelope?.more_available && envelope?.next_max_id ? String(envelope.next_max_id) : j?.next_max_id ? String(j.next_max_id) : null;
           return { users, nextCursor };
-        } catch (e) {
-          console.error(`[hikerApi] getHashtagUsers #${hashtag} error: ${e?.message}`);
-          return { users: [], nextCursor: null };
+        };
+        const endpointList = [
+          { path: "/v1/hashtag/medias/recent", param: "name" },
+          { path: "/v1/hashtag/medias/top", param: "name" },
+          { path: "/v2/hashtag/medias/recent", param: "hashtag" },
+          { path: "/v2/hashtag/medias/top", param: "hashtag" }
+        ];
+        for (const { path: endpoint, param } of endpointList) {
+          try {
+            const qs = new URLSearchParams({ [param]: tag, amount: String(amount) });
+            if (cursor) qs.set("next_max_id", cursor);
+            const j = await hikerGet(`${endpoint}?${qs}`, this.token);
+            if (j && !Array.isArray(j) && typeof j === "object") {
+              const hasError = j.detail || j.exc_type || j.state === false && j.error || typeof j.error === "string" && !j.items && !j.medias && !j.data && !j.response;
+              if (hasError) {
+                const detail = j.detail ?? j.exc_type ?? j.error ?? JSON.stringify(j);
+                console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: API error \u2014 "${detail}", trying next endpoint`);
+                continue;
+              }
+            }
+            const result = extractFromResponse(j, endpoint);
+            console.log(`[hikerApi] getHashtagUsers #${tag} (${endpoint}): ${result.users.length} users, nextCursor=${result.nextCursor ?? "none"}`);
+            if (result.users.length > 0) {
+              return { users: result.users.slice(0, max), nextCursor: result.nextCursor };
+            }
+            console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: 0 users, trying next endpoint`);
+          } catch (e) {
+            console.error(`[hikerApi] getHashtagUsers #${tag} ${endpoint} error: ${e?.message}`);
+          }
         }
+        return { users: [], nextCursor: null };
       }
     };
   }
@@ -121285,4317 +121372,10 @@ var init_imageAlteration = __esm({
   }
 });
 
-// ../../node_modules/.pnpm/smart-buffer@4.2.0/node_modules/smart-buffer/build/utils.js
-var require_utils6 = __commonJS({
-  "../../node_modules/.pnpm/smart-buffer@4.2.0/node_modules/smart-buffer/build/utils.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    var buffer_1 = __require("buffer");
-    var ERRORS = {
-      INVALID_ENCODING: "Invalid encoding provided. Please specify a valid encoding the internal Node.js Buffer supports.",
-      INVALID_SMARTBUFFER_SIZE: "Invalid size provided. Size must be a valid integer greater than zero.",
-      INVALID_SMARTBUFFER_BUFFER: "Invalid Buffer provided in SmartBufferOptions.",
-      INVALID_SMARTBUFFER_OBJECT: "Invalid SmartBufferOptions object supplied to SmartBuffer constructor or factory methods.",
-      INVALID_OFFSET: "An invalid offset value was provided.",
-      INVALID_OFFSET_NON_NUMBER: "An invalid offset value was provided. A numeric value is required.",
-      INVALID_LENGTH: "An invalid length value was provided.",
-      INVALID_LENGTH_NON_NUMBER: "An invalid length value was provived. A numeric value is required.",
-      INVALID_TARGET_OFFSET: "Target offset is beyond the bounds of the internal SmartBuffer data.",
-      INVALID_TARGET_LENGTH: "Specified length value moves cursor beyong the bounds of the internal SmartBuffer data.",
-      INVALID_READ_BEYOND_BOUNDS: "Attempted to read beyond the bounds of the managed data.",
-      INVALID_WRITE_BEYOND_BOUNDS: "Attempted to write beyond the bounds of the managed data."
-    };
-    exports2.ERRORS = ERRORS;
-    function checkEncoding(encoding) {
-      if (!buffer_1.Buffer.isEncoding(encoding)) {
-        throw new Error(ERRORS.INVALID_ENCODING);
-      }
-    }
-    exports2.checkEncoding = checkEncoding;
-    function isFiniteInteger(value) {
-      return typeof value === "number" && isFinite(value) && isInteger(value);
-    }
-    exports2.isFiniteInteger = isFiniteInteger;
-    function checkOffsetOrLengthValue(value, offset) {
-      if (typeof value === "number") {
-        if (!isFiniteInteger(value) || value < 0) {
-          throw new Error(offset ? ERRORS.INVALID_OFFSET : ERRORS.INVALID_LENGTH);
-        }
-      } else {
-        throw new Error(offset ? ERRORS.INVALID_OFFSET_NON_NUMBER : ERRORS.INVALID_LENGTH_NON_NUMBER);
-      }
-    }
-    function checkLengthValue(length) {
-      checkOffsetOrLengthValue(length, false);
-    }
-    exports2.checkLengthValue = checkLengthValue;
-    function checkOffsetValue(offset) {
-      checkOffsetOrLengthValue(offset, true);
-    }
-    exports2.checkOffsetValue = checkOffsetValue;
-    function checkTargetOffset(offset, buff) {
-      if (offset < 0 || offset > buff.length) {
-        throw new Error(ERRORS.INVALID_TARGET_OFFSET);
-      }
-    }
-    exports2.checkTargetOffset = checkTargetOffset;
-    function isInteger(value) {
-      return typeof value === "number" && isFinite(value) && Math.floor(value) === value;
-    }
-    function bigIntAndBufferInt64Check(bufferMethod) {
-      if (typeof BigInt === "undefined") {
-        throw new Error("Platform does not support JS BigInt type.");
-      }
-      if (typeof buffer_1.Buffer.prototype[bufferMethod] === "undefined") {
-        throw new Error(`Platform does not support Buffer.prototype.${bufferMethod}.`);
-      }
-    }
-    exports2.bigIntAndBufferInt64Check = bigIntAndBufferInt64Check;
-  }
-});
-
-// ../../node_modules/.pnpm/smart-buffer@4.2.0/node_modules/smart-buffer/build/smartbuffer.js
-var require_smartbuffer = __commonJS({
-  "../../node_modules/.pnpm/smart-buffer@4.2.0/node_modules/smart-buffer/build/smartbuffer.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    var utils_1 = require_utils6();
-    var DEFAULT_SMARTBUFFER_SIZE = 4096;
-    var DEFAULT_SMARTBUFFER_ENCODING = "utf8";
-    var SmartBuffer = class _SmartBuffer {
-      /**
-       * Creates a new SmartBuffer instance.
-       *
-       * @param options { SmartBufferOptions } The SmartBufferOptions to apply to this instance.
-       */
-      constructor(options) {
-        this.length = 0;
-        this._encoding = DEFAULT_SMARTBUFFER_ENCODING;
-        this._writeOffset = 0;
-        this._readOffset = 0;
-        if (_SmartBuffer.isSmartBufferOptions(options)) {
-          if (options.encoding) {
-            utils_1.checkEncoding(options.encoding);
-            this._encoding = options.encoding;
-          }
-          if (options.size) {
-            if (utils_1.isFiniteInteger(options.size) && options.size > 0) {
-              this._buff = Buffer.allocUnsafe(options.size);
-            } else {
-              throw new Error(utils_1.ERRORS.INVALID_SMARTBUFFER_SIZE);
-            }
-          } else if (options.buff) {
-            if (Buffer.isBuffer(options.buff)) {
-              this._buff = options.buff;
-              this.length = options.buff.length;
-            } else {
-              throw new Error(utils_1.ERRORS.INVALID_SMARTBUFFER_BUFFER);
-            }
-          } else {
-            this._buff = Buffer.allocUnsafe(DEFAULT_SMARTBUFFER_SIZE);
-          }
-        } else {
-          if (typeof options !== "undefined") {
-            throw new Error(utils_1.ERRORS.INVALID_SMARTBUFFER_OBJECT);
-          }
-          this._buff = Buffer.allocUnsafe(DEFAULT_SMARTBUFFER_SIZE);
-        }
-      }
-      /**
-       * Creates a new SmartBuffer instance with the provided internal Buffer size and optional encoding.
-       *
-       * @param size { Number } The size of the internal Buffer.
-       * @param encoding { String } The BufferEncoding to use for strings.
-       *
-       * @return { SmartBuffer }
-       */
-      static fromSize(size, encoding) {
-        return new this({
-          size,
-          encoding
-        });
-      }
-      /**
-       * Creates a new SmartBuffer instance with the provided Buffer and optional encoding.
-       *
-       * @param buffer { Buffer } The Buffer to use as the internal Buffer value.
-       * @param encoding { String } The BufferEncoding to use for strings.
-       *
-       * @return { SmartBuffer }
-       */
-      static fromBuffer(buff, encoding) {
-        return new this({
-          buff,
-          encoding
-        });
-      }
-      /**
-       * Creates a new SmartBuffer instance with the provided SmartBufferOptions options.
-       *
-       * @param options { SmartBufferOptions } The options to use when creating the SmartBuffer instance.
-       */
-      static fromOptions(options) {
-        return new this(options);
-      }
-      /**
-       * Type checking function that determines if an object is a SmartBufferOptions object.
-       */
-      static isSmartBufferOptions(options) {
-        const castOptions = options;
-        return castOptions && (castOptions.encoding !== void 0 || castOptions.size !== void 0 || castOptions.buff !== void 0);
-      }
-      // Signed integers
-      /**
-       * Reads an Int8 value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readInt8(offset) {
-        return this._readNumberValue(Buffer.prototype.readInt8, 1, offset);
-      }
-      /**
-       * Reads an Int16BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readInt16BE(offset) {
-        return this._readNumberValue(Buffer.prototype.readInt16BE, 2, offset);
-      }
-      /**
-       * Reads an Int16LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readInt16LE(offset) {
-        return this._readNumberValue(Buffer.prototype.readInt16LE, 2, offset);
-      }
-      /**
-       * Reads an Int32BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readInt32BE(offset) {
-        return this._readNumberValue(Buffer.prototype.readInt32BE, 4, offset);
-      }
-      /**
-       * Reads an Int32LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readInt32LE(offset) {
-        return this._readNumberValue(Buffer.prototype.readInt32LE, 4, offset);
-      }
-      /**
-       * Reads a BigInt64BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { BigInt }
-       */
-      readBigInt64BE(offset) {
-        utils_1.bigIntAndBufferInt64Check("readBigInt64BE");
-        return this._readNumberValue(Buffer.prototype.readBigInt64BE, 8, offset);
-      }
-      /**
-       * Reads a BigInt64LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { BigInt }
-       */
-      readBigInt64LE(offset) {
-        utils_1.bigIntAndBufferInt64Check("readBigInt64LE");
-        return this._readNumberValue(Buffer.prototype.readBigInt64LE, 8, offset);
-      }
-      /**
-       * Writes an Int8 value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeInt8(value, offset) {
-        this._writeNumberValue(Buffer.prototype.writeInt8, 1, value, offset);
-        return this;
-      }
-      /**
-       * Inserts an Int8 value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertInt8(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeInt8, 1, value, offset);
-      }
-      /**
-       * Writes an Int16BE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeInt16BE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeInt16BE, 2, value, offset);
-      }
-      /**
-       * Inserts an Int16BE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertInt16BE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeInt16BE, 2, value, offset);
-      }
-      /**
-       * Writes an Int16LE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeInt16LE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeInt16LE, 2, value, offset);
-      }
-      /**
-       * Inserts an Int16LE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertInt16LE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeInt16LE, 2, value, offset);
-      }
-      /**
-       * Writes an Int32BE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeInt32BE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeInt32BE, 4, value, offset);
-      }
-      /**
-       * Inserts an Int32BE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertInt32BE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeInt32BE, 4, value, offset);
-      }
-      /**
-       * Writes an Int32LE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeInt32LE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeInt32LE, 4, value, offset);
-      }
-      /**
-       * Inserts an Int32LE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertInt32LE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeInt32LE, 4, value, offset);
-      }
-      /**
-       * Writes a BigInt64BE value to the current write position (or at optional offset).
-       *
-       * @param value { BigInt } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeBigInt64BE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigInt64BE");
-        return this._writeNumberValue(Buffer.prototype.writeBigInt64BE, 8, value, offset);
-      }
-      /**
-       * Inserts a BigInt64BE value at the given offset value.
-       *
-       * @param value { BigInt } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertBigInt64BE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigInt64BE");
-        return this._insertNumberValue(Buffer.prototype.writeBigInt64BE, 8, value, offset);
-      }
-      /**
-       * Writes a BigInt64LE value to the current write position (or at optional offset).
-       *
-       * @param value { BigInt } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeBigInt64LE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigInt64LE");
-        return this._writeNumberValue(Buffer.prototype.writeBigInt64LE, 8, value, offset);
-      }
-      /**
-       * Inserts a Int64LE value at the given offset value.
-       *
-       * @param value { BigInt } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertBigInt64LE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigInt64LE");
-        return this._insertNumberValue(Buffer.prototype.writeBigInt64LE, 8, value, offset);
-      }
-      // Unsigned Integers
-      /**
-       * Reads an UInt8 value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readUInt8(offset) {
-        return this._readNumberValue(Buffer.prototype.readUInt8, 1, offset);
-      }
-      /**
-       * Reads an UInt16BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readUInt16BE(offset) {
-        return this._readNumberValue(Buffer.prototype.readUInt16BE, 2, offset);
-      }
-      /**
-       * Reads an UInt16LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readUInt16LE(offset) {
-        return this._readNumberValue(Buffer.prototype.readUInt16LE, 2, offset);
-      }
-      /**
-       * Reads an UInt32BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readUInt32BE(offset) {
-        return this._readNumberValue(Buffer.prototype.readUInt32BE, 4, offset);
-      }
-      /**
-       * Reads an UInt32LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readUInt32LE(offset) {
-        return this._readNumberValue(Buffer.prototype.readUInt32LE, 4, offset);
-      }
-      /**
-       * Reads a BigUInt64BE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { BigInt }
-       */
-      readBigUInt64BE(offset) {
-        utils_1.bigIntAndBufferInt64Check("readBigUInt64BE");
-        return this._readNumberValue(Buffer.prototype.readBigUInt64BE, 8, offset);
-      }
-      /**
-       * Reads a BigUInt64LE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { BigInt }
-       */
-      readBigUInt64LE(offset) {
-        utils_1.bigIntAndBufferInt64Check("readBigUInt64LE");
-        return this._readNumberValue(Buffer.prototype.readBigUInt64LE, 8, offset);
-      }
-      /**
-       * Writes an UInt8 value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeUInt8(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeUInt8, 1, value, offset);
-      }
-      /**
-       * Inserts an UInt8 value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertUInt8(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeUInt8, 1, value, offset);
-      }
-      /**
-       * Writes an UInt16BE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeUInt16BE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeUInt16BE, 2, value, offset);
-      }
-      /**
-       * Inserts an UInt16BE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertUInt16BE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeUInt16BE, 2, value, offset);
-      }
-      /**
-       * Writes an UInt16LE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeUInt16LE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeUInt16LE, 2, value, offset);
-      }
-      /**
-       * Inserts an UInt16LE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertUInt16LE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeUInt16LE, 2, value, offset);
-      }
-      /**
-       * Writes an UInt32BE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeUInt32BE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeUInt32BE, 4, value, offset);
-      }
-      /**
-       * Inserts an UInt32BE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertUInt32BE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeUInt32BE, 4, value, offset);
-      }
-      /**
-       * Writes an UInt32LE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeUInt32LE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeUInt32LE, 4, value, offset);
-      }
-      /**
-       * Inserts an UInt32LE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertUInt32LE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeUInt32LE, 4, value, offset);
-      }
-      /**
-       * Writes a BigUInt64BE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeBigUInt64BE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigUInt64BE");
-        return this._writeNumberValue(Buffer.prototype.writeBigUInt64BE, 8, value, offset);
-      }
-      /**
-       * Inserts a BigUInt64BE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertBigUInt64BE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigUInt64BE");
-        return this._insertNumberValue(Buffer.prototype.writeBigUInt64BE, 8, value, offset);
-      }
-      /**
-       * Writes a BigUInt64LE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeBigUInt64LE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigUInt64LE");
-        return this._writeNumberValue(Buffer.prototype.writeBigUInt64LE, 8, value, offset);
-      }
-      /**
-       * Inserts a BigUInt64LE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertBigUInt64LE(value, offset) {
-        utils_1.bigIntAndBufferInt64Check("writeBigUInt64LE");
-        return this._insertNumberValue(Buffer.prototype.writeBigUInt64LE, 8, value, offset);
-      }
-      // Floating Point
-      /**
-       * Reads an FloatBE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readFloatBE(offset) {
-        return this._readNumberValue(Buffer.prototype.readFloatBE, 4, offset);
-      }
-      /**
-       * Reads an FloatLE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readFloatLE(offset) {
-        return this._readNumberValue(Buffer.prototype.readFloatLE, 4, offset);
-      }
-      /**
-       * Writes a FloatBE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeFloatBE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeFloatBE, 4, value, offset);
-      }
-      /**
-       * Inserts a FloatBE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertFloatBE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeFloatBE, 4, value, offset);
-      }
-      /**
-       * Writes a FloatLE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeFloatLE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeFloatLE, 4, value, offset);
-      }
-      /**
-       * Inserts a FloatLE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertFloatLE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeFloatLE, 4, value, offset);
-      }
-      // Double Floating Point
-      /**
-       * Reads an DoublEBE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readDoubleBE(offset) {
-        return this._readNumberValue(Buffer.prototype.readDoubleBE, 8, offset);
-      }
-      /**
-       * Reads an DoubleLE value from the current read position or an optionally provided offset.
-       *
-       * @param offset { Number } The offset to read data from (optional)
-       * @return { Number }
-       */
-      readDoubleLE(offset) {
-        return this._readNumberValue(Buffer.prototype.readDoubleLE, 8, offset);
-      }
-      /**
-       * Writes a DoubleBE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeDoubleBE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeDoubleBE, 8, value, offset);
-      }
-      /**
-       * Inserts a DoubleBE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertDoubleBE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeDoubleBE, 8, value, offset);
-      }
-      /**
-       * Writes a DoubleLE value to the current write position (or at optional offset).
-       *
-       * @param value { Number } The value to write.
-       * @param offset { Number } The offset to write the value at.
-       *
-       * @return this
-       */
-      writeDoubleLE(value, offset) {
-        return this._writeNumberValue(Buffer.prototype.writeDoubleLE, 8, value, offset);
-      }
-      /**
-       * Inserts a DoubleLE value at the given offset value.
-       *
-       * @param value { Number } The value to insert.
-       * @param offset { Number } The offset to insert the value at.
-       *
-       * @return this
-       */
-      insertDoubleLE(value, offset) {
-        return this._insertNumberValue(Buffer.prototype.writeDoubleLE, 8, value, offset);
-      }
-      // Strings
-      /**
-       * Reads a String from the current read position.
-       *
-       * @param arg1 { Number | String } The number of bytes to read as a String, or the BufferEncoding to use for
-       *             the string (Defaults to instance level encoding).
-       * @param encoding { String } The BufferEncoding to use for the string (Defaults to instance level encoding).
-       *
-       * @return { String }
-       */
-      readString(arg1, encoding) {
-        let lengthVal;
-        if (typeof arg1 === "number") {
-          utils_1.checkLengthValue(arg1);
-          lengthVal = Math.min(arg1, this.length - this._readOffset);
-        } else {
-          encoding = arg1;
-          lengthVal = this.length - this._readOffset;
-        }
-        if (typeof encoding !== "undefined") {
-          utils_1.checkEncoding(encoding);
-        }
-        const value = this._buff.slice(this._readOffset, this._readOffset + lengthVal).toString(encoding || this._encoding);
-        this._readOffset += lengthVal;
-        return value;
-      }
-      /**
-       * Inserts a String
-       *
-       * @param value { String } The String value to insert.
-       * @param offset { Number } The offset to insert the string at.
-       * @param encoding { String } The BufferEncoding to use for writing strings (defaults to instance encoding).
-       *
-       * @return this
-       */
-      insertString(value, offset, encoding) {
-        utils_1.checkOffsetValue(offset);
-        return this._handleString(value, true, offset, encoding);
-      }
-      /**
-       * Writes a String
-       *
-       * @param value { String } The String value to write.
-       * @param arg2 { Number | String } The offset to write the string at, or the BufferEncoding to use.
-       * @param encoding { String } The BufferEncoding to use for writing strings (defaults to instance encoding).
-       *
-       * @return this
-       */
-      writeString(value, arg2, encoding) {
-        return this._handleString(value, false, arg2, encoding);
-      }
-      /**
-       * Reads a null-terminated String from the current read position.
-       *
-       * @param encoding { String } The BufferEncoding to use for the string (Defaults to instance level encoding).
-       *
-       * @return { String }
-       */
-      readStringNT(encoding) {
-        if (typeof encoding !== "undefined") {
-          utils_1.checkEncoding(encoding);
-        }
-        let nullPos = this.length;
-        for (let i2 = this._readOffset; i2 < this.length; i2++) {
-          if (this._buff[i2] === 0) {
-            nullPos = i2;
-            break;
-          }
-        }
-        const value = this._buff.slice(this._readOffset, nullPos);
-        this._readOffset = nullPos + 1;
-        return value.toString(encoding || this._encoding);
-      }
-      /**
-       * Inserts a null-terminated String.
-       *
-       * @param value { String } The String value to write.
-       * @param arg2 { Number | String } The offset to write the string to, or the BufferEncoding to use.
-       * @param encoding { String } The BufferEncoding to use for writing strings (defaults to instance encoding).
-       *
-       * @return this
-       */
-      insertStringNT(value, offset, encoding) {
-        utils_1.checkOffsetValue(offset);
-        this.insertString(value, offset, encoding);
-        this.insertUInt8(0, offset + value.length);
-        return this;
-      }
-      /**
-       * Writes a null-terminated String.
-       *
-       * @param value { String } The String value to write.
-       * @param arg2 { Number | String } The offset to write the string to, or the BufferEncoding to use.
-       * @param encoding { String } The BufferEncoding to use for writing strings (defaults to instance encoding).
-       *
-       * @return this
-       */
-      writeStringNT(value, arg2, encoding) {
-        this.writeString(value, arg2, encoding);
-        this.writeUInt8(0, typeof arg2 === "number" ? arg2 + value.length : this.writeOffset);
-        return this;
-      }
-      // Buffers
-      /**
-       * Reads a Buffer from the internal read position.
-       *
-       * @param length { Number } The length of data to read as a Buffer.
-       *
-       * @return { Buffer }
-       */
-      readBuffer(length) {
-        if (typeof length !== "undefined") {
-          utils_1.checkLengthValue(length);
-        }
-        const lengthVal = typeof length === "number" ? length : this.length;
-        const endPoint = Math.min(this.length, this._readOffset + lengthVal);
-        const value = this._buff.slice(this._readOffset, endPoint);
-        this._readOffset = endPoint;
-        return value;
-      }
-      /**
-       * Writes a Buffer to the current write position.
-       *
-       * @param value { Buffer } The Buffer to write.
-       * @param offset { Number } The offset to write the Buffer to.
-       *
-       * @return this
-       */
-      insertBuffer(value, offset) {
-        utils_1.checkOffsetValue(offset);
-        return this._handleBuffer(value, true, offset);
-      }
-      /**
-       * Writes a Buffer to the current write position.
-       *
-       * @param value { Buffer } The Buffer to write.
-       * @param offset { Number } The offset to write the Buffer to.
-       *
-       * @return this
-       */
-      writeBuffer(value, offset) {
-        return this._handleBuffer(value, false, offset);
-      }
-      /**
-       * Reads a null-terminated Buffer from the current read poisiton.
-       *
-       * @return { Buffer }
-       */
-      readBufferNT() {
-        let nullPos = this.length;
-        for (let i2 = this._readOffset; i2 < this.length; i2++) {
-          if (this._buff[i2] === 0) {
-            nullPos = i2;
-            break;
-          }
-        }
-        const value = this._buff.slice(this._readOffset, nullPos);
-        this._readOffset = nullPos + 1;
-        return value;
-      }
-      /**
-       * Inserts a null-terminated Buffer.
-       *
-       * @param value { Buffer } The Buffer to write.
-       * @param offset { Number } The offset to write the Buffer to.
-       *
-       * @return this
-       */
-      insertBufferNT(value, offset) {
-        utils_1.checkOffsetValue(offset);
-        this.insertBuffer(value, offset);
-        this.insertUInt8(0, offset + value.length);
-        return this;
-      }
-      /**
-       * Writes a null-terminated Buffer.
-       *
-       * @param value { Buffer } The Buffer to write.
-       * @param offset { Number } The offset to write the Buffer to.
-       *
-       * @return this
-       */
-      writeBufferNT(value, offset) {
-        if (typeof offset !== "undefined") {
-          utils_1.checkOffsetValue(offset);
-        }
-        this.writeBuffer(value, offset);
-        this.writeUInt8(0, typeof offset === "number" ? offset + value.length : this._writeOffset);
-        return this;
-      }
-      /**
-       * Clears the SmartBuffer instance to its original empty state.
-       */
-      clear() {
-        this._writeOffset = 0;
-        this._readOffset = 0;
-        this.length = 0;
-        return this;
-      }
-      /**
-       * Gets the remaining data left to be read from the SmartBuffer instance.
-       *
-       * @return { Number }
-       */
-      remaining() {
-        return this.length - this._readOffset;
-      }
-      /**
-       * Gets the current read offset value of the SmartBuffer instance.
-       *
-       * @return { Number }
-       */
-      get readOffset() {
-        return this._readOffset;
-      }
-      /**
-       * Sets the read offset value of the SmartBuffer instance.
-       *
-       * @param offset { Number } - The offset value to set.
-       */
-      set readOffset(offset) {
-        utils_1.checkOffsetValue(offset);
-        utils_1.checkTargetOffset(offset, this);
-        this._readOffset = offset;
-      }
-      /**
-       * Gets the current write offset value of the SmartBuffer instance.
-       *
-       * @return { Number }
-       */
-      get writeOffset() {
-        return this._writeOffset;
-      }
-      /**
-       * Sets the write offset value of the SmartBuffer instance.
-       *
-       * @param offset { Number } - The offset value to set.
-       */
-      set writeOffset(offset) {
-        utils_1.checkOffsetValue(offset);
-        utils_1.checkTargetOffset(offset, this);
-        this._writeOffset = offset;
-      }
-      /**
-       * Gets the currently set string encoding of the SmartBuffer instance.
-       *
-       * @return { BufferEncoding } The string Buffer encoding currently set.
-       */
-      get encoding() {
-        return this._encoding;
-      }
-      /**
-       * Sets the string encoding of the SmartBuffer instance.
-       *
-       * @param encoding { BufferEncoding } The string Buffer encoding to set.
-       */
-      set encoding(encoding) {
-        utils_1.checkEncoding(encoding);
-        this._encoding = encoding;
-      }
-      /**
-       * Gets the underlying internal Buffer. (This includes unmanaged data in the Buffer)
-       *
-       * @return { Buffer } The Buffer value.
-       */
-      get internalBuffer() {
-        return this._buff;
-      }
-      /**
-       * Gets the value of the internal managed Buffer (Includes managed data only)
-       *
-       * @param { Buffer }
-       */
-      toBuffer() {
-        return this._buff.slice(0, this.length);
-      }
-      /**
-       * Gets the String value of the internal managed Buffer
-       *
-       * @param encoding { String } The BufferEncoding to display the Buffer as (defaults to instance level encoding).
-       */
-      toString(encoding) {
-        const encodingVal = typeof encoding === "string" ? encoding : this._encoding;
-        utils_1.checkEncoding(encodingVal);
-        return this._buff.toString(encodingVal, 0, this.length);
-      }
-      /**
-       * Destroys the SmartBuffer instance.
-       */
-      destroy() {
-        this.clear();
-        return this;
-      }
-      /**
-       * Handles inserting and writing strings.
-       *
-       * @param value { String } The String value to insert.
-       * @param isInsert { Boolean } True if inserting a string, false if writing.
-       * @param arg2 { Number | String } The offset to insert the string at, or the BufferEncoding to use.
-       * @param encoding { String } The BufferEncoding to use for writing strings (defaults to instance encoding).
-       */
-      _handleString(value, isInsert, arg3, encoding) {
-        let offsetVal = this._writeOffset;
-        let encodingVal = this._encoding;
-        if (typeof arg3 === "number") {
-          offsetVal = arg3;
-        } else if (typeof arg3 === "string") {
-          utils_1.checkEncoding(arg3);
-          encodingVal = arg3;
-        }
-        if (typeof encoding === "string") {
-          utils_1.checkEncoding(encoding);
-          encodingVal = encoding;
-        }
-        const byteLength = Buffer.byteLength(value, encodingVal);
-        if (isInsert) {
-          this.ensureInsertable(byteLength, offsetVal);
-        } else {
-          this._ensureWriteable(byteLength, offsetVal);
-        }
-        this._buff.write(value, offsetVal, byteLength, encodingVal);
-        if (isInsert) {
-          this._writeOffset += byteLength;
-        } else {
-          if (typeof arg3 === "number") {
-            this._writeOffset = Math.max(this._writeOffset, offsetVal + byteLength);
-          } else {
-            this._writeOffset += byteLength;
-          }
-        }
-        return this;
-      }
-      /**
-       * Handles writing or insert of a Buffer.
-       *
-       * @param value { Buffer } The Buffer to write.
-       * @param offset { Number } The offset to write the Buffer to.
-       */
-      _handleBuffer(value, isInsert, offset) {
-        const offsetVal = typeof offset === "number" ? offset : this._writeOffset;
-        if (isInsert) {
-          this.ensureInsertable(value.length, offsetVal);
-        } else {
-          this._ensureWriteable(value.length, offsetVal);
-        }
-        value.copy(this._buff, offsetVal);
-        if (isInsert) {
-          this._writeOffset += value.length;
-        } else {
-          if (typeof offset === "number") {
-            this._writeOffset = Math.max(this._writeOffset, offsetVal + value.length);
-          } else {
-            this._writeOffset += value.length;
-          }
-        }
-        return this;
-      }
-      /**
-       * Ensures that the internal Buffer is large enough to read data.
-       *
-       * @param length { Number } The length of the data that needs to be read.
-       * @param offset { Number } The offset of the data that needs to be read.
-       */
-      ensureReadable(length, offset) {
-        let offsetVal = this._readOffset;
-        if (typeof offset !== "undefined") {
-          utils_1.checkOffsetValue(offset);
-          offsetVal = offset;
-        }
-        if (offsetVal < 0 || offsetVal + length > this.length) {
-          throw new Error(utils_1.ERRORS.INVALID_READ_BEYOND_BOUNDS);
-        }
-      }
-      /**
-       * Ensures that the internal Buffer is large enough to insert data.
-       *
-       * @param dataLength { Number } The length of the data that needs to be written.
-       * @param offset { Number } The offset of the data to be written.
-       */
-      ensureInsertable(dataLength, offset) {
-        utils_1.checkOffsetValue(offset);
-        this._ensureCapacity(this.length + dataLength);
-        if (offset < this.length) {
-          this._buff.copy(this._buff, offset + dataLength, offset, this._buff.length);
-        }
-        if (offset + dataLength > this.length) {
-          this.length = offset + dataLength;
-        } else {
-          this.length += dataLength;
-        }
-      }
-      /**
-       * Ensures that the internal Buffer is large enough to write data.
-       *
-       * @param dataLength { Number } The length of the data that needs to be written.
-       * @param offset { Number } The offset of the data to be written (defaults to writeOffset).
-       */
-      _ensureWriteable(dataLength, offset) {
-        const offsetVal = typeof offset === "number" ? offset : this._writeOffset;
-        this._ensureCapacity(offsetVal + dataLength);
-        if (offsetVal + dataLength > this.length) {
-          this.length = offsetVal + dataLength;
-        }
-      }
-      /**
-       * Ensures that the internal Buffer is large enough to write at least the given amount of data.
-       *
-       * @param minLength { Number } The minimum length of the data needs to be written.
-       */
-      _ensureCapacity(minLength) {
-        const oldLength = this._buff.length;
-        if (minLength > oldLength) {
-          let data = this._buff;
-          let newLength = oldLength * 3 / 2 + 1;
-          if (newLength < minLength) {
-            newLength = minLength;
-          }
-          this._buff = Buffer.allocUnsafe(newLength);
-          data.copy(this._buff, 0, 0, oldLength);
-        }
-      }
-      /**
-       * Reads a numeric number value using the provided function.
-       *
-       * @typeparam T { number | bigint } The type of the value to be read
-       *
-       * @param func { Function(offset: number) => number } The function to read data on the internal Buffer with.
-       * @param byteSize { Number } The number of bytes read.
-       * @param offset { Number } The offset to read from (optional). When this is not provided, the managed readOffset is used instead.
-       *
-       * @returns { T } the number value
-       */
-      _readNumberValue(func, byteSize, offset) {
-        this.ensureReadable(byteSize, offset);
-        const value = func.call(this._buff, typeof offset === "number" ? offset : this._readOffset);
-        if (typeof offset === "undefined") {
-          this._readOffset += byteSize;
-        }
-        return value;
-      }
-      /**
-       * Inserts a numeric number value based on the given offset and value.
-       *
-       * @typeparam T { number | bigint } The type of the value to be written
-       *
-       * @param func { Function(offset: T, offset?) => number} The function to write data on the internal Buffer with.
-       * @param byteSize { Number } The number of bytes written.
-       * @param value { T } The number value to write.
-       * @param offset { Number } the offset to write the number at (REQUIRED).
-       *
-       * @returns SmartBuffer this buffer
-       */
-      _insertNumberValue(func, byteSize, value, offset) {
-        utils_1.checkOffsetValue(offset);
-        this.ensureInsertable(byteSize, offset);
-        func.call(this._buff, value, offset);
-        this._writeOffset += byteSize;
-        return this;
-      }
-      /**
-       * Writes a numeric number value based on the given offset and value.
-       *
-       * @typeparam T { number | bigint } The type of the value to be written
-       *
-       * @param func { Function(offset: T, offset?) => number} The function to write data on the internal Buffer with.
-       * @param byteSize { Number } The number of bytes written.
-       * @param value { T } The number value to write.
-       * @param offset { Number } the offset to write the number at (REQUIRED).
-       *
-       * @returns SmartBuffer this buffer
-       */
-      _writeNumberValue(func, byteSize, value, offset) {
-        if (typeof offset === "number") {
-          if (offset < 0) {
-            throw new Error(utils_1.ERRORS.INVALID_WRITE_BEYOND_BOUNDS);
-          }
-          utils_1.checkOffsetValue(offset);
-        }
-        const offsetVal = typeof offset === "number" ? offset : this._writeOffset;
-        this._ensureWriteable(byteSize, offsetVal);
-        func.call(this._buff, value, offsetVal);
-        if (typeof offset === "number") {
-          this._writeOffset = Math.max(this._writeOffset, offsetVal + byteSize);
-        } else {
-          this._writeOffset += byteSize;
-        }
-        return this;
-      }
-    };
-    exports2.SmartBuffer = SmartBuffer;
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/constants.js
-var require_constants4 = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/constants.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.SOCKS5_NO_ACCEPTABLE_AUTH = exports2.SOCKS5_CUSTOM_AUTH_END = exports2.SOCKS5_CUSTOM_AUTH_START = exports2.SOCKS_INCOMING_PACKET_SIZES = exports2.SocksClientState = exports2.Socks5Response = exports2.Socks5HostType = exports2.Socks5Auth = exports2.Socks4Response = exports2.SocksCommand = exports2.ERRORS = exports2.DEFAULT_TIMEOUT = void 0;
-    var DEFAULT_TIMEOUT = 3e4;
-    exports2.DEFAULT_TIMEOUT = DEFAULT_TIMEOUT;
-    var ERRORS = {
-      InvalidSocksCommand: "An invalid SOCKS command was provided. Valid options are connect, bind, and associate.",
-      InvalidSocksCommandForOperation: "An invalid SOCKS command was provided. Only a subset of commands are supported for this operation.",
-      InvalidSocksCommandChain: "An invalid SOCKS command was provided. Chaining currently only supports the connect command.",
-      InvalidSocksClientOptionsDestination: "An invalid destination host was provided.",
-      InvalidSocksClientOptionsExistingSocket: "An invalid existing socket was provided. This should be an instance of stream.Duplex.",
-      InvalidSocksClientOptionsProxy: "Invalid SOCKS proxy details were provided.",
-      InvalidSocksClientOptionsTimeout: "An invalid timeout value was provided. Please enter a value above 0 (in ms).",
-      InvalidSocksClientOptionsProxiesLength: "At least two socks proxies must be provided for chaining.",
-      InvalidSocksClientOptionsCustomAuthRange: "Custom auth must be a value between 0x80 and 0xFE.",
-      InvalidSocksClientOptionsCustomAuthOptions: "When a custom_auth_method is provided, custom_auth_request_handler, custom_auth_response_size, and custom_auth_response_handler must also be provided and valid.",
-      NegotiationError: "Negotiation error",
-      SocketClosed: "Socket closed",
-      ProxyConnectionTimedOut: "Proxy connection timed out",
-      InternalError: "SocksClient internal error (this should not happen)",
-      InvalidSocks4HandshakeResponse: "Received invalid Socks4 handshake response",
-      Socks4ProxyRejectedConnection: "Socks4 Proxy rejected connection",
-      InvalidSocks4IncomingConnectionResponse: "Socks4 invalid incoming connection response",
-      Socks4ProxyRejectedIncomingBoundConnection: "Socks4 Proxy rejected incoming bound connection",
-      InvalidSocks5InitialHandshakeResponse: "Received invalid Socks5 initial handshake response",
-      InvalidSocks5IntiailHandshakeSocksVersion: "Received invalid Socks5 initial handshake (invalid socks version)",
-      InvalidSocks5InitialHandshakeNoAcceptedAuthType: "Received invalid Socks5 initial handshake (no accepted authentication type)",
-      InvalidSocks5InitialHandshakeUnknownAuthType: "Received invalid Socks5 initial handshake (unknown authentication type)",
-      Socks5AuthenticationFailed: "Socks5 Authentication failed",
-      InvalidSocks5FinalHandshake: "Received invalid Socks5 final handshake response",
-      InvalidSocks5FinalHandshakeRejected: "Socks5 proxy rejected connection",
-      InvalidSocks5IncomingConnectionResponse: "Received invalid Socks5 incoming connection response",
-      Socks5ProxyRejectedIncomingBoundConnection: "Socks5 Proxy rejected incoming bound connection"
-    };
-    exports2.ERRORS = ERRORS;
-    var SOCKS_INCOMING_PACKET_SIZES = {
-      Socks5InitialHandshakeResponse: 2,
-      Socks5UserPassAuthenticationResponse: 2,
-      // Command response + incoming connection (bind)
-      Socks5ResponseHeader: 5,
-      // We need at least 5 to read the hostname length, then we wait for the address+port information.
-      Socks5ResponseIPv4: 10,
-      // 4 header + 4 ip + 2 port
-      Socks5ResponseIPv6: 22,
-      // 4 header + 16 ip + 2 port
-      Socks5ResponseHostname: (hostNameLength) => hostNameLength + 7,
-      // 4 header + 1 host length + host + 2 port
-      // Command response + incoming connection (bind)
-      Socks4Response: 8
-      // 2 header + 2 port + 4 ip
-    };
-    exports2.SOCKS_INCOMING_PACKET_SIZES = SOCKS_INCOMING_PACKET_SIZES;
-    var SocksCommand;
-    (function(SocksCommand2) {
-      SocksCommand2[SocksCommand2["connect"] = 1] = "connect";
-      SocksCommand2[SocksCommand2["bind"] = 2] = "bind";
-      SocksCommand2[SocksCommand2["associate"] = 3] = "associate";
-    })(SocksCommand || (exports2.SocksCommand = SocksCommand = {}));
-    var Socks4Response;
-    (function(Socks4Response2) {
-      Socks4Response2[Socks4Response2["Granted"] = 90] = "Granted";
-      Socks4Response2[Socks4Response2["Failed"] = 91] = "Failed";
-      Socks4Response2[Socks4Response2["Rejected"] = 92] = "Rejected";
-      Socks4Response2[Socks4Response2["RejectedIdent"] = 93] = "RejectedIdent";
-    })(Socks4Response || (exports2.Socks4Response = Socks4Response = {}));
-    var Socks5Auth;
-    (function(Socks5Auth2) {
-      Socks5Auth2[Socks5Auth2["NoAuth"] = 0] = "NoAuth";
-      Socks5Auth2[Socks5Auth2["GSSApi"] = 1] = "GSSApi";
-      Socks5Auth2[Socks5Auth2["UserPass"] = 2] = "UserPass";
-    })(Socks5Auth || (exports2.Socks5Auth = Socks5Auth = {}));
-    var SOCKS5_CUSTOM_AUTH_START = 128;
-    exports2.SOCKS5_CUSTOM_AUTH_START = SOCKS5_CUSTOM_AUTH_START;
-    var SOCKS5_CUSTOM_AUTH_END = 254;
-    exports2.SOCKS5_CUSTOM_AUTH_END = SOCKS5_CUSTOM_AUTH_END;
-    var SOCKS5_NO_ACCEPTABLE_AUTH = 255;
-    exports2.SOCKS5_NO_ACCEPTABLE_AUTH = SOCKS5_NO_ACCEPTABLE_AUTH;
-    var Socks5Response;
-    (function(Socks5Response2) {
-      Socks5Response2[Socks5Response2["Granted"] = 0] = "Granted";
-      Socks5Response2[Socks5Response2["Failure"] = 1] = "Failure";
-      Socks5Response2[Socks5Response2["NotAllowed"] = 2] = "NotAllowed";
-      Socks5Response2[Socks5Response2["NetworkUnreachable"] = 3] = "NetworkUnreachable";
-      Socks5Response2[Socks5Response2["HostUnreachable"] = 4] = "HostUnreachable";
-      Socks5Response2[Socks5Response2["ConnectionRefused"] = 5] = "ConnectionRefused";
-      Socks5Response2[Socks5Response2["TTLExpired"] = 6] = "TTLExpired";
-      Socks5Response2[Socks5Response2["CommandNotSupported"] = 7] = "CommandNotSupported";
-      Socks5Response2[Socks5Response2["AddressNotSupported"] = 8] = "AddressNotSupported";
-    })(Socks5Response || (exports2.Socks5Response = Socks5Response = {}));
-    var Socks5HostType;
-    (function(Socks5HostType2) {
-      Socks5HostType2[Socks5HostType2["IPv4"] = 1] = "IPv4";
-      Socks5HostType2[Socks5HostType2["Hostname"] = 3] = "Hostname";
-      Socks5HostType2[Socks5HostType2["IPv6"] = 4] = "IPv6";
-    })(Socks5HostType || (exports2.Socks5HostType = Socks5HostType = {}));
-    var SocksClientState;
-    (function(SocksClientState2) {
-      SocksClientState2[SocksClientState2["Created"] = 0] = "Created";
-      SocksClientState2[SocksClientState2["Connecting"] = 1] = "Connecting";
-      SocksClientState2[SocksClientState2["Connected"] = 2] = "Connected";
-      SocksClientState2[SocksClientState2["SentInitialHandshake"] = 3] = "SentInitialHandshake";
-      SocksClientState2[SocksClientState2["ReceivedInitialHandshakeResponse"] = 4] = "ReceivedInitialHandshakeResponse";
-      SocksClientState2[SocksClientState2["SentAuthentication"] = 5] = "SentAuthentication";
-      SocksClientState2[SocksClientState2["ReceivedAuthenticationResponse"] = 6] = "ReceivedAuthenticationResponse";
-      SocksClientState2[SocksClientState2["SentFinalHandshake"] = 7] = "SentFinalHandshake";
-      SocksClientState2[SocksClientState2["ReceivedFinalResponse"] = 8] = "ReceivedFinalResponse";
-      SocksClientState2[SocksClientState2["BoundWaitingForConnection"] = 9] = "BoundWaitingForConnection";
-      SocksClientState2[SocksClientState2["Established"] = 10] = "Established";
-      SocksClientState2[SocksClientState2["Disconnected"] = 11] = "Disconnected";
-      SocksClientState2[SocksClientState2["Error"] = 99] = "Error";
-    })(SocksClientState || (exports2.SocksClientState = SocksClientState = {}));
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/util.js
-var require_util4 = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/util.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.shuffleArray = exports2.SocksClientError = void 0;
-    var SocksClientError = class extends Error {
-      constructor(message, options) {
-        super(message);
-        this.options = options;
-      }
-    };
-    exports2.SocksClientError = SocksClientError;
-    function shuffleArray(array2) {
-      for (let i2 = array2.length - 1; i2 > 0; i2--) {
-        const j = Math.floor(Math.random() * (i2 + 1));
-        [array2[i2], array2[j]] = [array2[j], array2[i2]];
-      }
-    }
-    exports2.shuffleArray = shuffleArray;
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/address-error.js
-var require_address_error = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/address-error.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.AddressError = void 0;
-    var AddressError = class extends Error {
-      constructor(message, parseMessage) {
-        super(message);
-        this.name = "AddressError";
-        this.parseMessage = parseMessage;
-      }
-    };
-    exports2.AddressError = AddressError;
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/common.js
-var require_common2 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/common.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.isInSubnet = isInSubnet;
-    exports2.isCorrect = isCorrect;
-    exports2.prefixLengthFromMask = prefixLengthFromMask;
-    exports2.numberToPaddedHex = numberToPaddedHex;
-    exports2.stringToPaddedHex = stringToPaddedHex;
-    exports2.testBit = testBit;
-    var address_error_1 = require_address_error();
-    function isInSubnet(address) {
-      if (this.subnetMask < address.subnetMask) {
-        return false;
-      }
-      if (this.mask(address.subnetMask) === address.mask()) {
-        return true;
-      }
-      return false;
-    }
-    function isCorrect(defaultBits) {
-      return function() {
-        if (this.addressMinusSuffix !== this.correctForm()) {
-          return false;
-        }
-        if (this.subnetMask === defaultBits && !this.parsedSubnet) {
-          return true;
-        }
-        return this.parsedSubnet === String(this.subnetMask);
-      };
-    }
-    function prefixLengthFromMask(value, totalBits) {
-      const binary = value.toString(2).padStart(totalBits, "0");
-      if (binary.length > totalBits) {
-        throw new address_error_1.AddressError("Invalid subnet mask.");
-      }
-      const firstZero = binary.indexOf("0");
-      if (firstZero === -1) {
-        return totalBits;
-      }
-      if (binary.slice(firstZero).includes("1")) {
-        throw new address_error_1.AddressError("Invalid subnet mask.");
-      }
-      return firstZero;
-    }
-    function numberToPaddedHex(number4) {
-      return number4.toString(16).padStart(2, "0");
-    }
-    function stringToPaddedHex(numberString) {
-      return numberToPaddedHex(parseInt(numberString, 10));
-    }
-    function testBit(binaryValue, position) {
-      const { length } = binaryValue;
-      if (position > length) {
-        return false;
-      }
-      const positionInString = length - position;
-      return binaryValue.substring(positionInString, positionInString + 1) === "1";
-    }
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v4/constants.js
-var require_constants5 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v4/constants.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.RE_SUBNET_STRING = exports2.RE_ADDRESS = exports2.GROUPS = exports2.BITS = void 0;
-    exports2.BITS = 32;
-    exports2.GROUPS = 4;
-    exports2.RE_ADDRESS = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/g;
-    exports2.RE_SUBNET_STRING = /\/\d{1,2}$/;
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ipv4.js
-var require_ipv4 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ipv4.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      var desc2 = Object.getOwnPropertyDescriptor(m2, k2);
-      if (!desc2 || ("get" in desc2 ? !m2.__esModule : desc2.writable || desc2.configurable)) {
-        desc2 = { enumerable: true, get: function() {
-          return m2[k2];
-        } };
-      }
-      Object.defineProperty(o, k22, desc2);
-    }) : (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      o[k22] = m2[k2];
-    }));
-    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v3) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v3 });
-    }) : function(o, v3) {
-      o["default"] = v3;
-    });
-    var __importStar = exports2 && exports2.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k2 in mod) if (k2 !== "default" && Object.prototype.hasOwnProperty.call(mod, k2)) __createBinding(result, mod, k2);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.Address4 = void 0;
-    var common = __importStar(require_common2());
-    var constants = __importStar(require_constants5());
-    var address_error_1 = require_address_error();
-    var isCorrect4 = common.isCorrect(constants.BITS);
-    var Address4 = class _Address4 {
-      constructor(address) {
-        this.groups = constants.GROUPS;
-        this.parsedAddress = [];
-        this.parsedSubnet = "";
-        this.subnet = "/32";
-        this.subnetMask = 32;
-        this.v4 = true;
-        this.isCorrect = isCorrect4;
-        this.isInSubnet = common.isInSubnet;
-        this.address = address;
-        const subnet = constants.RE_SUBNET_STRING.exec(address);
-        if (subnet) {
-          this.parsedSubnet = subnet[0].replace("/", "");
-          this.subnetMask = parseInt(this.parsedSubnet, 10);
-          this.subnet = `/${this.subnetMask}`;
-          if (this.subnetMask < 0 || this.subnetMask > constants.BITS) {
-            throw new address_error_1.AddressError("Invalid subnet mask.");
-          }
-          address = address.replace(constants.RE_SUBNET_STRING, "");
-        }
-        this.addressMinusSuffix = address;
-        this.parsedAddress = this.parse(address);
-      }
-      /**
-       * Returns true if the given string is a valid IPv4 address (with optional
-       * CIDR subnet), false otherwise. Host bits in the subnet portion are
-       * allowed (e.g. `192.168.1.5/24` is valid); for strict network-address
-       * validation compare `correctForm()` to `startAddress().correctForm()`,
-       * or use `networkForm()`.
-       */
-      static isValid(address) {
-        try {
-          new _Address4(address);
-          return true;
-        } catch (e) {
-          return false;
-        }
-      }
-      /**
-       * Parses an IPv4 address string into its four octet groups and stores the
-       * result on `this.parsedAddress`. Called automatically by the constructor;
-       * you typically don't need to call it directly. Throws `AddressError` if
-       * the input is not a valid IPv4 address.
-       */
-      parse(address) {
-        const groups = address.split(".");
-        if (!address.match(constants.RE_ADDRESS)) {
-          throw new address_error_1.AddressError("Invalid IPv4 address.");
-        }
-        return groups;
-      }
-      /**
-       * Returns the address in correct form: octets joined with `.` and any
-       * leading zeros stripped (e.g. `192.168.1.1`). For IPv4 this matches the
-       * canonical dotted-decimal representation.
-       */
-      correctForm() {
-        return this.parsedAddress.map((part) => parseInt(part, 10)).join(".");
-      }
-      /**
-       * Construct an `Address4` from an address and a dotted-decimal subnet
-       * mask given as separate strings (e.g. as returned by Node's
-       * `os.networkInterfaces()`). Throws `AddressError` if the mask is
-       * non-contiguous (e.g. `255.0.255.0`).
-       * @example
-       * var address = Address4.fromAddressAndMask('192.168.1.1', '255.255.255.0');
-       * address.subnetMask; // 24
-       */
-      static fromAddressAndMask(address, mask) {
-        const bits = common.prefixLengthFromMask(new _Address4(mask).bigInt(), constants.BITS);
-        return new _Address4(`${address}/${bits}`);
-      }
-      /**
-       * Construct an `Address4` from an address and a Cisco-style wildcard mask
-       * given as separate strings (e.g. `0.0.0.255` for a `/24`). The wildcard
-       * mask is the bitwise inverse of the subnet mask. Throws `AddressError`
-       * if the mask is non-contiguous (e.g. `0.255.0.255`).
-       * @example
-       * var address = Address4.fromAddressAndWildcardMask('10.0.0.1', '0.0.0.255');
-       * address.subnetMask; // 24
-       */
-      static fromAddressAndWildcardMask(address, wildcardMask) {
-        const wildcard = new _Address4(wildcardMask).bigInt();
-        const allOnes = (BigInt(1) << BigInt(constants.BITS)) - BigInt(1);
-        const mask = wildcard ^ allOnes;
-        const bits = common.prefixLengthFromMask(mask, constants.BITS);
-        return new _Address4(`${address}/${bits}`);
-      }
-      /**
-       * Construct an `Address4` from a wildcard pattern with trailing `*`
-       * octets. The number of trailing wildcards determines the prefix
-       * length: each `*` represents 8 bits.
-       *
-       * Only trailing whole-octet wildcards are supported. Partial-octet
-       * wildcards (e.g. `192.168.0.1*`) and interior wildcards (e.g.
-       * `192.*.0.1`) throw `AddressError`.
-       * @example
-       * Address4.fromWildcard('192.168.0.*').subnet;   // '/24'
-       * Address4.fromWildcard('192.168.*.*').subnet;   // '/16'
-       * Address4.fromWildcard('*.*.*.*').subnet;       // '/0'
-       */
-      static fromWildcard(input) {
-        const groups = input.split(".");
-        if (groups.length !== constants.GROUPS) {
-          throw new address_error_1.AddressError("Wildcard pattern must have 4 octets");
-        }
-        let firstWildcard = -1;
-        for (let i2 = 0; i2 < groups.length; i2++) {
-          if (groups[i2] === "*") {
-            if (firstWildcard === -1) {
-              firstWildcard = i2;
-            }
-          } else if (firstWildcard !== -1) {
-            throw new address_error_1.AddressError("Wildcard `*` must only appear in trailing octets (e.g. `192.168.0.*`)");
-          }
-        }
-        const trailing = firstWildcard === -1 ? 0 : groups.length - firstWildcard;
-        const replaced = groups.map((g) => g === "*" ? "0" : g);
-        const subnetBits = constants.BITS - trailing * 8;
-        return new _Address4(`${replaced.join(".")}/${subnetBits}`);
-      }
-      /**
-       * Converts a hex string to an IPv4 address object. Accepts 8 hex digits
-       * with optional `:` separators (e.g. `'7f000001'` or `'7f:00:00:01'`).
-       * Throws `AddressError` for any other length or for non-hex characters.
-       * @param {string} hex - a hex string to convert
-       * @returns {Address4}
-       */
-      static fromHex(hex) {
-        const stripped = hex.replace(/:/g, "");
-        if (!/^[0-9a-fA-F]{8}$/.test(stripped)) {
-          throw new address_error_1.AddressError("IPv4 hex must be exactly 8 hex digits");
-        }
-        const groups = [];
-        for (let i2 = 0; i2 < 8; i2 += 2) {
-          groups.push(parseInt(stripped.slice(i2, i2 + 2), 16));
-        }
-        return new _Address4(groups.join("."));
-      }
-      /**
-       * Converts an integer into a IPv4 address object. The integer must be a
-       * non-negative safe integer in the range `[0, 2**32 - 1]`; otherwise
-       * `AddressError` is thrown.
-       * @param {integer} integer - a number to convert
-       * @returns {Address4}
-       */
-      static fromInteger(integer3) {
-        if (!Number.isInteger(integer3) || integer3 < 0 || integer3 > 4294967295) {
-          throw new address_error_1.AddressError("IPv4 integer must be in the range 0 to 2**32 - 1");
-        }
-        return _Address4.fromHex(integer3.toString(16).padStart(8, "0"));
-      }
-      /**
-       * Return an address from in-addr.arpa form
-       * @param {string} arpaFormAddress - an 'in-addr.arpa' form ipv4 address
-       * @returns {Adress4}
-       * @example
-       * var address = Address4.fromArpa(42.2.0.192.in-addr.arpa.)
-       * address.correctForm(); // '192.0.2.42'
-       */
-      static fromArpa(arpaFormAddress) {
-        const leader = arpaFormAddress.replace(/(\.in-addr\.arpa)?\.$/, "");
-        const address = leader.split(".").reverse().join(".");
-        return new _Address4(address);
-      }
-      /**
-       * Converts an IPv4 address object to a hex string
-       * @returns {String}
-       */
-      toHex() {
-        return this.parsedAddress.map((part) => common.stringToPaddedHex(part)).join(":");
-      }
-      /**
-       * Converts an IPv4 address object to an array of bytes.
-       *
-       * To get a Node.js `Buffer`, wrap the result: `Buffer.from(address.toArray())`.
-       * @returns {Array}
-       */
-      toArray() {
-        return this.parsedAddress.map((part) => parseInt(part, 10));
-      }
-      /**
-       * Converts an IPv4 address object to an IPv6 address group
-       * @returns {String}
-       */
-      toGroup6() {
-        const output = [];
-        let i2;
-        for (i2 = 0; i2 < constants.GROUPS; i2 += 2) {
-          output.push(`${common.stringToPaddedHex(this.parsedAddress[i2])}${common.stringToPaddedHex(this.parsedAddress[i2 + 1])}`);
-        }
-        return output.join(":");
-      }
-      /**
-       * Returns the address as a `bigint`
-       * @returns {bigint}
-       */
-      bigInt() {
-        return BigInt(`0x${this.parsedAddress.map((n) => common.stringToPaddedHex(n)).join("")}`);
-      }
-      /**
-       * Helper function getting start address.
-       * @returns {bigint}
-       */
-      _startAddress() {
-        return BigInt(`0b${this.mask() + "0".repeat(constants.BITS - this.subnetMask)}`);
-      }
-      /**
-       * The first address in the range given by this address' subnet.
-       * Often referred to as the Network Address.
-       * @returns {Address4}
-       */
-      startAddress() {
-        return _Address4.fromBigInt(this._startAddress());
-      }
-      /**
-       * The first host address in the range given by this address's subnet ie
-       * the first address after the Network Address
-       * @returns {Address4}
-       */
-      startAddressExclusive() {
-        const adjust = BigInt("1");
-        return _Address4.fromBigInt(this._startAddress() + adjust);
-      }
-      /**
-       * Helper function getting end address.
-       * @returns {bigint}
-       */
-      _endAddress() {
-        return BigInt(`0b${this.mask() + "1".repeat(constants.BITS - this.subnetMask)}`);
-      }
-      /**
-       * The last address in the range given by this address' subnet
-       * Often referred to as the Broadcast
-       * @returns {Address4}
-       */
-      endAddress() {
-        return _Address4.fromBigInt(this._endAddress());
-      }
-      /**
-       * The last host address in the range given by this address's subnet ie
-       * the last address prior to the Broadcast Address
-       * @returns {Address4}
-       */
-      endAddressExclusive() {
-        const adjust = BigInt("1");
-        return _Address4.fromBigInt(this._endAddress() - adjust);
-      }
-      /**
-       * The dotted-decimal form of the subnet mask, e.g. `255.255.240.0` for
-       * a `/20`. Returns an `Address4`; call `.correctForm()` for the string.
-       * @returns {Address4}
-       */
-      subnetMaskAddress() {
-        return _Address4.fromBigInt(BigInt(`0b${"1".repeat(this.subnetMask)}${"0".repeat(constants.BITS - this.subnetMask)}`));
-      }
-      /**
-       * The Cisco-style wildcard mask, e.g. `0.0.0.255` for a `/24`. This is
-       * the bitwise inverse of `subnetMaskAddress()`. Returns an `Address4`;
-       * call `.correctForm()` for the string.
-       * @returns {Address4}
-       */
-      wildcardMask() {
-        return _Address4.fromBigInt(BigInt(`0b${"0".repeat(this.subnetMask)}${"1".repeat(constants.BITS - this.subnetMask)}`));
-      }
-      /**
-       * The network address in CIDR string form, e.g. `192.168.1.0/24` for
-       * `192.168.1.5/24`. For an address with no explicit subnet the prefix is
-       * `/32`, e.g. `networkForm()` on `192.168.1.5` returns `192.168.1.5/32`.
-       * @returns {string}
-       */
-      networkForm() {
-        return `${this.startAddress().correctForm()}/${this.subnetMask}`;
-      }
-      /**
-       * Converts a BigInt to a v4 address object. The value must be in the
-       * range `[0, 2**32 - 1]`; otherwise `AddressError` is thrown.
-       * @param {bigint} bigInt - a BigInt to convert
-       * @returns {Address4}
-       */
-      static fromBigInt(bigInt) {
-        if (bigInt < 0n || bigInt > 0xffffffffn) {
-          throw new address_error_1.AddressError("IPv4 BigInt must be in the range 0 to 2**32 - 1");
-        }
-        return _Address4.fromHex(bigInt.toString(16).padStart(8, "0"));
-      }
-      /**
-       * Convert a byte array to an Address4 object.
-       *
-       * To convert from a Node.js `Buffer`, spread it: `Address4.fromByteArray([...buf])`.
-       * @param {Array<number>} bytes - an array of 4 bytes (0-255)
-       * @returns {Address4}
-       */
-      static fromByteArray(bytes) {
-        if (bytes.length !== 4) {
-          throw new address_error_1.AddressError("IPv4 addresses require exactly 4 bytes");
-        }
-        for (let i2 = 0; i2 < bytes.length; i2++) {
-          if (!Number.isInteger(bytes[i2]) || bytes[i2] < 0 || bytes[i2] > 255) {
-            throw new address_error_1.AddressError("All bytes must be integers between 0 and 255");
-          }
-        }
-        return this.fromUnsignedByteArray(bytes);
-      }
-      /**
-       * Convert an unsigned byte array to an Address4 object
-       * @param {Array<number>} bytes - an array of 4 unsigned bytes (0-255)
-       * @returns {Address4}
-       */
-      static fromUnsignedByteArray(bytes) {
-        if (bytes.length !== 4) {
-          throw new address_error_1.AddressError("IPv4 addresses require exactly 4 bytes");
-        }
-        const address = bytes.join(".");
-        return new _Address4(address);
-      }
-      /**
-       * Returns the first n bits of the address, defaulting to the
-       * subnet mask
-       * @returns {String}
-       */
-      mask(mask) {
-        if (mask === void 0) {
-          mask = this.subnetMask;
-        }
-        return this.getBitsBase2(0, mask);
-      }
-      /**
-       * Returns the bits in the given range as a base-2 string
-       * @returns {string}
-       */
-      getBitsBase2(start, end) {
-        return this.binaryZeroPad().slice(start, end);
-      }
-      /**
-       * Return the reversed ip6.arpa form of the address
-       * @param {Object} options
-       * @param {boolean} options.omitSuffix - omit the "in-addr.arpa" suffix
-       * @returns {String}
-       */
-      reverseForm(options) {
-        if (!options) {
-          options = {};
-        }
-        const reversed = this.correctForm().split(".").reverse().join(".");
-        if (options.omitSuffix) {
-          return reversed;
-        }
-        return `${reversed}.in-addr.arpa.`;
-      }
-      /**
-       * Returns true if the given address is a multicast address
-       * @returns {boolean}
-       */
-      isMulticast() {
-        return this.isInSubnet(MULTICAST_V4);
-      }
-      /**
-       * Returns true if the address is in one of the [RFC 1918](https://datatracker.ietf.org/doc/html/rfc1918) private address ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
-       * @returns {boolean}
-       */
-      isPrivate() {
-        return PRIVATE_V4.some((subnet) => this.isInSubnet(subnet));
-      }
-      /**
-       * Returns true if the address is in the loopback range `127.0.0.0/8` ([RFC 1122](https://datatracker.ietf.org/doc/html/rfc1122)).
-       * @returns {boolean}
-       */
-      isLoopback() {
-        return this.isInSubnet(LOOPBACK_V4);
-      }
-      /**
-       * Returns true if the address is in the link-local range `169.254.0.0/16` ([RFC 3927](https://datatracker.ietf.org/doc/html/rfc3927)).
-       * @returns {boolean}
-       */
-      isLinkLocal() {
-        return this.isInSubnet(LINK_LOCAL_V4);
-      }
-      /**
-       * Returns true if the address is the unspecified address `0.0.0.0`.
-       * @returns {boolean}
-       */
-      isUnspecified() {
-        return this.isInSubnet(UNSPECIFIED_V4);
-      }
-      /**
-       * Returns true if the address is the limited broadcast address `255.255.255.255` ([RFC 919](https://datatracker.ietf.org/doc/html/rfc919)).
-       * @returns {boolean}
-       */
-      isBroadcast() {
-        return this.isInSubnet(BROADCAST_V4);
-      }
-      /**
-       * Returns true if the address is in the carrier-grade NAT range `100.64.0.0/10` ([RFC 6598](https://datatracker.ietf.org/doc/html/rfc6598)).
-       * @returns {boolean}
-       */
-      isCGNAT() {
-        return this.isInSubnet(CGNAT_V4);
-      }
-      /**
-       * Returns a zero-padded base-2 string representation of the address
-       * @returns {string}
-       */
-      binaryZeroPad() {
-        if (this._binaryZeroPad === void 0) {
-          this._binaryZeroPad = this.bigInt().toString(2).padStart(constants.BITS, "0");
-        }
-        return this._binaryZeroPad;
-      }
-      /**
-       * Groups an IPv4 address for inclusion at the end of an IPv6 address
-       * @returns {String}
-       */
-      groupForV6() {
-        const segments = this.parsedAddress;
-        return this.address.replace(constants.RE_ADDRESS, `<span class="hover-group group-v4 group-6">${segments.slice(0, 2).join(".")}</span>.<span class="hover-group group-v4 group-7">${segments.slice(2, 4).join(".")}</span>`);
-      }
-    };
-    exports2.Address4 = Address4;
-    var MULTICAST_V4 = new Address4("224.0.0.0/4");
-    var PRIVATE_V4 = [
-      new Address4("10.0.0.0/8"),
-      new Address4("172.16.0.0/12"),
-      new Address4("192.168.0.0/16")
-    ];
-    var LOOPBACK_V4 = new Address4("127.0.0.0/8");
-    var LINK_LOCAL_V4 = new Address4("169.254.0.0/16");
-    var UNSPECIFIED_V4 = new Address4("0.0.0.0/32");
-    var BROADCAST_V4 = new Address4("255.255.255.255/32");
-    var CGNAT_V4 = new Address4("100.64.0.0/10");
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/constants.js
-var require_constants6 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/constants.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.RE_URL_WITH_PORT = exports2.RE_URL = exports2.RE_ZONE_STRING = exports2.RE_SUBNET_STRING = exports2.RE_BAD_ADDRESS = exports2.RE_BAD_CHARACTERS = exports2.TYPES = exports2.SCOPES = exports2.GROUPS = exports2.BITS = void 0;
-    exports2.BITS = 128;
-    exports2.GROUPS = 8;
-    exports2.SCOPES = {
-      0: "Reserved",
-      1: "Interface local",
-      2: "Link local",
-      4: "Admin local",
-      5: "Site local",
-      8: "Organization local",
-      14: "Global",
-      15: "Reserved"
-    };
-    exports2.TYPES = {
-      "ff01::1/128": "Multicast (All nodes on this interface)",
-      "ff01::2/128": "Multicast (All routers on this interface)",
-      "ff02::1/128": "Multicast (All nodes on this link)",
-      "ff02::2/128": "Multicast (All routers on this link)",
-      "ff05::2/128": "Multicast (All routers in this site)",
-      "ff02::5/128": "Multicast (OSPFv3 AllSPF routers)",
-      "ff02::6/128": "Multicast (OSPFv3 AllDR routers)",
-      "ff02::9/128": "Multicast (RIP routers)",
-      "ff02::a/128": "Multicast (EIGRP routers)",
-      "ff02::d/128": "Multicast (PIM routers)",
-      "ff02::16/128": "Multicast (MLDv2 reports)",
-      "ff01::fb/128": "Multicast (mDNSv6)",
-      "ff02::fb/128": "Multicast (mDNSv6)",
-      "ff05::fb/128": "Multicast (mDNSv6)",
-      "ff02::1:2/128": "Multicast (All DHCP servers and relay agents on this link)",
-      "ff05::1:2/128": "Multicast (All DHCP servers and relay agents in this site)",
-      "ff02::1:3/128": "Multicast (All DHCP servers on this link)",
-      "ff05::1:3/128": "Multicast (All DHCP servers in this site)",
-      "::/128": "Unspecified",
-      "::1/128": "Loopback",
-      "ff00::/8": "Multicast",
-      "fe80::/10": "Link-local unicast",
-      "fc00::/7": "Unique local",
-      "2002::/16": "6to4",
-      "2001:db8::/32": "Documentation",
-      "64:ff9b::/96": "NAT64 (well-known)",
-      "64:ff9b:1::/48": "NAT64 (local-use)"
-    };
-    exports2.RE_BAD_CHARACTERS = /([^0-9a-f:/%])/gi;
-    exports2.RE_BAD_ADDRESS = /([0-9a-f]{5,}|:{3,}|[^:]:$|^:[^:]|\/$)/gi;
-    exports2.RE_SUBNET_STRING = /\/\d{1,3}(?=%|$)/;
-    exports2.RE_ZONE_STRING = /%.*$/;
-    exports2.RE_URL = /^\[{0,1}([0-9a-f:]+)\]{0,1}/;
-    exports2.RE_URL_WITH_PORT = /\[([0-9a-f:]+)\]:([0-9]{1,5})/;
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/helpers.js
-var require_helpers2 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/helpers.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.escapeHtml = escapeHtml;
-    exports2.spanAllZeroes = spanAllZeroes;
-    exports2.spanAll = spanAll;
-    exports2.spanLeadingZeroes = spanLeadingZeroes;
-    exports2.simpleGroup = simpleGroup;
-    function escapeHtml(s) {
-      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    }
-    function spanAllZeroes(s) {
-      return escapeHtml(s).replace(/(0+)/g, '<span class="zero">$1</span>');
-    }
-    function spanAll(s, offset = 0) {
-      const letters = s.split("");
-      return letters.map((n, i2) => `<span class="digit value-${escapeHtml(n)} position-${i2 + offset}">${spanAllZeroes(n)}</span>`).join("");
-    }
-    function spanLeadingZeroesSimple(group) {
-      return escapeHtml(group).replace(/^(0+)/, '<span class="zero">$1</span>');
-    }
-    function spanLeadingZeroes(address) {
-      const groups = address.split(":");
-      return groups.map((g) => spanLeadingZeroesSimple(g)).join(":");
-    }
-    function simpleGroup(addressString, offset = 0) {
-      const groups = addressString.split(":");
-      return groups.map((g, i2) => {
-        if (/group-v4/.test(g)) {
-          return g;
-        }
-        return `<span class="hover-group group-${i2 + offset}">${spanLeadingZeroesSimple(g)}</span>`;
-      });
-    }
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/regular-expressions.js
-var require_regular_expressions = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/v6/regular-expressions.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      var desc2 = Object.getOwnPropertyDescriptor(m2, k2);
-      if (!desc2 || ("get" in desc2 ? !m2.__esModule : desc2.writable || desc2.configurable)) {
-        desc2 = { enumerable: true, get: function() {
-          return m2[k2];
-        } };
-      }
-      Object.defineProperty(o, k22, desc2);
-    }) : (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      o[k22] = m2[k2];
-    }));
-    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v3) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v3 });
-    }) : function(o, v3) {
-      o["default"] = v3;
-    });
-    var __importStar = exports2 && exports2.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k2 in mod) if (k2 !== "default" && Object.prototype.hasOwnProperty.call(mod, k2)) __createBinding(result, mod, k2);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.ADDRESS_BOUNDARY = void 0;
-    exports2.groupPossibilities = groupPossibilities;
-    exports2.padGroup = padGroup;
-    exports2.simpleRegularExpression = simpleRegularExpression;
-    exports2.possibleElisions = possibleElisions;
-    var v6 = __importStar(require_constants6());
-    function groupPossibilities(possibilities) {
-      return `(${possibilities.join("|")})`;
-    }
-    function padGroup(group) {
-      if (group.length < 4) {
-        return `0{0,${4 - group.length}}${group}`;
-      }
-      return group;
-    }
-    exports2.ADDRESS_BOUNDARY = "[^A-Fa-f0-9:]";
-    function simpleRegularExpression(groups) {
-      const zeroIndexes = [];
-      groups.forEach((group, i2) => {
-        const groupInteger = parseInt(group, 16);
-        if (groupInteger === 0) {
-          zeroIndexes.push(i2);
-        }
-      });
-      const possibilities = zeroIndexes.map((zeroIndex) => groups.map((group, i2) => {
-        if (i2 === zeroIndex) {
-          const elision = i2 === 0 || i2 === v6.GROUPS - 1 ? ":" : "";
-          return groupPossibilities([padGroup(group), elision]);
-        }
-        return padGroup(group);
-      }).join(":"));
-      possibilities.push(groups.map(padGroup).join(":"));
-      return groupPossibilities(possibilities);
-    }
-    function possibleElisions(elidedGroups, moreLeft, moreRight) {
-      const left = moreLeft ? "" : ":";
-      const right = moreRight ? "" : ":";
-      const possibilities = [];
-      if (!moreLeft && !moreRight) {
-        possibilities.push("::");
-      }
-      if (moreLeft && moreRight) {
-        possibilities.push("");
-      }
-      if (moreRight && !moreLeft || !moreRight && moreLeft) {
-        possibilities.push(":");
-      }
-      possibilities.push(`${left}(:0{1,4}){1,${elidedGroups - 1}}`);
-      possibilities.push(`(0{1,4}:){1,${elidedGroups - 1}}${right}`);
-      possibilities.push(`(0{1,4}:){${elidedGroups - 1}}0{1,4}`);
-      for (let groups = 1; groups < elidedGroups - 1; groups++) {
-        for (let position = 1; position < elidedGroups - groups; position++) {
-          possibilities.push(`(0{1,4}:){${position}}:(0{1,4}:){${elidedGroups - position - groups - 1}}0{1,4}`);
-        }
-      }
-      return groupPossibilities(possibilities);
-    }
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ipv6.js
-var require_ipv6 = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ipv6.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      var desc2 = Object.getOwnPropertyDescriptor(m2, k2);
-      if (!desc2 || ("get" in desc2 ? !m2.__esModule : desc2.writable || desc2.configurable)) {
-        desc2 = { enumerable: true, get: function() {
-          return m2[k2];
-        } };
-      }
-      Object.defineProperty(o, k22, desc2);
-    }) : (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      o[k22] = m2[k2];
-    }));
-    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v3) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v3 });
-    }) : function(o, v3) {
-      o["default"] = v3;
-    });
-    var __importStar = exports2 && exports2.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k2 in mod) if (k2 !== "default" && Object.prototype.hasOwnProperty.call(mod, k2)) __createBinding(result, mod, k2);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.Address6 = void 0;
-    var common = __importStar(require_common2());
-    var constants4 = __importStar(require_constants5());
-    var constants6 = __importStar(require_constants6());
-    var helpers = __importStar(require_helpers2());
-    var ipv4_1 = require_ipv4();
-    var regular_expressions_1 = require_regular_expressions();
-    var address_error_1 = require_address_error();
-    var common_1 = require_common2();
-    var isCorrect6 = common.isCorrect(constants6.BITS);
-    function assert3(condition) {
-      if (!condition) {
-        throw new Error("Assertion failed.");
-      }
-    }
-    function addCommas(number4) {
-      const r2 = /(\d+)(\d{3})/;
-      while (r2.test(number4)) {
-        number4 = number4.replace(r2, "$1,$2");
-      }
-      return number4;
-    }
-    function spanLeadingZeroes4(n) {
-      n = n.replace(/^(0{1,})([1-9]+)$/, '<span class="parse-error">$1</span>$2');
-      n = n.replace(/^(0{1,})(0)$/, '<span class="parse-error">$1</span>$2');
-      return n;
-    }
-    function compact(address, slice) {
-      const s1 = [];
-      const s2 = [];
-      let i2;
-      for (i2 = 0; i2 < address.length; i2++) {
-        if (i2 < slice[0]) {
-          s1.push(address[i2]);
-        } else if (i2 > slice[1]) {
-          s2.push(address[i2]);
-        }
-      }
-      return s1.concat(["compact"]).concat(s2);
-    }
-    function paddedHex(octet) {
-      return parseInt(octet, 16).toString(16).padStart(4, "0");
-    }
-    function unsignByte(b3) {
-      return b3 & 255;
-    }
-    var Address6 = class _Address6 {
-      constructor(address, optionalGroups) {
-        this.addressMinusSuffix = "";
-        this.parsedSubnet = "";
-        this.subnet = "/128";
-        this.subnetMask = 128;
-        this.v4 = false;
-        this.zone = "";
-        this.isInSubnet = common.isInSubnet;
-        this.isCorrect = isCorrect6;
-        if (optionalGroups === void 0) {
-          this.groups = constants6.GROUPS;
-        } else {
-          this.groups = optionalGroups;
-        }
-        this.address = address;
-        const subnet = constants6.RE_SUBNET_STRING.exec(address);
-        if (subnet) {
-          this.parsedSubnet = subnet[0].replace("/", "");
-          this.subnetMask = parseInt(this.parsedSubnet, 10);
-          this.subnet = `/${this.subnetMask}`;
-          if (Number.isNaN(this.subnetMask) || this.subnetMask < 0 || this.subnetMask > constants6.BITS) {
-            throw new address_error_1.AddressError("Invalid subnet mask.");
-          }
-          address = address.replace(constants6.RE_SUBNET_STRING, "");
-        } else if (/\//.test(address)) {
-          throw new address_error_1.AddressError("Invalid subnet mask.");
-        }
-        const zone = constants6.RE_ZONE_STRING.exec(address);
-        if (zone) {
-          this.zone = zone[0];
-          address = address.replace(constants6.RE_ZONE_STRING, "");
-        }
-        this.addressMinusSuffix = address;
-        this.parsedAddress = this.parse(this.addressMinusSuffix);
-      }
-      /**
-       * Returns true if the given string is a valid IPv6 address (with optional
-       * CIDR subnet and zone identifier), false otherwise. Host bits in the
-       * subnet portion are allowed (e.g. `2001:db8::1/32` is valid); for strict
-       * network-address validation compare `correctForm()` to
-       * `startAddress().correctForm()`, or use `networkForm()`.
-       */
-      static isValid(address) {
-        try {
-          new _Address6(address);
-          return true;
-        } catch (e) {
-          return false;
-        }
-      }
-      /**
-       * Convert a BigInt to a v6 address object. The value must be in the
-       * range `[0, 2**128 - 1]`; otherwise `AddressError` is thrown.
-       * @param {bigint} bigInt - a BigInt to convert
-       * @returns {Address6}
-       * @example
-       * var bigInt = BigInt('1000000000000');
-       * var address = Address6.fromBigInt(bigInt);
-       * address.correctForm(); // '::e8:d4a5:1000'
-       */
-      static fromBigInt(bigInt) {
-        if (bigInt < 0n || bigInt > (1n << BigInt(constants6.BITS)) - 1n) {
-          throw new address_error_1.AddressError("IPv6 BigInt must be in the range 0 to 2**128 - 1");
-        }
-        const hex = bigInt.toString(16).padStart(32, "0");
-        const groups = [];
-        for (let i2 = 0; i2 < constants6.GROUPS; i2++) {
-          groups.push(hex.slice(i2 * 4, (i2 + 1) * 4));
-        }
-        return new _Address6(groups.join(":"));
-      }
-      /**
-       * Parse a URL (with optional bracketed host and port) into an address and
-       * port. Returns either `{ address, port }` on success or
-       * `{ error, address: null, port: null }` if the URL could not be parsed.
-       * Ports are returned as numbers (or `null` if absent or out of range).
-       * @example
-       * var addressAndPort = Address6.fromURL('http://[ffff::]:8080/foo/');
-       * addressAndPort.address.correctForm(); // 'ffff::'
-       * addressAndPort.port; // 8080
-       */
-      static fromURL(url2) {
-        let host;
-        let port2 = null;
-        let result;
-        if (url2.indexOf("[") !== -1 && url2.indexOf("]:") !== -1) {
-          result = constants6.RE_URL_WITH_PORT.exec(url2);
-          if (result === null) {
-            return {
-              error: "failed to parse address with port",
-              address: null,
-              port: null
-            };
-          }
-          host = result[1];
-          port2 = result[2];
-        } else if (url2.indexOf("/") !== -1) {
-          url2 = url2.replace(/^[a-z0-9]+:\/\//, "");
-          result = constants6.RE_URL.exec(url2);
-          if (result === null) {
-            return {
-              error: "failed to parse address from URL",
-              address: null,
-              port: null
-            };
-          }
-          host = result[1];
-        } else {
-          host = url2;
-        }
-        if (port2) {
-          port2 = parseInt(port2, 10);
-          if (port2 < 0 || port2 > 65536) {
-            port2 = null;
-          }
-        } else {
-          port2 = null;
-        }
-        return {
-          address: new _Address6(host),
-          port: port2
-        };
-      }
-      /**
-       * Construct an `Address6` from an address and a hex subnet mask given as
-       * separate strings (e.g. as returned by Node's `os.networkInterfaces()`).
-       * Throws `AddressError` if the mask is non-contiguous (e.g.
-       * `ffff::ffff`).
-       * @example
-       * var address = Address6.fromAddressAndMask('fe80::1', 'ffff:ffff:ffff:ffff::');
-       * address.subnetMask; // 64
-       */
-      static fromAddressAndMask(address, mask) {
-        const bits = common.prefixLengthFromMask(new _Address6(mask).bigInt(), constants6.BITS);
-        return new _Address6(`${address}/${bits}`);
-      }
-      /**
-       * Construct an `Address6` from an address and a Cisco-style wildcard mask
-       * given as separate strings (e.g. `::ffff:ffff:ffff:ffff` for a `/64`).
-       * The wildcard mask is the bitwise inverse of the subnet mask. Throws
-       * `AddressError` if the mask is non-contiguous.
-       * @example
-       * var address = Address6.fromAddressAndWildcardMask('fe80::1', '::ffff:ffff:ffff:ffff');
-       * address.subnetMask; // 64
-       */
-      static fromAddressAndWildcardMask(address, wildcardMask) {
-        const wildcard = new _Address6(wildcardMask).bigInt();
-        const allOnes = (BigInt(1) << BigInt(constants6.BITS)) - BigInt(1);
-        const mask = wildcard ^ allOnes;
-        const bits = common.prefixLengthFromMask(mask, constants6.BITS);
-        return new _Address6(`${address}/${bits}`);
-      }
-      /**
-       * Construct an `Address6` from a wildcard pattern with trailing `*`
-       * groups. The number of trailing wildcards determines the prefix
-       * length: each `*` represents 16 bits. `::` is expanded to zero groups
-       * (not wildcards) before evaluating trailing wildcards.
-       *
-       * Only trailing whole-group wildcards are supported. Partial-group
-       * wildcards (e.g. `2001:db8::0*`) and interior wildcards (e.g.
-       * `*::1`) throw `AddressError`.
-       * @example
-       * Address6.fromWildcard('2001:db8:*:*:*:*:*:*').subnet;  // '/32'
-       * Address6.fromWildcard('2001:db8::*').subnet;           // '/112'
-       * Address6.fromWildcard('*:*:*:*:*:*:*:*').subnet;       // '/0'
-       */
-      static fromWildcard(input) {
-        if (input.includes("%") || input.includes("/")) {
-          throw new address_error_1.AddressError("Wildcard pattern must not include a zone or CIDR suffix");
-        }
-        const halves = input.split("::");
-        if (halves.length > 2) {
-          throw new address_error_1.AddressError("Wildcard pattern cannot contain more than one '::'");
-        }
-        let groups;
-        if (halves.length === 2) {
-          const left = halves[0] === "" ? [] : halves[0].split(":");
-          const right = halves[1] === "" ? [] : halves[1].split(":");
-          const remaining = constants6.GROUPS - left.length - right.length;
-          if (remaining < 1) {
-            throw new address_error_1.AddressError("Wildcard pattern with '::' has too many groups");
-          }
-          groups = [...left, ...new Array(remaining).fill("0"), ...right];
-        } else {
-          groups = input.split(":");
-        }
-        if (groups.length !== constants6.GROUPS) {
-          throw new address_error_1.AddressError("Wildcard pattern must have 8 groups");
-        }
-        let firstWildcard = -1;
-        for (let i2 = 0; i2 < groups.length; i2++) {
-          if (groups[i2] === "*") {
-            if (firstWildcard === -1) {
-              firstWildcard = i2;
-            }
-          } else if (firstWildcard !== -1) {
-            throw new address_error_1.AddressError("Wildcard `*` must only appear in trailing groups (e.g. `2001:db8:*:*:*:*:*:*`)");
-          }
-        }
-        const trailing = firstWildcard === -1 ? 0 : groups.length - firstWildcard;
-        const replaced = groups.map((g) => g === "*" ? "0" : g);
-        const subnetBits = constants6.BITS - trailing * 16;
-        return new _Address6(`${replaced.join(":")}/${subnetBits}`);
-      }
-      /**
-       * Create an IPv6-mapped address given an IPv4 address
-       * @param {string} address - An IPv4 address string
-       * @returns {Address6}
-       * @example
-       * var address = Address6.fromAddress4('192.168.0.1');
-       * address.correctForm(); // '::ffff:c0a8:1'
-       * address.to4in6(); // '::ffff:192.168.0.1'
-       */
-      static fromAddress4(address) {
-        const address4 = new ipv4_1.Address4(address);
-        const mask6 = constants6.BITS - (constants4.BITS - address4.subnetMask);
-        return new _Address6(`::ffff:${address4.correctForm()}/${mask6}`);
-      }
-      /**
-       * Return an address from ip6.arpa form
-       * @param {string} arpaFormAddress - an 'ip6.arpa' form address
-       * @returns {Adress6}
-       * @example
-       * var address = Address6.fromArpa(e.f.f.f.3.c.2.6.f.f.f.e.6.6.8.e.1.0.6.7.9.4.e.c.0.0.0.0.1.0.0.2.ip6.arpa.)
-       * address.correctForm(); // '2001:0:ce49:7601:e866:efff:62c3:fffe'
-       */
-      static fromArpa(arpaFormAddress) {
-        let address = arpaFormAddress.replace(/(\.ip6\.arpa)?\.$/, "");
-        const semicolonAmount = 7;
-        if (address.length !== 63) {
-          throw new address_error_1.AddressError("Invalid 'ip6.arpa' form.");
-        }
-        const parts = address.split(".").reverse();
-        for (let i2 = semicolonAmount; i2 > 0; i2--) {
-          const insertIndex = i2 * 4;
-          parts.splice(insertIndex, 0, ":");
-        }
-        address = parts.join("");
-        return new _Address6(address);
-      }
-      /**
-       * Return the Microsoft UNC transcription of the address
-       * @returns {String} the Microsoft UNC transcription of the address
-       */
-      microsoftTranscription() {
-        return `${this.correctForm().replace(/:/g, "-")}.ipv6-literal.net`;
-      }
-      /**
-       * Return the first n bits of the address, defaulting to the subnet mask
-       * @param {number} [mask=subnet] - the number of bits to mask
-       * @returns {String} the first n bits of the address as a string
-       */
-      mask(mask = this.subnetMask) {
-        return this.getBitsBase2(0, mask);
-      }
-      /**
-       * Return the number of possible subnets of a given size in the address
-       * @param {number} [subnetSize=128] - the subnet size
-       * @returns {String}
-       */
-      // TODO: probably useful to have a numeric version of this too
-      possibleSubnets(subnetSize = 128) {
-        const availableBits = constants6.BITS - this.subnetMask;
-        const subnetBits = Math.abs(subnetSize - constants6.BITS);
-        const subnetPowers = availableBits - subnetBits;
-        if (subnetPowers < 0) {
-          return "0";
-        }
-        return addCommas((BigInt("2") ** BigInt(subnetPowers)).toString(10));
-      }
-      /**
-       * Helper function getting start address.
-       * @returns {bigint}
-       */
-      _startAddress() {
-        return BigInt(`0b${this.mask() + "0".repeat(constants6.BITS - this.subnetMask)}`);
-      }
-      /**
-       * The first address in the range given by this address' subnet
-       * Often referred to as the Network Address.
-       * @returns {Address6}
-       */
-      startAddress() {
-        return _Address6.fromBigInt(this._startAddress());
-      }
-      /**
-       * The first host address in the range given by this address's subnet ie
-       * the first address after the Network Address
-       * @returns {Address6}
-       */
-      startAddressExclusive() {
-        const adjust = BigInt("1");
-        return _Address6.fromBigInt(this._startAddress() + adjust);
-      }
-      /**
-       * Helper function getting end address.
-       * @returns {bigint}
-       */
-      _endAddress() {
-        return BigInt(`0b${this.mask() + "1".repeat(constants6.BITS - this.subnetMask)}`);
-      }
-      /**
-       * The last address in the range given by this address' subnet
-       * Often referred to as the Broadcast
-       * @returns {Address6}
-       */
-      endAddress() {
-        return _Address6.fromBigInt(this._endAddress());
-      }
-      /**
-       * The last host address in the range given by this address's subnet ie
-       * the last address prior to the Broadcast Address
-       * @returns {Address6}
-       */
-      endAddressExclusive() {
-        const adjust = BigInt("1");
-        return _Address6.fromBigInt(this._endAddress() - adjust);
-      }
-      /**
-       * The hex form of the subnet mask, e.g. `ffff:ffff:ffff:ffff::` for a
-       * `/64`. Returns an `Address6`; call `.correctForm()` for the string.
-       * @returns {Address6}
-       */
-      subnetMaskAddress() {
-        return _Address6.fromBigInt(BigInt(`0b${"1".repeat(this.subnetMask)}${"0".repeat(constants6.BITS - this.subnetMask)}`));
-      }
-      /**
-       * The Cisco-style wildcard mask, e.g. `::ffff:ffff:ffff:ffff` for a
-       * `/64`. This is the bitwise inverse of `subnetMaskAddress()`. Returns
-       * an `Address6`; call `.correctForm()` for the string.
-       * @returns {Address6}
-       */
-      wildcardMask() {
-        return _Address6.fromBigInt(BigInt(`0b${"0".repeat(this.subnetMask)}${"1".repeat(constants6.BITS - this.subnetMask)}`));
-      }
-      /**
-       * The network address in CIDR string form, e.g. `2001:db8::/32` for
-       * `2001:db8::1/32`. For an address with no explicit subnet the prefix
-       * is `/128`, e.g. `networkForm()` on `2001:db8::1` returns
-       * `2001:db8::1/128`.
-       * @returns {string}
-       */
-      networkForm() {
-        return `${this.startAddress().correctForm()}/${this.subnetMask}`;
-      }
-      /**
-       * Return the scope of the address. The 4-bit scope field
-       * ([RFC 4291 §2.7](https://datatracker.ietf.org/doc/html/rfc4291#section-2.7))
-       * is only defined for multicast addresses; for unicast addresses the scope
-       * is derived from the address type per
-       * [RFC 4007 §6](https://datatracker.ietf.org/doc/html/rfc4007#section-6).
-       * @returns {String}
-       */
-      getScope() {
-        const type = this.getType();
-        if (type === "Multicast" || type.startsWith("Multicast ")) {
-          const scope = constants6.SCOPES[parseInt(this.getBits(12, 16).toString(10), 10)];
-          return scope || "Unknown";
-        }
-        if (type === "Link-local unicast" || type === "Loopback") {
-          return "Link local";
-        }
-        if (type === "Unspecified") {
-          return "Unknown";
-        }
-        return "Global";
-      }
-      /**
-       * Return the type of the address
-       * @returns {String}
-       */
-      getType() {
-        for (let i2 = 0; i2 < TYPE_SUBNETS.length; i2++) {
-          const entry = TYPE_SUBNETS[i2];
-          if (this.isInSubnet(entry[0])) {
-            return entry[1];
-          }
-        }
-        return "Global unicast";
-      }
-      /**
-       * Return the bits in the given range as a BigInt
-       * @returns {bigint}
-       */
-      getBits(start, end) {
-        return BigInt(`0b${this.getBitsBase2(start, end)}`);
-      }
-      /**
-       * Return the bits in the given range as a base-2 string
-       * @returns {String}
-       */
-      getBitsBase2(start, end) {
-        return this.binaryZeroPad().slice(start, end);
-      }
-      /**
-       * Return the bits in the given range as a base-16 string
-       * @returns {String}
-       */
-      getBitsBase16(start, end) {
-        const length = end - start;
-        if (length % 4 !== 0) {
-          throw new Error("Length of bits to retrieve must be divisible by four");
-        }
-        return this.getBits(start, end).toString(16).padStart(length / 4, "0");
-      }
-      /**
-       * Return the bits that are set past the subnet mask length
-       * @returns {String}
-       */
-      getBitsPastSubnet() {
-        return this.getBitsBase2(this.subnetMask, constants6.BITS);
-      }
-      /**
-       * Return the reversed ip6.arpa form of the address
-       * @param {Object} options
-       * @param {boolean} options.omitSuffix - omit the "ip6.arpa" suffix
-       * @returns {String}
-       */
-      reverseForm(options) {
-        if (!options) {
-          options = {};
-        }
-        const characters = Math.floor(this.subnetMask / 4);
-        const reversed = this.canonicalForm().replace(/:/g, "").split("").slice(0, characters).reverse().join(".");
-        if (characters > 0) {
-          if (options.omitSuffix) {
-            return reversed;
-          }
-          return `${reversed}.ip6.arpa.`;
-        }
-        if (options.omitSuffix) {
-          return "";
-        }
-        return "ip6.arpa.";
-      }
-      /**
-       * Returns the address in correct form, per
-       * [RFC 5952](https://datatracker.ietf.org/doc/html/rfc5952): leading zeros
-       * stripped, the longest run of zero groups collapsed to `::`, and hex digits
-       * lowercased (e.g. `2001:db8::1`). This is the recommended form for display.
-       */
-      correctForm() {
-        let i2;
-        let groups = [];
-        let zeroCounter = 0;
-        const zeroes = [];
-        for (i2 = 0; i2 < this.parsedAddress.length; i2++) {
-          const value = parseInt(this.parsedAddress[i2], 16);
-          if (value === 0) {
-            zeroCounter++;
-          }
-          if (value !== 0 && zeroCounter > 0) {
-            if (zeroCounter > 1) {
-              zeroes.push([i2 - zeroCounter, i2 - 1]);
-            }
-            zeroCounter = 0;
-          }
-        }
-        if (zeroCounter > 1) {
-          zeroes.push([this.parsedAddress.length - zeroCounter, this.parsedAddress.length - 1]);
-        }
-        const zeroLengths = zeroes.map((n) => n[1] - n[0] + 1);
-        if (zeroes.length > 0) {
-          const index = zeroLengths.indexOf(Math.max(...zeroLengths));
-          groups = compact(this.parsedAddress, zeroes[index]);
-        } else {
-          groups = this.parsedAddress;
-        }
-        for (i2 = 0; i2 < groups.length; i2++) {
-          if (groups[i2] !== "compact") {
-            groups[i2] = parseInt(groups[i2], 16).toString(16);
-          }
-        }
-        let correct = groups.join(":");
-        correct = correct.replace(/^compact$/, "::");
-        correct = correct.replace(/(^compact)|(compact$)/, ":");
-        correct = correct.replace(/compact/, "");
-        return correct;
-      }
-      /**
-       * Return a zero-padded base-2 string representation of the address
-       * @returns {String}
-       * @example
-       * var address = new Address6('2001:4860:4001:803::1011');
-       * address.binaryZeroPad();
-       * // '0010000000000001010010000110000001000000000000010000100000000011
-       * //  0000000000000000000000000000000000000000000000000001000000010001'
-       */
-      binaryZeroPad() {
-        if (this._binaryZeroPad === void 0) {
-          this._binaryZeroPad = this.bigInt().toString(2).padStart(constants6.BITS, "0");
-        }
-        return this._binaryZeroPad;
-      }
-      /**
-       * Parses a v4-in-v6 string (e.g. `::ffff:192.168.0.1`) by extracting the
-       * trailing IPv4 address into `this.address4` / `this.parsedAddress4` and
-       * returning the address with the v4 portion converted to two v6 groups.
-       * Used internally by `parse()`.
-       */
-      // TODO: Improve the semantics of this helper function
-      parse4in6(address) {
-        if (address.indexOf(".") === -1) {
-          return address;
-        }
-        const groups = address.split(":");
-        const lastGroup = groups.slice(-1)[0];
-        const address4 = lastGroup.match(constants4.RE_ADDRESS);
-        if (address4) {
-          this.parsedAddress4 = address4[0];
-          this.address4 = new ipv4_1.Address4(this.parsedAddress4);
-          for (let i2 = 0; i2 < this.address4.groups; i2++) {
-            if (/^0[0-9]+/.test(this.address4.parsedAddress[i2])) {
-              const highlighted = this.address4.parsedAddress.map(spanLeadingZeroes4).join(".");
-              const prefix = groups.slice(0, -1).map(helpers.escapeHtml).join(":");
-              const separator = groups.length > 1 ? ":" : "";
-              throw new address_error_1.AddressError("IPv4 addresses can't have leading zeroes.", `${prefix}${separator}${highlighted}`);
-            }
-          }
-          this.v4 = true;
-          groups[groups.length - 1] = this.address4.toGroup6();
-          address = groups.join(":");
-        }
-        return address;
-      }
-      /**
-       * Parses an IPv6 address string into its 8 hexadecimal groups (expanding
-       * any `::` elision and any trailing v4-in-v6 portion) and stores the result
-       * on `this.parsedAddress`. Called automatically by the constructor; you
-       * typically don't need to call it directly. Throws `AddressError` if the
-       * input is malformed.
-       */
-      // TODO: Make private?
-      parse(address) {
-        address = this.parse4in6(address);
-        const badCharacters = address.match(constants6.RE_BAD_CHARACTERS);
-        if (badCharacters) {
-          throw new address_error_1.AddressError(`Bad character${badCharacters.length > 1 ? "s" : ""} detected in address: ${badCharacters.join("")}`, address.replace(constants6.RE_BAD_CHARACTERS, '<span class="parse-error">$1</span>'));
-        }
-        const badAddress = address.match(constants6.RE_BAD_ADDRESS);
-        if (badAddress) {
-          throw new address_error_1.AddressError(`Address failed regex: ${badAddress.join("")}`, address.replace(constants6.RE_BAD_ADDRESS, '<span class="parse-error">$1</span>'));
-        }
-        let groups = [];
-        const halves = address.split("::");
-        if (halves.length === 2) {
-          let first = halves[0].split(":");
-          let last = halves[1].split(":");
-          if (first.length === 1 && first[0] === "") {
-            first = [];
-          }
-          if (last.length === 1 && last[0] === "") {
-            last = [];
-          }
-          const remaining = this.groups - (first.length + last.length);
-          if (!remaining) {
-            throw new address_error_1.AddressError("Error parsing groups");
-          }
-          this.elidedGroups = remaining;
-          this.elisionBegin = first.length;
-          this.elisionEnd = first.length + this.elidedGroups;
-          groups = groups.concat(first);
-          for (let i2 = 0; i2 < remaining; i2++) {
-            groups.push("0");
-          }
-          groups = groups.concat(last);
-        } else if (halves.length === 1) {
-          groups = address.split(":");
-          this.elidedGroups = 0;
-        } else {
-          throw new address_error_1.AddressError("Too many :: groups found");
-        }
-        groups = groups.map((group) => parseInt(group, 16).toString(16));
-        if (groups.length !== this.groups) {
-          throw new address_error_1.AddressError("Incorrect number of groups found");
-        }
-        return groups;
-      }
-      /**
-       * Returns the canonical (fully expanded) form of the address: all 8 groups,
-       * each padded to 4 hex digits, with no `::` collapsing
-       * (e.g. `2001:0db8:0000:0000:0000:0000:0000:0001`). Useful for sorting and
-       * byte-exact comparison.
-       */
-      canonicalForm() {
-        return this.parsedAddress.map(paddedHex).join(":");
-      }
-      /**
-       * Return the decimal form of the address
-       * @returns {String}
-       */
-      decimal() {
-        return this.parsedAddress.map((n) => parseInt(n, 16).toString(10).padStart(5, "0")).join(":");
-      }
-      /**
-       * Return the address as a BigInt
-       * @returns {bigint}
-       */
-      bigInt() {
-        return BigInt(`0x${this.parsedAddress.map(paddedHex).join("")}`);
-      }
-      /**
-       * Return the last two groups of this address as an IPv4 address string
-       * @returns {Address4}
-       * @example
-       * var address = new Address6('2001:4860:4001::1825:bf11');
-       * address.to4().correctForm(); // '24.37.191.17'
-       */
-      to4() {
-        const binary = this.binaryZeroPad().split("");
-        return ipv4_1.Address4.fromHex(BigInt(`0b${binary.slice(96, 128).join("")}`).toString(16).padStart(8, "0"));
-      }
-      /**
-       * Return the v4-in-v6 form of the address
-       * @returns {String}
-       */
-      to4in6() {
-        const address4 = this.to4();
-        const address6 = new _Address6(this.parsedAddress.slice(0, 6).join(":"), 6);
-        const correct = address6.correctForm();
-        let infix = "";
-        if (!/:$/.test(correct)) {
-          infix = ":";
-        }
-        return correct + infix + address4.address;
-      }
-      /**
-       * Decodes the Teredo tunneling fields embedded in this address. Returns the
-       * Teredo prefix, server IPv4, client IPv4, raw flag bits, cone-NAT flag,
-       * UDP port, and Microsoft-format flag breakdown (reserved, universal/local,
-       * group/individual, nonce). Only meaningful for addresses in `2001::/32`.
-       */
-      inspectTeredo() {
-        const prefix = this.getBitsBase16(0, 32);
-        const bitsForUdpPort = this.getBits(80, 96);
-        const udpPort = (bitsForUdpPort ^ BigInt("0xffff")).toString();
-        const server4 = ipv4_1.Address4.fromHex(this.getBitsBase16(32, 64));
-        const bitsForClient4 = this.getBits(96, 128);
-        const client4 = ipv4_1.Address4.fromHex((bitsForClient4 ^ BigInt("0xffffffff")).toString(16).padStart(8, "0"));
-        const flagsBase2 = this.getBitsBase2(64, 80);
-        const coneNat = (0, common_1.testBit)(flagsBase2, 15);
-        const reserved = (0, common_1.testBit)(flagsBase2, 14);
-        const groupIndividual = (0, common_1.testBit)(flagsBase2, 8);
-        const universalLocal = (0, common_1.testBit)(flagsBase2, 9);
-        const nonce = BigInt(`0b${flagsBase2.slice(2, 6) + flagsBase2.slice(8, 16)}`).toString(10);
-        return {
-          prefix: `${prefix.slice(0, 4)}:${prefix.slice(4, 8)}`,
-          server4: server4.address,
-          client4: client4.address,
-          flags: flagsBase2,
-          coneNat,
-          microsoft: {
-            reserved,
-            universalLocal,
-            groupIndividual,
-            nonce
-          },
-          udpPort
-        };
-      }
-      /**
-       * Decodes the 6to4 tunneling fields embedded in this address. Returns the
-       * 6to4 prefix and the embedded IPv4 gateway address. Only meaningful for
-       * addresses in `2002::/16`.
-       */
-      inspect6to4() {
-        const prefix = this.getBitsBase16(0, 16);
-        const gateway = ipv4_1.Address4.fromHex(this.getBitsBase16(16, 48));
-        return {
-          prefix: prefix.slice(0, 4),
-          gateway: gateway.address
-        };
-      }
-      /**
-       * Return a v6 6to4 address from a v6 v4inv6 address
-       * @returns {Address6}
-       */
-      to6to4() {
-        if (!this.is4()) {
-          return null;
-        }
-        const addr6to4 = [
-          "2002",
-          this.getBitsBase16(96, 112),
-          this.getBitsBase16(112, 128),
-          "",
-          "/16"
-        ].join(":");
-        return new _Address6(addr6to4);
-      }
-      /**
-       * Embed an IPv4 address into a NAT64 IPv6 address using the encoding
-       * defined by [RFC 6052](https://datatracker.ietf.org/doc/html/rfc6052).
-       * The default prefix is the well-known prefix `64:ff9b::/96`. The prefix
-       * length must be one of 32, 40, 48, 56, 64, or 96; for prefixes shorter
-       * than /64 the IPv4 octets are split around the reserved bits 64–71.
-       * @example
-       * Address6.fromAddress4Nat64('192.0.2.33').correctForm(); // '64:ff9b::c000:221'
-       * Address6.fromAddress4Nat64('192.0.2.33', '2001:db8::/32').correctForm(); // '2001:db8:c000:221::'
-       */
-      static fromAddress4Nat64(address, prefix = "64:ff9b::/96") {
-        const v4 = new ipv4_1.Address4(address);
-        const prefix6 = new _Address6(prefix);
-        const pl = prefix6.subnetMask;
-        if (pl !== 32 && pl !== 40 && pl !== 48 && pl !== 56 && pl !== 64 && pl !== 96) {
-          throw new address_error_1.AddressError("NAT64 prefix length must be 32, 40, 48, 56, 64, or 96");
-        }
-        const prefixBits = prefix6.binaryZeroPad();
-        const v4Bits = v4.binaryZeroPad();
-        let bits;
-        if (pl === 96) {
-          bits = prefixBits.slice(0, 96) + v4Bits;
-        } else {
-          const beforeU = 64 - pl;
-          bits = prefixBits.slice(0, pl) + v4Bits.slice(0, beforeU) + "00000000" + v4Bits.slice(beforeU) + "0".repeat(128 - 72 - (32 - beforeU));
-        }
-        const hex = BigInt(`0b${bits}`).toString(16).padStart(32, "0");
-        const groups = [];
-        for (let i2 = 0; i2 < 8; i2++) {
-          groups.push(hex.slice(i2 * 4, (i2 + 1) * 4));
-        }
-        return new _Address6(groups.join(":"));
-      }
-      /**
-       * Extract the embedded IPv4 address from a NAT64 IPv6 address using the
-       * encoding defined by [RFC 6052](https://datatracker.ietf.org/doc/html/rfc6052).
-       * The default prefix is the well-known prefix `64:ff9b::/96`. Returns
-       * `null` if this address is not contained within the given prefix.
-       * @example
-       * new Address6('64:ff9b::c000:221').toAddress4Nat64()!.correctForm(); // '192.0.2.33'
-       */
-      toAddress4Nat64(prefix = "64:ff9b::/96") {
-        const prefix6 = new _Address6(prefix);
-        const pl = prefix6.subnetMask;
-        if (pl !== 32 && pl !== 40 && pl !== 48 && pl !== 56 && pl !== 64 && pl !== 96) {
-          throw new address_error_1.AddressError("NAT64 prefix length must be 32, 40, 48, 56, 64, or 96");
-        }
-        if (!this.isInSubnet(prefix6)) {
-          return null;
-        }
-        const bits = this.binaryZeroPad();
-        let v4Bits;
-        if (pl === 96) {
-          v4Bits = bits.slice(96, 128);
-        } else {
-          const beforeU = 64 - pl;
-          v4Bits = bits.slice(pl, pl + beforeU) + bits.slice(72, 72 + (32 - beforeU));
-        }
-        const octets = [];
-        for (let i2 = 0; i2 < 4; i2++) {
-          octets.push(parseInt(v4Bits.slice(i2 * 8, (i2 + 1) * 8), 2).toString());
-        }
-        return new ipv4_1.Address4(octets.join("."));
-      }
-      /**
-       * Return a byte array.
-       *
-       * To get a Node.js `Buffer`, wrap the result: `Buffer.from(address.toByteArray())`.
-       * @returns {Array}
-       */
-      toByteArray() {
-        const valueWithoutPadding = this.bigInt().toString(16);
-        const leadingPad = "0".repeat(valueWithoutPadding.length % 2);
-        const value = `${leadingPad}${valueWithoutPadding}`;
-        const bytes = [];
-        for (let i2 = 0, length = value.length; i2 < length; i2 += 2) {
-          bytes.push(parseInt(value.substring(i2, i2 + 2), 16));
-        }
-        return bytes;
-      }
-      /**
-       * Return an unsigned byte array.
-       *
-       * To get a Node.js `Buffer`, wrap the result: `Buffer.from(address.toUnsignedByteArray())`.
-       * @returns {Array}
-       */
-      toUnsignedByteArray() {
-        return this.toByteArray().map(unsignByte);
-      }
-      /**
-       * Convert a byte array to an Address6 object.
-       *
-       * To convert from a Node.js `Buffer`, spread it: `Address6.fromByteArray([...buf])`.
-       * @returns {Address6}
-       */
-      static fromByteArray(bytes) {
-        return this.fromUnsignedByteArray(bytes.map(unsignByte));
-      }
-      /**
-       * Convert an unsigned byte array to an Address6 object.
-       *
-       * To convert from a Node.js `Buffer`, spread it: `Address6.fromUnsignedByteArray([...buf])`.
-       * @returns {Address6}
-       */
-      static fromUnsignedByteArray(bytes) {
-        const BYTE_MAX = BigInt("256");
-        let result = BigInt("0");
-        let multiplier = BigInt("1");
-        for (let i2 = bytes.length - 1; i2 >= 0; i2--) {
-          result += multiplier * BigInt(bytes[i2].toString(10));
-          multiplier *= BYTE_MAX;
-        }
-        return _Address6.fromBigInt(result);
-      }
-      /**
-       * Returns true if the address is in the canonical form, false otherwise
-       * @returns {boolean}
-       */
-      isCanonical() {
-        return this.addressMinusSuffix === this.canonicalForm();
-      }
-      /**
-       * Returns true if the address is a link local address, false otherwise
-       * @returns {boolean}
-       */
-      isLinkLocal() {
-        if (this.getBitsBase2(0, 64) === "1111111010000000000000000000000000000000000000000000000000000000") {
-          return true;
-        }
-        return false;
-      }
-      /**
-       * Returns true if the address is a multicast address, false otherwise
-       * @returns {boolean}
-       */
-      isMulticast() {
-        const type = this.getType();
-        return type === "Multicast" || type.startsWith("Multicast ");
-      }
-      /**
-       * Returns true if the address was written in v4-in-v6 dotted-quad notation
-       * (e.g. `::ffff:127.0.0.1`), false otherwise. This is a notation-level flag
-       * and does not reflect whether the address bits lie in the IPv4-mapped
-       * (`::ffff:0:0/96`) subnet — for that, see {@link isMapped4}.
-       * @returns {boolean}
-       */
-      is4() {
-        return this.v4;
-      }
-      /**
-       * Returns true if the address is an IPv4-mapped IPv6 address in
-       * `::ffff:0:0/96` ([RFC 4291 §2.5.5.2](https://datatracker.ietf.org/doc/html/rfc4291#section-2.5.5.2)),
-       * false otherwise. Unlike {@link is4}, this checks the underlying address
-       * bits rather than the textual notation, so `::ffff:127.0.0.1` and
-       * `::ffff:7f00:1` both return true.
-       * @returns {boolean}
-       */
-      isMapped4() {
-        return this.isInSubnet(IPV4_MAPPED_SUBNET);
-      }
-      /**
-       * Returns true if the address is a Teredo address, false otherwise
-       * @returns {boolean}
-       */
-      isTeredo() {
-        return this.isInSubnet(TEREDO_SUBNET);
-      }
-      /**
-       * Returns true if the address is a 6to4 address, false otherwise
-       * @returns {boolean}
-       */
-      is6to4() {
-        return this.isInSubnet(SIX_TO_FOUR_SUBNET);
-      }
-      /**
-       * Returns true if the address is a loopback address, false otherwise
-       * @returns {boolean}
-       */
-      isLoopback() {
-        return this.getType() === "Loopback";
-      }
-      /**
-       * Returns true if the address is a Unique Local Address in `fc00::/7` ([RFC 4193](https://datatracker.ietf.org/doc/html/rfc4193)). ULAs are the IPv6 equivalent of IPv4 [RFC 1918](https://datatracker.ietf.org/doc/html/rfc1918) private addresses.
-       * @returns {boolean}
-       */
-      isULA() {
-        return this.isInSubnet(ULA_SUBNET);
-      }
-      /**
-       * Returns true if the address is the unspecified address `::`.
-       * @returns {boolean}
-       */
-      isUnspecified() {
-        return this.getType() === "Unspecified";
-      }
-      /**
-       * Returns true if the address is in the documentation prefix `2001:db8::/32` ([RFC 3849](https://datatracker.ietf.org/doc/html/rfc3849)).
-       * @returns {boolean}
-       */
-      isDocumentation() {
-        return this.isInSubnet(DOCUMENTATION_SUBNET);
-      }
-      // #endregion
-      // #region HTML
-      /**
-       * Returns the address as an HTTP URL with the host bracketed, e.g.
-       * `http://[2001:db8::1]/`. If `optionalPort` is provided it is appended,
-       * e.g. `http://[2001:db8::1]:8080/`.
-       */
-      href(optionalPort) {
-        if (optionalPort === void 0) {
-          optionalPort = "";
-        } else {
-          optionalPort = `:${optionalPort}`;
-        }
-        return `http://[${this.correctForm()}]${optionalPort}/`;
-      }
-      /**
-       * Returns an HTML `<a>` element whose `href` encodes the address in a URL
-       * hash fragment (default prefix `/#address=`). Useful for linking between
-       * pages of an address-inspector UI.
-       * @param options.className - CSS class for the rendered `<a>` element
-       * @param options.prefix - hash prefix prepended to the address (default `/#address=`)
-       * @param options.v4 - when true, render the address in v4-in-v6 form
-       */
-      link(options) {
-        if (!options) {
-          options = {};
-        }
-        if (options.className === void 0) {
-          options.className = "";
-        }
-        if (options.prefix === void 0) {
-          options.prefix = "/#address=";
-        }
-        if (options.v4 === void 0) {
-          options.v4 = false;
-        }
-        let formFunction = this.correctForm;
-        if (options.v4) {
-          formFunction = this.to4in6;
-        }
-        const form = formFunction.call(this);
-        const safeHref = helpers.escapeHtml(`${options.prefix}${form}`);
-        const safeForm = helpers.escapeHtml(form);
-        if (options.className) {
-          const safeClass = helpers.escapeHtml(options.className);
-          return `<a href="${safeHref}" class="${safeClass}">${safeForm}</a>`;
-        }
-        return `<a href="${safeHref}">${safeForm}</a>`;
-      }
-      /**
-       * Groups an address
-       * @returns {String}
-       */
-      group() {
-        if (this.elidedGroups === 0) {
-          return helpers.simpleGroup(this.addressMinusSuffix).join(":");
-        }
-        assert3(typeof this.elidedGroups === "number");
-        assert3(typeof this.elisionBegin === "number");
-        const output = [];
-        const [left, right] = this.addressMinusSuffix.split("::");
-        if (left.length) {
-          output.push(...helpers.simpleGroup(left));
-        } else {
-          output.push("");
-        }
-        const classes = ["hover-group"];
-        for (let i2 = this.elisionBegin; i2 < this.elisionBegin + this.elidedGroups; i2++) {
-          classes.push(`group-${i2}`);
-        }
-        output.push(`<span class="${classes.join(" ")}"></span>`);
-        if (right.length) {
-          output.push(...helpers.simpleGroup(right, this.elisionEnd));
-        } else {
-          output.push("");
-        }
-        if (this.is4()) {
-          assert3(this.address4 instanceof ipv4_1.Address4);
-          output.pop();
-          output.push(this.address4.groupForV6());
-        }
-        return output.join(":");
-      }
-      // #endregion
-      // #region Regular expressions
-      /**
-       * Generate a regular expression string that can be used to find or validate
-       * all variations of this address
-       * @param {boolean} substringSearch
-       * @returns {string}
-       */
-      regularExpressionString(substringSearch = false) {
-        let output = [];
-        const address6 = new _Address6(this.correctForm());
-        if (address6.elidedGroups === 0) {
-          output.push((0, regular_expressions_1.simpleRegularExpression)(address6.parsedAddress));
-        } else if (address6.elidedGroups === constants6.GROUPS) {
-          output.push((0, regular_expressions_1.possibleElisions)(constants6.GROUPS));
-        } else {
-          const halves = address6.address.split("::");
-          if (halves[0].length) {
-            output.push((0, regular_expressions_1.simpleRegularExpression)(halves[0].split(":")));
-          }
-          assert3(typeof address6.elidedGroups === "number");
-          output.push((0, regular_expressions_1.possibleElisions)(address6.elidedGroups, halves[0].length !== 0, halves[1].length !== 0));
-          if (halves[1].length) {
-            output.push((0, regular_expressions_1.simpleRegularExpression)(halves[1].split(":")));
-          }
-          output = [output.join(":")];
-        }
-        if (!substringSearch) {
-          output = [
-            "(?=^|",
-            regular_expressions_1.ADDRESS_BOUNDARY,
-            "|[^\\w\\:])(",
-            ...output,
-            ")(?=[^\\w\\:]|",
-            regular_expressions_1.ADDRESS_BOUNDARY,
-            "|$)"
-          ];
-        }
-        return output.join("");
-      }
-      /**
-       * Generate a regular expression that can be used to find or validate all
-       * variations of this address.
-       * @param {boolean} substringSearch
-       * @returns {RegExp}
-       */
-      regularExpression(substringSearch = false) {
-        return new RegExp(this.regularExpressionString(substringSearch), "i");
-      }
-    };
-    exports2.Address6 = Address6;
-    var TYPE_SUBNETS = Object.keys(constants6.TYPES).map((subnet) => [
-      new Address6(subnet),
-      constants6.TYPES[subnet]
-    ]);
-    var TEREDO_SUBNET = new Address6("2001::/32");
-    var SIX_TO_FOUR_SUBNET = new Address6("2002::/16");
-    var ULA_SUBNET = new Address6("fc00::/7");
-    var DOCUMENTATION_SUBNET = new Address6("2001:db8::/32");
-    var IPV4_MAPPED_SUBNET = new Address6("::ffff:0:0/96");
-  }
-});
-
-// ../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ip-address.js
-var require_ip_address = __commonJS({
-  "../../node_modules/.pnpm/ip-address@10.2.0/node_modules/ip-address/dist/ip-address.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      var desc2 = Object.getOwnPropertyDescriptor(m2, k2);
-      if (!desc2 || ("get" in desc2 ? !m2.__esModule : desc2.writable || desc2.configurable)) {
-        desc2 = { enumerable: true, get: function() {
-          return m2[k2];
-        } };
-      }
-      Object.defineProperty(o, k22, desc2);
-    }) : (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      o[k22] = m2[k2];
-    }));
-    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v3) {
-      Object.defineProperty(o, "default", { enumerable: true, value: v3 });
-    }) : function(o, v3) {
-      o["default"] = v3;
-    });
-    var __importStar = exports2 && exports2.__importStar || function(mod) {
-      if (mod && mod.__esModule) return mod;
-      var result = {};
-      if (mod != null) {
-        for (var k2 in mod) if (k2 !== "default" && Object.prototype.hasOwnProperty.call(mod, k2)) __createBinding(result, mod, k2);
-      }
-      __setModuleDefault(result, mod);
-      return result;
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.v6 = exports2.AddressError = exports2.Address6 = exports2.Address4 = void 0;
-    var ipv4_1 = require_ipv4();
-    Object.defineProperty(exports2, "Address4", { enumerable: true, get: function() {
-      return ipv4_1.Address4;
-    } });
-    var ipv6_1 = require_ipv6();
-    Object.defineProperty(exports2, "Address6", { enumerable: true, get: function() {
-      return ipv6_1.Address6;
-    } });
-    var address_error_1 = require_address_error();
-    Object.defineProperty(exports2, "AddressError", { enumerable: true, get: function() {
-      return address_error_1.AddressError;
-    } });
-    var helpers = __importStar(require_helpers2());
-    exports2.v6 = { helpers };
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/helpers.js
-var require_helpers3 = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/helpers.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.ipToBuffer = exports2.int32ToIpv4 = exports2.ipv4ToInt32 = exports2.validateSocksClientChainOptions = exports2.validateSocksClientOptions = void 0;
-    var util_1 = require_util4();
-    var constants_1 = require_constants4();
-    var stream = __require("stream");
-    var ip_address_1 = require_ip_address();
-    var net5 = __require("net");
-    function validateSocksClientOptions(options, acceptedCommands = ["connect", "bind", "associate"]) {
-      if (!constants_1.SocksCommand[options.command]) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksCommand, options);
-      }
-      if (acceptedCommands.indexOf(options.command) === -1) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksCommandForOperation, options);
-      }
-      if (!isValidSocksRemoteHost(options.destination)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsDestination, options);
-      }
-      if (!isValidSocksProxy(options.proxy)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsProxy, options);
-      }
-      validateCustomProxyAuth(options.proxy, options);
-      if (options.timeout && !isValidTimeoutValue(options.timeout)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsTimeout, options);
-      }
-      if (options.existing_socket && !(options.existing_socket instanceof stream.Duplex)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsExistingSocket, options);
-      }
-    }
-    exports2.validateSocksClientOptions = validateSocksClientOptions;
-    function validateSocksClientChainOptions(options) {
-      if (options.command !== "connect") {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksCommandChain, options);
-      }
-      if (!isValidSocksRemoteHost(options.destination)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsDestination, options);
-      }
-      if (!(options.proxies && Array.isArray(options.proxies) && options.proxies.length >= 2)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsProxiesLength, options);
-      }
-      options.proxies.forEach((proxy) => {
-        if (!isValidSocksProxy(proxy)) {
-          throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsProxy, options);
-        }
-        validateCustomProxyAuth(proxy, options);
-      });
-      if (options.timeout && !isValidTimeoutValue(options.timeout)) {
-        throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsTimeout, options);
-      }
-    }
-    exports2.validateSocksClientChainOptions = validateSocksClientChainOptions;
-    function validateCustomProxyAuth(proxy, options) {
-      if (proxy.custom_auth_method !== void 0) {
-        if (proxy.custom_auth_method < constants_1.SOCKS5_CUSTOM_AUTH_START || proxy.custom_auth_method > constants_1.SOCKS5_CUSTOM_AUTH_END) {
-          throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsCustomAuthRange, options);
-        }
-        if (proxy.custom_auth_request_handler === void 0 || typeof proxy.custom_auth_request_handler !== "function") {
-          throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsCustomAuthOptions, options);
-        }
-        if (proxy.custom_auth_response_size === void 0) {
-          throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsCustomAuthOptions, options);
-        }
-        if (proxy.custom_auth_response_handler === void 0 || typeof proxy.custom_auth_response_handler !== "function") {
-          throw new util_1.SocksClientError(constants_1.ERRORS.InvalidSocksClientOptionsCustomAuthOptions, options);
-        }
-      }
-    }
-    function isValidSocksRemoteHost(remoteHost) {
-      return remoteHost && typeof remoteHost.host === "string" && Buffer.byteLength(remoteHost.host) < 256 && typeof remoteHost.port === "number" && remoteHost.port >= 0 && remoteHost.port <= 65535;
-    }
-    function isValidSocksProxy(proxy) {
-      return proxy && (typeof proxy.host === "string" || typeof proxy.ipaddress === "string") && typeof proxy.port === "number" && proxy.port >= 0 && proxy.port <= 65535 && (proxy.type === 4 || proxy.type === 5);
-    }
-    function isValidTimeoutValue(value) {
-      return typeof value === "number" && value > 0;
-    }
-    function ipv4ToInt32(ip) {
-      const address = new ip_address_1.Address4(ip);
-      return address.toArray().reduce((acc, part) => (acc << 8) + part, 0) >>> 0;
-    }
-    exports2.ipv4ToInt32 = ipv4ToInt32;
-    function int32ToIpv4(int322) {
-      const octet1 = int322 >>> 24 & 255;
-      const octet2 = int322 >>> 16 & 255;
-      const octet3 = int322 >>> 8 & 255;
-      const octet4 = int322 & 255;
-      return [octet1, octet2, octet3, octet4].join(".");
-    }
-    exports2.int32ToIpv4 = int32ToIpv4;
-    function ipToBuffer(ip) {
-      if (net5.isIPv4(ip)) {
-        const address = new ip_address_1.Address4(ip);
-        return Buffer.from(address.toArray());
-      } else if (net5.isIPv6(ip)) {
-        const address = new ip_address_1.Address6(ip);
-        return Buffer.from(address.canonicalForm().split(":").map((segment) => segment.padStart(4, "0")).join(""), "hex");
-      } else {
-        throw new Error("Invalid IP address format");
-      }
-    }
-    exports2.ipToBuffer = ipToBuffer;
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/receivebuffer.js
-var require_receivebuffer = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/common/receivebuffer.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.ReceiveBuffer = void 0;
-    var ReceiveBuffer = class {
-      constructor(size = 4096) {
-        this.buffer = Buffer.allocUnsafe(size);
-        this.offset = 0;
-        this.originalSize = size;
-      }
-      get length() {
-        return this.offset;
-      }
-      append(data) {
-        if (!Buffer.isBuffer(data)) {
-          throw new Error("Attempted to append a non-buffer instance to ReceiveBuffer.");
-        }
-        if (this.offset + data.length >= this.buffer.length) {
-          const tmp = this.buffer;
-          this.buffer = Buffer.allocUnsafe(Math.max(this.buffer.length + this.originalSize, this.buffer.length + data.length));
-          tmp.copy(this.buffer);
-        }
-        data.copy(this.buffer, this.offset);
-        return this.offset += data.length;
-      }
-      peek(length) {
-        if (length > this.offset) {
-          throw new Error("Attempted to read beyond the bounds of the managed internal data.");
-        }
-        return this.buffer.slice(0, length);
-      }
-      get(length) {
-        if (length > this.offset) {
-          throw new Error("Attempted to read beyond the bounds of the managed internal data.");
-        }
-        const value = Buffer.allocUnsafe(length);
-        this.buffer.slice(0, length).copy(value);
-        this.buffer.copyWithin(0, length, length + this.offset - length);
-        this.offset -= length;
-        return value;
-      }
-    };
-    exports2.ReceiveBuffer = ReceiveBuffer;
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/client/socksclient.js
-var require_socksclient = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/client/socksclient.js"(exports2) {
-    "use strict";
-    var __awaiter = exports2 && exports2.__awaiter || function(thisArg, _arguments, P2, generator) {
-      function adopt(value) {
-        return value instanceof P2 ? value : new P2(function(resolve) {
-          resolve(value);
-        });
-      }
-      return new (P2 || (P2 = Promise))(function(resolve, reject) {
-        function fulfilled(value) {
-          try {
-            step(generator.next(value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function rejected(value) {
-          try {
-            step(generator["throw"](value));
-          } catch (e) {
-            reject(e);
-          }
-        }
-        function step(result) {
-          result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-        }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-      });
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.SocksClientError = exports2.SocksClient = void 0;
-    var events_1 = __require("events");
-    var net5 = __require("net");
-    var smart_buffer_1 = require_smartbuffer();
-    var constants_1 = require_constants4();
-    var helpers_1 = require_helpers3();
-    var receivebuffer_1 = require_receivebuffer();
-    var util_1 = require_util4();
-    Object.defineProperty(exports2, "SocksClientError", { enumerable: true, get: function() {
-      return util_1.SocksClientError;
-    } });
-    var ip_address_1 = require_ip_address();
-    var SocksClient2 = class _SocksClient extends events_1.EventEmitter {
-      constructor(options) {
-        super();
-        this.options = Object.assign({}, options);
-        (0, helpers_1.validateSocksClientOptions)(options);
-        this.setState(constants_1.SocksClientState.Created);
-      }
-      /**
-       * Creates a new SOCKS connection.
-       *
-       * Note: Supports callbacks and promises. Only supports the connect command.
-       * @param options { SocksClientOptions } Options.
-       * @param callback { Function } An optional callback function.
-       * @returns { Promise }
-       */
-      static createConnection(options, callback) {
-        return new Promise((resolve, reject) => {
-          try {
-            (0, helpers_1.validateSocksClientOptions)(options, ["connect"]);
-          } catch (err) {
-            if (typeof callback === "function") {
-              callback(err);
-              return resolve(err);
-            } else {
-              return reject(err);
-            }
-          }
-          const client = new _SocksClient(options);
-          client.connect(options.existing_socket);
-          client.once("established", (info) => {
-            client.removeAllListeners();
-            if (typeof callback === "function") {
-              callback(null, info);
-              resolve(info);
-            } else {
-              resolve(info);
-            }
-          });
-          client.once("error", (err) => {
-            client.removeAllListeners();
-            if (typeof callback === "function") {
-              callback(err);
-              resolve(err);
-            } else {
-              reject(err);
-            }
-          });
-        });
-      }
-      /**
-       * Creates a new SOCKS connection chain to a destination host through 2 or more SOCKS proxies.
-       *
-       * Note: Supports callbacks and promises. Only supports the connect method.
-       * Note: Implemented via createConnection() factory function.
-       * @param options { SocksClientChainOptions } Options
-       * @param callback { Function } An optional callback function.
-       * @returns { Promise }
-       */
-      static createConnectionChain(options, callback) {
-        return new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
-          try {
-            (0, helpers_1.validateSocksClientChainOptions)(options);
-          } catch (err) {
-            if (typeof callback === "function") {
-              callback(err);
-              return resolve(err);
-            } else {
-              return reject(err);
-            }
-          }
-          if (options.randomizeChain) {
-            (0, util_1.shuffleArray)(options.proxies);
-          }
-          try {
-            let sock;
-            for (let i2 = 0; i2 < options.proxies.length; i2++) {
-              const nextProxy = options.proxies[i2];
-              const nextDestination = i2 === options.proxies.length - 1 ? options.destination : {
-                host: options.proxies[i2 + 1].host || options.proxies[i2 + 1].ipaddress,
-                port: options.proxies[i2 + 1].port
-              };
-              const result = yield _SocksClient.createConnection({
-                command: "connect",
-                proxy: nextProxy,
-                destination: nextDestination,
-                existing_socket: sock
-              });
-              sock = sock || result.socket;
-            }
-            if (typeof callback === "function") {
-              callback(null, { socket: sock });
-              resolve({ socket: sock });
-            } else {
-              resolve({ socket: sock });
-            }
-          } catch (err) {
-            if (typeof callback === "function") {
-              callback(err);
-              resolve(err);
-            } else {
-              reject(err);
-            }
-          }
-        }));
-      }
-      /**
-       * Creates a SOCKS UDP Frame.
-       * @param options
-       */
-      static createUDPFrame(options) {
-        const buff = new smart_buffer_1.SmartBuffer();
-        buff.writeUInt16BE(0);
-        buff.writeUInt8(options.frameNumber || 0);
-        if (net5.isIPv4(options.remoteHost.host)) {
-          buff.writeUInt8(constants_1.Socks5HostType.IPv4);
-          buff.writeUInt32BE((0, helpers_1.ipv4ToInt32)(options.remoteHost.host));
-        } else if (net5.isIPv6(options.remoteHost.host)) {
-          buff.writeUInt8(constants_1.Socks5HostType.IPv6);
-          buff.writeBuffer((0, helpers_1.ipToBuffer)(options.remoteHost.host));
-        } else {
-          buff.writeUInt8(constants_1.Socks5HostType.Hostname);
-          buff.writeUInt8(Buffer.byteLength(options.remoteHost.host));
-          buff.writeString(options.remoteHost.host);
-        }
-        buff.writeUInt16BE(options.remoteHost.port);
-        buff.writeBuffer(options.data);
-        return buff.toBuffer();
-      }
-      /**
-       * Parses a SOCKS UDP frame.
-       * @param data
-       */
-      static parseUDPFrame(data) {
-        const buff = smart_buffer_1.SmartBuffer.fromBuffer(data);
-        buff.readOffset = 2;
-        const frameNumber = buff.readUInt8();
-        const hostType = buff.readUInt8();
-        let remoteHost;
-        if (hostType === constants_1.Socks5HostType.IPv4) {
-          remoteHost = (0, helpers_1.int32ToIpv4)(buff.readUInt32BE());
-        } else if (hostType === constants_1.Socks5HostType.IPv6) {
-          remoteHost = ip_address_1.Address6.fromByteArray(Array.from(buff.readBuffer(16))).canonicalForm();
-        } else {
-          remoteHost = buff.readString(buff.readUInt8());
-        }
-        const remotePort = buff.readUInt16BE();
-        return {
-          frameNumber,
-          remoteHost: {
-            host: remoteHost,
-            port: remotePort
-          },
-          data: buff.readBuffer()
-        };
-      }
-      /**
-       * Internal state setter. If the SocksClient is in an error state, it cannot be changed to a non error state.
-       */
-      setState(newState) {
-        if (this.state !== constants_1.SocksClientState.Error) {
-          this.state = newState;
-        }
-      }
-      /**
-       * Starts the connection establishment to the proxy and destination.
-       * @param existingSocket Connected socket to use instead of creating a new one (internal use).
-       */
-      connect(existingSocket) {
-        this.onDataReceived = (data) => this.onDataReceivedHandler(data);
-        this.onClose = () => this.onCloseHandler();
-        this.onError = (err) => this.onErrorHandler(err);
-        this.onConnect = () => this.onConnectHandler();
-        const timer = setTimeout(() => this.onEstablishedTimeout(), this.options.timeout || constants_1.DEFAULT_TIMEOUT);
-        if (timer.unref && typeof timer.unref === "function") {
-          timer.unref();
-        }
-        if (existingSocket) {
-          this.socket = existingSocket;
-        } else {
-          this.socket = new net5.Socket();
-        }
-        this.socket.once("close", this.onClose);
-        this.socket.once("error", this.onError);
-        this.socket.once("connect", this.onConnect);
-        this.socket.on("data", this.onDataReceived);
-        this.setState(constants_1.SocksClientState.Connecting);
-        this.receiveBuffer = new receivebuffer_1.ReceiveBuffer();
-        if (existingSocket) {
-          this.socket.emit("connect");
-        } else {
-          this.socket.connect(this.getSocketOptions());
-          if (this.options.set_tcp_nodelay !== void 0 && this.options.set_tcp_nodelay !== null) {
-            this.socket.setNoDelay(!!this.options.set_tcp_nodelay);
-          }
-        }
-        this.prependOnceListener("established", (info) => {
-          setImmediate(() => {
-            if (this.receiveBuffer.length > 0) {
-              const excessData = this.receiveBuffer.get(this.receiveBuffer.length);
-              info.socket.emit("data", excessData);
-            }
-            info.socket.resume();
-          });
-        });
-      }
-      // Socket options (defaults host/port to options.proxy.host/options.proxy.port)
-      getSocketOptions() {
-        return Object.assign(Object.assign({}, this.options.socket_options), { host: this.options.proxy.host || this.options.proxy.ipaddress, port: this.options.proxy.port });
-      }
-      /**
-       * Handles internal Socks timeout callback.
-       * Note: If the Socks client is not BoundWaitingForConnection or Established, the connection will be closed.
-       */
-      onEstablishedTimeout() {
-        if (this.state !== constants_1.SocksClientState.Established && this.state !== constants_1.SocksClientState.BoundWaitingForConnection) {
-          this.closeSocket(constants_1.ERRORS.ProxyConnectionTimedOut);
-        }
-      }
-      /**
-       * Handles Socket connect event.
-       */
-      onConnectHandler() {
-        this.setState(constants_1.SocksClientState.Connected);
-        if (this.options.proxy.type === 4) {
-          this.sendSocks4InitialHandshake();
-        } else {
-          this.sendSocks5InitialHandshake();
-        }
-        this.setState(constants_1.SocksClientState.SentInitialHandshake);
-      }
-      /**
-       * Handles Socket data event.
-       * @param data
-       */
-      onDataReceivedHandler(data) {
-        this.receiveBuffer.append(data);
-        this.processData();
-      }
-      /**
-       * Handles processing of the data we have received.
-       */
-      processData() {
-        while (this.state !== constants_1.SocksClientState.Established && this.state !== constants_1.SocksClientState.Error && this.receiveBuffer.length >= this.nextRequiredPacketBufferSize) {
-          if (this.state === constants_1.SocksClientState.SentInitialHandshake) {
-            if (this.options.proxy.type === 4) {
-              this.handleSocks4FinalHandshakeResponse();
-            } else {
-              this.handleInitialSocks5HandshakeResponse();
-            }
-          } else if (this.state === constants_1.SocksClientState.SentAuthentication) {
-            this.handleInitialSocks5AuthenticationHandshakeResponse();
-          } else if (this.state === constants_1.SocksClientState.SentFinalHandshake) {
-            this.handleSocks5FinalHandshakeResponse();
-          } else if (this.state === constants_1.SocksClientState.BoundWaitingForConnection) {
-            if (this.options.proxy.type === 4) {
-              this.handleSocks4IncomingConnectionResponse();
-            } else {
-              this.handleSocks5IncomingConnectionResponse();
-            }
-          } else {
-            this.closeSocket(constants_1.ERRORS.InternalError);
-            break;
-          }
-        }
-      }
-      /**
-       * Handles Socket close event.
-       * @param had_error
-       */
-      onCloseHandler() {
-        this.closeSocket(constants_1.ERRORS.SocketClosed);
-      }
-      /**
-       * Handles Socket error event.
-       * @param err
-       */
-      onErrorHandler(err) {
-        this.closeSocket(err.message);
-      }
-      /**
-       * Removes internal event listeners on the underlying Socket.
-       */
-      removeInternalSocketHandlers() {
-        this.socket.pause();
-        this.socket.removeListener("data", this.onDataReceived);
-        this.socket.removeListener("close", this.onClose);
-        this.socket.removeListener("error", this.onError);
-        this.socket.removeListener("connect", this.onConnect);
-      }
-      /**
-       * Closes and destroys the underlying Socket. Emits an error event.
-       * @param err { String } An error string to include in error event.
-       */
-      closeSocket(err) {
-        if (this.state !== constants_1.SocksClientState.Error) {
-          this.setState(constants_1.SocksClientState.Error);
-          this.socket.destroy();
-          this.removeInternalSocketHandlers();
-          this.emit("error", new util_1.SocksClientError(err, this.options));
-        }
-      }
-      /**
-       * Sends initial Socks v4 handshake request.
-       */
-      sendSocks4InitialHandshake() {
-        const userId = this.options.proxy.userId || "";
-        const buff = new smart_buffer_1.SmartBuffer();
-        buff.writeUInt8(4);
-        buff.writeUInt8(constants_1.SocksCommand[this.options.command]);
-        buff.writeUInt16BE(this.options.destination.port);
-        if (net5.isIPv4(this.options.destination.host)) {
-          buff.writeBuffer((0, helpers_1.ipToBuffer)(this.options.destination.host));
-          buff.writeStringNT(userId);
-        } else {
-          buff.writeUInt8(0);
-          buff.writeUInt8(0);
-          buff.writeUInt8(0);
-          buff.writeUInt8(1);
-          buff.writeStringNT(userId);
-          buff.writeStringNT(this.options.destination.host);
-        }
-        this.nextRequiredPacketBufferSize = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks4Response;
-        this.socket.write(buff.toBuffer());
-      }
-      /**
-       * Handles Socks v4 handshake response.
-       * @param data
-       */
-      handleSocks4FinalHandshakeResponse() {
-        const data = this.receiveBuffer.get(8);
-        if (data[1] !== constants_1.Socks4Response.Granted) {
-          this.closeSocket(`${constants_1.ERRORS.Socks4ProxyRejectedConnection} - (${constants_1.Socks4Response[data[1]]})`);
-        } else {
-          if (constants_1.SocksCommand[this.options.command] === constants_1.SocksCommand.bind) {
-            const buff = smart_buffer_1.SmartBuffer.fromBuffer(data);
-            buff.readOffset = 2;
-            const remoteHost = {
-              port: buff.readUInt16BE(),
-              host: (0, helpers_1.int32ToIpv4)(buff.readUInt32BE())
-            };
-            if (remoteHost.host === "0.0.0.0") {
-              remoteHost.host = this.options.proxy.ipaddress;
-            }
-            this.setState(constants_1.SocksClientState.BoundWaitingForConnection);
-            this.emit("bound", { remoteHost, socket: this.socket });
-          } else {
-            this.setState(constants_1.SocksClientState.Established);
-            this.removeInternalSocketHandlers();
-            this.emit("established", { socket: this.socket });
-          }
-        }
-      }
-      /**
-       * Handles Socks v4 incoming connection request (BIND)
-       * @param data
-       */
-      handleSocks4IncomingConnectionResponse() {
-        const data = this.receiveBuffer.get(8);
-        if (data[1] !== constants_1.Socks4Response.Granted) {
-          this.closeSocket(`${constants_1.ERRORS.Socks4ProxyRejectedIncomingBoundConnection} - (${constants_1.Socks4Response[data[1]]})`);
-        } else {
-          const buff = smart_buffer_1.SmartBuffer.fromBuffer(data);
-          buff.readOffset = 2;
-          const remoteHost = {
-            port: buff.readUInt16BE(),
-            host: (0, helpers_1.int32ToIpv4)(buff.readUInt32BE())
-          };
-          this.setState(constants_1.SocksClientState.Established);
-          this.removeInternalSocketHandlers();
-          this.emit("established", { remoteHost, socket: this.socket });
-        }
-      }
-      /**
-       * Sends initial Socks v5 handshake request.
-       */
-      sendSocks5InitialHandshake() {
-        const buff = new smart_buffer_1.SmartBuffer();
-        const supportedAuthMethods = [constants_1.Socks5Auth.NoAuth];
-        if (this.options.proxy.userId || this.options.proxy.password) {
-          supportedAuthMethods.push(constants_1.Socks5Auth.UserPass);
-        }
-        if (this.options.proxy.custom_auth_method !== void 0) {
-          supportedAuthMethods.push(this.options.proxy.custom_auth_method);
-        }
-        buff.writeUInt8(5);
-        buff.writeUInt8(supportedAuthMethods.length);
-        for (const authMethod of supportedAuthMethods) {
-          buff.writeUInt8(authMethod);
-        }
-        this.nextRequiredPacketBufferSize = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5InitialHandshakeResponse;
-        this.socket.write(buff.toBuffer());
-        this.setState(constants_1.SocksClientState.SentInitialHandshake);
-      }
-      /**
-       * Handles initial Socks v5 handshake response.
-       * @param data
-       */
-      handleInitialSocks5HandshakeResponse() {
-        const data = this.receiveBuffer.get(2);
-        if (data[0] !== 5) {
-          this.closeSocket(constants_1.ERRORS.InvalidSocks5IntiailHandshakeSocksVersion);
-        } else if (data[1] === constants_1.SOCKS5_NO_ACCEPTABLE_AUTH) {
-          this.closeSocket(constants_1.ERRORS.InvalidSocks5InitialHandshakeNoAcceptedAuthType);
-        } else {
-          if (data[1] === constants_1.Socks5Auth.NoAuth) {
-            this.socks5ChosenAuthType = constants_1.Socks5Auth.NoAuth;
-            this.sendSocks5CommandRequest();
-          } else if (data[1] === constants_1.Socks5Auth.UserPass) {
-            this.socks5ChosenAuthType = constants_1.Socks5Auth.UserPass;
-            this.sendSocks5UserPassAuthentication();
-          } else if (data[1] === this.options.proxy.custom_auth_method) {
-            this.socks5ChosenAuthType = this.options.proxy.custom_auth_method;
-            this.sendSocks5CustomAuthentication();
-          } else {
-            this.closeSocket(constants_1.ERRORS.InvalidSocks5InitialHandshakeUnknownAuthType);
-          }
-        }
-      }
-      /**
-       * Sends Socks v5 user & password auth handshake.
-       *
-       * Note: No auth and user/pass are currently supported.
-       */
-      sendSocks5UserPassAuthentication() {
-        const userId = this.options.proxy.userId || "";
-        const password = this.options.proxy.password || "";
-        const buff = new smart_buffer_1.SmartBuffer();
-        buff.writeUInt8(1);
-        buff.writeUInt8(Buffer.byteLength(userId));
-        buff.writeString(userId);
-        buff.writeUInt8(Buffer.byteLength(password));
-        buff.writeString(password);
-        this.nextRequiredPacketBufferSize = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5UserPassAuthenticationResponse;
-        this.socket.write(buff.toBuffer());
-        this.setState(constants_1.SocksClientState.SentAuthentication);
-      }
-      sendSocks5CustomAuthentication() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.nextRequiredPacketBufferSize = this.options.proxy.custom_auth_response_size;
-          this.socket.write(yield this.options.proxy.custom_auth_request_handler());
-          this.setState(constants_1.SocksClientState.SentAuthentication);
-        });
-      }
-      handleSocks5CustomAuthHandshakeResponse(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return yield this.options.proxy.custom_auth_response_handler(data);
-        });
-      }
-      handleSocks5AuthenticationNoAuthHandshakeResponse(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return data[1] === 0;
-        });
-      }
-      handleSocks5AuthenticationUserPassHandshakeResponse(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-          return data[1] === 0;
-        });
-      }
-      /**
-       * Handles Socks v5 auth handshake response.
-       * @param data
-       */
-      handleInitialSocks5AuthenticationHandshakeResponse() {
-        return __awaiter(this, void 0, void 0, function* () {
-          this.setState(constants_1.SocksClientState.ReceivedAuthenticationResponse);
-          let authResult = false;
-          if (this.socks5ChosenAuthType === constants_1.Socks5Auth.NoAuth) {
-            authResult = yield this.handleSocks5AuthenticationNoAuthHandshakeResponse(this.receiveBuffer.get(2));
-          } else if (this.socks5ChosenAuthType === constants_1.Socks5Auth.UserPass) {
-            authResult = yield this.handleSocks5AuthenticationUserPassHandshakeResponse(this.receiveBuffer.get(2));
-          } else if (this.socks5ChosenAuthType === this.options.proxy.custom_auth_method) {
-            authResult = yield this.handleSocks5CustomAuthHandshakeResponse(this.receiveBuffer.get(this.options.proxy.custom_auth_response_size));
-          }
-          if (!authResult) {
-            this.closeSocket(constants_1.ERRORS.Socks5AuthenticationFailed);
-          } else {
-            this.sendSocks5CommandRequest();
-          }
-        });
-      }
-      /**
-       * Sends Socks v5 final handshake request.
-       */
-      sendSocks5CommandRequest() {
-        const buff = new smart_buffer_1.SmartBuffer();
-        buff.writeUInt8(5);
-        buff.writeUInt8(constants_1.SocksCommand[this.options.command]);
-        buff.writeUInt8(0);
-        if (net5.isIPv4(this.options.destination.host)) {
-          buff.writeUInt8(constants_1.Socks5HostType.IPv4);
-          buff.writeBuffer((0, helpers_1.ipToBuffer)(this.options.destination.host));
-        } else if (net5.isIPv6(this.options.destination.host)) {
-          buff.writeUInt8(constants_1.Socks5HostType.IPv6);
-          buff.writeBuffer((0, helpers_1.ipToBuffer)(this.options.destination.host));
-        } else {
-          buff.writeUInt8(constants_1.Socks5HostType.Hostname);
-          buff.writeUInt8(this.options.destination.host.length);
-          buff.writeString(this.options.destination.host);
-        }
-        buff.writeUInt16BE(this.options.destination.port);
-        this.nextRequiredPacketBufferSize = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseHeader;
-        this.socket.write(buff.toBuffer());
-        this.setState(constants_1.SocksClientState.SentFinalHandshake);
-      }
-      /**
-       * Handles Socks v5 final handshake response.
-       * @param data
-       */
-      handleSocks5FinalHandshakeResponse() {
-        const header = this.receiveBuffer.peek(5);
-        if (header[0] !== 5 || header[1] !== constants_1.Socks5Response.Granted) {
-          this.closeSocket(`${constants_1.ERRORS.InvalidSocks5FinalHandshakeRejected} - ${constants_1.Socks5Response[header[1]]}`);
-        } else {
-          const addressType = header[3];
-          let remoteHost;
-          let buff;
-          if (addressType === constants_1.Socks5HostType.IPv4) {
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseIPv4;
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(4));
-            remoteHost = {
-              host: (0, helpers_1.int32ToIpv4)(buff.readUInt32BE()),
-              port: buff.readUInt16BE()
-            };
-            if (remoteHost.host === "0.0.0.0") {
-              remoteHost.host = this.options.proxy.ipaddress;
-            }
-          } else if (addressType === constants_1.Socks5HostType.Hostname) {
-            const hostLength = header[4];
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseHostname(hostLength);
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(5));
-            remoteHost = {
-              host: buff.readString(hostLength),
-              port: buff.readUInt16BE()
-            };
-          } else if (addressType === constants_1.Socks5HostType.IPv6) {
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseIPv6;
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(4));
-            remoteHost = {
-              host: ip_address_1.Address6.fromByteArray(Array.from(buff.readBuffer(16))).canonicalForm(),
-              port: buff.readUInt16BE()
-            };
-          }
-          this.setState(constants_1.SocksClientState.ReceivedFinalResponse);
-          if (constants_1.SocksCommand[this.options.command] === constants_1.SocksCommand.connect) {
-            this.setState(constants_1.SocksClientState.Established);
-            this.removeInternalSocketHandlers();
-            this.emit("established", { remoteHost, socket: this.socket });
-          } else if (constants_1.SocksCommand[this.options.command] === constants_1.SocksCommand.bind) {
-            this.setState(constants_1.SocksClientState.BoundWaitingForConnection);
-            this.nextRequiredPacketBufferSize = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseHeader;
-            this.emit("bound", { remoteHost, socket: this.socket });
-          } else if (constants_1.SocksCommand[this.options.command] === constants_1.SocksCommand.associate) {
-            this.setState(constants_1.SocksClientState.Established);
-            this.removeInternalSocketHandlers();
-            this.emit("established", {
-              remoteHost,
-              socket: this.socket
-            });
-          }
-        }
-      }
-      /**
-       * Handles Socks v5 incoming connection request (BIND).
-       */
-      handleSocks5IncomingConnectionResponse() {
-        const header = this.receiveBuffer.peek(5);
-        if (header[0] !== 5 || header[1] !== constants_1.Socks5Response.Granted) {
-          this.closeSocket(`${constants_1.ERRORS.Socks5ProxyRejectedIncomingBoundConnection} - ${constants_1.Socks5Response[header[1]]}`);
-        } else {
-          const addressType = header[3];
-          let remoteHost;
-          let buff;
-          if (addressType === constants_1.Socks5HostType.IPv4) {
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseIPv4;
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(4));
-            remoteHost = {
-              host: (0, helpers_1.int32ToIpv4)(buff.readUInt32BE()),
-              port: buff.readUInt16BE()
-            };
-            if (remoteHost.host === "0.0.0.0") {
-              remoteHost.host = this.options.proxy.ipaddress;
-            }
-          } else if (addressType === constants_1.Socks5HostType.Hostname) {
-            const hostLength = header[4];
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseHostname(hostLength);
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(5));
-            remoteHost = {
-              host: buff.readString(hostLength),
-              port: buff.readUInt16BE()
-            };
-          } else if (addressType === constants_1.Socks5HostType.IPv6) {
-            const dataNeeded = constants_1.SOCKS_INCOMING_PACKET_SIZES.Socks5ResponseIPv6;
-            if (this.receiveBuffer.length < dataNeeded) {
-              this.nextRequiredPacketBufferSize = dataNeeded;
-              return;
-            }
-            buff = smart_buffer_1.SmartBuffer.fromBuffer(this.receiveBuffer.get(dataNeeded).slice(4));
-            remoteHost = {
-              host: ip_address_1.Address6.fromByteArray(Array.from(buff.readBuffer(16))).canonicalForm(),
-              port: buff.readUInt16BE()
-            };
-          }
-          this.setState(constants_1.SocksClientState.Established);
-          this.removeInternalSocketHandlers();
-          this.emit("established", { remoteHost, socket: this.socket });
-        }
-      }
-      get socksClientOptions() {
-        return Object.assign({}, this.options);
-      }
-    };
-    exports2.SocksClient = SocksClient2;
-  }
-});
-
-// ../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/index.js
-var require_build = __commonJS({
-  "../../node_modules/.pnpm/socks@2.8.8/node_modules/socks/build/index.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      var desc2 = Object.getOwnPropertyDescriptor(m2, k2);
-      if (!desc2 || ("get" in desc2 ? !m2.__esModule : desc2.writable || desc2.configurable)) {
-        desc2 = { enumerable: true, get: function() {
-          return m2[k2];
-        } };
-      }
-      Object.defineProperty(o, k22, desc2);
-    }) : (function(o, m2, k2, k22) {
-      if (k22 === void 0) k22 = k2;
-      o[k22] = m2[k2];
-    }));
-    var __exportStar = exports2 && exports2.__exportStar || function(m2, exports3) {
-      for (var p in m2) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports3, p)) __createBinding(exports3, m2, p);
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    __exportStar(require_socksclient(), exports2);
-  }
-});
-
-// ../../node_modules/.pnpm/socks-proxy-agent@10.0.0/node_modules/socks-proxy-agent/dist/index.js
-var dist_exports2 = {};
-__export(dist_exports2, {
-  SocksProxyAgent: () => SocksProxyAgent
-});
-import * as dns from "dns";
-import * as net4 from "net";
-import * as tls3 from "tls";
-import { URL as URL3 } from "url";
-function parseSocksURL(url2) {
-  let lookup2 = false;
-  let type = 5;
-  const host = url2.hostname;
-  const port2 = parseInt(url2.port, 10) || 1080;
-  switch (url2.protocol.replace(":", "")) {
-    case "socks4":
-      lookup2 = true;
-      type = 4;
-      break;
-    // pass through
-    case "socks4a":
-      type = 4;
-      break;
-    case "socks5":
-      lookup2 = true;
-      type = 5;
-      break;
-    // pass through
-    case "socks":
-      type = 5;
-      break;
-    case "socks5h":
-      type = 5;
-      break;
-    default:
-      throw new TypeError(`A "socks" protocol must be specified! Got: ${String(url2.protocol)}`);
-  }
-  const proxy = {
-    host,
-    port: port2,
-    type
-  };
-  if (url2.username) {
-    Object.defineProperty(proxy, "userId", {
-      value: decodeURIComponent(url2.username),
-      enumerable: false
-    });
-  }
-  if (url2.password != null) {
-    Object.defineProperty(proxy, "password", {
-      value: decodeURIComponent(url2.password),
-      enumerable: false
-    });
-  }
-  return { lookup: lookup2, proxy };
-}
-function omit3(obj2, ...keys) {
-  const ret2 = {};
-  let key;
-  for (key in obj2) {
-    if (!keys.includes(key)) {
-      ret2[key] = obj2[key];
-    }
-  }
-  return ret2;
-}
-var import_socks, import_debug3, debug3, setServernameFromNonIpHost2, SocksProxyAgent;
-var init_dist3 = __esm({
-  "../../node_modules/.pnpm/socks-proxy-agent@10.0.0/node_modules/socks-proxy-agent/dist/index.js"() {
-    import_socks = __toESM(require_build(), 1);
-    init_dist();
-    import_debug3 = __toESM(require_src(), 1);
-    debug3 = (0, import_debug3.default)("socks-proxy-agent");
-    setServernameFromNonIpHost2 = (options) => {
-      if (options.servername === void 0 && options.host && !net4.isIP(options.host)) {
-        return {
-          ...options,
-          servername: options.host
-        };
-      }
-      return options;
-    };
-    SocksProxyAgent = class extends Agent2 {
-      constructor(uri, opts) {
-        super(opts);
-        const url2 = typeof uri === "string" ? new URL3(uri) : uri;
-        const { proxy, lookup: lookup2 } = parseSocksURL(url2);
-        this.shouldLookup = lookup2;
-        this.proxy = proxy;
-        this.timeout = opts?.timeout ?? null;
-        this.socketOptions = opts?.socketOptions ?? null;
-      }
-      /**
-       * Initiates a SOCKS connection to the specified SOCKS proxy server,
-       * which in turn connects to the specified remote host and port.
-       */
-      async connect(req, opts) {
-        const { shouldLookup, proxy, timeout } = this;
-        if (!opts.host) {
-          throw new Error("No `host` defined!");
-        }
-        let { host } = opts;
-        const { port: port2, lookup: lookupFn = dns.lookup } = opts;
-        if (shouldLookup) {
-          host = await new Promise((resolve, reject) => {
-            lookupFn(host, {}, (err, address) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve(typeof address === "string" ? address : address[0].address);
-              }
-            });
-          });
-        }
-        const socksOpts = {
-          proxy,
-          destination: {
-            host,
-            port: typeof port2 === "number" ? port2 : parseInt(port2, 10)
-          },
-          command: "connect",
-          timeout: timeout ?? void 0,
-          // @ts-expect-error the type supplied by socks for socket_options is wider
-          // than necessary since socks will always override the host and port
-          socket_options: this.socketOptions ?? void 0
-        };
-        const cleanup = (tlsSocket) => {
-          req.destroy();
-          socket.destroy();
-          if (tlsSocket)
-            tlsSocket.destroy();
-        };
-        debug3("Creating socks proxy connection: %o", socksOpts);
-        const { socket } = await import_socks.SocksClient.createConnection(socksOpts);
-        debug3("Successfully created socks proxy connection");
-        if (timeout !== null) {
-          socket.setTimeout(timeout);
-          socket.on("timeout", () => cleanup());
-        }
-        if (opts.secureEndpoint) {
-          debug3("Upgrading socket connection to TLS");
-          const tlsSocket = tls3.connect({
-            ...omit3(setServernameFromNonIpHost2(opts), "host", "path", "port"),
-            socket
-          });
-          tlsSocket.once("error", (error40) => {
-            debug3("Socket TLS error", error40.message);
-            cleanup(tlsSocket);
-          });
-          return tlsSocket;
-        }
-        return socket;
-      }
-    };
-    SocksProxyAgent.protocols = [
-      "socks",
-      "socks4",
-      "socks4a",
-      "socks5",
-      "socks5h"
-    ];
-  }
-});
-
 // src/instagram/jarveeParser.ts
 var jarveeParser_exports = {};
 __export(jarveeParser_exports, {
+  diagnoseJarveeBinary: () => diagnoseJarveeBinary,
   parseJarveeBinary: () => parseJarveeBinary
 });
 function readLPS(buf, pos) {
@@ -125642,6 +121422,17 @@ function decodeB64Username(s) {
   try {
     const dec = Buffer.from(s, "base64").toString("utf8");
     return IG_UN_RE.test(dec) ? dec : null;
+  } catch {
+    return null;
+  }
+}
+function decodeB64Password(s) {
+  if (!s.endsWith("=")) return null;
+  if (!B64_RE.test(s) || s.length < 8 || s.length > 120) return null;
+  try {
+    const dec = Buffer.from(s, "base64").toString("latin1");
+    if (!/^[\x20-\x7e]+$/.test(dec)) return null;
+    return isLikelyPassword(dec) ? dec : null;
   } catch {
     return null;
   }
@@ -125722,6 +121513,32 @@ function extractDmRecipients(sortedById) {
   }
   return [...recipients];
 }
+function diagnoseJarveeBinary(buffer) {
+  if (buffer.length < 20) return [];
+  const decoded = Buffer.from(buffer.map((b3) => b3 ^ 255));
+  const allRecords = extractAllStrings(decoded);
+  const sortedByOffset = [...allRecords].sort((a2, b3) => a2.offset - b3.offset);
+  for (let i2 = 0; i2 < sortedByOffset.length; i2++) {
+    const s = sortedByOffset[i2];
+    if (TOTP_RE.test(normaliseTOTP(s.value))) continue;
+    const username = decodeB64Username(s.value);
+    if (!username) continue;
+    const window2 = sortedByOffset.slice(i2 + 1, i2 + 80);
+    const proxyIdx = window2.findIndex((w2) => parseProxyStr(w2.value) !== null);
+    if (proxyIdx < 0) continue;
+    const before = sortedByOffset.slice(Math.max(0, i2 - 10), i2);
+    const after = sortedByOffset.slice(i2 + 1, i2 + 31);
+    return [
+      ...before.map((r2) => ({ ...r2, value: `[PRE]  ${r2.value}` })),
+      { ...s, value: `[ANCHOR\u2192username="${username}"]  raw="${s.value}"` },
+      ...after.map((r2, idx) => ({
+        ...r2,
+        value: `[+${String(idx + 1).padStart(2, "0")}] ${r2.value}`
+      }))
+    ];
+  }
+  return [];
+}
 function parseJarveeBinary(buffer) {
   if (buffer.length < 20) throw new Error("File too small to be a Jarvee binary export");
   const decoded = Buffer.from(buffer.map((b3) => b3 ^ 255));
@@ -125742,10 +121559,14 @@ function parseJarveeBinary(buffer) {
   const dmRecipients = extractDmRecipients(sortedById);
   const accounts = [];
   const usedOffsets = /* @__PURE__ */ new Set();
+  const knownPasswords = /* @__PURE__ */ new Set();
   for (let i2 = 0; i2 < sortedByOffset.length; i2++) {
     const s = sortedByOffset[i2];
+    if (usedOffsets.has(s.offset)) continue;
+    if (knownPasswords.has(s.value)) continue;
+    if (TOTP_RE.test(normaliseTOTP(s.value))) continue;
     const username = decodeB64Username(s.value);
-    if (!username || usedOffsets.has(s.offset)) continue;
+    if (!username) continue;
     const window2 = sortedByOffset.slice(i2 + 1, i2 + 80);
     const proxyIdx = window2.findIndex((w2) => parseProxyStr(w2.value) !== null);
     if (proxyIdx < 0) continue;
@@ -125777,6 +121598,7 @@ function parseJarveeBinary(buffer) {
       for (let k2 = smtpIdx + 1; k2 < proxyIdx; k2++) {
         const v3 = window2[k2].value;
         if (v3 === emailPassword) continue;
+        if (v3 === proxyPassword) continue;
         if (EMAIL_RE.test(v3) || SMTP_RE.test(v3)) continue;
         if (isLikelyPassword(v3)) {
           password = v3;
@@ -125788,6 +121610,7 @@ function parseJarveeBinary(buffer) {
       const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
       for (let k2 = 0; k2 < smtpBoundary; k2++) {
         const v3 = window2[k2].value;
+        if (v3 === proxyPassword || v3 === emailPassword) continue;
         if (EMAIL_RE.test(v3) || SMTP_RE.test(v3) || PROXY_RE.test(v3)) continue;
         if (isLikelyPassword(v3)) {
           password = v3;
@@ -125799,6 +121622,7 @@ function parseJarveeBinary(buffer) {
       const priorWindow = sortedByOffset.slice(Math.max(0, i2 - 40), i2).reverse();
       for (const pw of priorWindow) {
         const v3 = pw.value;
+        if (v3 === proxyPassword || v3 === emailPassword) continue;
         if (TOTP_RE.test(normaliseTOTP(v3))) continue;
         if (EMAIL_RE.test(v3) || SMTP_RE.test(v3) || PROXY_RE.test(v3) || URL_RE.test(v3)) continue;
         if (decodeB64Username(v3)) continue;
@@ -125807,6 +121631,24 @@ function parseJarveeBinary(buffer) {
           break;
         }
       }
+    }
+    if (!password) {
+      const fullPreProxy = sortedByOffset.slice(i2 + 1, i2 + 1 + proxyIdx);
+      for (const pw of fullPreProxy) {
+        if (pw.value === s.value) continue;
+        const decoded2 = decodeB64Password(pw.value);
+        if (decoded2 && decoded2 !== username) {
+          password = decoded2;
+          break;
+        }
+      }
+    }
+    if (!password && emailPassword) {
+      password = emailPassword;
+    }
+    if (password && password !== username) {
+      const decodedPw = decodeB64Password(password);
+      if (decodedPw && decodedPw !== username) password = decodedPw;
     }
     if (proxyPassword && proxyPassword === password) proxyPassword = "";
     let proxyUsername = "";
@@ -125825,7 +121667,9 @@ function parseJarveeBinary(buffer) {
     const emailItem = window2.slice(0, proxyIdx).find((w2) => EMAIL_RE.test(w2.value));
     const email3 = emailItem?.value ?? "";
     const priorWindow15 = sortedByOffset.slice(Math.max(0, i2 - 15), i2).reverse();
-    const twoFAItem = priorWindow15.find((w2) => TOTP_RE.test(normaliseTOTP(w2.value)));
+    const twoFAPreAnchor = priorWindow15.find((w2) => TOTP_RE.test(normaliseTOTP(w2.value)));
+    const twoFAPostProxy = !twoFAPreAnchor ? window2.slice(proxyIdx + 1).find((w2) => TOTP_RE.test(normaliseTOTP(w2.value))) : void 0;
+    const twoFAItem = twoFAPreAnchor ?? twoFAPostProxy;
     const twoFASecret = twoFAItem ? normaliseTOTP(twoFAItem.value) : "";
     const searchWindow = [...window2, ...sortedByOffset.slice(i2 + 80, i2 + 200)];
     const deviceItem = searchWindow.find((w2) => DEVICE_RE.test(w2.value));
@@ -125833,7 +121677,7 @@ function parseJarveeBinary(buffer) {
     const uaItem = searchWindow.find((w2) => /Mozilla\/5\.0/.test(w2.value));
     const userAgentWeb = uaItem?.value ?? "";
     const afterProxyCandidates = window2.slice(proxyIdx + 1).filter(
-      (w2) => w2.value.length >= 2 && w2.value.length <= 120 && !EMAIL_RE.test(w2.value) && !URL_RE.test(w2.value) && !PROXY_RE.test(w2.value) && !DEVICE_RE.test(w2.value) && !TOTP_RE.test(w2.value) && w2.value !== proxyUsername && w2.value !== proxyPassword && !/Mozilla/.test(w2.value) && !SMTP_RE.test(w2.value)
+      (w2) => w2.value.length >= 2 && w2.value.length <= 120 && !EMAIL_RE.test(w2.value) && !URL_RE.test(w2.value) && !PROXY_RE.test(w2.value) && !DEVICE_RE.test(w2.value) && !TOTP_RE.test(w2.value) && !TOTP_RE.test(normaliseTOTP(w2.value)) && w2.value !== proxyUsername && w2.value !== proxyPassword && !/Mozilla/.test(w2.value) && !SMTP_RE.test(w2.value)
     );
     const pipeLabelItem = afterProxyCandidates.find((w2) => JARVEE_LABEL_RE.test(w2.value));
     const fallbackLabelItem = afterProxyCandidates.find((w2) => w2.value.includes(" ") || /[A-Z]/.test(w2.value)) ?? afterProxyCandidates[0];
@@ -125857,6 +121701,16 @@ function parseJarveeBinary(buffer) {
       dmRecipients
     });
     usedOffsets.add(s.offset);
+    if (password) {
+      const pwRecord = window2.find((w2) => w2.value === password) ?? sortedByOffset.slice(Math.max(0, i2 - 40), i2).find((w2) => w2.value === password);
+      if (pwRecord) {
+        knownPasswords.add(pwRecord.value);
+        usedOffsets.add(pwRecord.offset);
+      }
+    }
+    for (const w2 of window2) {
+      usedOffsets.add(w2.offset);
+    }
   }
   return accounts;
 }
@@ -125883,8 +121737,8 @@ var init_jarveeParser = __esm({
 // src/index.ts
 var import_express5 = __toESM(require_express2(), 1);
 import { createServer } from "http";
-import path5 from "path";
-import fs5 from "fs";
+import path6 from "path";
+import fs6 from "fs";
 
 // src/app.ts
 var import_express4 = __toESM(require_express2(), 1);
@@ -126256,8 +122110,8 @@ function getErrorMap() {
 
 // ../../node_modules/.pnpm/zod@3.25.76/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path6, errorMaps, issueData } = params;
-  const fullPath = [...path6, ...issueData.path || []];
+  const { data, path: path7, errorMaps, issueData } = params;
+  const fullPath = [...path7, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -126372,11 +122226,11 @@ var errorUtil;
 
 // ../../node_modules/.pnpm/zod@3.25.76/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path6, key) {
+  constructor(parent, value, path7, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path6;
+    this._path = path7;
     this._key = key;
   }
   get path() {
@@ -130083,12 +125937,793 @@ app.use(
     }
   })
 );
-app.use((0, import_cors.default)());
+app.use((0, import_cors.default)({ origin: true, credentials: true }));
 app.use(import_express4.default.json({ limit: "100mb" }));
 app.use(import_express4.default.urlencoded({ extended: true, limit: "100mb" }));
 app.use("/api", routes_default);
 app.use("/api/ai", aiRouter);
 var app_default = app;
+
+// src/instagram/iphoneMirror.ts
+import { exec, spawn } from "child_process";
+import { promisify } from "util";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import https from "https";
+var execAsync = promisify(exec);
+var mlog = logger.child({ component: "mirror" });
+function getBinDir() {
+  if (process.env.IDEVICE_BIN_DIR) {
+    mlog.info({ dir: process.env.IDEVICE_BIN_DIR }, "[mirror] getBinDir: using IDEVICE_BIN_DIR env");
+    return process.env.IDEVICE_BIN_DIR;
+  }
+  const candidates = [
+    path.join(process.cwd(), "..", "electron", "resources", "bin", "win32"),
+    path.join(process.cwd(), "resources", "bin", "win32")
+  ];
+  for (const c3 of candidates) {
+    const probe = path.join(c3, "idevice_id.exe");
+    if (fs.existsSync(probe)) {
+      mlog.info({ dir: c3 }, "[mirror] getBinDir: found idevice_id.exe");
+      return c3;
+    }
+    mlog.debug({ checked: probe }, "[mirror] getBinDir: not found at candidate");
+  }
+  mlog.warn("[mirror] getBinDir: idevice_id.exe not found in any candidate \u2014 binaries missing?");
+  return "";
+}
+function binPath(exe) {
+  const dir = getBinDir();
+  if (!dir) return exe;
+  return path.join(dir, exe);
+}
+var _amdPath = void 0;
+var _isStoreItunes = false;
+async function getAppleMobileDevicePath() {
+  if (_amdPath !== void 0) {
+    mlog.debug({ cached: _amdPath }, "[mirror] getAppleMobileDevicePath: returning cached value");
+    return _amdPath ?? "";
+  }
+  if (process.platform !== "win32") {
+    _amdPath = "";
+    return "";
+  }
+  const staticPaths = [
+    "C:\\Program Files\\Common Files\\Apple\\Mobile Device Support",
+    "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support"
+  ];
+  for (const p of staticPaths) {
+    const dll = path.join(p, "AppleMobileDeviceInterface.dll");
+    const exists2 = fs.existsSync(dll);
+    mlog.debug({ path: p, dllExists: exists2 }, "[mirror] getAppleMobileDevicePath: checking static path");
+    if (exists2) {
+      _amdPath = p;
+      mlog.info({ amdPath: p, source: "static" }, "[mirror] getAppleMobileDevicePath: DLL found (static iTunes install)");
+      return p;
+    }
+  }
+  try {
+    const { stdout } = await execAsync('sc qc "Apple Mobile Device Service"', { timeout: 4e3 });
+    mlog.debug({ scOutput: stdout.trim() }, "[mirror] getAppleMobileDevicePath: sc qc output");
+    const m2 = stdout.match(/BINARY_PATH_NAME\s*:\s*"?([^"\r\n]+)/i);
+    if (m2) {
+      const svcBin = m2[1].trim().replace(/"/g, "").replace(/^"|"$/g, "");
+      const svcDir = path.dirname(svcBin);
+      mlog.info(`[mirror] getAppleMobileDevicePath: service binary at: "${svcBin}" \u2014 dir: "${svcDir}"`);
+      if (svcDir.toLowerCase().includes("windowsapps")) {
+        _isStoreItunes = true;
+        mlog.warn(`[mirror] getAppleMobileDevicePath: MICROSOFT STORE ITUNES DETECTED \u2014 service is in WindowsApps sandbox: "${svcDir}". libimobiledevice DLLs are inaccessible from this location. idevice_id.exe will crash. User must uninstall Store iTunes and install from apple.com.`);
+        _amdPath = "";
+        return "";
+      }
+      const candidates = [
+        svcDir,
+        path.join(svcDir, ".."),
+        path.join(svcDir, "..", ".."),
+        path.join(svcDir, "..", "..", "..")
+      ];
+      for (const c3 of candidates) {
+        const resolved = path.resolve(c3);
+        const dll = path.join(resolved, "AppleMobileDeviceInterface.dll");
+        const exists2 = fs.existsSync(dll);
+        mlog.info(`[mirror] getAppleMobileDevicePath: checking "${resolved}" \u2014 DLL exists: ${exists2}`);
+        if (exists2) {
+          _amdPath = resolved;
+          mlog.info(`[mirror] getAppleMobileDevicePath: DLL found at: "${resolved}" (service-query)`);
+          return resolved;
+        }
+      }
+      mlog.warn(`[mirror] getAppleMobileDevicePath: DLL not found in any candidate under "${svcDir}" \u2014 using svcDir as fallback`);
+      _amdPath = svcDir;
+      return svcDir;
+    } else {
+      mlog.warn("[mirror] getAppleMobileDevicePath: could not parse BINARY_PATH_NAME from sc qc output");
+    }
+  } catch (err) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] getAppleMobileDevicePath: sc qc failed");
+  }
+  mlog.warn("[mirror] getAppleMobileDevicePath: could not find Apple DLL path \u2014 idevice tools may fail to load DLLs");
+  _amdPath = "";
+  return "";
+}
+async function buildEnvWithApplePath() {
+  const amdPath = await getAppleMobileDevicePath();
+  const binDir = getBinDir();
+  const extra = [binDir, amdPath].filter(Boolean).join(path.delimiter);
+  const usbmuxd = process.env.USBMUXD_SOCKET_ADDRESS ?? "tcp:127.0.0.1:27015";
+  const finalPath = extra ? `${extra}${path.delimiter}${process.env.PATH ?? ""}` : process.env.PATH;
+  mlog.info(
+    { binDir, amdPath, usbmuxdSocket: usbmuxd, injectedPathPrefix: extra || "(none)" },
+    "[mirror] buildEnvWithApplePath: env ready"
+  );
+  return {
+    ...process.env,
+    PATH: finalPath,
+    USBMUXD_SOCKET_ADDRESS: usbmuxd
+  };
+}
+async function diagnoseIphoneSupport() {
+  mlog.info("[mirror] diagnoseIphoneSupport: starting");
+  const binDir = getBinDir();
+  const exe = path.join(binDir, "idevice_id.exe");
+  const binaryFound = binDir !== "" && fs.existsSync(exe);
+  mlog.info({ binDir, exe, binaryFound }, "[mirror] diagnoseIphoneSupport: binary check");
+  let appleDriverRunning = false;
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await execAsync('sc query "Apple Mobile Device Service"', { timeout: 4e3 });
+      appleDriverRunning = stdout.includes("RUNNING");
+      mlog.info({ appleDriverRunning, scOutput: stdout.trim() }, "[mirror] diagnoseIphoneSupport: AMDS service check (sc query)");
+    } catch (e1) {
+      mlog.warn({ err: String(e1?.message ?? e1) }, "[mirror] diagnoseIphoneSupport: sc query failed, trying tasklist");
+      try {
+        const { stdout: tl } = await execAsync(
+          'tasklist /FI "IMAGENAME eq AppleMobileDeviceService.exe" /NH',
+          { timeout: 4e3 }
+        );
+        appleDriverRunning = tl.includes("AppleMobileDeviceService.exe");
+        mlog.info({ appleDriverRunning, tasklistOutput: tl.trim() }, "[mirror] diagnoseIphoneSupport: AMDS check via tasklist");
+      } catch (e2) {
+        mlog.warn({ err: String(e2?.message ?? e2) }, "[mirror] diagnoseIphoneSupport: tasklist also failed");
+      }
+    }
+  }
+  const amdPath = await getAppleMobileDevicePath();
+  const env2 = await buildEnvWithApplePath();
+  let rawOutput = "";
+  let rawError = "";
+  let debugOutput = "";
+  if (binaryFound) {
+    const cmd = `"${exe}" -l`;
+    mlog.info({ cmd, usbmuxd: env2.USBMUXD_SOCKET_ADDRESS }, "[mirror] diagnoseIphoneSupport: running idevice_id -l");
+    try {
+      const result = await execAsync(cmd, { timeout: 6e3, env: env2 });
+      rawOutput = result.stdout.trim();
+      rawError = result.stderr?.trim() ?? "";
+      mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l result \u2014 stdout="${rawOutput}" stderr="${rawError}"`);
+    } catch (err) {
+      rawError = String(err?.stderr ?? err?.message ?? err);
+      mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id -l threw \u2014 code=${err?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
+    }
+    if (rawOutput === "" && rawError === "") {
+      const dbgCmd = `"${exe}" --debug -l`;
+      mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l returned empty \u2014 retrying with --debug`);
+      try {
+        const dbg = await execAsync(dbgCmd, { timeout: 8e3, env: env2 });
+        debugOutput = [dbg.stdout, dbg.stderr].filter(Boolean).join("\n").trim();
+        mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id --debug output: "${debugOutput}"`);
+      } catch (err) {
+        debugOutput = String(err?.stderr ?? err?.stdout ?? err?.message ?? "").trim();
+        mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id --debug threw \u2014 code=${err?.code} output="${debugOutput}"`);
+      }
+    }
+  } else {
+    mlog.warn("[mirror] diagnoseIphoneSupport: skipping idevice_id run \u2014 binary not found");
+  }
+  let suggestion = "";
+  if (!binaryFound) {
+    suggestion = "Equinox binaries are missing. Try reinstalling the app.";
+  } else if (_isStoreItunes) {
+    suggestion = "ms_store_itunes";
+  } else if (!appleDriverRunning && process.platform === "win32") {
+    suggestion = "itunes_required";
+  } else if (rawOutput === "" && rawError === "") {
+    suggestion = "no_connection";
+  } else if (rawError) {
+    suggestion = `error:${rawError}`;
+  } else {
+    suggestion = "ok";
+  }
+  mlog.info(`[mirror] diagnoseIphoneSupport: complete \u2014 suggestion="${suggestion}" binaryFound=${binaryFound} appleDriverRunning=${appleDriverRunning} amdPath="${amdPath}" msStoreItunes=${_isStoreItunes}`);
+  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, debugOutput, suggestion, msStoreItunes: _isStoreItunes };
+}
+async function listConnectedDevices() {
+  mlog.info("[mirror] listConnectedDevices: starting");
+  const env2 = await buildEnvWithApplePath();
+  try {
+    const exe = binPath("idevice_id.exe");
+    const cmd = `"${exe}" -l`;
+    mlog.info({ cmd, usbmuxd: env2.USBMUXD_SOCKET_ADDRESS }, "[mirror] listConnectedDevices: running bundled idevice_id.exe");
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 5e3, env: env2 });
+    mlog.info(`[mirror] listConnectedDevices: idevice_id.exe result \u2014 stdout="${stdout?.trim()}" stderr="${stderr?.trim()}"`);
+    const udids = stdout.trim().split("\n").filter(Boolean);
+    if (udids.length === 0) {
+      mlog.warn("[mirror] listConnectedDevices: idevice_id.exe returned no UDIDs");
+    } else {
+      mlog.info({ udids }, "[mirror] listConnectedDevices: found UDIDs");
+      const devices = [];
+      for (const udid of udids) {
+        let name = "iPhone";
+        let ios = "Unknown";
+        try {
+          const infoExe = binPath("ideviceinfo.exe");
+          const { stdout: nm } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k DeviceName`, { timeout: 3e3, env: env2 });
+          name = nm.trim() || "iPhone";
+          const { stdout: ver } = await execAsync(`"${infoExe}" -u "${udid.trim()}" -k ProductVersion`, { timeout: 3e3, env: env2 });
+          ios = ver.trim() || "Unknown";
+        } catch (e) {
+          mlog.warn({ udid, err: String(e?.message ?? e) }, "[mirror] listConnectedDevices: ideviceinfo failed for UDID");
+        }
+        devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
+      }
+      mlog.info({ count: devices.length }, "[mirror] listConnectedDevices: returning devices");
+      return devices;
+    }
+  } catch (err) {
+    mlog.warn(`[mirror] listConnectedDevices: bundled idevice_id.exe threw \u2014 code=${err?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
+  }
+  try {
+    mlog.info("[mirror] listConnectedDevices: trying idevice_id from PATH");
+    const { stdout } = await execAsync("idevice_id -l", { timeout: 4e3, env: env2 });
+    const udids = stdout.trim().split("\n").filter(Boolean);
+    mlog.info({ udids }, "[mirror] listConnectedDevices: PATH idevice_id result");
+    const devices = [];
+    for (const udid of udids) {
+      let name = "iPhone";
+      let ios = "Unknown";
+      try {
+        const { stdout: nm } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k DeviceName`, { timeout: 3e3, env: env2 });
+        name = nm.trim() || "iPhone";
+        const { stdout: ver } = await execAsync(`ideviceinfo -u "${udid.trim()}" -k ProductVersion`, { timeout: 3e3, env: env2 });
+        ios = ver.trim() || "Unknown";
+      } catch {
+      }
+      devices.push({ udid: udid.trim(), name, ios, connected: "usb" });
+    }
+    return devices;
+  } catch (err) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: PATH idevice_id also failed");
+  }
+  mlog.warn("[mirror] listConnectedDevices: all detection methods exhausted \u2014 returning empty");
+  return [];
+}
+var iproxyProc = null;
+var iproxyUdid = null;
+var iproxyPort = 8100;
+function getIproxyStatus() {
+  return { running: iproxyProc !== null, udid: iproxyUdid, port: iproxyPort };
+}
+async function startIproxy(udid, localPort = 8100, devicePort = 8100) {
+  if (iproxyProc && iproxyUdid !== udid) {
+    stopIproxy();
+  }
+  if (iproxyProc) return { ok: true };
+  iproxyPort = localPort;
+  iproxyUdid = udid;
+  const exe = binPath("iproxy.exe");
+  return new Promise((resolve) => {
+    try {
+      const args = [`${localPort}`, `${devicePort}`, "--udid", udid];
+      iproxyProc = spawn(exe, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: false
+      });
+      iproxyProc.on("error", (err) => {
+        iproxyProc = null;
+        resolve({ ok: false, error: `iproxy failed to start: ${err.message}` });
+      });
+      iproxyProc.on("exit", (code) => {
+        iproxyProc = null;
+      });
+      setTimeout(() => {
+        if (iproxyProc) {
+          resolve({ ok: true });
+        } else {
+          resolve({ ok: false, error: "iproxy exited immediately" });
+        }
+      }, 800);
+    } catch (err) {
+      iproxyProc = null;
+      resolve({ ok: false, error: String(err.message ?? err) });
+    }
+  });
+}
+function stopIproxy() {
+  if (iproxyProc) {
+    try {
+      iproxyProc.kill();
+    } catch {
+    }
+    iproxyProc = null;
+    iproxyUdid = null;
+  }
+}
+var WDA_IPA_URL = "https://github.com/nicowillis/webdriveragent-ipa/releases/download/v1.0.0/WebDriverAgent.ipa";
+var installListeners = /* @__PURE__ */ new Map();
+function onWdaInstallStatus(id, cb) {
+  installListeners.set(id, cb);
+}
+function offWdaInstallStatus(id) {
+  installListeners.delete(id);
+}
+function emitStatus(id, s) {
+  installListeners.get(id)?.(s);
+}
+function downloadFile(url2, dest, onProgress) {
+  return new Promise((resolve, reject) => {
+    const file2 = fs.createWriteStream(dest);
+    const req = https.get(url2, { headers: { "User-Agent": "Equinox/1.0" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        file2.close();
+        fs.unlink(dest, () => {
+        });
+        downloadFile(res.headers.location, dest, onProgress).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        file2.close();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      const total = parseInt(res.headers["content-length"] ?? "0", 10);
+      let received = 0;
+      res.on("data", (chunk) => {
+        received += chunk.length;
+        if (total > 0 && onProgress) onProgress(Math.round(received / total * 100));
+      });
+      res.pipe(file2);
+      file2.on("finish", () => file2.close(() => resolve()));
+      file2.on("error", reject);
+    });
+    req.on("error", reject);
+  });
+}
+async function installWdaOnDevice(udid, sessionId) {
+  const tmpIpa = path.join(os.tmpdir(), `wda_${Date.now()}.ipa`);
+  try {
+    emitStatus(sessionId, { step: "downloading", progress: 0, message: "Downloading control agent (one-time)\u2026" });
+    await downloadFile(WDA_IPA_URL, tmpIpa, (pct) => {
+      emitStatus(sessionId, { step: "downloading", progress: pct, message: `Downloading control agent\u2026 ${pct}%` });
+    });
+    emitStatus(sessionId, { step: "downloading", progress: 100, message: "Download complete. Installing on iPhone\u2026" });
+    const installer = binPath("ideviceinstaller.exe");
+    emitStatus(sessionId, { step: "installing", message: "Installing on iPhone \u2014 this takes ~30 seconds\u2026" });
+    await execAsync(`"${installer}" -u "${udid}" -i "${tmpIpa}"`, { timeout: 12e4 });
+    emitStatus(sessionId, { step: "done", message: "\u2705 Control agent installed! Starting connection\u2026" });
+    return { ok: true };
+  } catch (err) {
+    const msg = String(err?.message ?? err);
+    emitStatus(sessionId, { step: "error", message: `\u26A0 ${msg}` });
+    return { ok: false, error: msg };
+  } finally {
+    try {
+      fs.unlinkSync(tmpIpa);
+    } catch {
+    }
+  }
+}
+async function takeScreenshot(udid) {
+  const tmpFile = path.join(os.tmpdir(), `eqx_mirror_${Date.now()}.jpg`);
+  const readAndClean = () => {
+    try {
+      if (fs.existsSync(tmpFile)) {
+        const buf = fs.readFileSync(tmpFile);
+        try {
+          fs.unlinkSync(tmpFile);
+        } catch {
+        }
+        return buf.toString("base64");
+      }
+    } catch {
+    }
+    return null;
+  };
+  try {
+    const exe = binPath("idevicescreenshot.exe");
+    const uFlag = udid ? `-u "${udid}"` : "";
+    await execAsync(`"${exe}" ${uFlag} "${tmpFile}"`, { timeout: 8e3 });
+    const b64 = readAndClean();
+    if (b64) return b64;
+  } catch {
+  }
+  try {
+    const uFlag = udid ? `-u "${udid}"` : "";
+    await execAsync(`idevicescreenshot ${uFlag} "${tmpFile}"`, { timeout: 8e3 });
+    const b64 = readAndClean();
+    if (b64) return b64;
+  } catch {
+  }
+  return null;
+}
+var WDA_BASE = process.env.WDA_HOST ?? "http://127.0.0.1:8100";
+var _cachedSessionId = null;
+async function wdaFetch(method, urlPath, body) {
+  const res = await fetch(`${WDA_BASE}${urlPath}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body !== void 0 ? JSON.stringify(body) : void 0,
+    signal: AbortSignal.timeout(7e3)
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`WDA ${method} ${urlPath} \u2192 HTTP ${res.status}: ${txt}`);
+  }
+  return res.json();
+}
+async function wdaIsConnected() {
+  try {
+    const r2 = await wdaFetch("GET", "/status");
+    return !!(r2?.value || r2?.sessionId || r2?.status === 0);
+  } catch {
+    return false;
+  }
+}
+async function getSession() {
+  if (_cachedSessionId) {
+    try {
+      await wdaFetch("GET", `/session/${_cachedSessionId}`);
+      return _cachedSessionId;
+    } catch {
+      _cachedSessionId = null;
+    }
+  }
+  const resp = await wdaFetch("POST", "/session", {
+    capabilities: {
+      alwaysMatch: {
+        "platformName": "iOS",
+        "appium:automationName": "XCUITest"
+      }
+    }
+  });
+  const sid = resp?.sessionId ?? resp?.value?.sessionId;
+  if (!sid) throw new Error("WDA session creation failed");
+  _cachedSessionId = sid;
+  return sid;
+}
+async function wdaTap(x3, y2) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/tap/0`, { x: x3, y: y2 });
+}
+async function wdaDoubleTap(x3, y2) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/doubleTap`, { x: x3, y: y2 });
+}
+async function wdaLongPress(x3, y2, duration3 = 1) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/touchAndHold`, { x: x3, y: y2, duration: duration3 });
+}
+async function wdaSwipe(fromX, fromY, toX, toY, duration3 = 0.5) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/dragfromtoforduration`, {
+    fromX,
+    fromY,
+    toX,
+    toY,
+    duration: duration3
+  });
+}
+async function wdaTypeText(text2) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/keys`, { value: text2.split("") });
+}
+async function wdaPressButton(name) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/pressButton`, { name });
+}
+async function wdaLaunchApp(bundleId) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/apps/launch`, { bundleId });
+}
+async function wdaActivateApp(bundleId) {
+  const sid = await getSession();
+  await wdaFetch("POST", `/session/${sid}/wda/apps/activate`, { bundleId });
+}
+var INSTAGRAM_BUNDLE = "com.burbn.instagram";
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function runIphoneSignup(params) {
+  const log2 = params.onStatus ?? (() => {
+  });
+  try {
+    log2("Opening Instagram on iPhone\u2026");
+    await wdaLaunchApp(INSTAGRAM_BUNDLE);
+    await sleep(3e3);
+    log2("Looking for Sign Up button\u2026");
+    await wdaTap(195, 740);
+    await sleep(1500);
+    log2("Entering email address\u2026");
+    await wdaTap(195, 320);
+    await sleep(500);
+    await wdaTypeText(params.email);
+    await sleep(400);
+    await wdaTap(195, 420);
+    await sleep(2e3);
+    log2("Entering name\u2026");
+    await wdaTap(195, 280);
+    await sleep(400);
+    await wdaTypeText(params.username.replace(/_/g, " "));
+    await sleep(400);
+    log2("Entering password\u2026");
+    await wdaTap(195, 360);
+    await sleep(400);
+    await wdaTypeText(params.password);
+    await sleep(400);
+    await wdaTap(195, 440);
+    await sleep(2e3);
+    log2("Entering date of birth\u2026");
+    await wdaTap(195, 400);
+    await sleep(1e3);
+    await wdaTap(195, 600);
+    await sleep(2e3);
+    log2("Entering username\u2026");
+    await wdaTap(195, 320);
+    await sleep(500);
+    await wdaTypeText(params.username);
+    await sleep(500);
+    await wdaTap(195, 420);
+    await sleep(2e3);
+    log2("Signup form submitted \u2014 waiting for verification email\u2026");
+    if (params.verificationCode) {
+      log2(`Entering verification code: ${params.verificationCode}`);
+      await wdaTap(195, 400);
+      await sleep(500);
+      await wdaTypeText(params.verificationCode);
+      await sleep(500);
+      await wdaTap(195, 480);
+      await sleep(2e3);
+      log2("\u2705 Verification code submitted!");
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// src/routes/mirror.ts
+var signupStatus = /* @__PURE__ */ new Map();
+var wdaInstallStatus = /* @__PURE__ */ new Map();
+function registerMirrorRoutes(app2) {
+  app2.get("/api/mirror/devices", async (_req, res) => {
+    try {
+      const devices = await listConnectedDevices();
+      res.json({ ok: true, devices });
+    } catch (err) {
+      res.json({ ok: false, devices: [], error: String(err) });
+    }
+  });
+  app2.get("/api/mirror/diagnose", async (_req, res) => {
+    try {
+      const diag = await diagnoseIphoneSupport();
+      res.json({ ok: true, ...diag });
+    } catch (err) {
+      res.json({
+        ok: false,
+        binaryFound: false,
+        appleDriverRunning: false,
+        suggestion: String(err),
+        rawOutput: "",
+        rawError: "",
+        binaryPath: ""
+      });
+    }
+  });
+  app2.post("/api/mirror/iproxy/start", async (req, res) => {
+    try {
+      const { udid, localPort, devicePort } = req.body ?? {};
+      if (!udid) return res.status(400).json({ ok: false, error: "udid required" });
+      const result = await startIproxy(udid, localPort ?? 8100, devicePort ?? 8100);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/iproxy/stop", (_req, res) => {
+    stopIproxy();
+    res.json({ ok: true });
+  });
+  app2.get("/api/mirror/iproxy/status", (_req, res) => {
+    res.json({ ok: true, ...getIproxyStatus() });
+  });
+  app2.post("/api/mirror/wda/install", async (req, res) => {
+    try {
+      const { udid } = req.body ?? {};
+      if (!udid) return res.status(400).json({ ok: false, error: "udid required" });
+      const sessionId = `wdainstall_${Date.now()}`;
+      wdaInstallStatus.set(sessionId, { step: "downloading", progress: 0, message: "Starting\u2026", done: false });
+      res.json({ ok: true, sessionId });
+      onWdaInstallStatus(sessionId, (s) => {
+        wdaInstallStatus.set(sessionId, {
+          step: s.step,
+          progress: s.progress,
+          message: s.message,
+          done: s.step === "done" || s.step === "error"
+        });
+      });
+      installWdaOnDevice(udid, sessionId).then(() => {
+        offWdaInstallStatus(sessionId);
+      }).catch((err) => {
+        wdaInstallStatus.set(sessionId, { step: "error", message: `\u26A0 ${String(err)}`, done: true });
+        offWdaInstallStatus(sessionId);
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.get("/api/mirror/wda/install-status", (req, res) => {
+    const sid = String(req.query.sessionId ?? "");
+    const entry = wdaInstallStatus.get(sid);
+    if (!entry) return res.status(404).json({ ok: false, error: "Unknown session" });
+    res.json({ ok: true, ...entry });
+  });
+  app2.post("/api/mirror/screenshot", async (req, res) => {
+    try {
+      const { udid } = req.body ?? {};
+      const jpeg = await takeScreenshot(udid);
+      if (!jpeg) {
+        return res.status(503).json({
+          ok: false,
+          error: "Screenshot failed \u2014 make sure your iPhone is unlocked"
+        });
+      }
+      res.json({ ok: true, jpeg });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.get("/api/mirror/wda-status", async (_req, res) => {
+    try {
+      const connected = await wdaIsConnected();
+      const iproxy = getIproxyStatus();
+      res.json({ ok: true, connected, iproxy });
+    } catch {
+      res.json({ ok: true, connected: false, iproxy: getIproxyStatus() });
+    }
+  });
+  app2.post("/api/mirror/tap", async (req, res) => {
+    try {
+      const { x: x3, y: y2 } = req.body ?? {};
+      if (typeof x3 !== "number" || typeof y2 !== "number") {
+        return res.status(400).json({ ok: false, error: "x and y required" });
+      }
+      await wdaTap(x3, y2);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/double-tap", async (req, res) => {
+    try {
+      const { x: x3, y: y2 } = req.body ?? {};
+      await wdaDoubleTap(x3, y2);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/long-press", async (req, res) => {
+    try {
+      const { x: x3, y: y2, duration: duration3 } = req.body ?? {};
+      await wdaLongPress(x3, y2, duration3);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/swipe", async (req, res) => {
+    try {
+      const { fromX, fromY, toX, toY, duration: duration3 } = req.body ?? {};
+      await wdaSwipe(fromX, fromY, toX, toY, duration3);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/type", async (req, res) => {
+    try {
+      const { text: text2 } = req.body ?? {};
+      if (typeof text2 !== "string" || !text2) {
+        return res.status(400).json({ ok: false, error: "text required" });
+      }
+      await wdaTypeText(text2);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/press-button", async (req, res) => {
+    try {
+      const { name } = req.body ?? {};
+      const allowed = ["home", "volumeUp", "volumeDown", "power"];
+      if (!allowed.includes(name)) {
+        return res.status(400).json({ ok: false, error: "name must be home|volumeUp|volumeDown|power" });
+      }
+      await wdaPressButton(name);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/open-app", async (req, res) => {
+    try {
+      const { bundleId } = req.body ?? {};
+      if (!bundleId) return res.status(400).json({ ok: false, error: "bundleId required" });
+      await wdaLaunchApp(bundleId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/activate-app", async (req, res) => {
+    try {
+      const { bundleId } = req.body ?? {};
+      if (!bundleId) return res.status(400).json({ ok: false, error: "bundleId required" });
+      await wdaActivateApp(bundleId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/mirror/signup", async (req, res) => {
+    try {
+      const { email: email3, password, username, dob, sessionId } = req.body ?? {};
+      if (!email3 || !password || !username || !dob) {
+        return res.status(400).json({ ok: false, error: "email, password, username, dob required" });
+      }
+      const sid = sessionId ?? `signup_${Date.now()}`;
+      signupStatus.set(sid, { msg: "Starting\u2026", done: false });
+      res.json({ ok: true, sessionId: sid });
+      const params = {
+        email: email3,
+        password,
+        username,
+        dob,
+        onStatus: (msg) => signupStatus.set(sid, { msg, done: false })
+      };
+      runIphoneSignup(params).then((result) => {
+        signupStatus.set(sid, {
+          msg: result.ok ? "\u2705 Signup complete!" : `\u26A0 ${result.error}`,
+          done: true
+        });
+      }).catch((err) => {
+        signupStatus.set(sid, { msg: `\u26A0 ${String(err)}`, done: true });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.get("/api/mirror/signup-status", (req, res) => {
+    const sid = String(req.query.sessionId ?? "");
+    const entry = signupStatus.get(sid);
+    if (!entry) return res.status(404).json({ ok: false, error: "Unknown session" });
+    res.json({ ok: true, msg: entry.msg, done: entry.done });
+  });
+  app2.post("/api/mirror/signup-code", async (req, res) => {
+    try {
+      const { sessionId, code } = req.body ?? {};
+      if (!code) return res.status(400).json({ ok: false, error: "code required" });
+      const status = signupStatus.get(sessionId) ?? { msg: "Submitting code\u2026", done: false };
+      signupStatus.set(sessionId, { ...status, msg: `Submitting code ${code}\u2026` });
+      await wdaTap(195, 400);
+      await wdaTypeText(code);
+      await wdaTap(195, 480);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+}
 
 // ../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -130104,8 +126739,8 @@ var wrapper_default = import_websocket.default;
 // src/routes/instagram.ts
 import crypto2 from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
-import fs4 from "fs";
-import path4 from "path";
+import fs5 from "fs";
+import path5 from "path";
 
 // src/instagram/leaksPage.ts
 var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
@@ -132841,7 +129476,7 @@ Subquery.prototype.getSQL = function() {
 function mapResultRow(columns, row, joinsNotNullableMap) {
   const nullifyMap = {};
   const result = columns.reduce(
-    (result2, { path: path6, field }, columnIndex) => {
+    (result2, { path: path7, field }, columnIndex) => {
       let decoder;
       if (is(field, Column)) {
         decoder = field;
@@ -132853,8 +129488,8 @@ function mapResultRow(columns, row, joinsNotNullableMap) {
         decoder = field.sql.decoder;
       }
       let node = result2;
-      for (const [pathChunkIndex, pathChunk] of path6.entries()) {
-        if (pathChunkIndex < path6.length - 1) {
+      for (const [pathChunkIndex, pathChunk] of path7.entries()) {
+        if (pathChunkIndex < path7.length - 1) {
           if (!(pathChunk in node)) {
             node[pathChunk] = {};
           }
@@ -132862,8 +129497,8 @@ function mapResultRow(columns, row, joinsNotNullableMap) {
         } else {
           const rawValue = row[columnIndex];
           const value = node[pathChunk] = rawValue === null ? null : decoder.mapFromDriverValue(rawValue);
-          if (joinsNotNullableMap && is(field, Column) && path6.length === 2) {
-            const objectName = path6[0];
+          if (joinsNotNullableMap && is(field, Column) && path7.length === 2) {
+            const objectName = path7[0];
             if (!(objectName in nullifyMap)) {
               nullifyMap[objectName] = value === null ? getTableName(field.table) : false;
             } else if (typeof nullifyMap[objectName] === "string" && nullifyMap[objectName] !== getTableName(field.table)) {
@@ -137100,7 +133735,7 @@ function drizzle(...params) {
 
 // ../../lib/db/src/index.ts
 import Database from "better-sqlite3";
-import path from "path";
+import path2 from "path";
 
 // ../../lib/db/src/schema/index.ts
 var schema_exports = {};
@@ -137799,10 +134434,10 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj2, path6) {
-  if (!path6)
+function getElementAtPath(obj2, path7) {
+  if (!path7)
     return obj2;
-  return path6.reduce((acc, key) => acc?.[key], obj2);
+  return path7.reduce((acc, key) => acc?.[key], obj2);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -138122,11 +134757,11 @@ function aborted(x3, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path6, issues) {
+function prefixIssues(path7, issues) {
   return issues.map((iss) => {
     var _a;
     (_a = iss).path ?? (_a.path = []);
-    iss.path.unshift(path6);
+    iss.path.unshift(path7);
     return iss;
   });
 }
@@ -138263,7 +134898,7 @@ function treeifyError(error40, _mapper) {
     return issue2.message;
   };
   const result = { errors: [] };
-  const processError = (error41, path6 = []) => {
+  const processError = (error41, path7 = []) => {
     var _a, _b;
     for (const issue2 of error41.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
@@ -138273,7 +134908,7 @@ function treeifyError(error40, _mapper) {
       } else if (issue2.code === "invalid_element") {
         processError({ issues: issue2.issues }, issue2.path);
       } else {
-        const fullpath = [...path6, ...issue2.path];
+        const fullpath = [...path7, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -138303,9 +134938,9 @@ function treeifyError(error40, _mapper) {
   processError(error40);
   return result;
 }
-function toDotPath(path6) {
+function toDotPath(path7) {
   const segs = [];
-  for (const seg of path6) {
+  for (const seg of path7) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -148860,7 +145495,7 @@ var insertSourceSchema = createInsertSchema(sources).omit({ id: true });
 var insertLogSchema = createInsertSchema(logs).omit({ id: true });
 
 // ../../lib/db/src/index.ts
-var dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "database.db");
+var dbPath = process.env.DATABASE_PATH || path2.join(process.cwd(), "database.db");
 var sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
@@ -149092,7 +145727,8 @@ sqlite.exec(`
   }
 }
 var _migrations = [
-  "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'"
+  "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'",
+  "ALTER TABLE licenses ADD COLUMN expires_at TEXT"
 ];
 for (const sql2 of _migrations) {
   try {
@@ -149152,6 +145788,17 @@ var igApiCallsColNames = new Set(igApiCallsCols.map((c3) => c3.name));
 if (!igApiCallsColNames.has("username")) {
   sqlite.exec(`ALTER TABLE instagram_api_calls ADD COLUMN username TEXT DEFAULT '';`);
 }
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS pre_status_change_hits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    username TEXT DEFAULT '',
+    operation_name TEXT NOT NULL,
+    from_status TEXT DEFAULT '',
+    to_status TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+  );
+`);
 {
   const legacyResult = sqlite.prepare(`
     UPDATE profiles SET ig_device_state = NULL
@@ -149713,12 +146360,18 @@ var DatabaseStorage = class {
   }
   async createProfile(profile) {
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    const now = /* @__PURE__ */ new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const firstAddedStamp = `Added: ${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
     const [created] = await db.insert(profiles).values({
       ...profile,
       // Only fall back to random UA if the caller did not supply one
       userAgentApi: profile.userAgentApi || randomUA.api,
       userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
-      tags: profile.tags || "No Group Assigned"
+      tags: profile.tags || "No Group Assigned",
+      // Preserve any existing notes (EQX import carries the original stamp); only
+      // set the auto-stamp when notes is genuinely absent.
+      notes: profile.notes && String(profile.notes).trim() ? profile.notes : firstAddedStamp
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;
@@ -149731,6 +146384,21 @@ var DatabaseStorage = class {
     if ("accountStatus" in updates) {
       const caller = new Error().stack?.split("\n").slice(2, 5).join(" | ") ?? "unknown";
       console.log(`[status-audit] profile=${id} accountStatus="${updates.accountStatus}" caller=${caller}`);
+      try {
+        const cur = sqlite.prepare("SELECT account_status, username FROM profiles WHERE id = ?").get(id);
+        const lastCall = sqlite.prepare("SELECT operation_name FROM instagram_api_calls WHERE profile_id = ? ORDER BY id DESC LIMIT 1").get(id);
+        if (lastCall) {
+          sqlite.prepare("INSERT INTO pre_status_change_hits (profile_id, username, operation_name, from_status, to_status, occurred_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+            id,
+            cur?.username ?? "",
+            lastCall.operation_name,
+            cur?.account_status ?? "",
+            updates.accountStatus,
+            (/* @__PURE__ */ new Date()).toISOString()
+          );
+        }
+      } catch (_e) {
+      }
     }
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
     if ("accountStatus" in updates) {
@@ -149739,8 +146407,16 @@ var DatabaseStorage = class {
     return updated;
   }
   async deleteProfile(id) {
+    const [profile] = await db.select({ proxyId: profiles.proxyId }).from(profiles).where(eq(profiles.id, id));
+    const linkedProxyId = profile?.proxyId ?? null;
     await db.delete(tools).where(eq(tools.profileId, id));
     await db.delete(profiles).where(eq(profiles.id, id));
+    if (linkedProxyId) {
+      const others = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.proxyId, linkedProxyId));
+      if (others.length === 0) {
+        await db.delete(proxies).where(eq(proxies.id, linkedProxyId));
+      }
+    }
   }
   async updateProfileStatus(id, status) {
     const [updated] = await db.update(profiles).set({ status }).where(eq(profiles.id, id)).returning();
@@ -149748,7 +146424,7 @@ var DatabaseStorage = class {
   }
   async getToolsByProfile(profileId) {
     const existing = await db.select().from(tools).where(eq(tools.profileId, profileId));
-    const allTypes = ["follow", "unfollow", "like", "dm", "contact"];
+    const allTypes = ["follow", "unfollow", "like", "dm", "contact", "human_session"];
     const existingTypes = new Set(existing.map((t2) => t2.type));
     const missing = allTypes.filter((t2) => !existingTypes.has(t2));
     if (missing.length > 0) {
@@ -149826,6 +146502,10 @@ var DatabaseStorage = class {
   async getInstagramApiCallsByProfile(profileId, limit = 2e3) {
     return await db.select().from(instagramApiCalls).where(eq(instagramApiCalls.profileId, profileId)).orderBy(desc(instagramApiCalls.id)).limit(limit);
   }
+  async getInstagramApiCallCount(profileId) {
+    const [row] = await db.select({ count: sql`COUNT(*)` }).from(instagramApiCalls).where(eq(instagramApiCalls.profileId, profileId));
+    return Number(row?.count ?? 0);
+  }
   async getLastValidApiCallByProfile() {
     const rows = await db.select({
       profileId: instagramApiCalls.profileId,
@@ -149856,6 +146536,55 @@ var DatabaseStorage = class {
   }
   async getInstagramApiCallsSince(sinceId, limit = 5e3) {
     return await db.select().from(instagramApiCalls).where(gt(instagramApiCalls.id, sinceId)).orderBy(desc(instagramApiCalls.id)).limit(limit);
+  }
+  async getApiEndpointCounts(profileId, todayPrefix) {
+    const likePattern = todayPrefix + "%";
+    const rows = await db.select({
+      operationName: instagramApiCalls.operationName,
+      totalCount: sql`COUNT(*)`,
+      todayCount: sql`SUM(CASE WHEN ${instagramApiCalls.date} LIKE ${likePattern} THEN 1 ELSE 0 END)`
+    }).from(instagramApiCalls).where(eq(instagramApiCalls.profileId, profileId)).groupBy(instagramApiCalls.operationName).orderBy(desc(sql`COUNT(*)`));
+    return rows.map((r2) => ({
+      operationName: r2.operationName,
+      totalCount: Number(r2.totalCount ?? 0),
+      todayCount: Number(r2.todayCount ?? 0)
+    }));
+  }
+  async getPreStatusChangeHits(profileId) {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, COUNT(*) as cnt
+      FROM pre_status_change_hits
+      WHERE profile_id = ?
+      GROUP BY operation_name
+      ORDER BY cnt DESC
+    `).all(profileId);
+    return rows.map((r2) => ({ operationName: r2.operation_name, perAccountCount: r2.cnt }));
+  }
+  async getGlobalPreStatusChangeHits() {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, COUNT(*) as cnt
+      FROM pre_status_change_hits
+      GROUP BY operation_name
+      ORDER BY cnt DESC
+    `).all();
+    return rows.map((r2) => ({ operationName: r2.operation_name, globalCount: r2.cnt }));
+  }
+  async getPreStatusChangeHitsByProfile(profileId) {
+    const rows = sqlite.prepare(`
+      SELECT operation_name, from_status, to_status, occurred_at
+      FROM pre_status_change_hits
+      WHERE profile_id = ?
+      ORDER BY id ASC
+    `).all(profileId);
+    return rows.map((r2) => ({ operationName: r2.operation_name, fromStatus: r2.from_status, toStatus: r2.to_status, occurredAt: r2.occurred_at }));
+  }
+  async bulkInsertPreStatusChangeHits(hits) {
+    if (!hits.length) return;
+    const stmt = sqlite.prepare("INSERT INTO pre_status_change_hits (profile_id, username, operation_name, from_status, to_status, occurred_at) VALUES (?, ?, ?, ?, ?, ?)");
+    const txn = sqlite.transaction(() => {
+      for (const h4 of hits) stmt.run(h4.profileId, h4.username, h4.operationName, h4.fromStatus, h4.toStatus, h4.occurredAt);
+    });
+    txn();
   }
   _apiCallInsertCount = 0;
   async createInstagramApiCall(call) {
@@ -149997,10 +146726,50 @@ var DatabaseStorage = class {
     try {
       const s = JSON.parse(raw);
       if (!s?.username) return { ok: false };
-      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin };
+      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin, expiresAt: s.expiresAt ?? null };
     } catch {
       return { ok: false };
     }
+  }
+  getAllLicenses() {
+    return db.$client.prepare(
+      "SELECT id, username, tier, account_limit, active, is_admin, created_at, expires_at FROM licenses ORDER BY created_at DESC"
+    ).all();
+  }
+  createLicense(username, passwordHash, tier, accountLimit, expiresAt) {
+    db.$client.prepare(
+      "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at, expires_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?)"
+    ).run(username, passwordHash, tier, accountLimit, (/* @__PURE__ */ new Date()).toISOString(), expiresAt);
+  }
+  updateLicense(id, updates) {
+    const fields = [];
+    const values = [];
+    if (updates.tier !== void 0) {
+      fields.push("tier = ?");
+      values.push(updates.tier);
+    }
+    if (updates.accountLimit !== void 0) {
+      fields.push("account_limit = ?");
+      values.push(updates.accountLimit);
+    }
+    if (updates.active !== void 0) {
+      fields.push("active = ?");
+      values.push(updates.active);
+    }
+    if (updates.expiresAt !== void 0) {
+      fields.push("expires_at = ?");
+      values.push(updates.expiresAt);
+    }
+    if (updates.passwordHash !== void 0) {
+      fields.push("password_hash = ?");
+      values.push(updates.passwordHash);
+    }
+    if (fields.length === 0) return;
+    values.push(id);
+    db.$client.prepare(`UPDATE licenses SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+  }
+  deleteLicense(id) {
+    db.$client.prepare("DELETE FROM licenses WHERE is_admin = 0 AND id = ?").run(id);
   }
   async isGloballySkipped(username) {
     const rows = await db.select({ id: skippedUsers.id }).from(skippedUsers).where(sql`LOWER(${skippedUsers.instagramUsername}) = LOWER(${username})`).limit(1);
@@ -151607,10 +148376,10 @@ function h3(t2) {
 }
 
 // src/instagram/instagramWebClient.ts
-import * as https from "https";
+import * as https2 from "https";
 import * as http2 from "http";
-import * as fs from "fs";
-import * as path2 from "path";
+import * as fs2 from "fs";
+import * as path3 from "path";
 import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes as randomBytes3, constants as cryptoConstants } from "crypto";
 var import_instagram_private_api2 = __toESM(require_dist2(), 1);
 
@@ -151669,7 +148438,7 @@ function extractSetCookies(headers) {
 async function tlsRequest(opts) {
   const {
     host = "www.instagram.com",
-    path: path6,
+    path: path7,
     method,
     headers,
     body,
@@ -151679,7 +148448,7 @@ async function tlsRequest(opts) {
   } = opts;
   if (!proxyUrl) {
     throw new Error(
-      `[IP-LEAK BLOCKED] TLS request ${method} ${path6} refused \u2014 no proxy configured. Assign a proxy to this account before performing any actions.`
+      `[IP-LEAK BLOCKED] TLS request ${method} ${path7} refused \u2014 no proxy configured. Assign a proxy to this account before performing any actions.`
     );
   }
   const allHeaders = {
@@ -151689,7 +148458,7 @@ async function tlsRequest(opts) {
   };
   const client = await getClient();
   if (client && !forceNodeTls) {
-    const url2 = `https://${host}${path6}`;
+    const url2 = `https://${host}${path7}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
     const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
     headersWithoutUA["Accept-Encoding"] = "identity";
@@ -151720,14 +148489,14 @@ async function tlsRequest(opts) {
     } catch (err) {
       const ph = proxyHost(proxyUrl);
       console.error(
-        `[tls:req] ${method} ${host}${path6} FAILED after ${Date.now() - t02}ms \u2014 proxy=${ph} err=${err?.message ?? err}`
+        `[tls:req] ${method} ${host}${path7} FAILED after ${Date.now() - t02}ms \u2014 proxy=${ph} err=${err?.message ?? err}`
       );
       throw err;
     }
     const elapsed = Date.now() - t02;
     if (elapsed > 1e4) {
       console.warn(
-        `[tls:req] ${method} ${host}${path6} SLOW ${elapsed}ms via proxy=${proxyHost(proxyUrl)} status=${resp.status}`
+        `[tls:req] ${method} ${host}${path7} SLOW ${elapsed}ms via proxy=${proxyHost(proxyUrl)} status=${resp.status}`
       );
     }
     if (resp.status !== 0) {
@@ -151743,25 +148512,25 @@ async function tlsRequest(opts) {
     }
     const cycleTlsErr = resp.data != null ? typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data) : "";
     console.warn(
-      `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path6} elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)} err=${cycleTlsErr.slice(0, 300) || "(empty)"} \u2014 retrying via Node.js HTTPS`
+      `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path7} elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)} err=${cycleTlsErr.slice(0, 300) || "(empty)"} \u2014 retrying via Node.js HTTPS`
     );
   }
   if (forceNodeTls) {
-    console.log(`[tls:req] forceNodeTls \u2014 using Node.js TLS for ${method} ${host}${path6}`);
+    console.log(`[tls:req] forceNodeTls \u2014 using Node.js TLS for ${method} ${host}${path7}`);
   } else if (client) {
-    console.warn(`[tls:req] CycleTLS\u2192Node.js fallback for ${method} ${host}${path6}`);
+    console.warn(`[tls:req] CycleTLS\u2192Node.js fallback for ${method} ${host}${path7}`);
   } else {
-    console.warn(`[tls:req] CycleTLS unavailable \u2014 using Node.js TLS for ${method} ${host}${path6}`);
+    console.warn(`[tls:req] CycleTLS unavailable \u2014 using Node.js TLS for ${method} ${host}${path7}`);
   }
   const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-  const https4 = await import("node:https");
+  const https5 = await import("node:https");
   const zlib = await import("node:zlib");
   const agent = new HttpsProxyAgent2(proxyUrl, { keepAlive: false });
   const t0 = Date.now();
   try {
     const res = await new Promise((resolve, reject) => {
-      const req = https4.request(
-        { host, port: 443, path: path6, method, headers: allHeaders, agent, rejectUnauthorized: false },
+      const req = https5.request(
+        { host, port: 443, path: path7, method, headers: allHeaders, agent, rejectUnauthorized: false },
         (r2) => {
           const chunks = [];
           r2.on("data", (chunk) => chunks.push(chunk));
@@ -151787,7 +148556,7 @@ async function tlsRequest(opts) {
     const elapsed = Date.now() - t0;
     if (elapsed > 1e4) {
       console.warn(
-        `[tls:fallback] ${method} ${host}${path6} SLOW ${elapsed}ms via proxy=${proxyHost(proxyUrl)} status=${res.status}`
+        `[tls:fallback] ${method} ${host}${path7} SLOW ${elapsed}ms via proxy=${proxyHost(proxyUrl)} status=${res.status}`
       );
     }
     const rawSC = res.headers["set-cookie"];
@@ -151801,7 +148570,7 @@ async function tlsRequest(opts) {
   } catch (err) {
     const ph = proxyHost(proxyUrl);
     console.error(
-      `[tls:fallback] ${method} ${host}${path6} FAILED after ${Date.now() - t0}ms \u2014 proxy=${ph} code=${err?.code ?? "?"} msg=${err?.message ?? err}`
+      `[tls:fallback] ${method} ${host}${path7} FAILED after ${Date.now() - t0}ms \u2014 proxy=${ph} code=${err?.code ?? "?"} msg=${err?.message ?? err}`
     );
     throw err;
   } finally {
@@ -151934,15 +148703,15 @@ function patchIgClientTls(ig, proxyUrl) {
     };
   };
 }
-async function tlsMultipartPost(host, path6, headers, body, proxyUrl) {
+async function tlsMultipartPost(host, path7, headers, body, proxyUrl) {
   if (!proxyUrl) {
     throw new Error(
-      `[IP-LEAK BLOCKED] TLS multipart POST ${host}${path6} refused \u2014 no proxy configured.`
+      `[IP-LEAK BLOCKED] TLS multipart POST ${host}${path7} refused \u2014 no proxy configured.`
     );
   }
   const client = await getClient();
   if (client) {
-    const url2 = `https://${host}${path6}`;
+    const url2 = `https://${host}${path7}`;
     const userAgent = headers["User-Agent"] ?? "";
     const { "User-Agent": _ua, ...headersWithoutUA } = headers;
     try {
@@ -151968,17 +148737,17 @@ async function tlsMultipartPost(host, path6, headers, body, proxyUrl) {
       }
       return json2;
     } catch (err) {
-      console.error(`[tls:multipart] POST ${host}${path6} FAILED \u2014 err=${err?.message ?? err}`);
+      console.error(`[tls:multipart] POST ${host}${path7} FAILED \u2014 err=${err?.message ?? err}`);
       throw err;
     }
   }
   const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-  const https4 = await import("node:https");
+  const https5 = await import("node:https");
   const agent = new HttpsProxyAgent2(proxyUrl, { keepAlive: false });
   try {
     const res = await new Promise((resolve, reject) => {
-      const req = https4.request(
-        { host, port: 443, path: path6, method: "POST", headers, agent },
+      const req = https5.request(
+        { host, port: 443, path: path7, method: "POST", headers, agent },
         (r2) => {
           const chunks = [];
           r2.on("data", (chunk) => chunks.push(chunk));
@@ -152372,10 +149141,10 @@ var InstagramWebClient = class {
   // Returns true if a valid sessionid was found.
   loadBrowserCookies() {
     if (!this.profileId) return false;
-    const filePath = process.env.DATABASE_PATH ? path2.join(path2.dirname(process.env.DATABASE_PATH), "browser-data", `cookies-${this.profileId}.json`) : path2.join(process.cwd(), "server", "browser-data", `cookies-${this.profileId}.json`);
+    const filePath = process.env.DATABASE_PATH ? path3.join(path3.dirname(process.env.DATABASE_PATH), "browser-data", `cookies-${this.profileId}.json`) : path3.join(process.cwd(), "server", "browser-data", `cookies-${this.profileId}.json`);
     try {
-      if (!fs.existsSync(filePath)) return false;
-      const raw = fs.readFileSync(filePath, "utf8");
+      if (!fs2.existsSync(filePath)) return false;
+      const raw = fs2.readFileSync(filePath, "utf8");
       const puppeteerCookies = JSON.parse(raw);
       if (!Array.isArray(puppeteerCookies)) return false;
       const igCookies = puppeteerCookies.filter((c3) => (c3.domain ?? "").includes("instagram.com"));
@@ -152824,9 +149593,9 @@ var InstagramWebClient = class {
   }
   // ── Common authenticated request helper ────────────────────────────────────
   // web session GET (www.instagram.com)
-  async webGet(path6) {
+  async webGet(path7) {
     const res = await igReq({
-      path: path6,
+      path: path7,
       method: "GET",
       headers: {
         Host: "www.instagram.com",
@@ -152840,16 +149609,16 @@ var InstagramWebClient = class {
       cookieJar: this.cookieJar,
       proxyUrl: this.proxyUrl
     });
-    if (!res.json) console.log(`[webClient] webGet ${path6} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    if (!res.json) console.log(`[webClient] webGet ${path7} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
   // EB web cookies + mobile app headers → i.instagram.com.
   // NEVER use for session actions — use mobileSessionGet instead.
-  async ebGet(path6) {
+  async ebGet(path7) {
     await this.apiThrottle();
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "GET",
       headers: {
         Host: "i.instagram.com",
@@ -152864,7 +149633,7 @@ var InstagramWebClient = class {
       cookieJar: this.cookieJar,
       proxyUrl: this.proxyUrl
     });
-    if (!res.json) console.log(`[webClient] ebGet ${path6} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    if (!res.json) console.log(`[webClient] ebGet ${path7} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
@@ -152878,11 +149647,11 @@ var InstagramWebClient = class {
       return void 0;
     }
   }
-  async mobileSessionGet(path6) {
+  async mobileSessionGet(path7) {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some((c3) => c3.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
-      console.warn(`[webClient] mobileSessionGet ${path6}: no igApiCookies session`);
+      console.warn(`[webClient] mobileSessionGet ${path7}: no igApiCookies session`);
       return null;
     }
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
@@ -152907,7 +149676,7 @@ var InstagramWebClient = class {
     }
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "GET",
       headers: {
         Host: "i.instagram.com",
@@ -152934,18 +149703,18 @@ var InstagramWebClient = class {
     if (res.status >= 400) {
       const bodyMsg = res.json?.message ?? "";
       const errMsg = bodyMsg || "login_required";
-      console.warn(`[webClient] mobileSessionGet ${path6} \u2192 HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      console.warn(`[webClient] mobileSessionGet ${path7} \u2192 HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
       throw new Error(errMsg);
     }
-    if (!res.json) console.log(`[webClient] mobileSessionGet ${path6} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    if (!res.json) console.log(`[webClient] mobileSessionGet ${path7} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
   // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
   // Used for source-account scraping (repost) so the account is not linked to the lookup.
-  async mobileGetAnonymous(path6) {
+  async mobileGetAnonymous(path7) {
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "GET",
       headers: {
         Host: "i.instagram.com",
@@ -152962,12 +149731,12 @@ var InstagramWebClient = class {
     });
     return res.json;
   }
-  async webPost(path6, body = "", _isRetry = false) {
+  async webPost(path7, body = "", _isRetry = false) {
     await this.apiThrottle();
     const sessionCookie = this.cookieJar.find((c3) => c3.startsWith("sessionid="));
-    console.log(`[webClient] webPost ${path6} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}${_isRetry ? " [retry]" : ""}`);
+    console.log(`[webClient] webPost ${path7} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}${_isRetry ? " [retry]" : ""}`);
     const res = await igReq({
-      path: path6,
+      path: path7,
       method: "POST",
       headers: {
         Host: "www.instagram.com",
@@ -152986,16 +149755,16 @@ var InstagramWebClient = class {
       proxyUrl: this.proxyUrl
     });
     if (!_isRetry && res.status === 302) {
-      console.log(`[webClient] webPost ${path6}: 302 redirect \u2014 refreshing CSRF and retrying`);
+      console.log(`[webClient] webPost ${path7}: 302 redirect \u2014 refreshing CSRF and retrying`);
       const refreshed = await this.refreshCsrf();
-      if (refreshed) return this.webPost(path6, body, true);
+      if (refreshed) return this.webPost(path7, body, true);
     }
     if (res.status < 300) {
       this.cookieJar = mergeCookies(this.cookieJar, res.cookies);
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.csrfToken = newCsrf;
     }
-    if (!res.json) console.log(`[webClient] webPost ${path6} status=${res.status} body:`, res.rawBody.slice(0, 300));
+    if (!res.json) console.log(`[webClient] webPost ${path7} status=${res.status} body:`, res.rawBody.slice(0, 300));
     return { json: res.json, status: res.status, rawBody: res.rawBody };
   }
   // ── Follow a user by numeric ID ────────────────────────────────────────────
@@ -153612,20 +150381,20 @@ var InstagramWebClient = class {
       { method: "POST", path: "/api/v1/attribution/launch/", opName: "AttributionLaunch" }
     ];
     const ordered = randomise ? [...entries].sort(() => Math.random() - 0.5) : entries;
-    for (const { path: path6, method, opName, body } of ordered) {
+    for (const { path: path7, method, opName, body } of ordered) {
       await this.timed(opName, async () => {
         try {
           if (method === "POST") {
-            await this.mobileSessionPost(path6, body ?? "");
+            await this.mobileSessionPost(path7, body ?? "");
           } else {
-            await this.mobileSessionGet(path6);
+            await this.mobileSessionGet(path7);
           }
-          console.log(`[webClient] forceEmulation: ${method} ${path6} OK`);
-          return `${method} ${path6} OK`;
+          console.log(`[webClient] forceEmulation: ${method} ${path7} OK`);
+          return `${method} ${path7} OK`;
         } catch (e) {
           const errMsg = (e?.message ?? "error").slice(0, 80);
-          console.warn(`[webClient] forceEmulation: ${method} ${path6} failed: ${errMsg}`);
-          return `${method} ${path6} FAIL: ${errMsg}`;
+          console.warn(`[webClient] forceEmulation: ${method} ${path7} failed: ${errMsg}`);
+          return `${method} ${path7} FAIL: ${errMsg}`;
         }
       }, (res) => res);
     }
@@ -153720,10 +150489,14 @@ var InstagramWebClient = class {
   }
   // ── Visit a user's profile page ──────────────────────────────────────────
   // Fetches user info — equivalent to tapping a username to open their profile.
-  async visitUserProfile(userId) {
+  // `fromModule` matches the `from_module` query param the real Instagram app
+  // sends to indicate navigation context (e.g. "followers", "feed_timeline",
+  // "discover_people").  Omitting it produces a bare endpoint with no context
+  // which looks anomalous in Instagram's traffic logs.
+  async visitUserProfile(userId, fromModule = "profile") {
     return this.timed("VisitUserProfile", async () => {
       try {
-        await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+        await this.mobileSessionGet(`/api/v1/users/${userId}/info/?from_module=${encodeURIComponent(fromModule)}`);
         return true;
       } catch {
         return false;
@@ -154059,6 +150832,13 @@ var InstagramWebClient = class {
       return j?.status === "ok";
     }, `Save media ${mediaId}`);
   }
+  async postComment(mediaId, text2) {
+    return this.timed("PostComment", async () => {
+      const body = new URLSearchParams({ comment_text: text2 }).toString();
+      const j = await this.mobileSessionPost(`/api/v1/media/${mediaId}/comment/`, body);
+      return j?.status === "ok";
+    }, `Comment on media ${mediaId}`);
+  }
   async likeDirectMessage(threadId, itemId) {
     return this.timed("LikeDM", async () => {
       const body = new URLSearchParams({}).toString();
@@ -154362,7 +151142,7 @@ var InstagramWebClient = class {
   }
   // POST to i.instagram.com using the mobile session (mobileCookieJar).
   // Used exclusively for DM operations which require a mobile-origin session.
-  async _mobileDmPost(path6, body = "") {
+  async _mobileDmPost(path7, body = "") {
     await this.apiThrottle();
     let deviceUuid = "";
     let deviceAndroidId = "";
@@ -154378,7 +151158,7 @@ var InstagramWebClient = class {
     const midValue = midEntry ? midEntry.slice(4) : "";
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "POST",
       headers: {
         Host: "i.instagram.com",
@@ -154402,7 +151182,7 @@ var InstagramWebClient = class {
     this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
     const newCsrf = extractCsrf(res.cookies);
     if (newCsrf) this.mobileCsrf = newCsrf;
-    if (!res.json) console.log(`[webClient] _mobileDmPost ${path6} HTTP ${res.status}:`, res.rawBody.slice(0, 300));
+    if (!res.json) console.log(`[webClient] _mobileDmPost ${path7} HTTP ${res.status}:`, res.rawBody.slice(0, 300));
     return res.json;
   }
   async unsendDirectMessage(threadId, itemId) {
@@ -154435,12 +151215,12 @@ var InstagramWebClient = class {
   }
   // EB web cookies + mobile app headers → i.instagram.com.
   // NEVER use for session actions — use mobileSessionPost instead.
-  async ebPost(path6, body = "") {
+  async ebPost(path7, body = "") {
     await this.apiThrottle();
     const MOBILE_APP_ID = "567067343352427";
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "POST",
       headers: {
         Host: "i.instagram.com",
@@ -154459,7 +151239,7 @@ var InstagramWebClient = class {
     });
     const safeCookies = res.cookies.filter((c3) => !c3.startsWith("csrftoken="));
     this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
-    if (!res.json) console.log(`[webClient] ebPost ${path6} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
+    if (!res.json) console.log(`[webClient] ebPost ${path7} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
   }
   // Bootstrap a real csrftoken for the mobile session — zero EB dependency.
@@ -154574,11 +151354,11 @@ var InstagramWebClient = class {
   // Used for write actions (follow, unfollow) where i.instagram.com strictly requires
   // a proper mobile-originated session — web cookies return login_required on those.
   // If no igApiCookies session is available, returns null immediately (no fallback).
-  async mobileSessionPost(path6, body = "") {
+  async mobileSessionPost(path7, body = "") {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some((c3) => c3.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
-      console.warn(`[webClient] mobileSessionPost ${path6}: no igApiCookies session \u2014 cannot proceed (igApiCookies required for write actions)`);
+      console.warn(`[webClient] mobileSessionPost ${path7}: no igApiCookies session \u2014 cannot proceed (igApiCookies required for write actions)`);
       return null;
     }
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
@@ -154601,10 +151381,10 @@ var InstagramWebClient = class {
       deviceStr = deviceStr ?? this.userAgentApi;
       fullMobileUA = deviceStr ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})` : MOBILE_UA;
     }
-    console.log(`[webClient] mobileSessionPost ${path6} using igApiCookies session (csrf=${csrf.slice(0, 8) + "..."}, ua=${fullMobileUA.slice(0, 60)})`);
+    console.log(`[webClient] mobileSessionPost ${path7} using igApiCookies session (csrf=${csrf.slice(0, 8) + "..."}, ua=${fullMobileUA.slice(0, 60)})`);
     const res = await igReq({
       host: "i.instagram.com",
-      path: path6,
+      path: path7,
       method: "POST",
       headers: {
         Host: "i.instagram.com",
@@ -154631,14 +151411,14 @@ var InstagramWebClient = class {
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
     if (res.status !== 200 || !res.json) {
-      console.warn(`[webClient] mobileSessionPost ${path6} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
+      console.warn(`[webClient] mobileSessionPost ${path7} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
       if ((res.status >= 400 || !res.json) && !this._abdDismissInProgress) {
         this.mobileSessionReady = false;
       }
     } else {
       const feedLen = res.json?.feed_items?.length ?? res.json?.items?.length ?? null;
       if (feedLen !== null) {
-        console.log(`[webClient] mobileSessionPost ${path6} status=${res.status} feed_items=${feedLen} (status="${res.json?.status}")`);
+        console.log(`[webClient] mobileSessionPost ${path7} status=${res.status} feed_items=${feedLen} (status="${res.json?.status}")`);
       }
     }
     if (res.json?.message === "feedback_required" && !this._abdDismissInProgress) {
@@ -154974,7 +151754,7 @@ var InstagramWebClient = class {
   // comment which are confirmed working).  Avoids the rupload binary protocol
   // which requires a genuine mobile Bearer-token session and rejects web
   // sessionids with HTML 404.
-  async mobilePostMultipart(path6, parts) {
+  async mobilePostMultipart(path7, parts) {
     await this.apiThrottle();
     const boundary = `----InstaBoundary${Date.now()}`;
     const chunks = [];
@@ -155005,8 +151785,8 @@ Content-Disposition: form-data; name="${part.name}"`;
       "X-IG-Connection-Type": "WIFI",
       Cookie: this.cookieJar.join("; ")
     };
-    const json2 = await tlsMultipartPost("i.instagram.com", path6, headers, body, this.proxyUrl);
-    if (!json2) console.log(`[webClient] mobilePostMultipart ${path6} returned null \u2014 upload may have failed`);
+    const json2 = await tlsMultipartPost("i.instagram.com", path7, headers, body, this.proxyUrl);
+    if (!json2) console.log(`[webClient] mobilePostMultipart ${path7} returned null \u2014 upload may have failed`);
     return json2;
   }
   // ── Download an image from a CDN URL into a Buffer ────────────────────────
@@ -155023,7 +151803,7 @@ Content-Disposition: form-data; name="${part.name}"`;
           Accept: "image/*,*/*"
         }
       };
-      https.get(options, (res) => {
+      https2.get(options, (res) => {
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
         res.on("end", () => resolve(Buffer.concat(chunks)));
@@ -155848,7 +152628,7 @@ async function buildProxyUrl(profile) {
   return null;
 }
 function extractOperationName(rawUrl) {
-  const path6 = rawUrl.split("?")[0].replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v\d+\//, "").replace(/\/$/, "");
+  const path7 = rawUrl.split("?")[0].replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v\d+\//, "").replace(/\/$/, "");
   const EXACT = {
     // Pre-login setup
     "si/fetch_headers": "FetchHeaders",
@@ -155904,7 +152684,7 @@ function extractOperationName(rawUrl) {
     // Collections / highlights
     "highlights/create_reel": "CreateHighlight"
   };
-  if (EXACT[path6]) return EXACT[path6];
+  if (EXACT[path7]) return EXACT[path7];
   const PREFIX = [
     ["friendships/create/", "Follow"],
     ["friendships/destroy/", "Unfollow"],
@@ -155920,9 +152700,9 @@ function extractOperationName(rawUrl) {
     ["qe/", "FetchConfig"]
   ];
   for (const [prefix, name] of PREFIX) {
-    if (path6.startsWith(prefix)) return name;
+    if (path7.startsWith(prefix)) return name;
   }
-  const segment = path6.split("/").filter(Boolean).pop() ?? path6;
+  const segment = path7.split("/").filter(Boolean).pop() ?? path7;
   return segment.replace(/_([a-z])/g, (_2, c3) => c3.toUpperCase()).replace(/^./, (c3) => c3.toUpperCase());
 }
 function extractFromBody(body, key) {
@@ -156782,7 +153562,7 @@ async function fetchInstagramCodeFromImap(opts) {
 var import_instagram_private_api4 = __toESM(require_dist2(), 1);
 
 // src/instagram/browserSession.ts
-import https3 from "https";
+import https4 from "https";
 
 // src/instagram/totp.ts
 import { createHmac as createHmac2 } from "crypto";
@@ -156816,8 +153596,8 @@ function generateTotp(base32Secret, digits = 6, period = 30) {
 }
 
 // src/instagram/browserSession.ts
-import fs2 from "fs";
-import path3 from "path";
+import fs3 from "fs";
+import path4 from "path";
 import net3 from "net";
 import tls2 from "tls";
 var IS_ELECTRON_EB = !!process.env.EB_IPC_PORT;
@@ -156874,9 +153654,9 @@ function testProxyReachable(host, port2, timeoutMs = 2500) {
     });
   });
 }
-var COOKIES_DIR = process.env.DATABASE_PATH ? path3.join(path3.dirname(process.env.DATABASE_PATH), "browser-data") : path3.join(process.cwd(), "server", "browser-data");
+var COOKIES_DIR = process.env.DATABASE_PATH ? path4.join(path4.dirname(process.env.DATABASE_PATH), "browser-data") : path4.join(process.cwd(), "server", "browser-data");
 function cookiePath(profileId) {
-  return path3.join(COOKIES_DIR, `cookies-${profileId}.json`);
+  return path4.join(COOKIES_DIR, `cookies-${profileId}.json`);
 }
 async function saveCookies(profileId, page) {
   try {
@@ -156890,8 +153670,8 @@ async function saveCookies(profileId, page) {
     if (!currentSessionId) {
       try {
         const p = cookiePath(profileId);
-        if (fs2.existsSync(p)) {
-          const existing = JSON.parse(fs2.readFileSync(p, "utf8"));
+        if (fs3.existsSync(p)) {
+          const existing = JSON.parse(fs3.readFileSync(p, "utf8"));
           if (Array.isArray(existing) && existing.some((c3) => c3.name === "sessionid" && c3.value)) {
             log(`[cookies:${profileId}] Skipping JSON overwrite \u2014 Chrome has no sessionid but file still has one (session likely expired; file preserved)`, "browser");
             return;
@@ -156900,8 +153680,8 @@ async function saveCookies(profileId, page) {
       } catch {
       }
     }
-    fs2.mkdirSync(COOKIES_DIR, { recursive: true });
-    fs2.writeFileSync(cookiePath(profileId), JSON.stringify(cookies, null, 2), "utf8");
+    fs3.mkdirSync(COOKIES_DIR, { recursive: true });
+    fs3.writeFileSync(cookiePath(profileId), JSON.stringify(cookies, null, 2), "utf8");
     log(`[cookies:${profileId}] Saved ${cookies.length} cookies (explicit IG domain fetch)`, "browser");
     const get3 = (name) => cookies.find((c3) => c3.name === name)?.value ?? "";
     const sessionid = get3("sessionid");
@@ -156945,8 +153725,8 @@ async function saveCookies(profileId, page) {
 async function loadCookies(profileId, page) {
   try {
     const p = cookiePath(profileId);
-    if (!fs2.existsSync(p)) return false;
-    const raw = fs2.readFileSync(p, "utf8");
+    if (!fs3.existsSync(p)) return false;
+    const raw = fs3.readFileSync(p, "utf8");
     const cookies = JSON.parse(raw);
     if (!Array.isArray(cookies) || !cookies.length) return false;
     await page.setCookie(...cookies);
@@ -156959,7 +153739,7 @@ async function loadCookies(profileId, page) {
 }
 function hasSavedCookies(profileId) {
   try {
-    return fs2.existsSync(cookiePath(profileId));
+    return fs3.existsSync(cookiePath(profileId));
   } catch {
     return false;
   }
@@ -156967,7 +153747,7 @@ function hasSavedCookies(profileId) {
 function deleteSavedCookies(profileId) {
   try {
     const p = cookiePath(profileId);
-    if (fs2.existsSync(p)) fs2.unlinkSync(p);
+    if (fs3.existsSync(p)) fs3.unlinkSync(p);
   } catch {
   }
 }
@@ -157149,11 +153929,11 @@ async function harvestSignupCookiesFromEB(opts) {
   const logPfx = "[harvestSignupCookies]";
   log(`${logPfx} Starting EB cookie harvest for signup...`);
   opts?.onStep?.("EB harvest: starting temporary Chrome for cookie collection...");
-  const tmpDataDir = path3.join(
+  const tmpDataDir = path4.join(
     COOKIES_DIR,
     `signup-harvest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   );
-  fs2.mkdirSync(tmpDataDir, { recursive: true });
+  fs3.mkdirSync(tmpDataDir, { recursive: true });
   let puppeteerLib;
   try {
     puppeteerLib = (await import("puppeteer-core")).default;
@@ -157164,7 +153944,7 @@ async function harvestSignupCookiesFromEB(opts) {
       log(`${logPfx} Cannot load puppeteer: ${e?.message}`);
       opts?.onStep?.(`EB harvest failed: Puppeteer not available (${e?.message})`);
       try {
-        fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+        fs3.rmSync(tmpDataDir, { recursive: true, force: true });
       } catch {
       }
       return null;
@@ -157174,7 +153954,7 @@ async function harvestSignupCookiesFromEB(opts) {
     log(`${logPfx} No CHROMIUM_PATH \u2014 cannot harvest cookies`);
     opts?.onStep?.("EB harvest failed: Chrome executable not found (CHROMIUM_PATH not set) \u2014 cannot harvest cookies");
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
     return null;
@@ -157183,7 +153963,7 @@ async function harvestSignupCookiesFromEB(opts) {
     log(`${logPfx} No proxy configured \u2014 refusing to harvest EB cookies without a proxy (home IP would be exposed)`);
     opts?.onStep?.("EB harvest blocked: no proxy configured \u2014 a proxy is required to prevent IP exposure during signup");
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
     return null;
@@ -157208,7 +153988,7 @@ async function harvestSignupCookiesFromEB(opts) {
     log(`${logPfx} Browser launch failed: ${e?.message}`);
     opts?.onStep?.(`EB harvest failed: Chrome could not launch \u2014 ${e?.message}`);
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
     return null;
@@ -157489,7 +154269,7 @@ async function harvestSignupCookiesFromEB(opts) {
     } catch {
     }
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
     log(`${logPfx} Temporary Chrome closed and data dir cleaned up`);
@@ -158409,8 +155189,8 @@ async function getOrCreateSession(profileId, userAgent, proxy, userAgentApi) {
       proxyArg = [`--proxy-server=http://${proxy.host}:${proxy.port}`];
     }
   }
-  const userDataDir = path3.join(COOKIES_DIR, `userdata-${profileId}`);
-  fs2.mkdirSync(userDataDir, { recursive: true });
+  const userDataDir = path4.join(COOKIES_DIR, `userdata-${profileId}`);
+  fs3.mkdirSync(userDataDir, { recursive: true });
   const userDataArg = [`--user-data-dir=${userDataDir}`];
   console.log(`[EB-DEBUG][browserSession] profileId=${profileId}`);
   console.log(`[EB-DEBUG][browserSession] CHROMIUM_PATH env = "${process.env.CHROMIUM_PATH ?? "(not set)"}"`);
@@ -158445,10 +155225,10 @@ async function getOrCreateSession(profileId, userAgent, proxy, userAgentApi) {
   }
   const CHROME_LOCK_FILES = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
   for (const lockFile of CHROME_LOCK_FILES) {
-    const lockPath = path3.join(userDataDir, lockFile);
+    const lockPath = path4.join(userDataDir, lockFile);
     try {
-      if (fs2.existsSync(lockPath)) {
-        fs2.rmSync(lockPath, { force: true });
+      if (fs3.existsSync(lockPath)) {
+        fs3.rmSync(lockPath, { force: true });
         console.log(`[EB-DEBUG][browserSession] Removed stale lock file: ${lockPath}`);
       }
     } catch (e) {
@@ -158966,8 +155746,8 @@ async function getOrCreateSession(profileId, userAgent, proxy, userAgentApi) {
             session: false
           };
         });
-        fs2.mkdirSync(COOKIES_DIR, { recursive: true });
-        fs2.writeFileSync(cookiePath(profileId), JSON.stringify(puppeteerCookies, null, 2), "utf8");
+        fs3.mkdirSync(COOKIES_DIR, { recursive: true });
+        fs3.writeFileSync(cookiePath(profileId), JSON.stringify(puppeteerCookies, null, 2), "utf8");
         cookiesLoaded = await loadCookies(profileId, page);
         log(`[cookies:${profileId}] DB re-seed ${cookiesLoaded ? "succeeded \u2713" : "failed \u2014 will open login page"}`, "browser");
       }
@@ -159249,7 +156029,7 @@ function _httpGetOneHop(url2, headers, proxy) {
     } catch (e) {
       return reject(e);
     }
-    const req = https3.request(
+    const req = https4.request(
       {
         method: "GET",
         hostname: urlObj.hostname,
@@ -159773,14 +156553,25 @@ function startHousekeepLoop(profileId) {
               }).catch(() => null);
             }
           }
-        } else if (url2 && !s.challengeUrl) {
-          const detectedStatus = classifyEbChallengeUrl(url2);
-          if (detectedStatus) {
-            s.challengeUrl = url2;
-            log(`[housekeep:${profileId}] challenge page detected via URL scan (${detectedStatus}): ${url2.slice(0, 100)}`, "browser");
-            sendStatus(profileId, `\u26A0 Instagram security check required on this account.`);
-            storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {
-            });
+        } else if (url2) {
+          const isConsentChallengeParked = url2.includes("/consent/") && (url2.includes("user_cookie_choice") || url2.includes("_ocig_challenge"));
+          if (isConsentChallengeParked) {
+            log(`[housekeep:${profileId}] EB parked on consent challenge error page \u2014 recovering to instagram.com`, "browser");
+            sendStatus(profileId, "Browser is on a consent challenge page \u2014 navigating to instagram.com\u2026");
+            s.navProtectedUntil = Date.now() + 2e4;
+            s.page.goto("https://www.instagram.com/", {
+              waitUntil: "domcontentloaded",
+              timeout: 2e4
+            }).catch(() => null);
+          } else if (!s.challengeUrl) {
+            const detectedStatus = classifyEbChallengeUrl(url2);
+            if (detectedStatus) {
+              s.challengeUrl = url2;
+              log(`[housekeep:${profileId}] challenge page detected via URL scan (${detectedStatus}): ${url2.slice(0, 100)}`, "browser");
+              sendStatus(profileId, `\u26A0 Instagram security check required on this account.`);
+              storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {
+              });
+            }
           }
         }
       }
@@ -160073,10 +156864,10 @@ async function browserReload(profileId) {
   wsWrite(s.ws, { type: "loading", loading: false });
 }
 async function browserSetFiles(profileId, fileName, base64Data) {
-  const tmpPath = path3.join(COOKIES_DIR, `upload_${profileId}_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
+  const tmpPath = path4.join(COOKIES_DIR, `upload_${profileId}_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
   try {
-    fs2.mkdirSync(COOKIES_DIR, { recursive: true });
-    fs2.writeFileSync(tmpPath, Buffer.from(base64Data, "base64"));
+    fs3.mkdirSync(COOKIES_DIR, { recursive: true });
+    fs3.writeFileSync(tmpPath, Buffer.from(base64Data, "base64"));
     const chooser = pendingFileChoosers.get(profileId);
     if (chooser) {
       pendingFileChoosers.delete(profileId);
@@ -160093,7 +156884,7 @@ async function browserSetFiles(profileId, fileName, base64Data) {
   } finally {
     setTimeout(() => {
       try {
-        fs2.unlinkSync(tmpPath);
+        fs3.unlinkSync(tmpPath);
       } catch {
       }
     }, 15e3);
@@ -160224,13 +157015,13 @@ async function wipeEbSession(profileId) {
   }
   deleteSavedCookies(profileId);
   await closeSession(profileId, { skipCookieSave: true });
-  const userDataDir = path3.join(COOKIES_DIR, `userdata-${profileId}`);
-  const sleep2 = (ms) => new Promise((r2) => setTimeout(r2, ms));
+  const userDataDir = path4.join(COOKIES_DIR, `userdata-${profileId}`);
+  const sleep3 = (ms) => new Promise((r2) => setTimeout(r2, ms));
   for (let attempt = 1; attempt <= 3; attempt++) {
-    await sleep2(500);
-    if (!fs2.existsSync(userDataDir)) break;
+    await sleep3(500);
+    if (!fs3.existsSync(userDataDir)) break;
     try {
-      fs2.rmSync(userDataDir, { recursive: true, force: true });
+      fs3.rmSync(userDataDir, { recursive: true, force: true });
       log(`Deleted userDataDir for profile ${profileId} (attempt ${attempt}): ${userDataDir}`, "browser");
       break;
     } catch (e) {
@@ -160246,7 +157037,7 @@ async function navigateEbToLogin(profileId) {
   );
 }
 async function clearEbSessionCookies(profileId, igApiCookies) {
-  const sleep2 = (ms) => new Promise((r2) => setTimeout(r2, ms));
+  const sleep3 = (ms) => new Promise((r2) => setTimeout(r2, ms));
   const liveSession = sessions.get(profileId);
   if (liveSession?.page) {
     try {
@@ -160265,16 +157056,16 @@ async function clearEbSessionCookies(profileId, igApiCookies) {
     }
   }
   await closeSession(profileId, { skipCookieSave: true });
-  const userDataDir = path3.join(COOKIES_DIR, `userdata-${profileId}`);
+  const userDataDir = path4.join(COOKIES_DIR, `userdata-${profileId}`);
   let deleted = false;
   for (let attempt = 1; attempt <= 6; attempt++) {
-    await sleep2(1e3);
-    if (!fs2.existsSync(userDataDir)) {
+    await sleep3(1e3);
+    if (!fs3.existsSync(userDataDir)) {
       deleted = true;
       break;
     }
     try {
-      fs2.rmSync(userDataDir, { recursive: true, force: true });
+      fs3.rmSync(userDataDir, { recursive: true, force: true });
       deleted = true;
       log(`Wiped Chrome userDataDir for profile ${profileId} (attempt ${attempt})`, "browser");
       break;
@@ -160282,7 +157073,7 @@ async function clearEbSessionCookies(profileId, igApiCookies) {
       console.warn(`[browserSession] rmSync attempt ${attempt}/6 failed for profile ${profileId}: ${e?.message}`);
     }
   }
-  if (!deleted && fs2.existsSync(userDataDir)) {
+  if (!deleted && fs3.existsSync(userDataDir)) {
     console.warn(`[browserSession] Could not fully delete userDataDir for profile ${profileId} after 6 s \u2014 CDP wipe already cleared cookies in-process`);
   }
   deleteSavedCookies(profileId);
@@ -160306,8 +157097,8 @@ async function clearEbSessionCookies(profileId, igApiCookies) {
     });
     if (deviceCookies.length > 0) {
       try {
-        fs2.mkdirSync(COOKIES_DIR, { recursive: true });
-        fs2.writeFileSync(
+        fs3.mkdirSync(COOKIES_DIR, { recursive: true });
+        fs3.writeFileSync(
           cookiePath(profileId),
           JSON.stringify(deviceCookies, null, 2),
           "utf8"
@@ -160651,20 +157442,33 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           if (splashLoginLink) await splashLoginLink.click().catch(() => null);
           await delay(2500);
         } else {
-          s.challengeUrl = void 0;
-          const earlyCheck = await s.page.cookies(
-            "https://www.instagram.com",
-            "https://i.instagram.com",
-            "https://instagram.com"
-          ).catch(() => []);
-          if (!earlyCheck.some((c3) => c3.name === "sessionid" && c3.value.length > 5)) {
-            const msg2 = `Browser is on ${currentUrl.slice(0, 80)} but no sessionid cookie found \u2014 Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
-            sendStatus(profileId, `\u26A0 ${msg2}`);
-            return { ok: false, message: msg2 };
+          const isConsentChallengePage = currentUrl.includes("/consent/") && currentUrl.includes("user_cookie_choice");
+          if (isConsentChallengePage) {
+            sendStatus(profileId, `\u26A0 Consent challenge page detected (${currentUrl.slice(0, 100)}) \u2014 navigating to login to trigger TOTP entry\u2026`);
+            log(`[autoLogin:${profileId}] Consent challenge at step 1 \u2014 navigating to login page`, "browser");
+            s.navProtectedUntil = Date.now() + 25e3;
+            await s.page.goto("https://www.instagram.com/accounts/login/", {
+              waitUntil: "domcontentloaded",
+              timeout: 25e3
+            }).catch(() => null);
+            await delay(2e3);
+            await dismissCookieBanner(s.page);
+          } else {
+            s.challengeUrl = void 0;
+            const earlyCheck = await s.page.cookies(
+              "https://www.instagram.com",
+              "https://i.instagram.com",
+              "https://instagram.com"
+            ).catch(() => []);
+            if (!earlyCheck.some((c3) => c3.name === "sessionid" && c3.value.length > 5)) {
+              const msg2 = `Browser is on ${currentUrl.slice(0, 80)} but no sessionid cookie found \u2014 Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
+              sendStatus(profileId, `\u26A0 ${msg2}`);
+              return { ok: false, message: msg2 };
+            }
+            await saveCookies(profileId, s.page);
+            sendStatus(profileId, "\u2713 Already logged in \u2014 browser shows your account.");
+            return { ok: true, message: "Already logged in" };
           }
-          await saveCookies(profileId, s.page);
-          sendStatus(profileId, "\u2713 Already logged in \u2014 browser shows your account.");
-          return { ok: true, message: "Already logged in" };
         }
       }
       sendStatus(profileId, "Login form detected \u2014 filling credentials\u2026");
@@ -160869,6 +157673,27 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       await delay(2e3);
       await dismissInstagramPopups(s.page);
     }
+    {
+      const consentCheckUrl = s.page.url();
+      const isConsentChallengeRedirect = consentCheckUrl.includes("/consent/") && (consentCheckUrl.includes("user_cookie_choice") || consentCheckUrl.includes("_ocig_challenge"));
+      if (isConsentChallengeRedirect) {
+        const consentBodyText = await s.page.evaluate(
+          () => (document.body?.innerText || "").toLowerCase()
+        ).catch(() => "");
+        const isConsentError = consentBodyText.includes("sorry") || consentBodyText.includes("something went wrong") || consentBodyText.trim().length < 80;
+        if (isConsentError) {
+          sendStatus(profileId, `\u26A0 Cookie-consent challenge error detected (URL: ${consentCheckUrl.slice(0, 80)}) \u2014 navigating to 2FA entry page (equivalent to "Try another way" \u2192 TOTP on mobile)\u2026`);
+          log(`[autoLogin:${profileId}] Consent challenge redirect error \u2014 navigating to two_factor page`, "browser");
+          await s.page.goto("https://www.instagram.com/accounts/login/two_factor/", {
+            waitUntil: "domcontentloaded",
+            timeout: 15e3
+          }).catch(() => null);
+          await delay(2500);
+          await dismissCookieBanner(s.page);
+          await dismissInstagramPopups(s.page);
+        }
+      }
+    }
     const [pageText, dialogText, fullBodyText] = await Promise.all([
       s.page.evaluate(() => (document.body?.innerText || "").slice(0, 600).trim()).catch(() => ""),
       s.page.evaluate(() => {
@@ -160928,7 +157753,8 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
         return { ok: true, message: "Logged in" };
       }
     }
-    const isLoggedIn = !isErrorPage && !pageText.includes("Username, email or mobile number") && !pageText.includes("Create new account") && !pageUrl.includes("/accounts/login");
+    const isConsentChallengeErrorPage = pageUrl.includes("/consent/") && (pageUrl.includes("user_cookie_choice") || pageUrl.includes("_ocig_challenge")) && (fullBodyText.toLowerCase().includes("sorry") || fullBodyText.toLowerCase().includes("something went wrong") || fullBodyText.trim().length < 80);
+    const isLoggedIn = !isErrorPage && !isConsentChallengeErrorPage && !pageText.includes("Username, email or mobile number") && !pageText.includes("Create new account") && !pageUrl.includes("/accounts/login");
     sendStatus(profileId, `2FA detected: ${is2FA} (dom=${is2FAByDom}) | Logged in: ${isLoggedIn}`);
     if (is2FA) {
       const keyClean = twoFAKey.replace(/\s+/g, "");
@@ -161150,6 +157976,30 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
             return { ok: false, message: "Account requires human verification on Instagram" };
           }
           if (twoFaAccepted) {
+            const isPostTotpConsentRedirect = afterUrl.includes("/consent/") && afterUrl.includes("user_cookie_choice");
+            if (isPostTotpConsentRedirect) {
+              sendStatus(profileId, "\u26A0 Post-2FA consent redirect detected \u2014 navigating to instagram.com to confirm session\u2026");
+              log(`[autoLogin:${profileId}] Post-TOTP consent redirect \u2014 navigating to instagram.com`, "browser");
+              await s.page.goto("https://www.instagram.com/", {
+                waitUntil: "domcontentloaded",
+                timeout: 2e4
+              }).catch(() => null);
+              await delay(2e3);
+              await dismissCookieBanner(s.page);
+              await dismissInstagramPopups(s.page);
+              const postConsentSessionCookies = await s.page.cookies(
+                "https://www.instagram.com",
+                "https://i.instagram.com",
+                "https://instagram.com"
+              ).catch(() => []);
+              const hasSessionAfterConsent = postConsentSessionCookies.some((c3) => c3.name === "sessionid" && c3.value.length > 5);
+              if (!hasSessionAfterConsent) {
+                const msg2 = "Instagram showed a cookie-consent page after 2FA but did not issue a session. Click Fill Credentials again to retry \u2014 Instagram may need another attempt to accept the TOTP code.";
+                sendStatus(profileId, `\u26A0 ${msg2}`);
+                return { ok: false, message: msg2 };
+              }
+              sendStatus(profileId, "\u2713 Session confirmed after consent page \u2014 sessionid present.");
+            }
             await saveCookies(profileId, s.page);
             s.lastLoginSuccessAt = Date.now();
             if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
@@ -161170,6 +158020,15 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
         sendStatus(profileId, "\u26A0 2FA screen \u2014 no TOTP secret stored for this account. Go to Account Details and paste the 16-character TOTP secret key from your authenticator app, then try Fill Credentials again. You can also type the code manually in the browser window.");
         return { ok: false, message: "2FA screen \u2014 no TOTP key stored. Add the TOTP secret in Account Details and retry." };
       }
+    }
+    if (isConsentChallengeErrorPage) {
+      const keyClean = twoFAKey.replace(/\s+/g, "");
+      if (keyClean) {
+        sendStatus(profileId, "\u26A0 Cookie-consent challenge bypass could not complete \u2014 the 2FA session may have expired. Click Fill Credentials again to retry, or open the browser and log in manually.");
+        return { ok: false, message: "Cookie-consent challenge \u2014 2FA session expired. Click Fill Credentials again to retry." };
+      }
+      sendStatus(profileId, "\u26A0 Instagram showed a cookie-consent challenge. Add your TOTP secret key in Account Details (the 16-character code from your authenticator app), then click Fill Credentials again.");
+      return { ok: false, message: "Cookie-consent challenge \u2014 add your TOTP secret key in Account Details and retry." };
     }
     if (isErrorPage) {
       const knownChallenge = sessions.get(profileId)?.challengeUrl;
@@ -161436,9 +158295,9 @@ async function openSignupBrowser(opts) {
     }
   }
   if (!CHROMIUM_PATH) return { ok: false, error: "No Chromium executable found" };
-  const dataDir = path3.join(COOKIES_DIR, `signup-browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const dataDir = path4.join(COOKIES_DIR, `signup-browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   _signupDataDir = dataDir;
-  fs2.mkdirSync(dataDir, { recursive: true });
+  fs3.mkdirSync(dataDir, { recursive: true });
   const args = [...LAUNCH_ARGS, `--user-data-dir=${dataDir}`];
   if (opts?.proxyHost) args.push(`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`);
   let browser;
@@ -161655,7 +158514,7 @@ async function closeSignupBrowser() {
     await new Promise((r2) => setTimeout(r2, 600));
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        fs2.rmSync(dirToDelete, { recursive: true, force: true });
+        fs3.rmSync(dirToDelete, { recursive: true, force: true });
         break;
       } catch {
         if (attempt < 2) await new Promise((r2) => setTimeout(r2, 400));
@@ -161673,31 +158532,6 @@ function sendEbWsMessage(profileId, msg) {
   wsWrite(s.ws, msg);
 }
 var _pendingEBSignups = /* @__PURE__ */ new Map();
-async function _fillSignupInput(page, selectors, value) {
-  const d3 = (ms) => new Promise((r2) => setTimeout(r2, ms));
-  for (const sel of selectors) {
-    try {
-      const el = await page.$(sel);
-      if (!el) continue;
-      const box = await el.boundingBox();
-      if (!box || box.width === 0 || box.height === 0) continue;
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-      await d3(150);
-      await page.keyboard.down("Control");
-      await page.keyboard.press("a");
-      await page.keyboard.up("Control");
-      await d3(80);
-      await page.keyboard.press("Backspace");
-      await d3(100);
-      await page.keyboard.type(value, { delay: 55 + Math.random() * 45 });
-      await d3(200);
-      return true;
-    } catch {
-      continue;
-    }
-  }
-  return false;
-}
 function isEBSignupSession(sessionId) {
   return _pendingEBSignups.has(sessionId);
 }
@@ -161777,12 +158611,6 @@ async function warmupSignupSession(page, opts) {
   }
   step("EB warmup: session warm-up complete \u2713");
 }
-async function runWarmupOnOpenBrowser(opts) {
-  if (!_signupPage) throw new Error("Ghost Browser is not open");
-  _ghostWarmupDone = false;
-  await warmupSignupSession(_signupPage, opts);
-  _ghostWarmupDone = true;
-}
 async function createInstagramAccountViaEBForm(params) {
   const {
     username,
@@ -161822,8 +158650,8 @@ async function createInstagramAccountViaEBForm(params) {
     }
   }
   if (!CHROMIUM_PATH) return { status: "error", message: "No Chromium executable found", steps };
-  const tmpDataDir = path3.join(COOKIES_DIR, `signup-eb-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-  fs2.mkdirSync(tmpDataDir, { recursive: true });
+  const tmpDataDir = path4.join(COOKIES_DIR, `signup-eb-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  fs3.mkdirSync(tmpDataDir, { recursive: true });
   const browserArgs = [...HARVEST_ARGS, `--user-data-dir=${tmpDataDir}`, `--proxy-server=${proxyHost2}:${proxyPort ?? 80}`];
   let browser;
   try {
@@ -161831,7 +158659,7 @@ async function createInstagramAccountViaEBForm(params) {
     step("EB: Chrome launched \u2713");
   } catch (e) {
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
     return { status: "error", message: `Browser launch failed: ${e?.message}`, steps };
@@ -161842,7 +158670,7 @@ async function createInstagramAccountViaEBForm(params) {
     } catch {
     }
     try {
-      fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+      fs3.rmSync(tmpDataDir, { recursive: true, force: true });
     } catch {
     }
   };
@@ -161854,9 +158682,10 @@ async function createInstagramAccountViaEBForm(params) {
     await page.setViewport(viewportForUA(effectiveUA));
     await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
     if (proxyUsername) await page.authenticate({ username: proxyUsername, password: proxyPassword ?? "" });
+    let cdp = null;
     try {
-      const _cdp = await page.createCDPSession();
-      await _cdp.send("Network.setExtraHTTPHeaders", {
+      cdp = await page.createCDPSession();
+      await cdp.send("Network.setExtraHTTPHeaders", {
         headers: {
           "Accept-Language": "en-US,en;q=0.9",
           "sec-ch-ua-mobile": "?1",
@@ -161865,6 +158694,35 @@ async function createInstagramAccountViaEBForm(params) {
       });
     } catch {
     }
+    const tap = async (x3, y2) => {
+      if (!cdp) return;
+      try {
+        await cdp.send("Input.synthesizeTapGesture", { x: x3, y: y2, duration: 60, tapCount: 1, gestureSourceType: "touch" });
+        await delay(120);
+      } catch {
+      }
+    };
+    const clearAndType = async (x3, y2, text2) => {
+      await tap(x3, y2);
+      await delay(400);
+      try {
+        await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+          if (setter?.set) setter.set.call(el, "");
+          else el.value = "";
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      } catch {
+      }
+      await delay(120);
+      try {
+        if (cdp) await cdp.send("Input.insertText", { text: text2 });
+      } catch {
+      }
+    };
     await applyStealthScripts(page, effectiveUA).catch(
       (e) => step(`EB: stealth warn: ${e?.message?.slice(0, 60)}`)
     );
@@ -161872,109 +158730,248 @@ async function createInstagramAccountViaEBForm(params) {
     await warmupSignupSession(page, { onStep: step });
     const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
     const PHONE_GATE_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "use your email address"];
-    const _waitForEmailForm = async (maxMs) => {
-      const deadline = Date.now() + maxMs;
-      while (Date.now() < deadline) {
-        const found = await page.evaluate((sel) => !!document.querySelector(sel), EMAIL_FORM_SELECTORS).catch(() => false);
-        if (found) return true;
-        await delay(400);
-      }
-      return false;
-    };
-    const EMAIL_URLS = [
-      "https://www.instagram.com/accounts/signup/email/",
-      "https://www.instagram.com/accounts/emailsignup/"
+    step("EB: navigating to Instagram homepage...");
+    try {
+      await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 3e4 });
+    } catch (e) {
+      step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`);
+    }
+    await delay(1500);
+    const COOKIE_ACCEPT_LABELS = [
+      "allow all cookies",
+      "accept all cookies",
+      "allow all",
+      "accept all",
+      "allow essential and optional cookies",
+      "accept cookies",
+      "allow cookies",
+      "alle cookies akzeptieren",
+      "accepter tout",
+      "aceptar todo",
+      "accetta tutto",
+      "till\xE5t alla",
+      "alle accepteren"
     ];
-    let emailFormReady = false;
-    for (const url2 of EMAIL_URLS) {
-      step(`EB: navigating to ${url2}...`);
-      try {
-        await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 3e4 });
-      } catch (e) {
-        step(`EB: nav warning: ${e?.message?.slice(0, 80)}`);
-      }
-      await dismissCookieBanner(page);
-      await delay(800);
-      emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6e3 }).then(() => true).catch(() => false);
-      if (emailFormReady) {
-        step(`EB: email form ready at ${url2} \u2713`);
+    for (let att = 0; att < 6; att++) {
+      const cPos = await page.evaluate((labels) => {
+        const a2 = document.querySelector("[data-cookiebanner='accept_button']");
+        if (a2) {
+          const r2 = a2.getBoundingClientRect();
+          if (r2.width > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
+        }
+        for (const el of Array.from(document.querySelectorAll("button,[role='button'],a"))) {
+          const t2 = (el.innerText || el.textContent || "").trim().toLowerCase();
+          if (labels.indexOf(t2) !== -1) {
+            const r2 = el.getBoundingClientRect();
+            if (r2.width > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
+          }
+        }
+        return null;
+      }, COOKIE_ACCEPT_LABELS).catch(() => null);
+      if (!cPos) break;
+      step(`EB: tapping cookie banner (attempt ${att + 1})...`);
+      await tap(cPos.x, cPos.y);
+      await delay(1500);
+      const stillUp = await page.evaluate((labels) => {
+        for (const el of Array.from(document.querySelectorAll("button,[role='button'],a"))) {
+          if (labels.indexOf((el.innerText || el.textContent || "").trim().toLowerCase()) !== -1) return true;
+        }
+        return false;
+      }, COOKIE_ACCEPT_LABELS).catch(() => false);
+      if (!stillUp) {
+        step("EB: cookie banner dismissed \u2713");
         break;
       }
-      const diagUrl = await page.evaluate(() => `${window.location.href} | inputs: ${Array.from(document.querySelectorAll("input")).map((i2) => i2.getAttribute("aria-label") || i2.type).join(",")}`).catch(() => "");
-      step(`EB: email form not found at ${url2} \u2014 ${diagUrl}`);
     }
-    const finalDiag = await page.evaluate(() => ({
-      url: window.location.href,
-      inputs: Array.from(document.querySelectorAll("input")).map((el) => ({
-        name: el.name,
-        type: el.type,
-        placeholder: el.placeholder,
-        autocomplete: el.autocomplete,
-        id: el.id,
-        ariaLabel: el.getAttribute("aria-label")
-      })),
-      bodySnippet: document.body.innerText.replace(/\s+/g, " ").slice(0, 400)
-    })).catch(() => null);
-    if (finalDiag) {
-      step(`EB final diag: url=${finalDiag.url}`);
-      step(`EB final diag: inputs=${JSON.stringify(finalDiag.inputs)}`);
-      step(`EB final diag: page="${finalDiag.bodySnippet}"`);
+    await delay(1e3);
+    let signupNavigated = false;
+    const homepageUrl = page.url();
+    for (let att = 0; att < 4 && !signupNavigated; att++) {
+      const sPos = await page.evaluate(() => {
+        let el = document.querySelector("a[href*='/accounts/signup']");
+        if (!el) {
+          const all = Array.from(document.querySelectorAll("a,button,[role='button']"));
+          el = all.find((e) => (e.textContent || "").trim().toLowerCase() === "sign up") ?? null;
+          if (!el) el = all.find((e) => (e.textContent || "").trim().toLowerCase().includes("sign up")) ?? null;
+        }
+        if (el) {
+          el.scrollIntoView({ behavior: "instant", block: "center" });
+          const r2 = el.getBoundingClientRect();
+          if (r2.width > 0 && r2.height > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
+        }
+        return null;
+      }).catch(() => null);
+      if (sPos) {
+        step(`EB: tapping 'Sign up' at (${sPos.x}, ${sPos.y}) \u2014 attempt ${att + 1}...`);
+        await tap(sPos.x, sPos.y);
+        await delay(400);
+        await page.evaluate(() => {
+          let el = document.querySelector("a[href*='/accounts/signup']");
+          if (!el) {
+            const all = Array.from(document.querySelectorAll("a,button,[role='button']"));
+            el = all.find((e) => (e.textContent || "").trim().toLowerCase().includes("sign up")) ?? null;
+          }
+          if (el) el.click();
+        }).catch(() => {
+        });
+      } else {
+        step(`EB: 'Sign up' link not found (attempt ${att + 1}) \u2014 waiting 2 s for page to settle...`);
+        await delay(2e3);
+        continue;
+      }
+      for (let poll = 0; poll < 10 && !signupNavigated; poll++) {
+        await delay(500);
+        const nowUrl = page.url();
+        if (nowUrl !== homepageUrl) {
+          signupNavigated = true;
+          step(`EB: navigated \u2192 ${nowUrl.replace("https://www.instagram.com", "ig.com")} \u2713`);
+          break;
+        }
+        const pgVisible = await page.evaluate((labels) => {
+          const all = Array.from(document.querySelectorAll("button,a,[role='button']"));
+          return all.some((e) => {
+            const t2 = (e.textContent || "").trim().toLowerCase();
+            return labels.some((l2) => t2 === l2 || t2.includes(l2));
+          }) || !!document.querySelector("input[name='phoneNumber'],input[name='phone'],input[type='tel']");
+        }, PHONE_GATE_LABELS).catch(() => false);
+        if (pgVisible) {
+          signupNavigated = true;
+          step("EB: phone gate visible in DOM \u2713");
+          break;
+        }
+      }
+      if (!signupNavigated && att < 3) {
+        step(`EB: navigation not detected after attempt ${att + 1} \u2014 retrying...`);
+        await delay(1e3);
+      }
+    }
+    if (!signupNavigated) {
+      const diagText = await page.evaluate(() => document.body.innerText.slice(0, 200)).catch(() => "");
+      step(`EB: could not navigate past homepage \u2014 page: "${diagText}"`);
+      await cleanup();
+      return { status: "error", message: "Could not navigate past Instagram homepage \u2014 'Sign up' tap did not trigger navigation. Check proxy and try again.", steps };
+    }
+    await delay(1500);
+    let emailFormReady = await page.evaluate((sel) => !!document.querySelector(sel), EMAIL_FORM_SELECTORS).catch(() => false);
+    if (!emailFormReady) {
+      step("EB: looking for 'Sign up with email' on phone gate...");
+      for (let att = 0; att < 4; att++) {
+        const ePos = await page.evaluate((labels) => {
+          for (const el of Array.from(document.querySelectorAll("a,button,[role='button'],span,div"))) {
+            const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
+            if (labels.some((l2) => txt === l2 || txt.includes(l2))) {
+              const r2 = el.getBoundingClientRect();
+              if (r2.width > 0 && r2.height > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
+            }
+          }
+          return null;
+        }, PHONE_GATE_LABELS).catch(() => null);
+        if (ePos) {
+          step(`EB: tapping 'Sign up with email' at (${ePos.x}, ${ePos.y}) \u2014 attempt ${att + 1}...`);
+          await tap(ePos.x, ePos.y);
+          await delay(1800);
+          emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6e3 }).then(() => true).catch(() => false);
+          if (emailFormReady) {
+            step("EB: email form ready \u2713");
+            break;
+          }
+          step(`EB: email form not ready after tap ${att + 1} \u2014 retrying...`);
+        } else {
+          step(`EB: 'Sign up with email' not found (attempt ${att + 1}) \u2014 waiting 2 s...`);
+          await delay(2e3);
+        }
+      }
+    } else {
+      step("EB: already on email form (phone gate skipped) \u2713");
+    }
+    if (!emailFormReady) {
+      const diagUrl = page.url();
+      const diagText = await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => "");
+      step(`EB: email form not found \u2014 url=${diagUrl} page="${diagText}"`);
+      await cleanup();
+      return { status: "error", message: "Could not reach the email signup form \u2014 Instagram may have changed their signup flow", steps };
     }
     try {
-      await page.screenshot({ path: `/tmp/eb-diag-final.png`, fullPage: true });
+      await page.screenshot({ path: "/tmp/eb-diag-final.png", fullPage: true });
     } catch {
     }
     await delay(300);
     step("EB: filling signup form...");
-    const emailFilled = await _fillSignupInput(page, [
-      'input[aria-label="Email"]',
-      'input[name="emailOrPhone"]',
-      'input[type="email"]',
-      'input[placeholder*="email" i]',
-      'input[autocomplete="email"]',
-      'input[name="email"]',
-      'input[name="emailAddress"]'
-    ], email3);
-    if (!emailFilled) {
+    const getFieldCoords = async (selectors) => {
+      return page.evaluate((sels) => {
+        for (const sel of sels) {
+          const el = document.querySelector(sel);
+          if (el) {
+            const r2 = el.getBoundingClientRect();
+            if (r2.width > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
+          }
+        }
+        return null;
+      }, selectors).catch(() => null);
+    };
+    const emailCoords = await getFieldCoords(['input[aria-label="Email"]', 'input[name="emailOrPhone"]', 'input[type="email"]', 'input[placeholder*="email" i]', 'input[name="email"]']);
+    if (!emailCoords) {
       step("EB: could not find email input \u2014 Instagram may have changed their form layout");
       await cleanup();
       return { status: "error", message: "Could not find email field on Instagram's signup page \u2014 the form layout may have changed", steps };
     }
-    await page.keyboard.press("Tab");
+    await clearAndType(emailCoords.x, emailCoords.y, email3);
+    await page.evaluate(() => {
+      if (document.activeElement) document.activeElement.blur();
+    }).catch(() => {
+    });
     await delay(600);
     step("EB: email filled \u2713");
-    await delay(200);
-    await _fillSignupInput(page, ['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]'], firstName);
-    step("EB: full name filled \u2713");
-    await delay(400);
-    await _fillSignupInput(page, ['input[name="username"]', 'input[placeholder*="username" i]'], username);
-    step("EB: username filled \u2713");
-    await delay(400);
-    await _fillSignupInput(page, ['input[name="password"]', 'input[type="password"]', 'input[placeholder*="password" i]'], password);
-    step("EB: password filled \u2713");
-    await delay(800);
+    const nameCoords = await getFieldCoords(['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]']);
+    if (nameCoords) {
+      await clearAndType(nameCoords.x, nameCoords.y, firstName);
+      await page.evaluate(() => {
+        if (document.activeElement) document.activeElement.blur();
+      }).catch(() => {
+      });
+      step("EB: full name filled \u2713");
+      await delay(400);
+    }
+    const usernameCoords = await getFieldCoords(['input[name="username"]', 'input[placeholder*="username" i]']);
+    if (usernameCoords) {
+      await clearAndType(usernameCoords.x, usernameCoords.y, username);
+      await page.evaluate(() => {
+        if (document.activeElement) document.activeElement.blur();
+      }).catch(() => {
+      });
+      step("EB: username filled \u2713");
+      await delay(400);
+    }
+    const passwordCoords = await getFieldCoords(['input[name="password"]', 'input[type="password"]', 'input[placeholder*="password" i]']);
+    if (passwordCoords) {
+      await clearAndType(passwordCoords.x, passwordCoords.y, password);
+      await page.evaluate(() => {
+        if (document.activeElement) document.activeElement.blur();
+      }).catch(() => {
+      });
+      step("EB: password filled \u2713");
+      await delay(800);
+    }
     await delay(500);
     const nextBtnCoords = await page.evaluate(() => {
       const LABELS = ["next", "sign up", "register", "create account", "continue"];
-      for (const btn of Array.from(document.querySelectorAll('button, [role="button"]'))) {
+      for (const btn of Array.from(document.querySelectorAll("button, [role='button']"))) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
         if (LABELS.some((l2) => txt === l2 || txt.startsWith(l2))) {
           const r2 = btn.getBoundingClientRect();
-          if (r2.width > 0 && r2.height > 0) return { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+          if (r2.width > 0 && r2.height > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
         }
       }
-      const sub = document.querySelector('button[type="submit"]');
+      const sub = document.querySelector("button[type='submit']");
       if (sub) {
         const r2 = sub.getBoundingClientRect();
-        if (r2.width > 0) return { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+        if (r2.width > 0) return { x: Math.round(r2.left + r2.width / 2), y: Math.round(r2.top + r2.height / 2) };
       }
       return null;
     });
     const signUpClicked = !!nextBtnCoords;
     if (nextBtnCoords) {
-      await page.mouse.move(nextBtnCoords.x, nextBtnCoords.y);
-      await delay(100);
-      await page.mouse.click(nextBtnCoords.x, nextBtnCoords.y);
+      await tap(nextBtnCoords.x, nextBtnCoords.y);
     }
     if (!signUpClicked) {
       step("EB: could not find Sign Up button");
@@ -161996,56 +158993,142 @@ async function createInstagramAccountViaEBForm(params) {
     }).catch(() => false);
     if (onBirthday) {
       step("EB: filling birthday form...");
+      await delay(1e3);
       const MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-      await page.evaluate((m2, mName, d3, y2) => {
-        for (const sel of Array.from(document.querySelectorAll("select"))) {
-          const lbl = (sel.title || sel.getAttribute("aria-label") || "").toLowerCase();
-          if (lbl.includes("month")) {
+      const mName = MONTHS[month] ?? "";
+      await page.waitForSelector(
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select',
+        { timeout: 8e3, visible: true }
+      ).catch(() => {
+        step("EB: DOB waitForSelector timed out \u2014 form may not have loaded");
+      });
+      await delay(800);
+      const dobDiag = await page.evaluate(() => {
+        const selects = Array.from(document.querySelectorAll("select")).map((s) => ({
+          tag: "select",
+          name: s.name,
+          aria: s.getAttribute("aria-label"),
+          title: s.title,
+          optCount: s.options.length
+        }));
+        const inputs = Array.from(document.querySelectorAll("input")).map((i2) => ({
+          tag: "input",
+          type: i2.type,
+          name: i2.name,
+          placeholder: i2.placeholder,
+          aria: i2.getAttribute("aria-label"),
+          value: i2.value,
+          hidden: i2.type === "hidden"
+        }));
+        return { selects, inputs };
+      });
+      step(`EB: DOB page DOM \u2014 selects:[${dobDiag.selects.map((s) => `${s.aria || s.name || s.title}(${s.optCount}opts)`).join(",")}] inputs:[${dobDiag.inputs.map((i2) => `${i2.type}:ph="${i2.placeholder}":aria="${i2.aria}":val="${i2.value}"`).join(",")}]`);
+      const mm = String(month).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      const yyyy = String(year);
+      const dateStr = `${mm}/${dd}/${yyyy}`;
+      let dobFilled = false;
+      if (dobDiag.selects.length >= 2) {
+        const dobResult = await page.evaluate((m2, mn, d3, y2) => {
+          function setSelectNative(sel, value) {
+            const ns = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
+            if (ns) ns.call(sel, value);
+            else sel.value = value;
+            sel.dispatchEvent(new Event("input", { bubbles: true }));
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          function findOpt(sel, num, name) {
+            const ns = String(num);
             for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(m2) || opt.text === mName || opt.text.startsWith(mName.slice(0, 3))) {
-                sel.value = opt.value;
-                sel.dispatchEvent(new Event("change", { bubbles: true }));
-                break;
+              if (opt.value === ns || opt.text === name || opt.text.trim().startsWith(name.slice(0, 3)) || opt.text === ns) return opt.value;
+            }
+            return null;
+          }
+          const all = Array.from(document.querySelectorAll("select"));
+          let mf = false, df = false, yf = false;
+          for (const sel of all) {
+            const lbl = (sel.title || sel.getAttribute("aria-label") || sel.getAttribute("name") || "").toLowerCase();
+            if (!mf && lbl.includes("month")) {
+              const v3 = findOpt(sel, m2, mn);
+              if (v3 !== null) {
+                setSelectNative(sel, v3);
+                mf = true;
+              }
+            } else if (!df && lbl.includes("day")) {
+              const v3 = findOpt(sel, d3, String(d3));
+              if (v3 !== null) {
+                setSelectNative(sel, v3);
+                df = true;
+              }
+            } else if (!yf && (lbl.includes("year") || lbl.includes("yr"))) {
+              const v3 = findOpt(sel, y2, String(y2));
+              if (v3 !== null) {
+                setSelectNative(sel, v3);
+                yf = true;
               }
             }
           }
-          if (lbl.includes("day")) {
-            for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(d3) || opt.text === String(d3)) {
-                sel.value = opt.value;
-                sel.dispatchEvent(new Event("change", { bubbles: true }));
-                break;
+          if ((!mf || !df || !yf) && all.length >= 3) {
+            if (!mf) {
+              const v3 = findOpt(all[0], m2, mn);
+              if (v3 !== null) {
+                setSelectNative(all[0], v3);
+                mf = true;
+              }
+            }
+            if (!df) {
+              const v3 = findOpt(all[1], d3, String(d3));
+              if (v3 !== null) {
+                setSelectNative(all[1], v3);
+                df = true;
+              }
+            }
+            if (!yf) {
+              const v3 = findOpt(all[2], y2, String(y2));
+              if (v3 !== null) {
+                setSelectNative(all[2], v3);
+                yf = true;
               }
             }
           }
-          if (lbl.includes("year")) {
-            for (const opt of Array.from(sel.options)) {
-              if (opt.value === String(y2) || opt.text === String(y2)) {
-                sel.value = opt.value;
-                sel.dispatchEvent(new Event("change", { bubbles: true }));
-                break;
-              }
-            }
+          return { mf, df, yf };
+        }, month, mName, day, year);
+        dobFilled = dobResult.mf && dobResult.df && dobResult.yf;
+        step(`EB: select DOB fill \u2014 month:${dobResult.mf} day:${dobResult.df} year:${dobResult.yf} \u2192 filled:${dobFilled}`);
+      }
+      if (!dobFilled) {
+        const dobInputHandle = await page.$([
+          'input[placeholder*="Birthday" i]',
+          'input[aria-label*="Birthday" i]',
+          'input[placeholder*="birth" i]',
+          'input[aria-label*="birth" i]',
+          'input[placeholder*="MM/DD" i]',
+          'input[placeholder*="DD/MM" i]',
+          'input[placeholder*="date" i]',
+          // Broad fallback: first visible text-like input on the page
+          'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="password"])'
+        ].join(", ")).catch(() => null);
+        if (dobInputHandle) {
+          await dobInputHandle.click({ clickCount: 3 });
+          await delay(200);
+          await page.keyboard.down("Control");
+          await page.keyboard.press("a");
+          await page.keyboard.up("Control");
+          await delay(100);
+          await page.keyboard.type(dateStr, { delay: 80 });
+          await delay(400);
+          const actualVal = await page.evaluate((el) => el.value, dobInputHandle).catch(() => "?");
+          step(`EB: typed date "${dateStr}" into first visible input \u2014 field now shows "${actualVal}"`);
+          dobFilled = actualVal.replace(/\D/g, "").length >= 6;
+          if (!dobFilled) {
+            step(`EB: WARNING \u2014 field value "${actualVal}" looks wrong after typing, will try Next anyway`);
+            dobFilled = true;
           }
+        } else {
+          step("EB: WARNING \u2014 no input element found on birthday page at all");
         }
-        for (const inp of Array.from(document.querySelectorAll("input"))) {
-          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || "").toLowerCase();
-          if (lbl.includes("month")) {
-            inp.value = String(m2);
-            inp.dispatchEvent(new Event("input", { bubbles: true }));
-            inp.dispatchEvent(new Event("change", { bubbles: true }));
-          } else if (lbl.includes("day")) {
-            inp.value = String(d3);
-            inp.dispatchEvent(new Event("input", { bubbles: true }));
-            inp.dispatchEvent(new Event("change", { bubbles: true }));
-          } else if (lbl.includes("year")) {
-            inp.value = String(y2);
-            inp.dispatchEvent(new Event("input", { bubbles: true }));
-            inp.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        }
-      }, month, MONTHS[month] ?? "", day, year);
-      await delay(600);
+      }
+      await delay(400);
       step("EB: birthday filled \u2713");
       await page.evaluate(() => {
         for (const btn of Array.from(document.querySelectorAll('button, [role="button"]'))) {
@@ -162099,7 +159182,7 @@ async function createInstagramAccountViaEBForm(params) {
           } catch {
           }
           try {
-            fs2.rmSync(s.tmpDataDir, { recursive: true, force: true });
+            fs3.rmSync(s.tmpDataDir, { recursive: true, force: true });
           } catch {
           }
         }
@@ -162230,7 +159313,7 @@ async function submitSignupCodeViaEB(sessionId, code) {
       } catch {
       }
       try {
-        fs2.rmSync(tmpDataDir, { recursive: true, force: true });
+        fs3.rmSync(tmpDataDir, { recursive: true, force: true });
       } catch {
       }
       return { status: "success", steps, sessionCookies: cookieStrings };
@@ -162303,7 +159386,7 @@ init_hikerApiClient();
 init_imageAlteration();
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
-import * as fs3 from "fs";
+import * as fs4 from "fs";
 function mediaIdToShortcode(id) {
   const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
   const numericPart = id.split("_")[0];
@@ -162342,14 +159425,14 @@ function igErrMsg(e) {
 function randInt2(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-function sleep(ms) {
+function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 async function sleepInterruptible(ms, stop) {
   const chunk = 1e4;
   const end = Date.now() + ms;
   while (!stop.stopped && Date.now() < end) {
-    await sleep(Math.min(chunk, end - Date.now()));
+    await sleep2(Math.min(chunk, end - Date.now()));
   }
 }
 function todayStr() {
@@ -162364,7 +159447,7 @@ function engineLog(level, msg) {
 `;
   process.stderr.write(line);
   try {
-    fs3.appendFileSync(ENGINE_LOG_FILE, line);
+    fs4.appendFileSync(ENGINE_LOG_FILE, line);
   } catch (_2) {
   }
 }
@@ -162680,10 +159763,6 @@ var AutomationEngine = class {
       dailyDate: todayStr(),
       hourlyCount: 0,
       hourlyHour: hourStr(),
-      actionDailyCount: {},
-      actionDailyDate: todayStr(),
-      actionHourlyCount: {},
-      actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: true,
@@ -162718,7 +159797,7 @@ var AutomationEngine = class {
           }
           const startupEnd = Date.now() + waitMs;
           while (!state.stop.stopped && Date.now() < startupEnd && !this.followForceRun.has(profile.id)) {
-            await sleep(1e3);
+            await sleep2(1e3);
           }
           this.followForceRun.delete(profile.id);
           state.nextFollowAt = 0;
@@ -162737,34 +159816,34 @@ var AutomationEngine = class {
         }
         if (freshProfile.accountStatus === "bad_password") {
           engineLog("WARN", `@${freshProfile.username}: bad_password \u2014 cannot authenticate, pausing 10min (update the password to resume)`);
-          await sleep(10 * 6e4);
+          await sleep2(10 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "logged_out") {
           engineLog("WARN", `@${freshProfile.username}: logged_out \u2014 session invalid, pausing 5min (re-verify the account to resume)`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
           engineLog("WARN", `@${freshProfile.username}: captcha/checkpoint pending \u2014 pausing 5min`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "pending") {
           engineLog("WARN", `@${freshProfile.username}: account not yet verified via browser \u2014 pausing 5min (run Verify Credentials to start automation)`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
           engineLog("WARN", `@${freshProfile.username}: account status is "${freshProfile.accountStatus}" \u2014 pausing 5min before re-check`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.activeTimerEnabled && freshProfile.activeTimerStart && freshProfile.activeTimerEnd) {
           if (!isWithinActiveWindow(freshProfile.activeTimerStart, freshProfile.activeTimerEnd)) {
             const waitMin = minutesUntilWindowOpen(freshProfile.activeTimerStart);
             engineLog("INFO", `@${freshProfile.username}: outside active window (${freshProfile.activeTimerStart}\u2013${freshProfile.activeTimerEnd}) \u2014 sleeping ${waitMin}min`);
-            await sleep(waitMin * 6e4);
+            await sleep2(waitMin * 6e4);
             continue;
           }
         }
@@ -162801,7 +159880,7 @@ var AutomationEngine = class {
                   (sa.autoStartUnfollowAfterMax ?? 135) * 6e4
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling unfollow tool in ${Math.round(delayMs / 6e4)}min`);
-                await sleep(delayMs);
+                await sleep2(delayMs);
               }
               const tools22 = await storage.getToolsByProfile(freshProfile.id);
               const unfollowTool2 = tools22.find((t2) => t2.type === "unfollow");
@@ -162823,7 +159902,7 @@ var AutomationEngine = class {
         engineLog("INFO", `@${freshProfile.username}: next follow session in ${Math.round(waitMs / 6e4)}min (Run Now will skip this wait)`);
         const endAt = Date.now() + waitMs;
         while (!state.stop.stopped && Date.now() < endAt && !this.followForceRun.has(freshProfile.id)) {
-          await sleep(1e3);
+          await sleep2(1e3);
         }
         this.followForceRun.delete(freshProfile.id);
         state.nextFollowAt = 0;
@@ -162848,10 +159927,6 @@ ${err?.stack ?? ""}`);
       dailyDate: todayStr(),
       hourlyCount: 0,
       hourlyHour: hourStr(),
-      actionDailyCount: {},
-      actionDailyDate: todayStr(),
-      actionHourlyCount: {},
-      actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       // run immediately on first tick
@@ -162947,10 +160022,6 @@ ${err?.stack ?? ""}`);
       dailyDate: todayStr(),
       hourlyCount: 0,
       hourlyHour: hourStr(),
-      actionDailyCount: {},
-      actionDailyDate: todayStr(),
-      actionHourlyCount: {},
-      actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -162984,20 +160055,20 @@ ${err?.stack ?? ""}`);
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") {
           engineLog("WARN", `@${freshProfile.username}: bad_password \u2014 pausing 10min`);
-          await sleep(10 * 6e4);
+          await sleep2(10 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "logged_out") {
           engineLog("WARN", `@${freshProfile.username}: logged_out \u2014 pausing 5min`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
@@ -163028,7 +160099,7 @@ ${err?.stack ?? ""}`);
                   (sa.autoStartFollowAfterMax ?? 120) * 6e4
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling follow tool in ${Math.round(delayMs / 6e4)}min`);
-                await sleep(delayMs);
+                await sleep2(delayMs);
               }
               const tools22 = await storage.getToolsByProfile(freshProfile.id);
               const followTool2 = tools22.find((t2) => t2.type === "follow");
@@ -163067,10 +160138,6 @@ ${err?.stack ?? ""}`);
       dailyDate: todayStr(),
       hourlyCount: 0,
       hourlyHour: hourStr(),
-      actionDailyCount: {},
-      actionDailyDate: todayStr(),
-      actionHourlyCount: {},
-      actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -163102,20 +160169,20 @@ ${err?.stack ?? ""}`);
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") {
           engineLog("WARN", `@${freshProfile.username}: bad_password \u2014 pausing 10min`);
-          await sleep(10 * 6e4);
+          await sleep2(10 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "logged_out") {
           engineLog("WARN", `@${freshProfile.username}: logged_out \u2014 pausing 5min`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
@@ -163154,10 +160221,6 @@ ${err?.stack ?? ""}`);
       dailyDate: todayStr(),
       hourlyCount: 0,
       hourlyHour: hourStr(),
-      actionDailyCount: {},
-      actionDailyDate: todayStr(),
-      actionHourlyCount: {},
-      actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
@@ -163197,20 +160260,20 @@ ${err?.stack ?? ""}`);
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") {
           engineLog("WARN", `@${freshProfile.username}: bad_password \u2014 pausing 10min`);
-          await sleep(10 * 6e4);
+          await sleep2(10 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "logged_out") {
           engineLog("WARN", `@${freshProfile.username}: logged_out \u2014 pausing 5min`);
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
-          await sleep(5 * 6e4);
+          await sleep2(5 * 6e4);
           continue;
         }
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
@@ -163456,18 +160519,12 @@ ${err?.stack ?? ""}`);
             console.log(`[engine] @${profile.username}: Contact DM ABD auto-dismissed \u2713 \u2014 skipping this message, continuing`);
             this.logAction(profile.id, tool.id, "abd_dismissed", msg.instagramUsername, "", "", "ok", "Automated Behavior warning auto-dismissed");
             await storage.updateContactPendingMessage(msg.id, { status: "failed" });
-            await sleep(5e3);
+            await sleep2(5e3);
             continue;
           }
           await storage.updateProfile(profile.id, { accountStatus: "valid" });
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "skipped", "Instagram action-blocked contact DM");
           await storage.updateContactPendingMessage(msg.id, { status: "failed" });
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-            const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
-            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-            this.logAction(profile.id, tool.id, "action_suspended", msg.instagramUsername, "", "", "suspended", `Tool stopped \u2014 blocked by Instagram. Suspended until ${_untilStr}`);
-          }
           break;
         }
         if (result) {
@@ -163500,7 +160557,7 @@ ${err?.stack ?? ""}`);
           );
           await storage.incrementStat(profile.id, "dm");
           console.log(`[engine] @${profile.username}: \u{1F4E9} contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
-          if (sent < queue.length) await sleep(randInt2(delayMin, delayMax));
+          if (sent < queue.length) await sleep2(randInt2(delayMin, delayMax));
         } else {
           console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block, will retry)`);
           this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed (will retry)");
@@ -163773,27 +160830,6 @@ ${err?.stack ?? ""}`);
     }).catch(() => {
     });
   }
-  // ── Per-action daily/hourly counter helpers ───────────────────────────────
-  actionDaily(state, key) {
-    if (state.actionDailyDate !== todayStr()) {
-      state.actionDailyCount = {};
-      state.actionDailyDate = todayStr();
-    }
-    return state.actionDailyCount[key] ?? 0;
-  }
-  actionHourly(state, key) {
-    if (state.actionHourlyHour !== hourStr()) {
-      state.actionHourlyCount = {};
-      state.actionHourlyHour = hourStr();
-    }
-    return state.actionHourlyCount[key] ?? 0;
-  }
-  bumpAction(state, key) {
-    this.actionDaily(state, key);
-    this.actionHourly(state, key);
-    state.actionDailyCount[key] = (state.actionDailyCount[key] ?? 0) + 1;
-    state.actionHourlyCount[key] = (state.actionHourlyCount[key] ?? 0) + 1;
-  }
   // ── Action block / suspension helpers ────────────────────────────────────
   // Returns true if the given action is currently suspended due to a block.
   isActionSuspended(state, key) {
@@ -163844,193 +160880,6 @@ ${err?.stack ?? ""}`);
       this.logAction(profileId, toolId, "action_suspended", targetUsername, sourceValue, sourceType, "suspended", msg);
     }
   }
-  // Returns true if the action should fire before the follow, respecting all limits.
-  // chanceMin/Max  = overall % probability to trigger this action at all
-  // beforeMin/Max  = of those triggers, % to run BEFORE the follow
-  // maxDayMin/Max  = daily cap (max number of times per day, randomised each check)
-  // maxHourMin/Max = hourly cap
-  shouldDoAction(state, key, s, chanceMinKey, chanceMaxKey, beforeMinKey, beforeMaxKey, maxDayMinKey, maxDayMaxKey, maxHourMinKey, maxHourMaxKey) {
-    const chance2 = randInt2(s[chanceMinKey] ?? 0, s[chanceMaxKey] ?? 0);
-    if (chance2 <= 0 || Math.random() * 100 >= chance2) return false;
-    const maxDay = randInt2(s[maxDayMinKey] ?? 0, s[maxDayMaxKey] ?? 0);
-    if (maxDay > 0 && this.actionDaily(state, key) >= maxDay) return false;
-    const maxHour = randInt2(s[maxHourMinKey] ?? 0, s[maxHourMaxKey] ?? 0);
-    if (maxHour > 0 && this.actionHourly(state, key) >= maxHour) return false;
-    const beforePct = randInt2(s[beforeMinKey] ?? 0, s[beforeMaxKey] ?? 0);
-    if (beforePct <= 0 || Math.random() * 100 >= beforePct) return false;
-    return true;
-  }
-  // ── Pre-follow action variations (like, stories, reels, highlights) ────────
-  async preFollowActions(profile, tool, client, user, source, s, state, hikerClient = null) {
-    const uname = user.username;
-    const uid = user.pk;
-    if (!this.isActionSuspended(state, "like") && this.shouldDoAction(
-      state,
-      "like",
-      s,
-      "likeChanceMin",
-      "likeChanceMax",
-      "likeBeforeMin",
-      "likeBeforeMax",
-      "likeMaxPerDayMin",
-      "likeMaxPerDayMax",
-      "likeMaxPerHourMin",
-      "likeMaxPerHourMax"
-    )) {
-      const likeCount = randInt2(s.likeProcessMin ?? 1, s.likeProcessMax ?? 1);
-      for (let i2 = 0; i2 < likeCount; i2++) {
-        try {
-          const mediaId = hikerClient ? await hikerClient.getUserRecentMediaId(uid) : await client.getUserRecentMediaId(uid);
-          if (mediaId) {
-            const liked = await client.likeMedia(mediaId, uname);
-            if (liked === "blocked") {
-              await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
-              const abdOk = await client.tryDismissABD();
-              if (abdOk) {
-                await storage.updateProfile(profile.id, { accountStatus: "valid" });
-                await storage.incrementStat(profile.id, "abd");
-                console.log(`[engine] @${profile.username}: Like ABD auto-dismissed \u2713 \u2014 continuing`);
-                this.logAction(profile.id, tool.id, "abd_dismissed", uname, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed");
-                await sleep(5e3);
-                break;
-              }
-              await storage.updateProfile(profile.id, { accountStatus: "valid" });
-              this.recordActionBlock(state, profile.id, tool.id, "like", "Like", uname, source.value, source.type);
-              break;
-            } else if (liked) {
-              this.bumpAction(state, "like");
-              await storage.incrementStat(profile.id, "like");
-              console.log(`[engine] @${profile.username}: \u2665 liked post of @${uname} (${i2 + 1}/${likeCount})`);
-              this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "ok", `Liked post (${i2 + 1}/${likeCount})`);
-              await sleep(randInt2((s.likeDelayMin ?? 2) * 1e3, (s.likeDelayMax ?? 6) * 1e3));
-            }
-          }
-        } catch (e) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] like @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    } else if (this.isActionSuspended(state, "like")) {
-      console.log(`[engine] @${profile.username}: like suspended (${this.suspensionRemaining(state, "like")} remaining) \u2014 skipping`);
-    }
-    if (!this.isActionSuspended(state, "viewStories") && this.shouldDoAction(
-      state,
-      "viewStories",
-      s,
-      "viewStoriesChanceMin",
-      "viewStoriesChanceMax",
-      "viewStoriesBeforeMin",
-      "viewStoriesBeforeMax",
-      "viewStoriesMaxPerDayMin",
-      "viewStoriesMaxPerDayMax",
-      "viewStoriesMaxPerHourMin",
-      "viewStoriesMaxPerHourMax"
-    )) {
-      const storyCount = randInt2(s.viewStoriesProcessMin ?? 1, s.viewStoriesProcessMax ?? 3);
-      for (let i2 = 0; i2 < storyCount; i2++) {
-        try {
-          const ok = await client.viewStories(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewStories");
-            await storage.incrementStat(profile.id, "story");
-            console.log(`[engine] @${profile.username}: \u{1F4D6} viewed stories of @${uname} (${i2 + 1}/${storyCount})`);
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "ok", `Stories viewed (${i2 + 1}/${storyCount})`);
-            await sleep(randInt2((s.viewStoriesDelayMin ?? 2) * 1e3, (s.viewStoriesDelayMax ?? 6) * 1e3));
-          } else break;
-        } catch (e) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] stories @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-    if (!this.isActionSuspended(state, "viewReels") && this.shouldDoAction(
-      state,
-      "viewReels",
-      s,
-      "viewReelsChanceMin",
-      "viewReelsChanceMax",
-      "viewReelsBeforeMin",
-      "viewReelsBeforeMax",
-      "viewReelsMaxPerDayMin",
-      "viewReelsMaxPerDayMax",
-      "viewReelsMaxPerHourMin",
-      "viewReelsMaxPerHourMax"
-    )) {
-      const reelCount = randInt2(s.viewReelsProcessMin ?? 1, s.viewReelsProcessMax ?? 2);
-      for (let i2 = 0; i2 < reelCount; i2++) {
-        try {
-          const ok = await client.viewReels(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewReels");
-            console.log(`[engine] @${profile.username}: \u{1F3AC} viewed reels of @${uname} (${i2 + 1}/${reelCount})`);
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "ok", `Reels viewed (${i2 + 1}/${reelCount})`);
-            await sleep(randInt2((s.viewReelsDelayMin ?? 2) * 1e3, (s.viewReelsDelayMax ?? 6) * 1e3));
-          } else break;
-        } catch (e) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] reels @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-    if (!this.isActionSuspended(state, "viewHighlights") && this.shouldDoAction(
-      state,
-      "viewHighlights",
-      s,
-      "viewHighlightsChanceMin",
-      "viewHighlightsChanceMax",
-      "viewHighlightsBeforeMin",
-      "viewHighlightsBeforeMax",
-      "viewHighlightsMaxPerDayMin",
-      "viewHighlightsMaxPerDayMax",
-      "viewHighlightsMaxPerHourMin",
-      "viewHighlightsMaxPerHourMax"
-    )) {
-      const highlightCount = randInt2(s.viewHighlightsProcessMin ?? 1, s.viewHighlightsProcessMax ?? 2);
-      for (let i2 = 0; i2 < highlightCount; i2++) {
-        try {
-          const ok = await client.viewHighlights(uid, uname);
-          if (ok) {
-            this.bumpAction(state, "viewHighlights");
-            console.log(`[engine] @${profile.username}: \u2B50 viewed highlights of @${uname} (${i2 + 1}/${highlightCount})`);
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "ok", `Highlights viewed (${i2 + 1}/${highlightCount})`);
-            await sleep(randInt2((s.viewHighlightsDelayMin ?? 2) * 1e3, (s.viewHighlightsDelayMax ?? 6) * 1e3));
-          } else break;
-        } catch (e) {
-          const _em = igErrMsg(e);
-          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
-          if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
-            return true;
-          }
-          console.warn(`[engine] highlights @${uname} error: ${_em}`);
-          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", _em);
-          break;
-        }
-      }
-    }
-    return false;
-  }
   // ── Spintax resolver: {A|B|C} → picks one branch randomly ────────────────
   applySpintax(text2) {
     return text2.replace(/\{([^}]+)\}/g, (_2, group) => {
@@ -164060,7 +160909,7 @@ ${err?.stack ?? ""}`);
       const midnight = new Date(now);
       midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 0, 0);
-      await sleep(midnight.getTime() - now.getTime());
+      await sleep2(midnight.getTime() - now.getTime());
       return { unfollowed: 0 };
     }
     const client = await this.ensureClient(profile, state);
@@ -164128,13 +160977,7 @@ ${err?.stack ?? ""}`);
         attempted++;
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
-          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-            const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
-            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-            this.logAction(profile.id, tool.id, "action_suspended", fu.instagramUsername, "", "", "suspended", `Tool stopped \u2014 blocked by Instagram. Suspended until ${_untilStr}`);
-          }
+          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram automated-behaviour warning \u2014 breaking unfollow session");
           break;
         }
         if (result) {
@@ -164153,7 +160996,7 @@ ${err?.stack ?? ""}`);
           }
         }
         if (attempted < processCount && !state.stop.stopped) {
-          await sleep(randInt2(delayMin, delayMax));
+          await sleep2(randInt2(delayMin, delayMax));
         }
       } catch (e) {
         const msg = igErrMsg(e);
@@ -164186,7 +161029,7 @@ ${err?.stack ?? ""}`);
       const midnight = new Date(now);
       midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 0, 0);
-      await sleep(midnight.getTime() - now.getTime());
+      await sleep2(midnight.getTime() - now.getTime());
       return { sent: 0 };
     }
     const client = await this.ensureClient(profile, state);
@@ -164256,7 +161099,7 @@ ${err?.stack ?? ""}`);
             await storage.incrementStat(profile.id, "abd");
             console.log(`[engine] @${profile.username}: DM ABD auto-dismissed \u2713 \u2014 continuing session`);
             this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed");
-            await sleep(5e3);
+            await sleep2(5e3);
             continue;
           }
           await storage.updateProfile(profile.id, { accountStatus: "valid" });
@@ -164269,7 +161112,7 @@ ${err?.stack ?? ""}`);
           console.log(`[engine] @${profile.username}: \u2709 DM sent to @${user.username} [${sent}/${processCount}]`);
           this.logAction(profile.id, tool.id, "dm", user.username, source.value, source.type, "ok", `DM sent [${sent}/${processCount}]: "${text2.slice(0, 50)}"`);
           await storage.incrementStat(profile.id, "dm");
-          await sleep(randInt2(delayMin, delayMax));
+          await sleep2(randInt2(delayMin, delayMax));
         }
       } catch (e) {
         const msg = igErrMsg(e);
@@ -164332,6 +161175,14 @@ ${err?.stack ?? ""}`);
     if (!status) return null;
     console.error(`[engine] applyAccountLevelError profileId=${profileId} status=${status} raw=${rawError.slice(0, 400)}`);
     await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
+    if (status === "banned" || status === "suspended") {
+      await storage.incrementStat(profileId, "banned").catch(() => {
+      });
+    }
+    if (status === "captcha") {
+      await storage.incrementStat(profileId, "captcha").catch(() => {
+      });
+    }
     if (state && status === "logged_out") state.client = null;
     if (status === "logged_out" && toolId !== void 0) {
       this.logAction(profileId, toolId, "logged_out", "", "", "", "error", rawError.slice(0, 300));
@@ -164583,7 +161434,7 @@ ${err?.stack ?? ""}`);
                 const vpPct = randInt2(vpPctMin, vpPctMax);
                 if (Math.random() * 100 >= vpPct) continue;
                 try {
-                  await client.visitUserProfile(item.userId);
+                  await client.visitUserProfile(item.userId, "feed_timeline");
                   console.log(`[engine] @${profile.username}: \u{1F464} visited profile of @${item.username}`);
                   this.logAction(profile.id, tool.id, "visit_profile", item.username, "", "profile", "ok", `Visited @${item.username}'s profile`);
                 } catch (e) {
@@ -164817,6 +161668,7 @@ ${err?.stack ?? ""}`);
                 }
                 console.log(`[engine] @${profile.username}: \u{1F501} uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
+                await storage.incrementStat(profile.id, "repost");
                 uploadedCount++;
                 if (deleteAfterUpload) {
                   try {
@@ -164900,6 +161752,7 @@ ${err?.stack ?? ""}`);
               });
               console.log(`[engine] @${profile.username}: \u{1F501} reposted ${item.mediaId} from @${sourceUsername} \u2192 own post ${postedShortcode} (alteration=${level}) [${repostedCount + 1}/${targetCount}]`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level}) [${repostedCount + 1}/${targetCount}]`);
+              await storage.incrementStat(profile.id, "repost");
               repostedCount++;
             } else {
               console.warn(`[engine] @${profile.username}: \u{1F501} upload failed for ${item.mediaId}`);
@@ -165017,6 +161870,7 @@ ${err?.stack ?? ""}`);
     const processCount = randInt2(s.processMin ?? 5, s.processMax ?? 15);
     const followMin = (s.delayAfterFollowMin ?? 5) * 1e3;
     const followMax = (s.delayAfterFollowMax ?? 15) * 1e3;
+    const maxExtraRounds = randInt2(s.abortScrapeAfterMin ?? 10, s.abortScrapeAfterMax ?? 20);
     const globalSettings2 = await storage.getGlobalSettings();
     const globalSkipFollowed = globalSettings2.skipFollowedUsers === "true";
     const globalSkipSkipped = globalSettings2.skipAlreadySkippedUsers === "true";
@@ -165034,12 +161888,12 @@ ${err?.stack ?? ""}`);
       const midnight = new Date(now);
       midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 0, 0);
-      await sleep(midnight.getTime() - now.getTime());
+      await sleep2(midnight.getTime() - now.getTime());
       return zero;
     }
     if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) {
       console.log(`[engine] @${profile.username}: hourly limit (${maxPerHour}) hit \u2014 sleeping 1h`);
-      await sleep(36e5);
+      await sleep2(36e5);
       return zero;
     }
     const client = await this.ensureClient(profile, state);
@@ -165052,7 +161906,7 @@ ${err?.stack ?? ""}`);
     if (!sources2.length) {
       engineLog("WARN", `@${profile.username}: follow tool has no sources \u2014 add hashtags or accounts in Follow Tool settings`);
       this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured  add hashtag or account sources in Follow Tool settings");
-      await sleep(3e5);
+      await sleep2(3e5);
       return zero;
     }
     const source = this.pickSource(sources2);
@@ -165146,19 +162000,60 @@ ${err?.stack ?? ""}`);
     }
     engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
     const injectSuggestedEnabled = !!s.injectSuggestedEnabled;
-    const injectSuggestedMin = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 40));
-    const injectSuggestedMax = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 60));
+    const injectSuggestedMin = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 1));
+    const injectSuggestedMax = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 1));
     const injectSearchEnabled = !!s.injectSearchEnabled;
-    const injectSearchMin = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
-    const injectSearchMax = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
+    const injectSearchMin = Math.max(0, Math.min(100, s.injectSearchMin ?? 1));
+    const injectSearchMax = Math.max(0, Math.min(100, s.injectSearchMax ?? 1));
     const injectProfileBrowsingEnabled = !!s.injectProfileBrowsingEnabled;
-    const injectProfileBrowsingMin = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
-    const injectProfileBrowsingMax = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
+    const injectProfileBrowsingMin = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 1));
+    const injectProfileBrowsingMax = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 1));
     const injectProfileBrowsingFeedMin = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
     const injectProfileBrowsingFeedMax = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
     const injectProfileBrowsingPostPctMin = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
     const injectProfileBrowsingPostPctMax = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
     const injectProfileBrowsingBeforeFollow = !!s.injectProfileBrowsingBeforeFollow;
+    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? 1));
+    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? 1));
+    const injectProfileBrowsingAbandonFollow = !!s.injectProfileBrowsingAbandonFollow;
+    const injectProfileBrowsingAbandonPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
+    const injectProfileBrowsingAbandonPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMax ?? 20));
+    const injectProfileBrowsingLikePctMin = Math.max(0, s.injectProfileBrowsingLikePctMin ?? 0);
+    const injectProfileBrowsingLikePctMax = Math.max(0, s.injectProfileBrowsingLikePctMax ?? 0);
+    const injectProfileBrowsingSaveMediaPctMin = Math.max(0, s.injectProfileBrowsingSaveMediaPctMin ?? 0);
+    const injectProfileBrowsingSaveMediaPctMax = Math.max(0, s.injectProfileBrowsingSaveMediaPctMax ?? 0);
+    const injectProfileBrowsingWatchStoriesPctMin = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMin ?? 0);
+    const injectProfileBrowsingWatchStoriesPctMax = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMax ?? 0);
+    const injectProfileBrowsingViewHighlightsPctMin = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMin ?? 0);
+    const injectProfileBrowsingViewHighlightsPctMax = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMax ?? 0);
+    const injectProfileBrowsingCommentPctMin = Math.max(0, s.injectProfileBrowsingCommentPctMin ?? 0);
+    const injectProfileBrowsingCommentPctMax = Math.max(0, s.injectProfileBrowsingCommentPctMax ?? 0);
+    const injectProfileBrowsingCommentText = s.injectProfileBrowsingCommentText ?? "";
+    const sampleSlots = (n, lo, hi) => {
+      const out = /* @__PURE__ */ new Set();
+      if (n <= 0 || hi < lo) return out;
+      const pool = hi - lo + 1;
+      const count = Math.min(n, pool);
+      const arr = Array.from({ length: pool }, (_2, i2) => lo + i2);
+      for (let i2 = 0; i2 < count; i2++) {
+        const j = i2 + Math.floor(Math.random() * (pool - i2));
+        [arr[i2], arr[j]] = [arr[j], arr[i2]];
+      }
+      for (let i2 = 0; i2 < count; i2++) out.add(arr[i2]);
+      return out;
+    };
+    const suggestedPct = randInt2(injectSuggestedMin, injectSuggestedMax);
+    const injectSuggestedSlots = injectSuggestedEnabled ? sampleSlots(Math.round(processCount * suggestedPct / 100), 1, Math.max(1, processCount - 1)) : /* @__PURE__ */ new Set();
+    const searchMidPct = randInt2(injectSearchMin, injectSearchMax);
+    const injectSearchMidSlots = injectSearchEnabled ? sampleSlots(Math.round(processCount * searchMidPct / 100), 1, Math.max(1, processCount - 1)) : /* @__PURE__ */ new Set();
+    const browsePct = randInt2(injectProfileBrowsingMin, injectProfileBrowsingMax);
+    const injectBrowseSlots = injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow ? sampleSlots(Math.round(processCount * browsePct / 100), 0, Math.max(0, processCount - 1)) : /* @__PURE__ */ new Set();
+    if (injectSuggestedEnabled)
+      engineLog("INFO", `@${profile.username}: getSuggestedUsers scheduled for ${injectSuggestedSlots.size}/${processCount} follow slots (${suggestedPct}%)`);
+    if (injectSearchEnabled)
+      engineLog("INFO", `@${profile.username}: searchByUsername mid-session scheduled for ${injectSearchMidSlots.size}/${processCount} follow slots (${searchMidPct}%)`);
+    if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+      engineLog("INFO", `@${profile.username}: browse-before-follow scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
     if (injectSearchEnabled && candidates.length > 0) {
       const searchQuery = source.type === "target_followers" ? source.value.replace(/^@/, "") : candidates[0]?.username ?? source.value;
       if (searchQuery) {
@@ -165173,9 +162068,9 @@ ${err?.stack ?? ""}`);
     let hitHardLimit = false;
     const browseTargetProfile = async (label, targetUser) => {
       try {
-        await client.visitUserProfile(targetUser.pk);
+        await client.visitUserProfile(targetUser.pk, "profile");
         engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
-        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `Visited profile`);
       } catch {
       }
       const feedCount = randInt2(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
@@ -165183,7 +162078,7 @@ ${err?.stack ?? ""}`);
       try {
         profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
         engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
-        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `[Profile Browse] Scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
       } catch {
       }
       if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
@@ -165193,7 +162088,83 @@ ${err?.stack ?? ""}`);
             try {
               await client.viewFeedPost(post.mediaId);
               engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
-              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `[Profile Browse] Opened post from @${targetUser.username}'s profile`);
+              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
+            } catch {
+            }
+          }
+        }
+      }
+      if (injectProfileBrowsingLikePctMax > 0 && profilePosts.length > 0) {
+        const likePct = randInt2(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < likePct) {
+            try {
+              const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
+              if (likeResult && likeResult !== "blocked") {
+                engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
+                this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
+                await storage.incrementStat(profile.id, "like");
+              }
+            } catch {
+            }
+          }
+        }
+      }
+      if (injectProfileBrowsingSaveMediaPctMax > 0 && profilePosts.length > 0) {
+        const savePct = randInt2(injectProfileBrowsingSaveMediaPctMin, injectProfileBrowsingSaveMediaPctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < savePct) {
+            try {
+              const saved = await client.saveMedia(post.mediaId);
+              if (saved) {
+                engineLog("INFO", `@${profile.username}: [${label}] saved post ${post.shortcode} from @${targetUser.username}`);
+                this.logAction(profile.id, tool.id, "save_media", targetUser.username, post.shortcode, "post", "ok", `Saved post from profile browse`);
+              }
+            } catch {
+            }
+          }
+        }
+      }
+      if (injectProfileBrowsingWatchStoriesPctMax > 0) {
+        const storiesPct = randInt2(injectProfileBrowsingWatchStoriesPctMin, injectProfileBrowsingWatchStoriesPctMax);
+        if (Math.random() * 100 < storiesPct) {
+          try {
+            const storiesUrl = await client.viewStories(targetUser.pk, targetUser.username);
+            if (storiesUrl) {
+              engineLog("INFO", `@${profile.username}: [${label}] watched stories of @${targetUser.username}`);
+              this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
+              await storage.incrementStat(profile.id, "story");
+            }
+          } catch {
+          }
+        }
+      }
+      if (injectProfileBrowsingViewHighlightsPctMax > 0) {
+        const highlightsPct = randInt2(injectProfileBrowsingViewHighlightsPctMin, injectProfileBrowsingViewHighlightsPctMax);
+        if (Math.random() * 100 < highlightsPct) {
+          try {
+            const hlUrl = await client.viewHighlights(targetUser.pk, targetUser.username);
+            if (hlUrl) {
+              engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
+              this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
+            }
+          } catch {
+          }
+        }
+      }
+      if (injectProfileBrowsingCommentPctMax > 0 && profilePosts.length > 0 && injectProfileBrowsingCommentText.trim()) {
+        const commentPct = randInt2(injectProfileBrowsingCommentPctMin, injectProfileBrowsingCommentPctMax);
+        if (Math.random() * 100 < commentPct) {
+          const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
+          const commentText = this.spin(injectProfileBrowsingCommentText).trim();
+          if (commentText) {
+            try {
+              const commented = await client.postComment(post.mediaId, commentText);
+              if (commented) {
+                engineLog("INFO", `@${profile.username}: [${label}] commented on post ${post.shortcode} of @${targetUser.username}: "${commentText}"`);
+                this.logAction(profile.id, tool.id, "comment", targetUser.username, post.shortcode, "post", "ok", `Commented: ${commentText}`);
+                await storage.incrementStat(profile.id, "comment");
+              }
             } catch {
             }
           }
@@ -165214,7 +162185,7 @@ ${err?.stack ?? ""}`);
       if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) {
         console.log(`[engine] @${profile.username}: hourly cap hit mid-session`);
         hitHardLimit = true;
-        await sleep(36e5);
+        await sleep2(36e5);
         break;
       }
       {
@@ -165262,43 +162233,35 @@ ${err?.stack ?? ""}`);
         hitHardLimit = true;
         break;
       }
-      if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) {
-        hitHardLimit = true;
-        break;
-      }
       if (followed > 0) {
         let suggestedFired = false;
-        if (injectSuggestedEnabled) {
-          const threshold = randInt2(injectSuggestedMin, injectSuggestedMax);
-          if (Math.random() * 100 < threshold) {
-            try {
-              await client.getSuggestedUsers();
-              engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
-              suggestedFired = true;
-            } catch {
-            }
+        if (injectSuggestedEnabled && injectSuggestedSlots.has(followed)) {
+          try {
+            await client.getSuggestedUsers();
+            engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
+            suggestedFired = true;
+          } catch (e) {
+            engineLog("WARN", `@${profile.username}: getSuggestedUsers failed (non-critical): ${e?.message ?? e}`);
           }
         }
-        if (!suggestedFired && injectSearchEnabled) {
-          const threshold = randInt2(injectSearchMin, injectSearchMax);
-          if (Math.random() * 100 < threshold) {
-            try {
-              await client.searchUserByUsername(user.username);
-              engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
-            } catch {
-            }
-          }
-        }
-        if (injectProfileBrowsingEnabled) {
-          const threshold = randInt2(injectProfileBrowsingMin, injectProfileBrowsingMax);
-          if (Math.random() * 100 < threshold) {
-            engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
-            await browseTargetProfile("between-follows inject", user);
+        if (!suggestedFired && injectSearchEnabled && injectSearchMidSlots.has(followed)) {
+          try {
+            await client.searchUserByUsername(user.username);
+            engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
+          } catch {
           }
         }
       }
-      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
+      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow && injectBrowseSlots.has(followed)) {
         await browseTargetProfile("pre-follow browse", user);
+        if (injectProfileBrowsingAbandonFollow) {
+          const abandonThreshold = randInt2(injectProfileBrowsingAbandonPctMin, injectProfileBrowsingAbandonPctMax);
+          if (Math.random() * 100 < abandonThreshold) {
+            engineLog("INFO", `@${profile.username}: abandoned follow @${user.username} after profile browse (abandon chance fired)`);
+            skipped++;
+            continue;
+          }
+        }
       }
       let result;
       try {
@@ -165347,7 +162310,8 @@ ${err?.stack ?? ""}`);
         }
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
-          if (reason.includes("feedback_required") && state.client) {
+          const isFeedbackRequired = reason.includes("feedback_required");
+          if (isFeedbackRequired && state.client) {
             await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
             const abdOk = await state.client.tryDismissABD();
             if (abdOk) {
@@ -165355,13 +162319,13 @@ ${err?.stack ?? ""}`);
               await storage.incrementStat(profile.id, "abd");
               console.log(`[engine] @${profile.username}: ABD auto-dismissed \u2713 \u2014 continuing session`);
               this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed \u2014 session continues");
-              await sleep(5e3);
+              await sleep2(5e3);
               continue;
             }
             await storage.updateProfile(profile.id, { accountStatus: "valid" });
           }
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
-          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+          if (!isFeedbackRequired && s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
             const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
             const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
             await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
@@ -165370,16 +162334,8 @@ ${err?.stack ?? ""}`);
           hitHardLimit = true;
           break;
         }
-        if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-          const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
-          const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-          await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-          this.logAction(profile.id, tool.id, "action_suspended", user.username, source.value, source.type, "suspended", `Tool stopped \u2014 blocked by Instagram. Suspended until ${_untilStr}`);
-          hitHardLimit = true;
-          break;
-        }
         if (followed + blocked >= processCount) break;
-        await sleep(randInt2(followMin, followMax));
+        await sleep2(randInt2(followMin, followMax));
         continue;
       }
       if (!result.ok) {
@@ -165405,7 +162361,14 @@ ${err?.stack ?? ""}`);
       this.bump(state);
       followed++;
       console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
-      await sleep(randInt2(followMin, followMax));
+      if (injectProfileBrowsingEnabled) {
+        const threshold = randInt2(injectProfileBrowsingMin, injectProfileBrowsingMax);
+        if (Math.random() * 100 < threshold) {
+          engineLog("INFO", `@${profile.username}: post-follow profile browsing for @${user.username}`);
+          await browseTargetProfile("post-follow browse", user);
+        }
+      }
+      await sleep2(randInt2(followMin, followMax));
     }
     const sameTypeSources = sources2.filter((s2) => s2.type === source.type);
     const initialSourceIdx = sameTypeSources.findIndex((s2) => s2.id === source.id);
@@ -165415,19 +162378,21 @@ ${err?.stack ?? ""}`);
     const sourceRoundCount = /* @__PURE__ */ new Map();
     if (!hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
-      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 20) {
+      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < maxExtraRounds) {
         extraRound++;
         const availableSources = sameTypeSources.filter((s2) => !exhaustedSourceIds.has(s2.id));
         if (!availableSources.length) break;
         const rescrapeSource = availableSources[(initialSourceIdx + extraRound) % availableSources.length];
         const needMore = processCount - followed;
         let moreCandidates = [];
+        let rawApiCount = -1;
         try {
           if (rescrapeSource.type === "hashtag" && hikerClient) {
             const t0 = Date.now();
             const globalCursor = await storage.getHashtagCursor(rescrapeSource.value);
             const result = await hikerClient.getHashtagUsers(rescrapeSource.value, needMore + 5, globalCursor);
             moreCandidates = result.users;
+            rawApiCount = result.users.length;
             if (result.nextCursor) {
               await storage.setHashtagCursor(rescrapeSource.value, result.nextCursor).catch(() => {
               });
@@ -165444,10 +162409,10 @@ ${err?.stack ?? ""}`);
               });
               moreCandidates = fresh;
               if (beforeDedup !== moreCandidates.length) {
-                engineLog("INFO", `@${profile.username}: hashtag dedup (rescrape round ${extraRound}) \u2014 ${beforeDedup - moreCandidates.length} already-scraped removed from #${rescrapeSource.value}`);
+                engineLog("INFO", `@${profile.username}: hashtag dedup (rescrape round ${extraRound}) \u2014 ${beforeDedup - moreCandidates.length} already-scraped removed from #${rescrapeSource.value} (${moreCandidates.length} fresh remaining)`);
               }
             }
-            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users, ${rawApiCount} raw)`, Date.now() - t0);
           } else if (rescrapeSource.type === "target_followers" && hikerClient && rescrapeSource.targetUserId) {
             if (!seenFollowerPksBySource.has(rescrapeSource.id)) {
               seenFollowerPksBySource.set(rescrapeSource.id, /* @__PURE__ */ new Set());
@@ -165474,7 +162439,9 @@ ${err?.stack ?? ""}`);
           break;
         }
         if (!moreCandidates.length) {
-          exhaustedSourceIds.add(rescrapeSource.id);
+          if (rawApiCount <= 0) {
+            exhaustedSourceIds.add(rescrapeSource.id);
+          }
           continue;
         }
         engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} #${rescrapeSource.value} \u2014 ${moreCandidates.length} new candidates (need ${needMore} more)`);
@@ -165509,10 +162476,6 @@ ${err?.stack ?? ""}`);
             hitHardLimit = true;
             break;
           }
-          if (await this.preFollowActions(profile, tool, client, user, rescrapeSource, s, state, hikerClient)) {
-            hitHardLimit = true;
-            break;
-          }
           let result;
           try {
             const sourceLabel = rescrapeSource.value ? rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value : void 0;
@@ -165540,8 +162503,9 @@ ${err?.stack ?? ""}`);
               hitHardLimit = true;
               break;
             }
-            if (reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong")) {
-              if (reason.includes("feedback_required") && state.client) {
+            const isRescrapeABD = reason.includes("feedback_required");
+            if (reason.includes("Please wait") || isRescrapeABD || reason.includes("something went wrong")) {
+              if (isRescrapeABD && state.client) {
                 await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
                 const abdOk = await state.client.tryDismissABD();
                 if (abdOk) {
@@ -165549,25 +162513,23 @@ ${err?.stack ?? ""}`);
                   await storage.incrementStat(profile.id, "abd");
                   console.log(`[engine] @${profile.username}: ABD auto-dismissed \u2713 \u2014 continuing session`);
                   this.logAction(profile.id, tool.id, "abd_dismissed", user.username, rescrapeSource.value, rescrapeSource.type, "ok", "Automated Behavior warning auto-dismissed \u2014 session continues");
-                  await sleep(5e3);
+                  await sleep2(5e3);
                   continue;
                 }
                 await storage.updateProfile(profile.id, { accountStatus: "valid" });
               }
               this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
-              hitHardLimit = true;
-              break;
-            }
-            if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
-              const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
-              const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-              await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
-              this.logAction(profile.id, tool.id, "action_suspended", user.username, rescrapeSource.value, rescrapeSource.type, "suspended", `Tool stopped \u2014 blocked by Instagram. Suspended until ${_untilStr}`);
+              if (!isRescrapeABD && s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+                const _blockedUntilMs = Date.now() + s.stopOnBlockMinutes * 6e4;
+                const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+                await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+                this.logAction(profile.id, tool.id, "action_suspended", user.username, rescrapeSource.value, rescrapeSource.type, "suspended", `Tool stopped \u2014 blocked by Instagram. Suspended until ${_untilStr}`);
+              }
               hitHardLimit = true;
               break;
             }
             if (followed + blocked >= processCount) break;
-            await sleep(randInt2(followMin, followMax));
+            await sleep2(randInt2(followMin, followMax));
             continue;
           }
           if (!result.ok) {
@@ -165583,7 +162545,7 @@ ${err?.stack ?? ""}`);
           this.bump(state);
           followed++;
           console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
-          await sleep(randInt2(followMin, followMax));
+          await sleep2(randInt2(followMin, followMax));
         }
         if (!hitHardLimit && followed === 0 && blocked >= processCount) {
           engineLog("WARN", `@${profile.username}: re-scrape aborted after round ${extraRound} \u2014 ${blocked} block(s), 0 follows (session dead or action-blocked)`);
@@ -165630,10 +162592,6 @@ ${err?.stack ?? ""}`);
         dailyDate: "",
         hourlyCount: 0,
         hourlyHour: "",
-        actionDailyCount: {},
-        actionDailyDate: "",
-        actionHourlyCount: {},
-        actionHourlyHour: "",
         actionSuspensions: {},
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,
@@ -165694,6 +162652,7 @@ ${err?.stack ?? ""}`);
       });
       console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} \u2192 ${postedShortcode}`);
       this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+      await storage.incrementStat(profileId, "repost");
       return { ok: true, message: `Reposted \u2192 instagram.com/p/${postedShortcode}` };
     } catch (e) {
       console.warn(`[engine] @${profile.username}: manual repost error: ${e?.message}`);
@@ -165884,10 +162843,6 @@ ${err?.stack ?? ""}`);
         dailyDate: todayStr(),
         hourlyCount: 0,
         hourlyHour: hourStr(),
-        actionDailyCount: {},
-        actionDailyDate: todayStr(),
-        actionHourlyCount: {},
-        actionHourlyHour: hourStr(),
         actionSuspensions: {},
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,
@@ -166397,7 +163352,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     sourceValue: "",
     sourceType: "",
     result: "ok",
-    detail: `Equinox started \u2014 ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
+    detail: `Equinox started: ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
     timestamp: SERVER_START
   }).catch(() => {
   });
@@ -166517,35 +163472,23 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
-    const auth = proxy.username && proxy.password ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}` : "";
     const start = Date.now();
     try {
-      const https4 = await import("https");
-      let agent;
-      if (proxy.proxyType === "socks5") {
-        const { SocksProxyAgent: SocksProxyAgent2 } = await Promise.resolve().then(() => (init_dist3(), dist_exports2));
-        const proxyUrl = `socks5://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
-        agent = new SocksProxyAgent2(proxyUrl);
-      } else {
-        const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-        const proxyUrl = `http://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
-        agent = new HttpsProxyAgent2(proxyUrl);
-      }
+      const net4 = await import("net");
       await new Promise((resolve, reject) => {
-        const req2 = https4.default.get({
-          hostname: "www.instagram.com",
-          path: "/",
-          agent,
-          timeout: 1e4,
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-        }, (r2) => {
-          r2.resume();
+        const sock = (net4.default ?? net4).createConnection({
+          host: proxy.host,
+          port: Number(proxy.port),
+          timeout: 5e3
+        });
+        sock.once("connect", () => {
+          sock.destroy();
           resolve();
         });
-        req2.on("error", reject);
-        req2.on("timeout", () => {
-          req2.destroy();
-          reject(new Error("timeout"));
+        sock.once("error", reject);
+        sock.once("timeout", () => {
+          sock.destroy();
+          reject(new Error("TCP timeout"));
         });
       });
       res.json({ alive: true, latencyMs: Date.now() - start });
@@ -166565,6 +163508,23 @@ async function registerInstagramRoutes(httpServer2, app2) {
       ebLiveStats: p.userAgentEmbedded ? getEbLiveStats(p.id, p.userAgentEmbedded) : null
     }));
     res.json(enriched);
+  });
+  app2.get("/api/profiles/:profileId/api-call-count", async (req, res) => {
+    const count = await storage.getInstagramApiCallCount(Number(req.params.profileId));
+    res.json({ count });
+  });
+  app2.get("/api/profiles/:profileId/api-endpoint-counts", async (req, res) => {
+    const todayPrefix = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const counts = await storage.getApiEndpointCounts(Number(req.params.profileId), todayPrefix);
+    res.json(counts);
+  });
+  app2.get("/api/profiles/:profileId/pre-status-change-hits", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const [perAccount, global2] = await Promise.all([
+      storage.getPreStatusChangeHits(profileId),
+      storage.getGlobalPreStatusChangeHits()
+    ]);
+    res.json({ perAccount, global: global2 });
   });
   app2.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
@@ -166736,8 +163696,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
   };
   function seedBrowserCookieFile(profileId, igApiCookies) {
     try {
-      const cookiesDir = process.env.DATABASE_PATH ? path4.join(path4.dirname(process.env.DATABASE_PATH), "browser-data") : path4.join(process.cwd(), "server", "browser-data");
-      const cookieFilePath = path4.join(cookiesDir, `cookies-${profileId}.json`);
+      const cookiesDir = process.env.DATABASE_PATH ? path5.join(path5.dirname(process.env.DATABASE_PATH), "browser-data") : path5.join(process.cwd(), "server", "browser-data");
+      const cookieFilePath = path5.join(cookiesDir, `cookies-${profileId}.json`);
       const parsed = {};
       for (const part of igApiCookies.split(";")) {
         const eqIdx = part.indexOf("=");
@@ -166761,8 +163721,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
           session: false
         };
       });
-      fs4.mkdirSync(cookiesDir, { recursive: true });
-      fs4.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
+      fs5.mkdirSync(cookiesDir, { recursive: true });
+      fs5.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
     } catch {
     }
   }
@@ -166815,8 +163775,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       parsed["ig_did"] ? `ig_did=${parsed["ig_did"]}` : ""
     ].filter(Boolean);
     const igApiCookies = cookieParts.join(";");
-    const cookiesDir = process.env.DATABASE_PATH ? path4.join(path4.dirname(process.env.DATABASE_PATH), "browser-data") : path4.join(process.cwd(), "server", "browser-data");
-    const cookieFilePath = path4.join(cookiesDir, `cookies-${profileId}.json`);
+    const cookiesDir = process.env.DATABASE_PATH ? path5.join(path5.dirname(process.env.DATABASE_PATH), "browser-data") : path5.join(process.cwd(), "server", "browser-data");
+    const cookieFilePath = path5.join(cookiesDir, `cookies-${profileId}.json`);
     const COOKIE_META2 = {
       sessionid: { httpOnly: true, sameSite: "Lax" },
       csrftoken: { httpOnly: false, sameSite: "Lax" },
@@ -166840,8 +163800,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       };
     });
     try {
-      fs4.mkdirSync(cookiesDir, { recursive: true });
-      fs4.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
+      fs5.mkdirSync(cookiesDir, { recursive: true });
+      fs5.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
     } catch (err) {
       console.error(`[inject-cookies:${profileId}] Failed to write cookie file:`, err?.message);
       return res.status(500).json({ ok: false, message: "Failed to write browser cookie file" });
@@ -166878,8 +163838,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       map2["ig_did"] ? `ig_did=${map2["ig_did"]}` : ""
     ].filter(Boolean);
     const igApiCookies = parts.join(";");
-    const cookiesDir = process.env.DATABASE_PATH ? path4.join(path4.dirname(process.env.DATABASE_PATH), "browser-data") : path4.join(process.cwd(), "server", "browser-data");
-    const cookieFilePath2 = path4.join(cookiesDir, `cookies-${profileId}.json`);
+    const cookiesDir = process.env.DATABASE_PATH ? path5.join(path5.dirname(process.env.DATABASE_PATH), "browser-data") : path5.join(process.cwd(), "server", "browser-data");
+    const cookieFilePath2 = path5.join(cookiesDir, `cookies-${profileId}.json`);
     const cookieObjs = cookies.map((c3) => ({
       name: c3.name,
       value: c3.value,
@@ -166892,8 +163852,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       sameSite: "None"
     }));
     try {
-      fs4.mkdirSync(cookiesDir, { recursive: true });
-      fs4.writeFileSync(cookieFilePath2, JSON.stringify(cookieObjs, null, 2), "utf8");
+      fs5.mkdirSync(cookiesDir, { recursive: true });
+      fs5.writeFileSync(cookieFilePath2, JSON.stringify(cookieObjs, null, 2), "utf8");
     } catch {
     }
     const dbUpdate = { igApiCookies };
@@ -167371,6 +164331,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
             if (!resolvedProxyId && existing.proxyId) {
               delete updates.proxyId;
             }
+            if (existing.notes && String(existing.notes).trim()) {
+              delete updates.notes;
+            }
             await storage.updateProfile(existing.id, updates);
             if (igApiCookies) seedBrowserCookieFile(existing.id, igApiCookies);
             results.push({ success: true, username: profileData.username, action: "updated" });
@@ -167648,12 +164611,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
         if (source === "HikerAPI") return "HikerAPI";
         if (source === "Browser") return "Browser Session";
         if (source === "ProfileSync") return "Profile Sync";
-        if (source === "Human Session Emulation") return "Human Session Emulation";
+        if (source === "Human Session Emulation") return "Human Session Tool";
         if (source === "Follow Tool") return "Follow Tool";
         if (source === "Unfollow Tool") return "Unfollow Tool";
         if (source === "Contact Tool") return "Contact Tool";
         return operationName;
       };
+      const resolveSource = (source) => source === "HikerAPI" ? "HikerAPI" : "Equinox";
       const esc2 = (v3) => /[",\r\n]/.test(v3) ? `"${v3.replace(/"/g, '""')}"` : v3;
       const settings = await storage.getGlobalSettings();
       const useLocal = settings.useLocalTime === "true";
@@ -167695,7 +164659,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
           resolveOperationName(call.source ?? "", call.operationName ?? ""),
           call.operationName ?? "",
           call.message ?? "",
-          call.source ?? "",
+          resolveSource(call.source ?? ""),
           call.navChain ?? "",
           ipPort,
           String(call.durationMs ?? "")
@@ -167909,11 +164873,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
     res.send(html);
   });
   app2.get("/api/browser/debug", async (_req, res) => {
-    const fs6 = await import("fs");
+    const fs7 = await import("fs");
     const chromiumPath = process.env.CHROMIUM_PATH || "";
     let chromiumExists = false;
     try {
-      chromiumExists = chromiumPath ? fs6.existsSync(chromiumPath) : false;
+      chromiumExists = chromiumPath ? fs7.existsSync(chromiumPath) : false;
     } catch {
     }
     let puppeteerCoreAvailable = false;
@@ -168096,24 +165060,15 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (ipcPort) {
       try {
         const { proxyHost: proxyHost2, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body;
-        let initialUrl;
-        try {
-          const settings = await storage.getGlobalSettings();
-          if (settings.hikerApiEnabled === "true" && settings.hikerApiToken) {
-            const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
-            const hiker = new HikerApiClient2(settings.hikerApiToken);
-            const shortcodes = await hiker.getTrendingReelShortcodes(3);
-            if (shortcodes.length > 0) initialUrl = `https://www.instagram.com/reel/${shortcodes[0]}/`;
-          }
-        } catch {
-        }
         const body = {
           profileId: -1,
           username: "Ghost",
+          // Open directly on Instagram's homepage so signup starts immediately
+          // (no blank-page flash that forces a second "Create Account" click)
+          initialUrl: "https://www.instagram.com/",
           proxy: proxyHost2 && proxyPort ? { host: proxyHost2, port: Number(proxyPort), user: proxyUsername ?? void 0, pass: proxyPassword ?? void 0, type: proxyType ?? "http" } : void 0,
           userAgent: userAgent ?? void 0,
-          ebFingerprint: fingerprint ?? void 0,
-          initialUrl
+          ebFingerprint: fingerprint ?? void 0
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method: "POST",
@@ -168188,98 +165143,6 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ ok: false, error: err?.message });
     }
   });
-  app2.post("/api/signup/browser/warmup-step", (req, res) => {
-    const { msg } = req.body;
-    if (msg) sendSignupWsMsg({ type: "signupStep", msg });
-    res.json({ ok: true });
-  });
-  app2.post("/api/signup/browser/warmup-done", (_req, res) => {
-    sendSignupWsMsg({ type: "warmupDone" });
-    res.json({ ok: true });
-  });
-  app2.get("/api/signup/browser/trending-reels", async (req, res) => {
-    const n = Math.min(10, Math.max(1, Number(req.query.n) || 5));
-    try {
-      const settings = await storage.getGlobalSettings();
-      if (settings.hikerApiEnabled !== "true" || !settings.hikerApiToken) {
-        return res.json({ urls: [] });
-      }
-      const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
-      const hiker = new HikerApiClient2(settings.hikerApiToken);
-      const shortcodes = await hiker.getTrendingReelShortcodes(n + 2);
-      const urls = shortcodes.slice(0, n).map((sc) => `https://www.instagram.com/reel/${sc}/`);
-      return res.json({ urls });
-    } catch (e) {
-      return res.json({ urls: [], warning: e?.message?.slice(0, 100) });
-    }
-  });
-  app2.post("/api/signup/browser/warmup", async (req, res) => {
-    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
-    if (ipcPort) {
-      try {
-        await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-warmup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(req.body)
-        });
-      } catch {
-        sendSignupWsMsg({ type: "signupStep", msg: "Warm-up error: could not reach Electron process." });
-        sendSignupWsMsg({ type: "warmupDone" });
-      }
-      res.json({ ok: true });
-      return;
-    }
-    if (!isSignupBrowserOpen()) {
-      return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
-    }
-    const {
-      reelsMin,
-      reelsMax,
-      postsMin,
-      postsMax,
-      profilesMin,
-      profilesMax,
-      reelsIdleMin,
-      reelsIdleMax,
-      postsIdleMin,
-      postsIdleMax,
-      profilesIdleMin,
-      profilesIdleMax,
-      postClicksPerProfileMin,
-      postClicksPerProfileMax,
-      postBrowseTimeMin,
-      postBrowseTimeMax
-    } = req.body;
-    res.json({ ok: true });
-    (async () => {
-      try {
-        await runWarmupOnOpenBrowser({
-          reelsMin,
-          reelsMax,
-          postsMin,
-          postsMax,
-          profilesMin,
-          profilesMax,
-          reelsIdleMin,
-          reelsIdleMax,
-          postsIdleMin,
-          postsIdleMax,
-          profilesIdleMin,
-          profilesIdleMax,
-          postClicksPerProfileMin,
-          postClicksPerProfileMax,
-          postBrowseTimeMin,
-          postBrowseTimeMax,
-          onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg })
-        });
-        sendSignupWsMsg({ type: "warmupDone" });
-      } catch (e) {
-        sendSignupWsMsg({ type: "signupStep", msg: `Warm-up error: ${e?.message ?? "unknown"}` });
-        sendSignupWsMsg({ type: "warmupDone" });
-      }
-    })().catch(() => {
-    });
-  });
   app2.post("/api/signup/browser/automate", async (req, res) => {
     const {
       email: email3,
@@ -168344,6 +165207,92 @@ async function registerInstagramRoutes(httpServer2, app2) {
       }
     })().catch(() => {
     });
+  });
+  let _ghostSignupCode = null;
+  let _ghostSignupLatestStep = "";
+  let _ghostSignupDone = false;
+  app2.post("/api/signup/browser/ghost-signup", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) return res.json({ ok: false, error: "Not running in Electron mode" });
+    _ghostSignupCode = null;
+    _ghostSignupLatestStep = "Starting\u2026";
+    _ghostSignupDone = false;
+    try {
+      const r2 = await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body)
+      });
+      const j = await r2.json();
+      return res.json(j);
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message ?? "IPC error" });
+    }
+  });
+  app2.post("/api/signup/browser/ghost-signup-step", (req, res) => {
+    const { msg, done } = req.body ?? {};
+    if (msg) {
+      _ghostSignupLatestStep = msg;
+      console.log(`[ghost-signup-step] ${msg}`);
+      sendSignupWsMsg({ type: "signupStep", msg });
+    }
+    if (done) _ghostSignupDone = true;
+    return res.json({ ok: true });
+  });
+  app2.get("/api/signup/browser/ghost-signup-status", (_req, res) => {
+    return res.json({ ok: true, msg: _ghostSignupLatestStep, done: _ghostSignupDone });
+  });
+  app2.post("/api/signup/browser/ghost-code", (req, res) => {
+    const { code } = req.body ?? {};
+    if (!code) return res.status(400).json({ ok: false, error: "code is required" });
+    _ghostSignupCode = String(code).trim();
+    return res.json({ ok: true });
+  });
+  app2.get("/api/signup/browser/ghost-code-peek", (_req, res) => {
+    const code = _ghostSignupCode;
+    if (code) _ghostSignupCode = null;
+    return res.json({ ok: true, code: code ?? null });
+  });
+  app2.post("/api/imap/fetch-code", async (req, res) => {
+    const { host, port: port2, secure = true, email: email3, password } = req.body ?? {};
+    if (!host || !email3 || !password) {
+      return res.status(400).json({ ok: false, error: "host, email, and password are required" });
+    }
+    try {
+      const { ImapFlow: ImapFlow2 } = await import("imapflow");
+      const client = new ImapFlow2({
+        host,
+        port: Number(port2) || (secure ? 993 : 143),
+        secure: !!secure,
+        auth: { user: email3, pass: password },
+        logger: false
+      });
+      await client.connect();
+      const lock = await client.getMailboxLock("INBOX");
+      let code = null;
+      try {
+        const since = new Date(Date.now() - 20 * 60 * 1e3);
+        const uids = await client.search({ since }, { uid: true });
+        if (uids && uids.length > 0) {
+          const slice = uids.slice(-10).reverse();
+          for await (const msg of client.fetch(slice, { source: true, uid: true })) {
+            const src = msg.source.toString("utf8");
+            const m2 = src.match(/(?<![.\d])(\d{6})(?![.\d])/);
+            if (m2) {
+              code = m2[1];
+              break;
+            }
+          }
+        }
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+      if (code) return res.json({ ok: true, code });
+      return res.json({ ok: false, error: "No 6-digit verification code found in the last 20 minutes of email" });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message ?? "IMAP connection failed" });
+    }
   });
   app2.post("/api/browser/:profileId/files", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -168903,11 +165852,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
   async function buildEqxPayload(id, trustScoreId) {
     const profile = await storage.getProfile(id);
     if (!profile) return null;
-    const [allTools, followedUsers2, statsData, apiCallsData] = await Promise.all([
+    const [allTools, followedUsers2, statsData, apiCallsData, preStatusChangeHitsData] = await Promise.all([
       storage.getToolsByProfile(id),
       storage.getFollowedUsersByProfile(id, 1e5),
       storage.getStatsByProfile(id),
-      storage.getInstagramApiCallsByProfile(id, 2e3)
+      storage.getInstagramApiCallsByProfile(id, 2e3),
+      storage.getPreStatusChangeHitsByProfile(id)
     ]);
     const toolsWithSources = await Promise.all(
       allTools.map(async (t2) => ({
@@ -168972,6 +165922,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
         navChain: c3.navChain,
         ipAddress: c3.ipAddress,
         durationMs: c3.durationMs
+      })),
+      preStatusChangeHits: preStatusChangeHitsData.map((h4) => ({
+        operationName: h4.operationName,
+        fromStatus: h4.fromStatus,
+        toStatus: h4.toStatus,
+        occurredAt: h4.occurredAt
       }))
     };
     const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
@@ -169151,6 +166107,20 @@ async function registerInstagramRoutes(httpServer2, app2) {
       } catch (e) {
         req.log.warn({ err: e }, "import-eqx: failed to import stats (non-fatal)");
       }
+      try {
+        if (Array.isArray(payload.preStatusChangeHits) && payload.preStatusChangeHits.length > 0) {
+          await storage.bulkInsertPreStatusChangeHits(payload.preStatusChangeHits.map((h4) => ({
+            profileId: created.id,
+            username: created.username ?? "",
+            operationName: h4.operationName || "",
+            fromStatus: h4.fromStatus || "",
+            toStatus: h4.toStatus || "",
+            occurredAt: h4.occurredAt || (/* @__PURE__ */ new Date()).toISOString()
+          })));
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to import pre-status-change hits (non-fatal)");
+      }
       storage.createSessionAction({
         profileId: created.id,
         toolId: 0,
@@ -169185,7 +166155,14 @@ async function registerInstagramRoutes(httpServer2, app2) {
       } catch {
         return res.status(400).json({ error: "Invalid base64 data" });
       }
-      const { parseJarveeBinary: parseJarveeBinary2 } = await Promise.resolve().then(() => (init_jarveeParser(), jarveeParser_exports));
+      const { parseJarveeBinary: parseJarveeBinary2, diagnoseJarveeBinary: diagnoseJarveeBinary2 } = await Promise.resolve().then(() => (init_jarveeParser(), jarveeParser_exports));
+      try {
+        const diagRows = diagnoseJarveeBinary2(buf);
+        console.log("\n=== JARVEE DIAGNOSE ===");
+        for (const r2 of diagRows) console.log(`  offset=${r2.offset.toString().padStart(6)}  ${r2.value}`);
+        console.log("=== END DIAGNOSE ===\n");
+      } catch {
+      }
       let jarveeAccounts;
       try {
         jarveeAccounts = parseJarveeBinary2(buf);
@@ -169227,6 +166204,23 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch (e) {
       req.log.error({ err: e }, "parse-jarvee failed");
       return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  app2.post("/api/profiles/diagnose-jarvee", async (req, res) => {
+    try {
+      const { fileBase64 } = req.body;
+      if (!fileBase64) return res.status(400).json({ error: "fileBase64 is required" });
+      let buf;
+      try {
+        buf = Buffer.from(fileBase64, "base64");
+      } catch {
+        return res.status(400).json({ error: "Invalid base64 data" });
+      }
+      const { diagnoseJarveeBinary: diagnoseJarveeBinary2 } = await Promise.resolve().then(() => (init_jarveeParser(), jarveeParser_exports));
+      const rows = diagnoseJarveeBinary2(buf);
+      return res.json({ rows });
+    } catch (e) {
+      return res.status(500).json({ error: e?.message ?? "Diagnose failed" });
     }
   });
   app2.post("/api/profiles/import-jarvee", async (req, res) => {
@@ -169276,7 +166270,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
             twoFASecretKey: ja.twoFASecret ?? null,
             emailValidationUsername: ja.email ?? null,
             emailValidationPassword: ja.emailPassword ?? null,
-            notes: "Imported from Jarvee"
+            notes: null
+            // createProfile will auto-stamp the first-added date
           };
           if (proxyStr) profileData.proxy = proxyStr;
           const created = await storage.createProfile(profileData);
@@ -169841,60 +166836,15 @@ async function registerInstagramRoutes(httpServer2, app2) {
       return res.status(500).json({ error: e?.message ?? "Internal error" });
     }
   });
-  app2.post("/api/5sim/get-number", async (req, res) => {
-    try {
-      const { apiKey, country = "any" } = req.body;
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const countrySlug = country === "any" ? "any" : encodeURIComponent(country);
-      const url2 = `https://5sim.net/v1/user/buy/activation/${countrySlug}/any/instagram`;
-      const r2 = await fetch(url2, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      if (!r2.ok) return res.json({ ok: false, error: `5sim HTTP ${r2.status}` });
-      const data = await r2.json();
-      if (data.id && data.phone) {
-        return res.json({ ok: true, id: String(data.id), phone: data.phone.replace(/^\+/, "") });
-      }
-      return res.json({ ok: false, error: JSON.stringify(data) });
-    } catch (e) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
-  app2.get("/api/5sim/get-sms/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { apiKey } = req.query;
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const url2 = `https://5sim.net/v1/user/check/${encodeURIComponent(id)}`;
-      const r2 = await fetch(url2, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      if (!r2.ok) return res.json({ ok: false, status: `HTTP ${r2.status}` });
-      const data = await r2.json();
-      const code = data.sms?.[0]?.code;
-      if (code) return res.json({ ok: true, code });
-      return res.json({ ok: false, status: data.status ?? "WAIT_CODE" });
-    } catch (e) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
-  app2.post("/api/5sim/cancel/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { apiKey } = req.body;
-      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
-      const url2 = `https://5sim.net/v1/user/cancel/${encodeURIComponent(id)}`;
-      const r2 = await fetch(url2, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
-      return res.json({ ok: r2.ok });
-    } catch (e) {
-      return res.status(500).json({ error: e?.message ?? "Internal error" });
-    }
-  });
   (async () => {
     try {
       const allProfiles = await storage.getProfiles();
       let seeded = 0;
-      const cookiesDir = process.env.DATABASE_PATH ? path4.join(path4.dirname(process.env.DATABASE_PATH), "browser-data") : path4.join(process.cwd(), "server", "browser-data");
+      const cookiesDir = process.env.DATABASE_PATH ? path5.join(path5.dirname(process.env.DATABASE_PATH), "browser-data") : path5.join(process.cwd(), "server", "browser-data");
       for (const p of allProfiles) {
         if (!p.igApiCookies) continue;
-        const filePath = path4.join(cookiesDir, `cookies-${p.id}.json`);
-        if (fs4.existsSync(filePath)) continue;
+        const filePath = path5.join(cookiesDir, `cookies-${p.id}.json`);
+        if (fs5.existsSync(filePath)) continue;
         seedBrowserCookieFile(p.id, p.igApiCookies);
         seeded++;
       }
@@ -169965,7 +166915,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       const row = storage.getLicenseByUsername(username);
       if (!row) return res.json({ ok: false });
       if (hashLicensePwd(username, password) !== row.password_hash) return res.json({ ok: false });
-      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1 };
+      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1, expiresAt: row.expires_at ?? null };
       await storage.setGlobalSetting("license_session", JSON.stringify(sessionData));
       res.json({ ok: true, ...sessionData });
     } catch (err) {
@@ -169995,6 +166945,61 @@ async function registerInstagramRoutes(httpServer2, app2) {
       { id: "enterprise", label: "Enterprise", price: "\xA3250/mo", accountLimit: 1e3 }
     ]);
   });
+  const requireAdmin = async (res) => {
+    const session = await storage.getLicenseSession();
+    if (!session.ok || !session.isAdmin) {
+      res.status(403).json({ ok: false, error: "Admin access required" });
+      return false;
+    }
+    return true;
+  };
+  app2.get("/api/license/users", async (_req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      res.json(storage.getAllLicenses());
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.post("/api/license/users", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      const { username, password, tier, accountLimit, expiresAt } = req.body ?? {};
+      if (!username || !password || !tier) return res.status(400).json({ ok: false, error: "Missing fields" });
+      const passwordHash = hashLicensePwd(username.trim(), password);
+      storage.createLicense(username.trim(), passwordHash, tier, accountLimit ?? 15, expiresAt ?? null);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.put("/api/license/users/:id", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      const id = Number(req.params.id);
+      const { tier, accountLimit, active, expiresAt, password, username } = req.body ?? {};
+      const updates = {};
+      if (tier !== void 0) updates.tier = tier;
+      if (accountLimit !== void 0) updates.accountLimit = Number(accountLimit);
+      if (active !== void 0) updates.active = active ? 1 : 0;
+      if (expiresAt !== void 0) updates.expiresAt = expiresAt || null;
+      if (password && username) updates.passwordHash = hashLicensePwd(username, password);
+      storage.updateLicense(id, updates);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.delete("/api/license/users/:id", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      storage.deleteLicense(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  registerMirrorRoutes(app2);
 }
 
 // src/index.ts
@@ -170002,31 +167007,31 @@ var port = Number(process.env["PORT"] ?? "3000");
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${process.env["PORT"]}"`);
 }
-var SERVER_LOG_PATH = process.env.DATABASE_PATH ? path5.join(path5.dirname(process.env.DATABASE_PATH), "equinox-debug.log") : path5.join(process.cwd(), "equinox-debug.log");
+var SERVER_LOG_PATH = process.env.DATABASE_PATH ? path6.join(path6.dirname(process.env.DATABASE_PATH), "equinox-debug.log") : path6.join(process.cwd(), "equinox-debug.log");
 var MAX_LOG_BYTES = 5 * 1024 * 1024;
 global.__SERVER_LOG_PATH = SERVER_LOG_PATH;
 var _logFd = null;
 try {
-  _logFd = fs5.openSync(SERVER_LOG_PATH, "a");
+  _logFd = fs6.openSync(SERVER_LOG_PATH, "a");
 } catch {
 }
 function _writeLogLine(chunk) {
   if (_logFd === null) return;
   try {
     const line = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    fs5.write(_logFd, line.endsWith("\n") ? line : line + "\n", () => {
+    fs6.write(_logFd, line.endsWith("\n") ? line : line + "\n", () => {
     });
     try {
-      const stat = fs5.fstatSync(_logFd);
+      const stat = fs6.fstatSync(_logFd);
       if (stat.size > MAX_LOG_BYTES) {
-        fs5.closeSync(_logFd);
-        const content = fs5.readFileSync(SERVER_LOG_PATH, "utf8");
+        fs6.closeSync(_logFd);
+        const content = fs6.readFileSync(SERVER_LOG_PATH, "utf8");
         const half = content.slice(Math.floor(content.length / 2));
         const boundary = half.indexOf("\n");
         const trimmed = boundary >= 0 ? half.slice(boundary + 1) : half;
-        fs5.writeFileSync(SERVER_LOG_PATH, `[Log rotated at ${(/* @__PURE__ */ new Date()).toISOString()}]
+        fs6.writeFileSync(SERVER_LOG_PATH, `[Log rotated at ${(/* @__PURE__ */ new Date()).toISOString()}]
 ` + trimmed, "utf8");
-        _logFd = fs5.openSync(SERVER_LOG_PATH, "a");
+        _logFd = fs6.openSync(SERVER_LOG_PATH, "a");
       }
     } catch {
     }
@@ -170046,11 +167051,11 @@ process.stderr.write = function(chunk, encodingOrCb, cb) {
 console.log(`[server] Log file: ${SERVER_LOG_PATH}`);
 var httpServer = createServer(app_default);
 registerInstagramRoutes(httpServer, app_default).then(() => {
-  const frontendDist = process.env.FRONTEND_DIST_PATH || path5.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
-  if (fs5.existsSync(frontendDist)) {
+  const frontendDist = process.env.FRONTEND_DIST_PATH || path6.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
+  if (fs6.existsSync(frontendDist)) {
     app_default.use(import_express5.default.static(frontendDist));
     app_default.use((_req, res) => {
-      res.sendFile(path5.join(frontendDist, "index.html"));
+      res.sendFile(path6.join(frontendDist, "index.html"));
     });
     logger.info({ frontendDist }, "Serving frontend static files");
   }
