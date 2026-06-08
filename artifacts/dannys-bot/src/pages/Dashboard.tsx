@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.848",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: when the white icon is missing and no certificate appears in Settings, the screen now explains why (the install never completed) and shows a prominent Reinstall button — no more hunting for a tiny link." },
+    ],
+  },
+  {
     version: "1.0.847",
     date: "8 Jun 2026",
     items: [

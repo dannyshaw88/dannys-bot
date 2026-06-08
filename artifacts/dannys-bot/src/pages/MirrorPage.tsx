@@ -500,19 +500,38 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
               ))}
             </ol>
           </div>
-          {/* Secondary — if they haven't trusted the cert yet */}
+
+          {/* No white icon / no certificate — reinstall path */}
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+            <p className="text-xs font-semibold text-foreground">Don't see the white icon on your phone?</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The install may not have completed. The white icon only appears <em>after</em> a successful install — and the developer certificate in Settings only appears at the same time. If neither is there, the app was never installed on your phone.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Click <strong>Reinstall</strong> below with your iPhone plugged in and unlocked, then wait about 30 seconds for the install to finish.
+            </p>
+            <Button
+              className="w-full h-9 font-semibold"
+              style={{ background: "#1AD2F2", color: "#000" }}
+              onClick={onReinstall}
+            >
+              ↺ Reinstall Control Agent
+            </Button>
+          </div>
+
+          {/* Secondary — certificate trust (only relevant after a successful install) */}
           <details className="rounded-lg border border-border overflow-hidden">
             <summary className="px-3 py-2.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/40 transition-colors">
-              Don't see the WebDriverAgent app? — Trust the developer certificate first ▸
+              White icon is there but won't open? — Trust the developer certificate ▸
             </summary>
             <div className="px-3 pb-3 pt-2 space-y-2 bg-muted/20">
-              <p className="text-xs text-muted-foreground">If this is the first time installing the control agent, iOS blocks it until you trust the certificate once:</p>
+              <p className="text-xs text-muted-foreground">iOS blocks a newly installed app from running until you trust its developer certificate once. If you can see the white icon but tapping it does nothing:</p>
               <ol className="space-y-1.5">
                 {[
                   <>Open <strong>Settings → General → VPN &amp; Device Management</strong>.</>,
                   <>Under "Developer App", tap the developer entry.</>,
                   <>Tap <strong>Trust</strong> and enter your passcode.</>,
-                  <>The WebDriverAgent app will now be launchable from the home screen.</>,
+                  <>The WebDriverAgent app will now open normally.</>,
                 ].map((text, i) => (
                   <li key={i} className="flex gap-2 items-start">
                     <span className="shrink-0 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground mt-0.5">{i + 1}</span>
@@ -522,19 +541,10 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
               </ol>
             </div>
           </details>
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
-              Waiting for control agent to start…
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-[11px] shrink-0"
-              onClick={onReinstall}
-            >
-              ↺ Reinstall
-            </Button>
+
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
+            Waiting for control agent to start…
           </div>
         </div>
       )}
