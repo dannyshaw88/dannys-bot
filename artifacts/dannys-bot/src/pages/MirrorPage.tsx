@@ -163,9 +163,11 @@ interface SetupPanelProps {
   onInstallWda: () => void;
   onReinstall: () => void;
   onRetry: () => void;
+  onRestartAmds: () => Promise<void>;
+  restartingAmds: boolean;
 }
 
-function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onReinstall, onRetry }: SetupPanelProps) {
+function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onReinstall, onRetry, onRestartAmds, restartingAmds }: SetupPanelProps) {
   const steps = [
     { id: "plug",    label: "Plug in iPhone",             done: stage !== "no_device" },
     { id: "trust",   label: "Tap \"Trust\" on iPhone",    done: stage === "installing_wda" || stage === "starting_iproxy" || stage === "ready" },
@@ -310,54 +312,66 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
           )}
 
           {/* usbmuxd.dll absent — modern iTunes no longer ships it.
-              Equinox automatically falls back to direct TCP usbmuxd protocol.
-              If TCP ok, show green info. If TCP also fails, show steps. */}
+              Equinox falls back to direct TCP usbmuxd protocol.
+              TCP connects to AMDS but still returns 0 devices = phone not trusted / locked / charge-only cable. */}
           {dllMissing && !diagnosing && (
-            <div className={cn(
-              "rounded-lg border p-4 space-y-3",
-              usbmuxdDllMissingTcpOk
-                ? "border-green-400 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
-                : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30",
-            )}>
-              <div className="flex items-start gap-2">
-                <span className={cn("text-base leading-none mt-0.5",
-                  usbmuxdDllMissingTcpOk
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-amber-600 dark:text-amber-400",
-                )}>
-                  {usbmuxdDllMissingTcpOk ? "✓" : "⚠"}
+            <div className="space-y-3">
+              {/* Status line */}
+              <div className={cn(
+                "rounded-lg border p-3 flex items-start gap-2",
+                usbmuxdDllMissingTcpOk
+                  ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30"
+                  : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30",
+              )}>
+                <span className={cn("text-sm leading-none mt-0.5", usbmuxdDllMissingTcpOk ? "text-blue-600" : "text-amber-600")}>
+                  {usbmuxdDllMissingTcpOk ? "ℹ" : "⚠"}
                 </span>
-                <div className="space-y-1">
-                  {usbmuxdDllMissingTcpOk ? (
-                    <>
-                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">
-                        Direct connection active — plug in your iPhone
-                      </p>
-                      <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
-                        Modern iTunes no longer ships <strong>usbmuxd.dll</strong>, which the bundled tool needs. Equinox has automatically switched to talking directly to Apple's service over TCP — no DLLs required. Device detection is fully working. Plug in your iPhone to continue.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                        USB bridge not available — plug in your iPhone first
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                        Modern iTunes no longer ships <strong>usbmuxd.dll</strong>, which the bundled tool needs. Equinox tried switching to a direct TCP connection to Apple's service — but no device was found yet.
-                        <strong> This is not an iTunes problem.</strong> Plug in your iPhone and click Check again.
-                      </p>
-                    </>
-                  )}
-                </div>
+                <p className={cn("text-xs leading-relaxed", usbmuxdDllMissingTcpOk ? "text-blue-800 dark:text-blue-300" : "text-amber-800 dark:text-amber-300")}>
+                  {usbmuxdDllMissingTcpOk
+                    ? <><strong>Apple service is ready</strong> — but your iPhone isn't showing up. Plug it in with a data cable and work through the steps below.</>
+                    : <><strong>Apple service not responding.</strong> Make sure iTunes is installed and try restarting it below.</>
+                  }
+                </p>
               </div>
-              {usbmuxdDllMissing && (
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
-                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
-                    Check again
-                  </Button>
-                </div>
-              )}
+
+              {/* Trust / cable troubleshooting — always shown, this is what 99% of users need */}
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <p className="text-xs font-semibold text-foreground">iPhone plugged in but not detected? Work through these:</p>
+                <ol className="space-y-2">
+                  {[
+                    { text: <><strong>Unlock your iPhone</strong> — swipe up and enter your passcode. AMDS ignores locked phones.</> },
+                    { text: <>Watch for a <strong>"Trust This Computer?"</strong> popup on your iPhone screen — tap <strong>Trust</strong> and enter your passcode. This only appears once per computer.</> },
+                    { text: <>Use a <strong>data cable</strong> (charge-only cables have no data pins — the phone charges but Windows can't talk to it). The original Apple cable that came in the box is always a data cable.</> },
+                    { text: <>Try a <strong>USB 2.0 port</strong> (black port) instead of USB 3.0 (blue port). USB 3.0 ports sometimes drop the trust handshake.</> },
+                    { text: <>Unplug, wait 5 seconds, replug — then watch for the Trust popup again.</> },
+                  ].map((s, i) => (
+                    <li key={i} className="flex gap-2.5 items-start">
+                      <span className="shrink-0 w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground mt-0.5">{i + 1}</span>
+                      <span className="text-xs text-foreground leading-relaxed">{s.text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 text-xs"
+                  onClick={onRestartAmds}
+                  disabled={restartingAmds}
+                >
+                  {restartingAmds
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Restarting…</>
+                    : <><RefreshCw className="w-3.5 h-3.5 mr-1.5" />Restart Apple Service</>
+                  }
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 h-9 text-xs" onClick={onRetry}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  Check again
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1215,6 +1229,7 @@ export function MirrorPage() {
 
   const [diagnosis, setDiagnosis]   = useState<DiagResult | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
+  const [restartingAmds, setRestartingAmds] = useState(false);
 
   const streamRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const fpsCountRef = useRef(0);
@@ -1225,6 +1240,19 @@ export function MirrorPage() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
+
+  // ── Restart Apple Mobile Device Service ─────────────────────────────────────
+
+  const handleRestartAmds = useCallback(async () => {
+    setRestartingAmds(true);
+    try {
+      await fetch("/api/mirror/amds-restart", { method: "POST" });
+    } catch {}
+    setRestartingAmds(false);
+    setDiagnosis(null);
+    setTimeout(runDiagnose, 2000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Diagnose why no device found ────────────────────────────────────────────
 
@@ -1598,6 +1626,8 @@ export function MirrorPage() {
                       onInstallWda={handleInstallWda}
                       onReinstall={handleReinstall}
                       onRetry={() => { setDiagnosis(null); refreshStatus(); setTimeout(runDiagnose, 1500); }}
+                      onRestartAmds={handleRestartAmds}
+                      restartingAmds={restartingAmds}
                     />
                   )}
                   <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.849",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: when your iPhone is plugged in but Equinox still can't see it (Trust dialog, charge-only cable, locked screen), the setup screen now shows clear step-by-step instructions instead of a misleading green 'ready' banner." },
+      { category: "New", text: "Mirror: added a 'Restart Apple Service' button — fixes cases where Apple's USB service is running but stuck seeing zero devices, without needing to open Windows Services manually." },
+    ],
+  },
+  {
     version: "1.0.848",
     date: "8 Jun 2026",
     items: [

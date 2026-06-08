@@ -405,6 +405,32 @@ function stopIproxyTcp(): void {
   }
 }
 
+/** Restart the Apple Mobile Device Service on Windows.
+ *  This fixes cases where AMDS is running but not seeing any connected devices.
+ *  Safe to call at any time — gracefully no-ops on non-Windows. */
+export async function restartAmds(): Promise<{ ok: boolean; message: string }> {
+  if (process.platform !== "win32") {
+    return { ok: false, message: "Not a Windows machine — AMDS restart not applicable." };
+  }
+  try {
+    mlog.info("[mirror] restartAmds: stopping Apple Mobile Device Service");
+    try {
+      await execAsync('sc stop "Apple Mobile Device Service"', { timeout: 8000 });
+    } catch {
+      // ignore — it may already be stopped or the stop takes longer than the timeout
+    }
+    await new Promise(r => setTimeout(r, 2000)); // let the service fully stop
+    mlog.info("[mirror] restartAmds: starting Apple Mobile Device Service");
+    await execAsync('sc start "Apple Mobile Device Service"', { timeout: 10000 });
+    await new Promise(r => setTimeout(r, 1500)); // let it fully start
+    mlog.info("[mirror] restartAmds: done");
+    return { ok: true, message: "Apple Mobile Device Service restarted." };
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] restartAmds: failed");
+    return { ok: false, message: String(err?.message ?? err) };
+  }
+}
+
 /** Build an env object that includes ALL known Apple DLL directories in PATH.
  *  Fresh iTunes installs spread DLLs across Mobile Device Support, Apple Application Support,
  *  and the iTunes app dir. We inject all of them so any transitively-required DLL is loadable

@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import {
   listConnectedDevices,
   diagnoseIphoneSupport,
+  restartAmds,
   takeScreenshot,
   wdaIsConnected,
   wdaTap,
@@ -139,6 +140,17 @@ export function registerMirrorRoutes(app: Express, httpServer?: Server): void {
     } catch (err) {
       res.json({ ok: false, binaryFound: false, appleDriverRunning: false,
         suggestion: String(err), rawOutput: "", rawError: "", binaryPath: "" });
+    }
+  });
+
+  // ── AMDS restart (fixes "service connected but 0 devices" on Windows) ────
+
+  app.post("/api/mirror/amds-restart", async (_req, res) => {
+    try {
+      const result = await restartAmds();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, message: String(err) });
     }
   });
 
