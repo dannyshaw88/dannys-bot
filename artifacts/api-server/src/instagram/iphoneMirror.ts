@@ -40,6 +40,70 @@ export interface IosDevice {
   connected: "usb" | "wifi";
 }
 
+export interface IphoneDiagnostics {
+  binaryFound: boolean;
+  binaryPath: string;
+  appleDriverRunning: boolean;
+  rawOutput: string;
+  rawError: string;
+  suggestion: string;
+}
+
+/** Run a full diagnostic: is the binary present? Is Apple's USB driver loaded? */
+export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics> {
+  const binDir = getBinDir();
+  const exe = path.join(binDir, "idevice_id.exe");
+  const binaryFound = binDir !== "" && fs.existsSync(exe);
+
+  // Check if Apple Mobile Device Service is running (Windows only)
+  let appleDriverRunning = false;
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await execAsync(
+        'sc query "Apple Mobile Device Service"',
+        { timeout: 4000 },
+      );
+      appleDriverRunning = stdout.includes("RUNNING");
+    } catch {
+      // Service not found or sc not available — also try checking via tasklist
+      try {
+        const { stdout: tl } = await execAsync(
+          "tasklist /FI \"IMAGENAME eq AppleMobileDeviceService.exe\" /NH",
+          { timeout: 4000 },
+        );
+        appleDriverRunning = tl.includes("AppleMobileDeviceService.exe");
+      } catch {}
+    }
+  }
+
+  let rawOutput = "";
+  let rawError = "";
+  if (binaryFound) {
+    try {
+      const result = await execAsync(`"${exe}" -l`, { timeout: 6000 });
+      rawOutput = result.stdout.trim();
+      rawError = (result as any).stderr?.trim() ?? "";
+    } catch (err: any) {
+      rawError = String(err?.stderr ?? err?.message ?? err);
+    }
+  }
+
+  let suggestion = "";
+  if (!binaryFound) {
+    suggestion = "Equinox binaries are missing. Try reinstalling the app.";
+  } else if (!appleDriverRunning && process.platform === "win32") {
+    suggestion = "itunes_required";
+  } else if (rawOutput === "" && rawError === "") {
+    suggestion = "No iPhone found. Make sure the cable is firmly connected and your iPhone is unlocked.";
+  } else if (rawError) {
+    suggestion = `Detection error: ${rawError}`;
+  } else {
+    suggestion = "ok";
+  }
+
+  return { binaryFound, binaryPath: exe, appleDriverRunning, rawOutput, rawError, suggestion };
+}
+
 export async function listConnectedDevices(): Promise<IosDevice[]> {
   // 1. Use bundled idevice_id.exe
   try {

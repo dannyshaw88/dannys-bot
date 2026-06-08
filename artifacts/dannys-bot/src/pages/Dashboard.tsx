@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.831",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "iPhone not detected: Equinox now diagnoses why and tells you exactly what to fix — most commonly iTunes needs to be installed for Windows to see your iPhone." },
+      { category: "Fix", text: "Added a 'Download iTunes' button inside the app when the Apple USB driver is missing — one click takes you straight to Apple's download page." },
+      { category: "Fix", text: "'Check again' button now re-runs detection after you've made a change, without needing to restart the app." },
+    ],
+  },
+  {
     version: "1.0.830",
     date: "8 Jun 2026",
     items: [

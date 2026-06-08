@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import {
   listConnectedDevices,
+  diagnoseIphoneSupport,
   takeScreenshot,
   wdaIsConnected,
   wdaTap,
@@ -37,6 +38,18 @@ export function registerMirrorRoutes(app: Express): void {
       res.json({ ok: true, devices });
     } catch (err) {
       res.json({ ok: false, devices: [], error: String(err) });
+    }
+  });
+
+  // ── Diagnostics (run when no device found to explain why) ─────────────────
+
+  app.get("/api/mirror/diagnose", async (_req, res) => {
+    try {
+      const diag = await diagnoseIphoneSupport();
+      res.json({ ok: true, ...diag });
+    } catch (err) {
+      res.json({ ok: false, binaryFound: false, appleDriverRunning: false,
+        suggestion: String(err), rawOutput: "", rawError: "", binaryPath: "" });
     }
   });
 

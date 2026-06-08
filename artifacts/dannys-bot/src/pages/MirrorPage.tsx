@@ -141,23 +141,35 @@ function PhoneFrame({ jpeg, streaming, fps, onTap, onSwipe }: PhoneFrameProps) {
 
 // ── Setup progress panel ──────────────────────────────────────────────────────
 
+interface DiagResult {
+  binaryFound: boolean;
+  appleDriverRunning: boolean;
+  suggestion: string;
+  rawError: string;
+}
+
 interface SetupPanelProps {
   stage: SetupStage;
   devices: IosDevice[];
   selectedUdid: string | null;
   installProgress: number;
   installMessage: string;
+  diagnosis: DiagResult | null;
+  diagnosing: boolean;
   onInstallWda: () => void;
   onRetry: () => void;
 }
 
-function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, onInstallWda, onRetry }: SetupPanelProps) {
+function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onRetry }: SetupPanelProps) {
   const steps = [
     { id: "plug",    label: "Plug in iPhone",             done: stage !== "no_device" },
     { id: "trust",   label: "Tap \"Trust\" on iPhone",    done: stage === "installing_wda" || stage === "starting_iproxy" || stage === "ready" },
     { id: "agent",   label: "Install control agent",      done: stage === "starting_iproxy" || stage === "ready" },
     { id: "connect", label: "Connect",                    done: stage === "ready" },
   ];
+
+  const itunesRequired = diagnosis?.suggestion === "itunes_required";
+  const binaryMissing  = diagnosis !== null && !diagnosis.binaryFound;
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-5">
@@ -187,8 +199,75 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
 
       {/* Stage-specific action */}
       {stage === "no_device" && (
-        <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
-          Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
+        <div className="space-y-3">
+          {/* iTunes required — most common root cause */}
+          {itunesRequired && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⚠</span>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Apple USB driver required</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Equinox needs <strong>iTunes</strong> (or the <strong>Apple Devices</strong> app) installed on this PC so Windows can communicate with your iPhone over USB. Without it, the iPhone is invisible to Equinox even when plugged in.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <a
+                  href="https://www.apple.com/itunes/download/win64"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1"
+                >
+                  <Button className="w-full h-9 text-xs font-semibold" style={{ background: "#1AD2F2", color: "#000" }}>
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Download iTunes (Apple)
+                  </Button>
+                </a>
+                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  Retry
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Install iTunes, restart Equinox, then plug in your iPhone again.
+              </p>
+            </div>
+          )}
+
+          {/* Binary missing */}
+          {binaryMissing && (
+            <div className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 text-sm text-red-800 dark:text-red-300">
+              <p className="font-semibold">Equinox binaries not found</p>
+              <p className="text-xs mt-1">The iPhone communication tools are missing. Try reinstalling Equinox.</p>
+            </div>
+          )}
+
+          {/* Diagnosing spinner */}
+          {diagnosing && !itunesRequired && !binaryMissing && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Checking iPhone connection…
+            </div>
+          )}
+
+          {/* Generic waiting message */}
+          {!itunesRequired && !binaryMissing && !diagnosing && (
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
+              {diagnosis?.rawError
+                ? <span className="text-red-500 text-xs">{diagnosis.rawError}</span>
+                : "Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically."
+              }
+            </div>
+          )}
+
+          {/* Retry button when diagnosis is done but no iTunes issue */}
+          {!itunesRequired && !binaryMissing && diagnosis !== null && (
+            <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={onRetry}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />
+              Check again
+            </Button>
+          )}
         </div>
       )}
 
@@ -594,6 +673,9 @@ export function MirrorPage() {
   const [installProgress, setInstallProgress]   = useState(0);
   const [installMessage, setInstallMessage]     = useState("");
 
+  const [diagnosis, setDiagnosis]   = useState<DiagResult | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+
   const streamRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const fpsCountRef = useRef(0);
   const fpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -603,6 +685,26 @@ export function MirrorPage() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2500);
   };
+
+  // ── Diagnose why no device found ────────────────────────────────────────────
+
+  const runDiagnose = useCallback(async () => {
+    setDiagnosing(true);
+    try {
+      const r = await fetch("/api/mirror/diagnose");
+      const j = await r.json() as any;
+      setDiagnosis({
+        binaryFound: !!j.binaryFound,
+        appleDriverRunning: !!j.appleDriverRunning,
+        suggestion: j.suggestion ?? "",
+        rawError: j.rawError ?? "",
+      });
+    } catch {
+      setDiagnosis({ binaryFound: false, appleDriverRunning: false, suggestion: "", rawError: "" });
+    } finally {
+      setDiagnosing(false);
+    }
+  }, []);
 
   // ── Compute setup stage from state ──────────────────────────────────────────
 
@@ -615,10 +717,19 @@ export function MirrorPage() {
       setStage("installing_wda");
     } else if (devices.length > 0) {
       setStage("device_found");
+      setDiagnosis(null); // clear any old diagnosis once device is found
     } else {
       setStage("no_device");
     }
   }, [devices, wdaConnected, iproxyRunning, installSessionId]);
+
+  // ── Run diagnosis once when we hit no_device, with a short delay ────────────
+
+  useEffect(() => {
+    if (stage !== "no_device") return;
+    const t = setTimeout(() => { runDiagnose(); }, 2500);
+    return () => clearTimeout(t);
+  }, [stage, runDiagnose]);
 
   // ── Auto-start iproxy when device detected ─────────────────────────────────
 
@@ -931,8 +1042,10 @@ export function MirrorPage() {
                       selectedUdid={selectedUdid}
                       installProgress={installProgress}
                       installMessage={installMessage}
+                      diagnosis={diagnosis}
+                      diagnosing={diagnosing}
                       onInstallWda={handleInstallWda}
-                      onRetry={refreshStatus}
+                      onRetry={() => { setDiagnosis(null); refreshStatus(); setTimeout(runDiagnose, 1500); }}
                     />
                   )}
                   <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />
