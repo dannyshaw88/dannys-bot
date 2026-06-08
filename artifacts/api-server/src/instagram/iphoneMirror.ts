@@ -161,41 +161,11 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
   } else if (rawOutput === "" && rawError === "") {
-    // idevice_id returned nothing — could be locked OR could be unlocked but
-    // hasn't tapped "Trust This Computer" yet. Run ideviceinfo to tell the diff:
-    // pairing errors (code -17, "pair") → needs trust; others → needs unlock.
-    let infoErr = "";
-    try {
-      const infoExe = binPath("ideviceinfo.exe");
-      await execAsync(`"${infoExe}"`, { timeout: 3000, env });
-      // succeeded without a UDID → device is actually accessible
-      suggestion = "ok";
-    } catch (err: any) {
-      infoErr = String(err?.stderr ?? err?.message ?? "").toLowerCase();
-    }
-    if (suggestion !== "ok") {
-      if (
-        infoErr.includes("pair") ||
-        infoErr.includes("trust") ||
-        infoErr.includes("-17") ||
-        infoErr.includes("AFC_E_")
-      ) {
-        suggestion = "needs_trust";
-      } else {
-        // Also try PATH version in case bundled binary not available
-        try {
-          await execAsync("ideviceinfo", { timeout: 2000, env });
-          suggestion = "ok";
-        } catch (err2: any) {
-          const e2 = String((err2 as any)?.stderr ?? (err2 as any)?.message ?? "").toLowerCase();
-          if (e2.includes("pair") || e2.includes("trust") || e2.includes("-17")) {
-            suggestion = "needs_trust";
-          } else {
-            suggestion = "unlock";
-          }
-        }
-      }
-    }
+    // idevice_id returned nothing — we cannot reliably distinguish "locked"
+    // from "not trusted yet" from Windows binary error output alone.
+    // Return a neutral "no_connection" signal and let the UI show a full
+    // troubleshooting checklist instead of a misleading "locked" message.
+    suggestion = "no_connection";
   } else if (rawError) {
     suggestion = `error:${rawError}`;
   } else {

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.834",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool no longer shows the misleading 'iPhone detected but locked' message when your phone is already unlocked — replaced with a clear numbered checklist covering all possible causes." },
+      { category: "Fix", text: "New troubleshooting panel guides you step-by-step: unlock screen → check Trust popup → replug cable → restart Apple Mobile Device Service." },
+    ],
+  },
+  {
     version: "1.0.833",
     date: "8 Jun 2026",
     items: [

@@ -169,12 +169,13 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
     { id: "connect", label: "Connect",                    done: stage === "ready" },
   ];
 
-  const itunesRequired = diagnosis?.suggestion === "itunes_required";
-  const binaryMissing  = diagnosis !== null && !diagnosis.binaryFound;
-  const needsUnlock    = diagnosis?.suggestion === "unlock";
-  const needsTrust     = diagnosis?.suggestion === "needs_trust";
-  const hasError       = diagnosis?.suggestion?.startsWith("error:") ?? false;
-  const errorText      = hasError ? diagnosis!.suggestion.slice(6) : "";
+  const itunesRequired  = diagnosis?.suggestion === "itunes_required";
+  const binaryMissing   = diagnosis !== null && !diagnosis.binaryFound;
+  const noConnection    = diagnosis?.suggestion === "no_connection"
+    || diagnosis?.suggestion === "unlock"
+    || diagnosis?.suggestion === "needs_trust";
+  const hasError        = diagnosis?.suggestion?.startsWith("error:") ?? false;
+  const errorText       = hasError ? diagnosis!.suggestion.slice(6) : "";
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-5">
@@ -256,23 +257,24 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             </div>
           )}
 
-          {/* iPhone plugged in but screen is locked */}
-          {needsUnlock && !diagnosing && (
-            <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-2">
-              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">iPhone detected but locked</p>
-              <p className="text-xs text-blue-700 dark:text-blue-400">
-                Your iPhone is connected but the screen is off or locked. <strong>Unlock your iPhone</strong> — swipe up and enter your passcode — then click Check again. Also check if your iPhone is showing a <strong>"Trust This Computer?"</strong> prompt — tap Trust and enter your passcode.
-              </p>
-            </div>
-          )}
-
-          {/* iPhone plugged in and unlocked but hasn't tapped Trust yet */}
-          {needsTrust && !diagnosing && (
-            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Tap "Trust" on your iPhone</p>
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Your iPhone is connected and unlocked, but it hasn't authorised this PC yet. Look for a <strong>"Trust This Computer?"</strong> popup on your iPhone screen — tap <strong>Trust</strong> and enter your passcode. Then click Check again.
-              </p>
+          {/* iPhone connected but Equinox can't communicate with it */}
+          {noConnection && !diagnosing && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+              <p className="text-sm font-semibold">iPhone connected — can't communicate yet</p>
+              <p className="text-[11px] text-muted-foreground">Work through these steps one by one, clicking Check again after each:</p>
+              <ol className="space-y-2">
+                {[
+                  { n: 1, text: <>Make sure your iPhone screen is <strong>on and unlocked</strong> — swipe up and enter your passcode.</> },
+                  { n: 2, text: <>Look for a <strong>"Trust This Computer?"</strong> popup on your iPhone. Tap <strong>Trust</strong> and enter your passcode when prompted.</> },
+                  { n: 3, text: <>Unplug the cable and plug it back in, then wait 5 seconds.</> },
+                  { n: 4, text: <>Press <strong>Win + R</strong>, type <code className="bg-muted px-1 rounded text-[10px]">services.msc</code>, find <strong>Apple Mobile Device Service</strong>, right-click → <strong>Restart</strong>.</> },
+                ].map(s => (
+                  <li key={s.n} className="flex gap-2.5 items-start">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground mt-0.5">{s.n}</span>
+                    <span className="text-xs text-foreground leading-relaxed">{s.text}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
 
@@ -288,7 +290,7 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
           )}
 
           {/* Generic waiting — no diagnosis yet or suggestion is empty */}
-          {!itunesRequired && !binaryMissing && !needsUnlock && !needsTrust && !hasError && !diagnosing && (
+          {!itunesRequired && !binaryMissing && !noConnection && !hasError && !diagnosing && (
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
               Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
             </div>
