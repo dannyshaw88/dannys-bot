@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.838",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool now correctly identifies when the iPhone communication tool crashes because an Apple DLL isn't loading — instead of showing 'can't communicate', it now shows a clear 'iTunes driver not loading correctly' card with step-by-step fix instructions." },
+      { category: "Fix", text: "Mirror tool DLL search now checks more locations including the iTunes app folder and Apple Application Support, covering all standard iTunes install layouts." },
+      { category: "Fix", text: "Mirror tool now also looks for AppleMobileDeviceLibrary.dll in addition to AppleMobileDeviceInterface.dll — older iTunes versions use the library name." },
+    ],
+  },
+  {
     version: "1.0.837",
     date: "8 Jun 2026",
     items: [

@@ -125980,6 +125980,14 @@ function binPath(exe) {
 }
 var _amdPath = void 0;
 var _isStoreItunes = false;
+var APPLE_DLL_NAMES = [
+  "AppleMobileDeviceInterface.dll",
+  "AppleMobileDeviceLibrary.dll",
+  "libimobiledevice-1.0.dll"
+];
+function findAppleDllInDir(dir) {
+  return APPLE_DLL_NAMES.some((dll) => fs.existsSync(path.join(dir, dll)));
+}
 async function getAppleMobileDevicePath() {
   if (_amdPath !== void 0) {
     mlog.debug({ cached: _amdPath }, "[mirror] getAppleMobileDevicePath: returning cached value");
@@ -125991,11 +125999,14 @@ async function getAppleMobileDevicePath() {
   }
   const staticPaths = [
     "C:\\Program Files\\Common Files\\Apple\\Mobile Device Support",
-    "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support"
+    "C:\\Program Files (x86)\\Common Files\\Apple\\Mobile Device Support",
+    "C:\\Program Files\\iTunes",
+    "C:\\Program Files (x86)\\iTunes",
+    "C:\\Program Files\\Common Files\\Apple\\Apple Application Support",
+    "C:\\Program Files (x86)\\Common Files\\Apple\\Apple Application Support"
   ];
   for (const p of staticPaths) {
-    const dll = path.join(p, "AppleMobileDeviceInterface.dll");
-    const exists2 = fs.existsSync(dll);
+    const exists2 = findAppleDllInDir(p);
     mlog.debug({ path: p, dllExists: exists2 }, "[mirror] getAppleMobileDevicePath: checking static path");
     if (exists2) {
       _amdPath = p;
@@ -126003,6 +126014,7 @@ async function getAppleMobileDevicePath() {
       return p;
     }
   }
+  let svcDirFallback = "";
   try {
     const { stdout } = await execAsync('sc qc "Apple Mobile Device Service"', { timeout: 4e3 });
     mlog.debug({ scOutput: stdout.trim() }, "[mirror] getAppleMobileDevicePath: sc qc output");
@@ -126021,12 +126033,16 @@ async function getAppleMobileDevicePath() {
         svcDir,
         path.join(svcDir, ".."),
         path.join(svcDir, "..", ".."),
-        path.join(svcDir, "..", "..", "..")
+        path.join(svcDir, "..", "..", ".."),
+        // Also probe sibling iTunes app directory
+        path.join(svcDir, "..", "..", "iTunes"),
+        path.join(svcDir, "..", "..", "..", "iTunes"),
+        "C:\\Program Files\\iTunes",
+        "C:\\Program Files (x86)\\iTunes"
       ];
       for (const c3 of candidates) {
         const resolved = path.resolve(c3);
-        const dll = path.join(resolved, "AppleMobileDeviceInterface.dll");
-        const exists2 = fs.existsSync(dll);
+        const exists2 = findAppleDllInDir(resolved);
         mlog.info(`[mirror] getAppleMobileDevicePath: checking "${resolved}" \u2014 DLL exists: ${exists2}`);
         if (exists2) {
           _amdPath = resolved;
@@ -126034,19 +126050,40 @@ async function getAppleMobileDevicePath() {
           return resolved;
         }
       }
+      svcDirFallback = svcDir;
       mlog.warn(`[mirror] getAppleMobileDevicePath: DLL not found in any candidate under "${svcDir}" \u2014 using svcDir as fallback`);
-      _amdPath = svcDir;
-      return svcDir;
     } else {
       mlog.warn("[mirror] getAppleMobileDevicePath: could not parse BINARY_PATH_NAME from sc qc output");
     }
   } catch (err) {
     mlog.warn({ err: String(err?.message ?? err) }, "[mirror] getAppleMobileDevicePath: sc qc failed");
   }
+  try {
+    const { stdout: regOut } = await execAsync(
+      'reg query "HKLM\\SOFTWARE\\Apple Inc.\\Apple Mobile Device Support" /v "InstallDir" 2>nul || reg query "HKLM\\SOFTWARE\\WOW6432Node\\Apple Inc.\\Apple Mobile Device Support" /v "InstallDir" 2>nul',
+      { timeout: 4e3 }
+    );
+    const regMatch = regOut.match(/InstallDir\s+REG_SZ\s+(.+)/i);
+    if (regMatch) {
+      const regDir = regMatch[1].trim();
+      mlog.info(`[mirror] getAppleMobileDevicePath: registry InstallDir="${regDir}"`);
+      if (findAppleDllInDir(regDir)) {
+        _amdPath = regDir;
+        mlog.info(`[mirror] getAppleMobileDevicePath: DLL found via registry at "${regDir}"`);
+        return regDir;
+      }
+    }
+  } catch {
+  }
+  if (svcDirFallback) {
+    _amdPath = svcDirFallback;
+    return svcDirFallback;
+  }
   mlog.warn("[mirror] getAppleMobileDevicePath: could not find Apple DLL path \u2014 idevice tools may fail to load DLLs");
   _amdPath = "";
   return "";
 }
+var DLL_NOT_FOUND_EXIT_CODE = 3221225781;
 async function buildEnvWithApplePath() {
   const amdPath = await getAppleMobileDevicePath();
   const binDir = getBinDir();
@@ -126094,6 +126131,7 @@ async function diagnoseIphoneSupport() {
   let rawOutput = "";
   let rawError = "";
   let debugOutput = "";
+  let dllCrash = false;
   if (binaryFound) {
     const cmd = `"${exe}" -l`;
     mlog.info({ cmd, usbmuxd: env2.USBMUXD_SOCKET_ADDRESS }, "[mirror] diagnoseIphoneSupport: running idevice_id -l");
@@ -126103,10 +126141,15 @@ async function diagnoseIphoneSupport() {
       rawError = result.stderr?.trim() ?? "";
       mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l result \u2014 stdout="${rawOutput}" stderr="${rawError}"`);
     } catch (err) {
-      rawError = String(err?.stderr ?? err?.message ?? err);
-      mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id -l threw \u2014 code=${err?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
+      const exitCode = err?.code;
+      if (exitCode === DLL_NOT_FOUND_EXIT_CODE) {
+        dllCrash = true;
+        mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id.exe crashed with 0xC0000135 (DLL_NOT_FOUND) \u2014 Apple DLL missing from PATH. amdPath="${amdPath}"`);
+      }
+      rawError = String((err?.stderr || err?.message) ?? err);
+      mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id -l threw \u2014 code=${exitCode} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
     }
-    if (rawOutput === "" && rawError === "") {
+    if (rawOutput === "" && rawError === "" && !dllCrash) {
       const dbgCmd = `"${exe}" --debug -l`;
       mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l returned empty \u2014 retrying with --debug`);
       try {
@@ -126114,8 +126157,10 @@ async function diagnoseIphoneSupport() {
         debugOutput = [dbg.stdout, dbg.stderr].filter(Boolean).join("\n").trim();
         mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id --debug output: "${debugOutput}"`);
       } catch (err) {
-        debugOutput = String(err?.stderr ?? err?.stdout ?? err?.message ?? "").trim();
-        mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id --debug threw \u2014 code=${err?.code} output="${debugOutput}"`);
+        const dbgCode = err?.code;
+        if (dbgCode === DLL_NOT_FOUND_EXIT_CODE) dllCrash = true;
+        debugOutput = String((err?.stderr || err?.stdout || err?.message) ?? "").trim();
+        mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id --debug threw \u2014 code=${dbgCode} output="${debugOutput}"`);
       }
     }
   } else {
@@ -126128,6 +126173,8 @@ async function diagnoseIphoneSupport() {
     suggestion = "ms_store_itunes";
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
+  } else if (dllCrash) {
+    suggestion = "dll_missing";
   } else if (rawOutput === "" && rawError === "") {
     suggestion = "no_connection";
   } else if (rawError) {
@@ -126171,7 +126218,11 @@ async function listConnectedDevices() {
       return devices;
     }
   } catch (err) {
-    mlog.warn(`[mirror] listConnectedDevices: bundled idevice_id.exe threw \u2014 code=${err?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
+    const exitCode = err?.code;
+    if (exitCode === DLL_NOT_FOUND_EXIT_CODE) {
+      mlog.warn(`[mirror] listConnectedDevices: idevice_id.exe crashed with 0xC0000135 (DLL_NOT_FOUND) \u2014 Apple DLL not in PATH. Run diagnose for full details.`);
+    }
+    mlog.warn(`[mirror] listConnectedDevices: bundled idevice_id.exe threw \u2014 code=${exitCode} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
   }
   try {
     mlog.info("[mirror] listConnectedDevices: trying idevice_id from PATH");

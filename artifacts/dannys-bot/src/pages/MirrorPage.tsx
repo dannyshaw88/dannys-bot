@@ -174,6 +174,7 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
 
   const itunesRequired  = diagnosis?.suggestion === "itunes_required";
   const msStoreItunes   = diagnosis?.suggestion === "ms_store_itunes";
+  const dllMissing      = diagnosis?.suggestion === "dll_missing";
   const binaryMissing   = diagnosis !== null && !diagnosis.binaryFound;
   const noConnection    = diagnosis?.suggestion === "no_connection"
     || diagnosis?.suggestion === "unlock"
@@ -297,8 +298,51 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
             </div>
           )}
 
+          {/* Apple DLL not loading — iTunes installed but driver not accessible from PATH */}
+          {dllMissing && !diagnosing && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⚠</span>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">iTunes driver not loading correctly</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                    iTunes is installed and the Apple service is running, but the required Apple DLL
+                    (<strong>AppleMobileDeviceInterface.dll</strong>) isn't accessible. This usually
+                    happens after a fresh iTunes install before a reboot, or if the installer didn't
+                    finish cleanly.
+                  </p>
+                </div>
+              </div>
+              <ol className="space-y-1.5">
+                {[
+                  <><strong>Restart your PC</strong> — most common fix. A fresh iTunes install often needs a reboot before its DLLs register in Windows' path.</>,
+                  <>If restarting doesn't help, open <strong>Start → Settings → Apps</strong>, find <strong>iTunes</strong>, click → <strong>Modify</strong> → <strong>Repair</strong>.</>,
+                  <>After repairing, <strong>restart your PC again</strong>, then reopen Equinox and plug in your iPhone.</>,
+                  <>Still stuck? Uninstall iTunes completely, restart, then reinstall from <strong>apple.com/itunes</strong> (not the Microsoft Store).</>,
+                ].map((text, i) => (
+                  <li key={i} className="flex gap-2 items-start">
+                    <span className="shrink-0 w-4 h-4 rounded-full bg-amber-200 dark:bg-amber-900 flex items-center justify-center text-[9px] font-bold text-amber-700 dark:text-amber-300 mt-0.5">{i + 1}</span>
+                    <span className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="flex gap-2 pt-1">
+                <a href="https://www.apple.com/itunes/download/win64" target="_blank" rel="noreferrer" className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full h-9 text-xs">
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Download iTunes (Apple)
+                  </Button>
+                </a>
+                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                  Check again
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Diagnosing spinner */}
-          {diagnosing && !itunesRequired && !binaryMissing && (
+          {diagnosing && !itunesRequired && !binaryMissing && !dllMissing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               Checking iPhone connection…
@@ -353,14 +397,14 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
           )}
 
           {/* Generic waiting — no diagnosis yet or suggestion is empty */}
-          {!itunesRequired && !binaryMissing && !noConnection && !hasError && !diagnosing && (
+          {!itunesRequired && !binaryMissing && !dllMissing && !noConnection && !hasError && !diagnosing && (
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground">
               Waiting for your iPhone… plug it in with a USB cable and it will appear here automatically.
             </div>
           )}
 
-          {/* Retry button when diagnosis is done */}
-          {!itunesRequired && !binaryMissing && diagnosis !== null && (
+          {/* Retry button when diagnosis is done (dllMissing has its own retry inside the card) */}
+          {!itunesRequired && !binaryMissing && !dllMissing && diagnosis !== null && (
             <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={onRetry}>
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
               Check again
