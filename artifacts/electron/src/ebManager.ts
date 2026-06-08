@@ -421,6 +421,21 @@ const GHOST_SIGNUP_FP_PATCH_JS = `(function(){
   // ── navigator: platform + touch (belt-and-suspenders on top of CDP) ───────────
   try{Object.defineProperty(navigator,'platform',{get:function(){return 'Linux armv8l';},configurable:true});}catch(e){}
   try{Object.defineProperty(navigator,'maxTouchPoints',{get:function(){return 10;},configurable:true});}catch(e){}
+  // ── navigator.hardwareConcurrency: Pixel 8 has 8 cores (Tensor G3) ───────────
+  // The desktop fp script picks from [4,6,8,8,8,12,16] — can land on 4, which
+  // is wrong for a Pixel 8. Pin to 8 here as the canonical Pixel 8 core count.
+  try{Object.defineProperty(navigator,'hardwareConcurrency',{get:function(){return 8;},configurable:true});}catch(e){}
+  // ── navigator.languages: strip HTTP q-weight from JS array ────────────────────
+  // Setting acceptLanguage:"en-US,en;q=0.9" in CDP causes Chrome to leak the
+  // q-value into navigator.languages → ["en-US","en;q=0.9"]. Real Android Chrome
+  // strips q-values: navigator.languages is always ["en-US","en"].
+  try{
+    var _rawLangs=Array.from(navigator.languages||[]);
+    var _cleanLangs=_rawLangs.map(function(l){return l.split(';')[0].trim();}).filter(Boolean);
+    if(_cleanLangs.length===0)_cleanLangs=['en-US','en'];
+    Object.defineProperty(navigator,'languages',{get:function(){return _cleanLangs;},configurable:true});
+    Object.defineProperty(navigator,'language',{get:function(){return _cleanLangs[0];},configurable:true});
+  }catch(e){}
   // ── navigator.plugins: empty on Android Chrome ────────────────────────────────
   try{
     var _ep=Object.create(PluginArray.prototype);

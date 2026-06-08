@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.827",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: navigator.languages was reporting '[\"en-US\",\"en;q=0.9\"]' — the HTTP Accept-Language q-weight was leaking into the JavaScript API. Real Android Chrome always strips q-values and gives [\"en-US\",\"en\"]. This has been corrected." },
+      { category: "Fix", text: "Ghost Browser signup: hardwareConcurrency was randomly picking 4 from the desktop fingerprint pool. The Pixel 8 has 8 cores (Tensor G3). Now pinned to 8." },
+    ],
+  },
+  {
     version: "1.0.826",
     date: "8 Jun 2026",
     items: [
