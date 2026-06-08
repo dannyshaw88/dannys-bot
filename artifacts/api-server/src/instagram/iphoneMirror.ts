@@ -48,6 +48,7 @@ function binPath(exe: string): string {
 // and inject it into PATH so every child_process spawn can load the DLL.
 
 let _amdPath: string | null | undefined = undefined; // undefined = not yet resolved
+let _isStoreItunes = false; // true when iTunes is the sandboxed Microsoft Store version
 
 async function getAppleMobileDevicePath(): Promise<string> {
   if (_amdPath !== undefined) {
@@ -81,24 +82,35 @@ async function getAppleMobileDevicePath(): Promise<string> {
     if (m) {
       const svcBin = m[1].trim().replace(/"/g, "").replace(/^"|"$/g, "");
       const svcDir = path.dirname(svcBin);
-      mlog.info({ svcBin, svcDir }, "[mirror] getAppleMobileDevicePath: service binary found");
+      mlog.info(`[mirror] getAppleMobileDevicePath: service binary at: "${svcBin}" — dir: "${svcDir}"`);
+
+      // Detect Microsoft Store iTunes — its binaries live in a sandboxed WindowsApps directory
+      // that child processes cannot read DLLs from. libimobiledevice tools will crash on load.
+      if (svcDir.toLowerCase().includes("windowsapps")) {
+        _isStoreItunes = true;
+        mlog.warn(`[mirror] getAppleMobileDevicePath: MICROSOFT STORE ITUNES DETECTED — service is in WindowsApps sandbox: "${svcDir}". libimobiledevice DLLs are inaccessible from this location. idevice_id.exe will crash. User must uninstall Store iTunes and install from apple.com.`);
+        _amdPath = "";
+        return "";
+      }
+
       const candidates = [
         svcDir,
         path.join(svcDir, ".."),
         path.join(svcDir, "..", ".."),
+        path.join(svcDir, "..", "..", ".."),
       ];
       for (const c of candidates) {
         const resolved = path.resolve(c);
         const dll = path.join(resolved, "AppleMobileDeviceInterface.dll");
         const exists = fs.existsSync(dll);
-        mlog.debug({ candidate: resolved, dllExists: exists }, "[mirror] getAppleMobileDevicePath: checking candidate");
+        mlog.info(`[mirror] getAppleMobileDevicePath: checking "${resolved}" — DLL exists: ${exists}`);
         if (exists) {
           _amdPath = resolved;
-          mlog.info({ amdPath: resolved, source: "service-query" }, "[mirror] getAppleMobileDevicePath: DLL found (service query)");
+          mlog.info(`[mirror] getAppleMobileDevicePath: DLL found at: "${resolved}" (service-query)`);
           return resolved;
         }
       }
-      mlog.warn({ svcDir }, "[mirror] getAppleMobileDevicePath: DLL not found in service dir hierarchy — using svcDir as fallback");
+      mlog.warn(`[mirror] getAppleMobileDevicePath: DLL not found in any candidate under "${svcDir}" — using svcDir as fallback`);
       _amdPath = svcDir;
       return svcDir;
     } else {
@@ -147,6 +159,7 @@ export interface IphoneDiagnostics {
   rawOutput: string;
   rawError: string;
   suggestion: string;
+  msStoreItunes?: boolean;
 }
 
 /** Run a full diagnostic: is the binary present? Is Apple's USB driver loaded? */
@@ -193,23 +206,23 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
       const result = await execAsync(cmd, { timeout: 6000, env });
       rawOutput = result.stdout.trim();
       rawError = (result as any).stderr?.trim() ?? "";
-      mlog.info({ rawOutput, rawError }, "[mirror] diagnoseIphoneSupport: idevice_id -l result");
+      mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l result — stdout="${rawOutput}" stderr="${rawError}"`);
     } catch (err: any) {
       rawError = String(err?.stderr ?? err?.message ?? err);
-      mlog.warn({ rawError, exitCode: (err as any)?.code }, "[mirror] diagnoseIphoneSupport: idevice_id -l threw error");
+      mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id -l threw — code=${(err as any)?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
     }
 
     // If nothing came back, try with --debug to get verbose output for diagnosis
     if (rawOutput === "" && rawError === "") {
       const dbgCmd = `"${exe}" --debug -l`;
-      mlog.info({ cmd: dbgCmd }, "[mirror] diagnoseIphoneSupport: idevice_id -l returned empty — retrying with --debug");
+      mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id -l returned empty — retrying with --debug`);
       try {
         const dbg = await execAsync(dbgCmd, { timeout: 8000, env });
         debugOutput = [dbg.stdout, (dbg as any).stderr].filter(Boolean).join("\n").trim();
-        mlog.info({ debugOutput }, "[mirror] diagnoseIphoneSupport: idevice_id --debug result");
+        mlog.info(`[mirror] diagnoseIphoneSupport: idevice_id --debug output: "${debugOutput}"`);
       } catch (err: any) {
         debugOutput = String(err?.stderr ?? err?.stdout ?? err?.message ?? "").trim();
-        mlog.warn({ debugOutput, exitCode: (err as any)?.code }, "[mirror] diagnoseIphoneSupport: idevice_id --debug threw error");
+        mlog.warn(`[mirror] diagnoseIphoneSupport: idevice_id --debug threw — code=${(err as any)?.code} output="${debugOutput}"`);
       }
     }
   } else {
@@ -219,6 +232,8 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
   let suggestion = "";
   if (!binaryFound) {
     suggestion = "Equinox binaries are missing. Try reinstalling the app.";
+  } else if (_isStoreItunes) {
+    suggestion = "ms_store_itunes";
   } else if (!appleDriverRunning && process.platform === "win32") {
     suggestion = "itunes_required";
   } else if (rawOutput === "" && rawError === "") {
@@ -229,8 +244,8 @@ export async function diagnoseIphoneSupport(): Promise<IphoneDiagnostics & { amd
     suggestion = "ok";
   }
 
-  mlog.info({ suggestion, binaryFound, appleDriverRunning, amdPath }, "[mirror] diagnoseIphoneSupport: complete");
-  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, debugOutput, suggestion };
+  mlog.info(`[mirror] diagnoseIphoneSupport: complete — suggestion="${suggestion}" binaryFound=${binaryFound} appleDriverRunning=${appleDriverRunning} amdPath="${amdPath}" msStoreItunes=${_isStoreItunes}`);
+  return { binaryFound, binaryPath: exe, appleDriverRunning, amdPath, rawOutput, rawError, debugOutput, suggestion, msStoreItunes: _isStoreItunes };
 }
 
 export async function listConnectedDevices(): Promise<IosDevice[]> {
@@ -243,7 +258,7 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
     const cmd = `"${exe}" -l`;
     mlog.info({ cmd, usbmuxd: env.USBMUXD_SOCKET_ADDRESS }, "[mirror] listConnectedDevices: running bundled idevice_id.exe");
     const { stdout, stderr } = await execAsync(cmd, { timeout: 5000, env }) as any;
-    mlog.info({ stdout: stdout?.trim(), stderr: stderr?.trim() }, "[mirror] listConnectedDevices: idevice_id.exe result");
+    mlog.info(`[mirror] listConnectedDevices: idevice_id.exe result — stdout="${stdout?.trim()}" stderr="${stderr?.trim()}"`);
     const udids = stdout.trim().split("\n").filter(Boolean);
     if (udids.length === 0) {
       mlog.warn("[mirror] listConnectedDevices: idevice_id.exe returned no UDIDs");
@@ -269,7 +284,7 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
       return devices;
     }
   } catch (err: any) {
-    mlog.warn({ err: String(err?.stderr ?? err?.message ?? err), exitCode: (err as any)?.code }, "[mirror] listConnectedDevices: bundled idevice_id.exe threw");
+    mlog.warn(`[mirror] listConnectedDevices: bundled idevice_id.exe threw — code=${(err as any)?.code} stderr="${String(err?.stderr ?? "")}" message="${String(err?.message ?? err)}"`);
   }
 
   // 2. Try idevice_id from PATH (dev environments with libimobiledevice)

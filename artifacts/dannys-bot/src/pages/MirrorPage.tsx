@@ -149,6 +149,7 @@ interface DiagResult {
   amdPath?: string;
   debugOutput?: string;
   binaryPath?: string;
+  msStoreItunes?: boolean;
 }
 
 interface SetupPanelProps {
@@ -172,6 +173,7 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
   ];
 
   const itunesRequired  = diagnosis?.suggestion === "itunes_required";
+  const msStoreItunes   = diagnosis?.suggestion === "ms_store_itunes";
   const binaryMissing   = diagnosis !== null && !diagnosis.binaryFound;
   const noConnection    = diagnosis?.suggestion === "no_connection"
     || diagnosis?.suggestion === "unlock"
@@ -208,6 +210,50 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
       {/* Stage-specific action */}
       {stage === "no_device" && (
         <div className="space-y-3">
+          {/* Microsoft Store iTunes — sandboxed, libimobiledevice cannot reach its DLLs */}
+          {msStoreItunes && (
+            <div className="rounded-lg border border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <span className="text-red-600 dark:text-red-400 text-base leading-none mt-0.5">✕</span>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-300">Microsoft Store iTunes — not compatible</p>
+                  <p className="text-xs text-red-700 dark:text-red-400 leading-relaxed">
+                    You have iTunes installed from the <strong>Microsoft Store</strong>. That version runs in a sandboxed container that blocks the USB communication tools Equinox uses — so even though your iPhone shows up in Windows Explorer, Equinox cannot reach it.
+                  </p>
+                  <p className="text-xs text-red-700 dark:text-red-400 leading-relaxed">
+                    <strong>Fix:</strong> Uninstall Microsoft Store iTunes, then download and install iTunes directly from Apple's website.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <ol className="space-y-1.5">
+                  {[
+                    <>Open <strong>Start → Settings → Apps</strong>, search for <strong>iTunes</strong>, click it → <strong>Uninstall</strong>.</>,
+                    <>Go to <strong>apple.com/itunes</strong> and download the Windows installer (not the Store link).</>,
+                    <>Install it, then plug your iPhone back in and click <strong>Check again</strong>.</>,
+                  ].map((text, i) => (
+                    <li key={i} className="flex gap-2 items-start">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-red-200 dark:bg-red-900 flex items-center justify-center text-[9px] font-bold text-red-700 dark:text-red-300 mt-0.5">{i + 1}</span>
+                      <span className="text-xs text-red-700 dark:text-red-400 leading-relaxed">{text}</span>
+                    </li>
+                  ))}
+                </ol>
+                <div className="flex gap-2 pt-1">
+                  <a href="https://www.apple.com/itunes/download/win64" target="_blank" rel="noreferrer" className="flex-1">
+                    <Button className="w-full h-9 text-xs font-semibold" style={{ background: "#1AD2F2", color: "#000" }}>
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      Download iTunes from Apple
+                    </Button>
+                  </a>
+                  <Button variant="outline" size="sm" className="h-9 text-xs" onClick={onRetry}>
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                    Check again
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* iTunes required — most common root cause */}
           {itunesRequired && (
             <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">

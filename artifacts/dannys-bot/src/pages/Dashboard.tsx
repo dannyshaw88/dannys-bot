@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.837",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror tool now detects Microsoft Store iTunes and shows a clear error explaining it's not compatible — and how to switch to the proper Apple website version." },
+      { category: "Fix", text: "All Mirror tool log messages now include the full error text inline so they're visible in the debug log file regardless of format." },
+    ],
+  },
+  {
     version: "1.0.836",
     date: "8 Jun 2026",
     items: [
