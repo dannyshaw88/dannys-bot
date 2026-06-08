@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.825",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: every account created was getting the same canvas fingerprint, the same WebGL renderer, and the same audio hash because all signups use the same 'Pixel 8' UA which seeds the fingerprint randomiser to the same value every time. Instagram was clustering all ghost-signup accounts by canvas fingerprint and banning them in batches. Each signup session now generates its own random canvas noise, WebGL GPU identity, and audio fingerprint." },
+      { category: "Fix", text: "Ghost Browser signup: all keyboard input now uses Android IME key codes (key='Unidentified', windowsVirtualKeyCode=229) instead of Windows virtual key codes. On Android, every key from the virtual keyboard fires VK_PROCESSKEY (229) — sending the actual character code (e.g. 65 for 'A') is a hard Windows desktop signal." },
+      { category: "Fix", text: "Ghost Browser signup: screen.orientation was still reporting 'landscape-primary' (Electron's desktop default) even though the viewport was set to 393x851 portrait. Instagram reads screen.orientation to classify the device type. Now correctly reports 'portrait-primary'." },
+      { category: "Fix", text: "Ghost Browser signup: window.visualViewport, window.ontouchstart, and window.matchMedia pointer/hover queries (belt-and-suspenders on top of CDP touch emulation) are now all correctly set to match a real Android phone." },
+    ],
+  },
+  {
     version: "1.0.824",
     date: "8 Jun 2026",
     items: [

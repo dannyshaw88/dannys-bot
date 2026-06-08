@@ -466,6 +466,42 @@ const GHOST_SIGNUP_FP_PATCH_JS = `(function(){
       }catch(e3){}
     },16+Math.round(Math.random()*5));
   }catch(e){}
+  // ── screen.orientation + window.orientation: must be portrait ────────────────
+  // The fp script's desktop branch (isMobile=false, which ghost browser gets)
+  // never touches orientation, so Electron defaults to landscape-primary.
+  // setDeviceMetricsOverride sets portraitPrimary at the rendering level but does
+  // NOT override the JavaScript screen.orientation object.
+  try{
+    var _ori={type:'portrait-primary',angle:0,onchange:null,
+      lock:function(){return Promise.reject(new DOMException('Not supported','NotSupportedError'));},
+      unlock:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+    Object.defineProperty(screen,'orientation',{get:function(){return _ori;},configurable:true});
+  }catch(e){}
+  try{Object.defineProperty(window,'orientation',{get:function(){return 0;},configurable:true});}catch(e){}
+  // ── window.visualViewport: match the emulated 393×851 viewport ─────────────
+  try{if(window.visualViewport){
+    Object.defineProperty(window.visualViewport,'width',{get:function(){return 393;},configurable:true});
+    Object.defineProperty(window.visualViewport,'height',{get:function(){return 851;},configurable:true});
+    Object.defineProperty(window.visualViewport,'scale',{get:function(){return 1;},configurable:true});
+  }}catch(e){}
+  // ── window.ontouchstart: must be null (not undefined) on Android Chrome ─────
+  // undefined = no touch support; null = touch capable, no handler registered.
+  // The fp script only sets this in the mobile branch (isMobile=true).
+  try{if(window.ontouchstart===undefined)window.ontouchstart=null;}catch(e){}
+  // ── matchMedia: belt-and-suspenders on top of CDP setTouchEmulationEnabled ──
+  // CDP touch emulation SHOULD flip (pointer:coarse) at Blink level, but the
+  // fp script's mobile branch also patches matchMedia as extra insurance. Since
+  // ghost browser runs the desktop branch, we replicate that patch here.
+  try{
+    var _oMM=window.matchMedia.bind(window);
+    window.matchMedia=function(q){
+      var _mql={matches:false,media:q,onchange:null,addListener:function(){},removeListener:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+      if(/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q))return Object.assign({},_mql,{matches:true});
+      if(/(hover:\s*none|any-hover:\s*none)/.test(q))return Object.assign({},_mql,{matches:true});
+      if(/(pointer:\s*fine|any-pointer:\s*fine|hover:\s*hover|any-hover:\s*hover)/.test(q))return _mql;
+      try{return _oMM(q);}catch(e2){return _mql;}
+    };
+  }catch(e){}
   // ── Remove desktop-only APIs absent from Android Chrome ───────────────────────
   // performance.memory is a non-standard Chrome extension not available on Android.
   // Instagram's device classifier checks "typeof performance.memory" to distinguish
@@ -579,29 +615,53 @@ async function humanMouseClick(
 async function typeTextCDP(
   dbg: Electron.Debugger,
   text: string,
-  opts?: { minDelay?: number; maxDelay?: number },
+  opts?: { minDelay?: number; maxDelay?: number; androidIme?: boolean },
 ): Promise<void> {
-  const min = opts?.minDelay ?? 80;
-  const max = opts?.maxDelay ?? 280;
+  const min       = opts?.minDelay  ?? 80;
+  const max       = opts?.maxDelay  ?? 280;
+  // androidIme=true: mimic Android virtual keyboard (IME) behaviour.
+  // On Android every key fires keydown/keyup with key="Unidentified" and
+  // windowsVirtualKeyCode=229 (VK_PROCESSKEY), NOT the actual char code.
+  // Sending real Windows virtual key codes (e.g. 65 for 'A') is a hard
+  // desktop signal Instagram's input-event analyser can read.
+  const androidIme = opts?.androidIme ?? false;
   for (const char of text) {
     const code = char.codePointAt(0) ?? 0;
     const vk   = code >= 32 && code <= 126 ? code : 0;
     try {
-      await dbg.sendCommand("Input.dispatchKeyEvent", {
-        type: "rawKeyDown",
-        windowsVirtualKeyCode: vk,
-        nativeVirtualKeyCode:  vk,
-        unmodifiedText: char,
-        text: char,
-      });
-      await dbg.sendCommand("Input.insertText", { text: char });
-      await dbg.sendCommand("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        windowsVirtualKeyCode: vk,
-        nativeVirtualKeyCode:  vk,
-        unmodifiedText: char,
-        text: char,
-      });
+      if (androidIme) {
+        // Android IME path: keyCode 229 = VK_PROCESSKEY (standard for all
+        // Android virtual keyboard input — character never appears in keydown)
+        await dbg.sendCommand("Input.dispatchKeyEvent", {
+          type: "rawKeyDown",
+          key: "Unidentified",
+          windowsVirtualKeyCode: 229,
+          nativeVirtualKeyCode:  229,
+        });
+        await dbg.sendCommand("Input.insertText", { text: char });
+        await dbg.sendCommand("Input.dispatchKeyEvent", {
+          type: "keyUp",
+          key: "Unidentified",
+          windowsVirtualKeyCode: 229,
+          nativeVirtualKeyCode:  229,
+        });
+      } else {
+        await dbg.sendCommand("Input.dispatchKeyEvent", {
+          type: "rawKeyDown",
+          windowsVirtualKeyCode: vk,
+          nativeVirtualKeyCode:  vk,
+          unmodifiedText: char,
+          text: char,
+        });
+        await dbg.sendCommand("Input.insertText", { text: char });
+        await dbg.sendCommand("Input.dispatchKeyEvent", {
+          type: "keyUp",
+          windowsVirtualKeyCode: vk,
+          nativeVirtualKeyCode:  vk,
+          unmodifiedText: char,
+          text: char,
+        });
+      }
     } catch {}
     // Human inter-key delay: base 80–280 ms + 8% chance of 400–1000 ms thinking pause
     const base  = min + Math.random() * (max - min);
@@ -4388,11 +4448,57 @@ export function startEbIpcServer(
 
           // Inject scripts before navigating to Instagram.
           // addScriptToEvaluateOnNewDocument fires on every subsequent navigation in order:
-          //   1st: WEBRTC_BLOCKER_JS   (injected when ghost window opened)
-          //   2nd: _fpScript desktop   (injected when ghost window opened, isMobile=false)
-          //   3rd: MOUSE_HOVER_BLOCKER (injected here)
-          //   4th: GHOST_SIGNUP_FP_PATCH (injected here — overrides desktop fp values)
-          // buildFingerprintScript now emits configurable:true getters so step 4 can win.
+          //   1st: WEBRTC_BLOCKER_JS         (injected when ghost window opened)
+          //   2nd: _fpScript desktop         (injected when ghost window opened, isMobile=false)
+          //   3rd: MOUSE_HOVER_BLOCKER       (injected here)
+          //   4th: GHOST_SIGNUP_FP_PATCH     (injected here — overrides desktop fp values)
+          //   5th: per-session canvas patch  (injected here — unique fingerprint per signup)
+          // buildFingerprintScript now emits configurable:true getters so steps 4-5 can win.
+
+          // ── Per-session unique canvas / WebGL / audio fingerprint ──────────────
+          // CRITICAL: the fp script PRNG is seeded from the UA hash. Ghost browser
+          // always uses "Pixel 8" UA → same seed → same canvas hash, same WebGL
+          // renderer, same audio fingerprint on EVERY signup. Instagram clusters
+          // accounts by canvas fingerprint and bans in bulk. This patch generates
+          // a fresh set of random values per signup session and re-overrides the
+          // prototype methods the fp script already patched.
+          const _gpCN   = 2 + Math.floor(Math.random() * 252);
+          const _gpAN   = (Math.random() * 0.0000008 + 0.0000001).toFixed(16);
+          const _gpWGPU = [
+            ["Qualcomm Technologies, Inc.", "Adreno (TM) 750"],
+            ["Qualcomm Technologies, Inc.", "Adreno (TM) 735"],
+            ["Qualcomm Technologies, Inc.", "Adreno (TM) 720"],
+            ["Qualcomm Technologies, Inc.", "Adreno (TM) 740"],
+            ["ARM", "Mali-G920 MC10"],
+            ["ARM", "Mali-G715 MC5"],
+            ["Google", "Tensor G3"],
+            ["Google", "Tensor G4"],
+          ];
+          const [_gpWV, _gpWR] = _gpWGPU[Math.floor(Math.random() * _gpWGPU.length)];
+          const _ghostCanvasScript = `(function(){
+  var _CN=${_gpCN},_AN=${_gpAN};
+  var _WV=${JSON.stringify(_gpWV)},_WR=${JSON.stringify(_gpWR)};
+  try{
+    HTMLCanvasElement.prototype.toDataURL=function(){
+      if(!this.width||!this.height)return Object.getPrototypeOf(HTMLCanvasElement.prototype).toDataURL.apply(this,arguments);
+      try{var c=document.createElement('canvas');c.width=this.width;c.height=this.height;var cx=c.getContext('2d');cx.drawImage(this,0,0);var d=cx.getImageData(0,0,c.width,c.height);d.data[(_CN*4)%d.data.length]^=1;cx.putImageData(d,0,0);return Object.getPrototypeOf(HTMLCanvasElement.prototype).toDataURL.apply(c,arguments);}catch(e2){return Object.getPrototypeOf(HTMLCanvasElement.prototype).toDataURL.apply(this,arguments);}
+    };
+    HTMLCanvasElement.prototype.toBlob=function(cb,type,quality){
+      if(!this.width||!this.height){HTMLCanvasElement.prototype.toBlob.call(this,cb,type,quality);return;}
+      try{var c=document.createElement('canvas');c.width=this.width;c.height=this.height;var cx=c.getContext('2d');cx.drawImage(this,0,0);var d=cx.getImageData(0,0,c.width,c.height);d.data[(_CN*4)%d.data.length]^=1;cx.putImageData(d,0,0);HTMLCanvasElement.prototype.toBlob.call(c,cb,type,quality);}catch(e2){HTMLCanvasElement.prototype.toBlob.call(this,cb,type,quality);}
+    };
+  }catch(e){}
+  try{
+    if(window.WebGLRenderingContext){WebGLRenderingContext.prototype.getParameter=function(p){if(p===0x9245)return _WV;if(p===0x9246)return _WR;return WebGLRenderingContext.prototype.getParameter.call(this,p);};}
+    if(window.WebGL2RenderingContext){WebGL2RenderingContext.prototype.getParameter=function(p){if(p===0x9245)return _WV;if(p===0x9246)return _WR;return WebGL2RenderingContext.prototype.getParameter.call(this,p);};}
+  }catch(e){}
+  try{
+    var _S=Math.round(_AN*1e7)|1;
+    AnalyserNode.prototype.getFloatFrequencyData=function(a){var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;_oGFF.call(this,a);if(a&&a.length>0){var s=_S;for(var i=0;i<a.length;i++){s=Math.imul(1664525,s)+1013904223>>>0;a[i]+=(s/0x100000000)*0.0001-0.00005;}}};
+    AnalyserNode.prototype.getByteFrequencyData=function(a){var _oGBF=AnalyserNode.prototype.getByteFrequencyData;_oGBF.call(this,a);if(a&&a.length>0){var s=_S;for(var i=0;i<a.length;i++){s=Math.imul(1664525,s)+1013904223>>>0;var v=a[i]+(s/0x100000000>0.5?1:0);a[i]=Math.max(0,Math.min(255,v));}}};
+  }catch(e){}
+})();`;
+
           try {
             await wc.debugger.sendCommand("Page.enable");
           } catch {}
@@ -4402,13 +4508,18 @@ export function startEbIpcServer(
           try {
             await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: GHOST_SIGNUP_FP_PATCH_JS });
           } catch {}
+          try {
+            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _ghostCanvasScript });
+          } catch {}
           // Also execute on the currently-loaded page (addScriptToEvaluateOnNewDocument
           // only applies to future navigations — we need it on the page that's already open)
           wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
           wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
+          wc.executeJavaScript(_ghostCanvasScript).catch(() => {});
           wc.on("dom-ready", () => {
             wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
             wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
+            wc.executeJavaScript(_ghostCanvasScript).catch(() => {});
           });
 
           const js = (script: string): Promise<any> =>
@@ -4443,9 +4554,11 @@ export function startEbIpcServer(
           // with human-like inter-key delays. typeTextCDP fires rawKeyDown +
           // Input.insertText (1 char) + keyUp per character, so Instagram's
           // keystroke-timing analyser sees natural inter-character gaps, not a paste.
-          const typeText = async (text: string) => {
+          // androidIme:true → keyCode=229/Unidentified on every key, matching how
+          // Android's virtual keyboard actually fires events (not Windows key codes).
+          const typeText = async (text: string, opts?: { minDelay?: number; maxDelay?: number }) => {
             try {
-              await typeTextCDP(wc.debugger, text);
+              await typeTextCDP(wc.debugger, text, { ...(opts ?? {}), androidIme: true });
             } catch {}
           };
 
@@ -4496,8 +4609,10 @@ export function startEbIpcServer(
             // Input.insertText (1 char) + keyUp per character with 80–280 ms human
             // inter-key delays. Instagram's keystroke-timing analyser sees natural
             // gaps; a full-string Input.insertText would look like an instant paste.
+            // androidIme:true sends key="Unidentified" / vk=229 (VK_PROCESSKEY)
+            // which is how Android virtual keyboards actually fire events.
             try {
-              await typeTextCDP(wc.debugger, text);
+              await typeTextCDP(wc.debugger, text, { androidIme: true });
             } catch {}
             await sleep(150);
             // Verify the text actually landed in the field (helps diagnose future issues)
