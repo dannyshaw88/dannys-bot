@@ -474,9 +474,36 @@ function SetupPanel({ stage, devices, selectedUdid, installProgress, installMess
       )}
 
       {stage === "starting_iproxy" && (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
-          Connecting to your iPhone…
+        <div className="space-y-3">
+          <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⚠</span>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">One more step on your iPhone</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                  The control agent is installed but iOS won't let it run until you trust the developer certificate. This is a one-time step.
+                </p>
+              </div>
+            </div>
+            <ol className="space-y-2">
+              {[
+                <><strong>Open Settings</strong> on your iPhone.</>,
+                <>Go to <strong>General → VPN &amp; Device Management</strong>.</>,
+                <>Under "Developer App", tap the entry (it may say <em>Apple Development</em> or a developer name).</>,
+                <>Tap <strong>Trust</strong> and confirm with your passcode.</>,
+                <>The control agent will start and Equinox will connect automatically.</>,
+              ].map((text, i) => (
+                <li key={i} className="flex gap-2.5 items-start">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-amber-200 dark:bg-amber-900 flex items-center justify-center text-[10px] font-bold text-amber-800 dark:text-amber-300 mt-0.5">{i + 1}</span>
+                  <span className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">{text}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: "#1AD2F2" }} />
+            Waiting for control agent to start…
+          </div>
         </div>
       )}
 

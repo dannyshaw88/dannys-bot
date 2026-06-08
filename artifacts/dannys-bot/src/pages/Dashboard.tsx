@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.845",
+    date: "8 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: after installing the control agent, the app was stuck showing just a spinning 'Connecting...' with no guidance. It now shows clear step-by-step instructions: open Settings → General → VPN & Device Management, trust the developer certificate, and Equinox will connect automatically." },
+    ],
+  },
+  {
     version: "1.0.844",
     date: "8 Jun 2026",
     items: [
