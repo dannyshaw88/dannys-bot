@@ -22,6 +22,7 @@ import {
   installWdaOnDevice,
   onWdaInstallStatus,
   offWdaInstallStatus,
+  bootstrapAppleDlls,
   type IphoneSignupParams,
 } from "../instagram/iphoneMirror";
 import {
@@ -38,6 +39,10 @@ const signupStatus: Map<string, { msg: string; done: boolean }> = new Map();
 const wdaInstallStatus: Map<string, { step: string; progress?: number; message: string; done: boolean }> = new Map();
 
 export function registerMirrorRoutes(app: Express, httpServer?: Server): void {
+  // Copy Apple DLLs into bin/win32 at startup so idevice_id.exe and ideviceinstaller.exe
+  // can find them in their own directory (Windows DLL search order step 1 — exe's directory).
+  // PATH env injection doesn't work for statically-imported DLLs loaded before process init.
+  bootstrapAppleDlls().catch(() => {});
 
   // ── AirPlay wireless mirror ────────────────────────────────────────────────
 

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.855",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: Apple DLLs are now copied into Equinox's own bin folder at startup — this is the real fix for idevice_id.exe crashing (PATH injection fails because Windows loads static DLL imports before the process runs, so PATH is never consulted)." },
+      { category: "Fix", text: "Mirror: The installer now bundles a real WebDriverAgent.ipa when the CI build can find one, and skips gracefully when it can't — no more dead download URL errors." },
+    ],
+  },
+  {
     version: "1.0.854",
     date: "9 Jun 2026",
     items: [

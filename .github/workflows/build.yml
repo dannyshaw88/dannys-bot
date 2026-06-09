@@ -109,6 +109,38 @@ jobs:
         working-directory: artifacts/electron
         run: npm install
 
+      - name: Fetch WDA IPA (best-effort — creates placeholder if unavailable)
+        shell: pwsh
+        run: |
+          $dest = "artifacts/electron/resources/WebDriverAgent.ipa"
+          $urls = @(
+            "https://github.com/nicowillis/WebDriverAgent-Binaries/releases/download/latest/WebDriverAgent.ipa",
+            "https://github.com/appium/WebDriverAgent/releases/download/latest/WebDriverAgent.ipa",
+            "https://github.com/ios-control/ios-deploy/releases/download/latest/WebDriverAgent.ipa"
+          )
+          $ok = $false
+          foreach ($url in $urls) {
+            try {
+              Write-Host "Trying $url"
+              Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 30 -ErrorAction Stop
+              $bytes = [System.IO.File]::ReadAllBytes($dest)
+              if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b) {
+                Write-Host "Downloaded real IPA ($($bytes.Length) bytes) from $url"
+                $ok = $true
+                break
+              } else {
+                Write-Host "Downloaded file is not a valid IPA — skipping"
+                Remove-Item $dest -Force -ErrorAction SilentlyContinue
+              }
+            } catch {
+              Write-Host "Failed: $_"
+            }
+          }
+          if (-not $ok) {
+            Write-Host "No WDA IPA found — creating placeholder so electron-builder does not fail"
+            Set-Content -Path $dest -Value "PLACEHOLDER_NO_IPA" -NoNewline
+          }
+
       - name: Bundle Electron main process
         working-directory: artifacts/electron
         run: node build.mjs

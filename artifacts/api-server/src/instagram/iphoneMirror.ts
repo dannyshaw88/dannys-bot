@@ -467,6 +467,64 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
   return merged;
 }
 
+// ── Runtime Apple DLL bootstrap ───────────────────────────────────────────────
+// PATH env injection fails for DLLs in the static import table — those are resolved
+// by the Windows loader BEFORE the process starts, so the process's own PATH env is
+// never consulted. The only reliable fix: copy Apple DLLs into bin/win32 (the exe's
+// own directory, step 1 in Windows DLL search order) the first time the server runs.
+const APPLE_DLLS_NEEDED = [
+  "MobileDevice.dll",
+  "CoreFoundation.dll",
+  "CFNetwork.dll",
+  "ASL.dll",
+  "iTunesMobileDevice.dll",
+  "AppleMobileDeviceInterface.dll",
+];
+
+let _dllsBootstrapped = false;
+
+export async function bootstrapAppleDlls(): Promise<void> {
+  if (process.platform !== "win32" || _dllsBootstrapped) return;
+  _dllsBootstrapped = true;
+
+  const binDir = getBinDir();
+  if (!binDir) {
+    mlog.warn("[mirror] bootstrapAppleDlls: no bin dir — skipping DLL copy");
+    return;
+  }
+
+  const allAppleDirs = [...APPLE_STATIC_DIRS];
+  try {
+    const amdPath = await getAppleMobileDevicePath();
+    if (amdPath && !allAppleDirs.includes(amdPath)) allAppleDirs.push(amdPath);
+  } catch {}
+
+  let copied = 0;
+  for (const dll of APPLE_DLLS_NEEDED) {
+    const dest = path.join(binDir, dll);
+    if (fs.existsSync(dest)) continue; // already there from a previous run
+    for (const srcDir of allAppleDirs) {
+      const src = path.join(srcDir, dll);
+      try {
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+          mlog.info({ dll, from: srcDir }, "[mirror] bootstrapAppleDlls: copied Apple DLL to bin dir");
+          copied++;
+          break;
+        }
+      } catch (e: any) {
+        mlog.warn({ dll, err: String(e?.message ?? e) }, "[mirror] bootstrapAppleDlls: failed to copy");
+      }
+    }
+  }
+
+  if (copied > 0) {
+    mlog.info({ copied }, "[mirror] bootstrapAppleDlls: done — idevice_id.exe should now find Apple DLLs in its own directory");
+  } else {
+    mlog.debug("[mirror] bootstrapAppleDlls: all DLLs already in place or not found in Apple dirs");
+  }
+}
+
 // ── Device detection ──────────────────────────────────────────────────────────
 
 export interface IosDevice {
@@ -819,7 +877,8 @@ function downloadFile(url: string, dest: string, onProgress?: (pct: number) => v
 }
 
 /** Resolve path to a bundled WebDriverAgent.ipa baked into the Electron resources.
- *  The IPA lives at resources/WebDriverAgent.ipa (two levels above bin/win32). */
+ *  The IPA lives at resources/WebDriverAgent.ipa (two levels above bin/win32).
+ *  Returns null if the file is missing OR is a CI placeholder (no PK zip header). */
 function getBundledIpaPath(): string | null {
   const binDir = getBinDir();
   // packaged Electron: resources/bin/win32 → go up two levels to resources/
@@ -829,7 +888,18 @@ function getBundledIpaPath(): string | null {
     path.join(binDir, "..", "WebDriverAgent.ipa"),
   ];
   for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p; } catch {}
+    try {
+      if (!fs.existsSync(p)) continue;
+      // Validate: a real IPA is a ZIP file — first two bytes must be 'PK' (0x50 0x4B).
+      // The CI creates a tiny placeholder file when no real IPA was found during the build;
+      // that placeholder won't have the PK header, so we skip it and fall back to download.
+      const buf = Buffer.alloc(2);
+      const fd = fs.openSync(p, "r");
+      fs.readSync(fd, buf, 0, 2, 0);
+      fs.closeSync(fd);
+      if (buf[0] === 0x50 && buf[1] === 0x4b) return p; // valid ZIP/IPA
+      mlog.info({ path: p }, "[mirror] getBundledIpaPath: placeholder IPA detected (no PK header) — treating as absent");
+    } catch {}
   }
   return null;
 }
