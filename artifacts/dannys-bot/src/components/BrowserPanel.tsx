@@ -38,6 +38,12 @@ interface BrowserPanelProps {
   forceStream?: boolean;
   /** Called for every non-binary WS message (after internal handling). Use to receive signupStep / signupPaused / signupDone events. */
   onMessage?: (msg: any) => void;
+  /** Override canvas/stream width in CSS pixels (default 1280). */
+  browserWidth?: number;
+  /** Override canvas/stream height in CSS pixels (default 760). */
+  browserHeight?: number;
+  /** Hide the isolation banner and address-bar toolbar (use when embedding inside a phone frame). */
+  noToolbar?: boolean;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -61,6 +67,8 @@ interface TabInfo {
 
 const BROWSER_W = 1280;
 const BROWSER_H = 760;
+const MOBILE_W  = 393;
+const MOBILE_H  = 851;
 
 function nowTs() {
   const d = new Date();
@@ -70,7 +78,13 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage, browserWidth, browserHeight, noToolbar }: BrowserPanelProps) {
+  const bW = browserWidth ?? BROWSER_W;
+  const bH = browserHeight ?? BROWSER_H;
+  const bWRef = useRef(bW);
+  const bHRef = useRef(bH);
+  bWRef.current = bW;
+  bHRef.current = bH;
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<WebSocket | null>(null);
@@ -223,8 +237,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const x = Math.round((e.clientX - rect.left) * (BROWSER_W / rect.width));
-      const y = Math.round((e.clientY - rect.top) * (BROWSER_H / rect.height));
+      const x = Math.round((e.clientX - rect.left) * (bWRef.current / rect.width));
+      const y = Math.round((e.clientY - rect.top) * (bHRef.current / rect.height));
       if (scrollBufRef.current) {
         scrollBufRef.current.dX += e.deltaX;
         scrollBufRef.current.dY += e.deltaY;
@@ -352,7 +366,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               if (!canvas) { bmp.close(); return; }
               const ctx = canvas.getContext("2d");
               if (!ctx) { bmp.close(); return; }
-              ctx.drawImage(bmp, 0, 0, BROWSER_W, BROWSER_H);
+              ctx.drawImage(bmp, 0, 0, bWRef.current, bHRef.current);
               bmp.close();
             });
           }
@@ -605,8 +619,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const scale = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return {
-      x: Math.round((e.clientX - r.left) * (BROWSER_W / r.width)),
-      y: Math.round((e.clientY - r.top)  * (BROWSER_H / r.height)),
+      x: Math.round((e.clientX - r.left) * (bWRef.current / r.width)),
+      y: Math.round((e.clientY - r.top)  * (bHRef.current / r.height)),
     };
   };
 
@@ -786,7 +800,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     <div className={`flex flex-col bg-background rounded-xl border border-border overflow-hidden shadow-sm ${embedded ? "" : "h-full"}`}>
 
       {/* Isolation banner */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">
+      {!noToolbar && <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">
         <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
         <span className="text-muted-foreground truncate">
           Isolated session · <span className="font-semibold text-foreground">@{username}</span>
@@ -797,10 +811,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
           {statusLabel}
         </span>
-      </div>
+      </div>}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-background shrink-0">
+      {!noToolbar && <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-background shrink-0">
         <button
           onClick={() => { send({ type: "newTab" }); setTimeout(() => send({ type: "navigate", url: "https://www.google.com/" }), 300); }}
           disabled={!connected}
@@ -1027,10 +1041,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         >
           {openedAt ? elapsedLabel : "--:--"}
         </div>
-      </div>
+      </div>}
 
       {/* Tab strip — always visible once browser is running */}
-      {(connected || tabs.length > 0) && (
+      {!noToolbar && (connected || tabs.length > 0) && (
         <div className="flex items-center gap-0.5 px-2 pt-1 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
           {tabs.map((tab, i) => (
             <div
@@ -1203,8 +1217,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
 
             <canvas
               ref={canvasRef}
-              width={BROWSER_W}
-              height={BROWSER_H}
+              width={bW}
+              height={bH}
               className="outline-none"
               style={{
                 display: connected ? "block" : "none",
@@ -1212,7 +1226,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 maxHeight: "100%",
                 width: "auto",
                 height: "auto",
-                aspectRatio: `${BROWSER_W} / ${BROWSER_H}`,
+                aspectRatio: `${bW} / ${bH}`,
                 cursor: "default",
                 touchAction: "none",
               }}

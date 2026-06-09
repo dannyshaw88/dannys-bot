@@ -1100,11 +1100,9 @@ export function CreateGhostPage() {
 
         </div>
 
-        {/* ── Right: Browser ── */}
-        <div className={cn(
-          "flex-1 min-w-0 rounded-lg border border-border overflow-hidden flex flex-col",
-          (!isOpen || isNative) && "items-center justify-center bg-muted/20"
-        )}>
+        {/* ── Right: Phone frame ── */}
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
+
           {isOpen && isNative ? (
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
               <div className="w-20 h-20 rounded-3xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center">
@@ -1129,16 +1127,8 @@ export function CreateGhostPage() {
                 Bring Window to Front
               </Button>
             </div>
-          ) : isOpen ? (
-            <BrowserPanel
-              profileId={0}
-              userAgent={activeUA.embedded}
-              username="ghost"
-              streamUrl="/api/signup/browser/stream"
-              inputUrl="/api/signup/browser/input"
-              forceStream={true}
-            />
-          ) : (
+
+          ) : !isOpen ? (
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
               <div className="w-20 h-20 rounded-3xl bg-muted/60 flex items-center justify-center">
                 <Ghost className="w-10 h-10 text-muted-foreground/50" />
@@ -1148,6 +1138,70 @@ export function CreateGhostPage() {
                 <p className="text-sm text-muted-foreground">
                   Fill in your account details, then click <span className="font-medium">Create Account</span> to launch the browser and run the signup automatically.
                 </p>
+              </div>
+            </div>
+
+          ) : (
+            /* ── Phone shell ── */
+            <div className="h-full flex items-center justify-center py-3">
+              {/* Phone body — Pixel 8 proportions (393×851) */}
+              <div
+                className="relative flex-shrink-0"
+                style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}
+              >
+                {/* Outer bezel */}
+                <div className="absolute inset-0 rounded-[2.2rem] bg-[#1c1c1e] shadow-2xl ring-1 ring-white/5" />
+
+                {/* Power button (right side) */}
+                <div className="absolute right-[-3px] top-[28%] h-[9%] w-[3px] rounded-r bg-[#2e2e30]" />
+                {/* Volume up (left side) */}
+                <div className="absolute left-[-3px] top-[22%] h-[6%] w-[3px] rounded-l bg-[#2e2e30]" />
+                {/* Volume down (left side) */}
+                <div className="absolute left-[-3px] top-[31%] h-[9%] w-[3px] rounded-l bg-[#2e2e30]" />
+
+                {/* Inner screen frame (slight inset from the bezel) */}
+                <div className="absolute inset-[3%] rounded-[1.7rem] overflow-hidden bg-black flex flex-col">
+
+                  {/* Android status bar — time + icons */}
+                  <div className="shrink-0 flex items-center justify-between px-4 bg-black text-white" style={{ height: "4%" }}>
+                    <span className="text-[10px] font-semibold tabular-nums">
+                      {new Date().getHours().toString().padStart(2,"0")}:{new Date().getMinutes().toString().padStart(2,"0")}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {/* Wifi */}
+                      <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+                      {/* Signal */}
+                      <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M17 4h3v16h-3V4zM5 14h3v6H5v-6zm6-5h3v11h-3V9z"/></svg>
+                      {/* Battery */}
+                      <svg className="w-3 h-2.5 text-white fill-current" viewBox="0 0 24 16"><rect x="0" y="2" width="20" height="12" rx="2" ry="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="20" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="1.5" y="3.5" width="14" height="9" rx="1" fill="currentColor"/></svg>
+                    </div>
+                  </div>
+
+                  {/* Camera punch-hole */}
+                  <div className="shrink-0 flex justify-center bg-black" style={{ height: "2.5%" }}>
+                    <div className="w-3 h-3 rounded-full bg-[#111] border border-[#2a2a2a] self-center" />
+                  </div>
+
+                  {/* Browser stream fills remaining space */}
+                  <div className="flex-1 overflow-hidden min-h-0">
+                    <BrowserPanel
+                      profileId={0}
+                      userAgent={activeUA.embedded}
+                      username="ghost"
+                      streamUrl="/api/signup/browser/stream"
+                      inputUrl="/api/signup/browser/input"
+                      forceStream={true}
+                      browserWidth={393}
+                      browserHeight={851}
+                      noToolbar={true}
+                    />
+                  </div>
+
+                  {/* Home indicator */}
+                  <div className="shrink-0 flex justify-center items-center bg-black" style={{ height: "2.5%" }}>
+                    <div className="w-[32%] h-[3px] rounded-full bg-white/30" />
+                  </div>
+                </div>
               </div>
             </div>
           )}

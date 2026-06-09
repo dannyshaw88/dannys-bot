@@ -5396,7 +5396,9 @@ export function startEbIpcServer(
               }
             }
 
-            await waitAndTap(["next", "continue"], "Next (after DOB)");
+            // The mobile drum-picker dialog has a "SET" confirmation button;
+            // the regular flow uses "Next" / "Continue". Accept all three.
+            await waitAndTap(["set", "next", "continue"], "Set/Next (after DOB)");
             await sleep(2800);
 
             // ── Step 6: Full name ──────────────────────────────────────────────

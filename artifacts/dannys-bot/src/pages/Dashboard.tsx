@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.861",
+    date: "9 Jun 2026",
+    items: [
+      { category: "New", text: "Ghost Browser now displays inside a phone frame shell at mobile resolution (393×851) so the signup flow looks exactly like a real Android screen." },
+      { category: "Fix", text: "Signup automation: the date-of-birth drum picker now correctly taps the 'Set' confirmation button after scrolling — previously the flow was stalling because only 'Next' was being searched for." },
+    ],
+  },
+  {
     version: "1.0.860",
     date: "9 Jun 2026",
     items: [
