@@ -1235,7 +1235,8 @@ export function MirrorPage() {
   const streamRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const fpsCountRef = useRef(0);
   const fpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const installPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const installPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reinstallingRef = useRef(false); // blocks auto-restart iproxy during reinstall
 
   const toast = (msg: string) => {
     setToastMsg(msg);
@@ -1304,7 +1305,8 @@ export function MirrorPage() {
   // ── Auto-start iproxy when device detected ─────────────────────────────────
 
   useEffect(() => {
-    if (selectedUdid && stage === "device_found" && !iproxyRunning && !installSessionId) {
+    // reinstallingRef.current blocks this from fighting with a user-initiated reinstall
+    if (selectedUdid && stage === "device_found" && !iproxyRunning && !installSessionId && !reinstallingRef.current) {
       // Don't auto-install — wait for user to click. But DO auto-start iproxy
       // if WDA was already installed (from a previous session).
       fetch("/api/mirror/iproxy/start", {
@@ -1450,14 +1452,21 @@ export function MirrorPage() {
       toast("⚠ iPhone not detected — plug in your iPhone and wait for it to appear before reinstalling.");
       return;
     }
+    // Lock the ref BEFORE stopping iproxy so the auto-start-iproxy effect can't
+    // race in and restart iproxy before the reinstall begins.
+    reinstallingRef.current = true;
     try {
-      await fetch("/api/mirror/iproxy/stop", { method: "POST" });
-    } catch {}
-    setIproxyRunning(false);
-    setInstallSessionId(null);
-    setInstallProgress(0);
-    setInstallMessage("");
-    await handleInstallWda();
+      try {
+        await fetch("/api/mirror/iproxy/stop", { method: "POST" });
+      } catch {}
+      setIproxyRunning(false);
+      setInstallSessionId(null);
+      setInstallProgress(0);
+      setInstallMessage("");
+      await handleInstallWda();
+    } finally {
+      reinstallingRef.current = false;
+    }
   };
 
   // ── WDA control commands ───────────────────────────────────────────────────
