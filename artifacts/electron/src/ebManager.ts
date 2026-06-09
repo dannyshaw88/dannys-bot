@@ -387,11 +387,16 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
 // Instagram's JS never sees a mouse pointer during the automated signup flow.
 // CDP synthesizeTapGesture fires touchstart/touchend (NOT mouse events) so the
 // automation is unaffected. Physical mouse clicks from the user are blocked.
+// Blocks all mouse-EXCLUSIVE events during ghost signup.
+// DO NOT include 'click', 'pointerdown', 'pointerup' here — CDP synthesizeTapGesture
+// fires touch events that result in a 'click' at the end (touchstart→touchend→click).
+// Blocking 'click' kills that final event and React button handlers never fire.
+// 'mousedown' / 'mouseup' are sufficient to defeat Instagram's mouse-detection:
+// those events only fire for real mouse buttons and are never part of a touch sequence.
 const GHOST_MOUSE_BLOCKER_JS = `(function(){
   var BLOCK=['mousemove','mouseover','mouseout','mouseenter','mouseleave',
              'pointermove','pointerover','pointerout','pointerenter','pointerleave',
-             'mousedown','mouseup','click','dblclick','contextmenu','auxclick',
-             'pointerdown','pointerup'];
+             'mousedown','mouseup','dblclick','contextmenu','auxclick'];
   function block(e){ e.stopImmediatePropagation(); }
   BLOCK.forEach(function(t){
     window.addEventListener(t, block, true);
