@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.862",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser now opens as a portrait phone-sized window (430×932) instead of full-screen — Instagram always serves the mobile layout." },
+      { category: "Fix", text: "Mobile viewport (393×851, touch enabled) is now applied immediately when the Ghost Browser opens, not just during automated signup — you now see the mobile Instagram interface when browsing manually too." },
+      { category: "Fix", text: "Date of birth: tapping the field now checks whether a drum picker opens (it only appears after a tap on mobile). If it opens, the drum columns are scrolled; if not, the value is set directly via JavaScript so it always lands correctly." },
+      { category: "Fix", text: "Signup automation now blocks all mouse events (hover, click, mousedown, mouseup) during the flow — Instagram's fraud detection can no longer see any mouse activity." },
+    ],
+  },
+  {
     version: "1.0.861",
     date: "9 Jun 2026",
     items: [

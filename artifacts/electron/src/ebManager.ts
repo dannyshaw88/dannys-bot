@@ -383,6 +383,22 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
   });
 })();`;
 
+// Ghost-signup variant: blocks ALL mouse events (hover + click + down/up) so
+// Instagram's JS never sees a mouse pointer during the automated signup flow.
+// CDP synthesizeTapGesture fires touchstart/touchend (NOT mouse events) so the
+// automation is unaffected. Physical mouse clicks from the user are blocked.
+const GHOST_MOUSE_BLOCKER_JS = `(function(){
+  var BLOCK=['mousemove','mouseover','mouseout','mouseenter','mouseleave',
+             'pointermove','pointerover','pointerout','pointerenter','pointerleave',
+             'mousedown','mouseup','click','dblclick','contextmenu','auxclick',
+             'pointerdown','pointerup'];
+  function block(e){ e.stopImmediatePropagation(); }
+  BLOCK.forEach(function(t){
+    window.addEventListener(t, block, true);
+    document.addEventListener(t, block, true);
+  });
+})();`;
+
 // Ghost signup mobile fingerprint patch — injected AFTER the main _fpScript so it
 // can override the values the desktop-mode fp script set.
 //
@@ -1635,6 +1651,7 @@ export async function openEbWindow(opts: {
   initialUrl?: string;
 }): Promise<void> {
   const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl } = opts;
+  const isGhostBrowser = profileId === -1;
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -1686,7 +1703,7 @@ export async function openEbWindow(opts: {
       }
       const _wasHidden = !existing.win.isVisible();
       if (existing.win.isMinimized()) existing.win.restore();
-      if (!existing.win.isMaximized()) existing.win.maximize();
+      if (!isGhostBrowser && !existing.win.isMaximized()) existing.win.maximize();
       if (!existing.win.isVisible()) existing.win.show();
       existing.win.focus();
 
@@ -1894,9 +1911,11 @@ export async function openEbWindow(opts: {
   // Seed existing cookies into the Electron session
   await loadCookiesFromFile(profileId, ses);
 
+  // Ghost browser (profileId -1) opens at phone portrait dimensions, not maximized.
+  // Regular account EB windows open full-screen maximized.
   const win = new BrowserWindow({
-    width:           1280,
-    height:          820,
+    width:           isGhostBrowser ? 430 : 1280,
+    height:          isGhostBrowser ? 932 : 820,
     title:           `@${username} — Equinox Browser`,
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
@@ -1910,7 +1929,11 @@ export async function openEbWindow(opts: {
   });
   win.once("ready-to-show", () => {
     win.show();
-    win.maximize();
+    if (isGhostBrowser) {
+      win.center();
+    } else {
+      win.maximize();
+    }
   });
 
   // Register in ebMap IMMEDIATELY — before any async CDP/proxy/cookie work.
@@ -2190,6 +2213,19 @@ export async function openEbWindow(opts: {
   win.webContents.on("dom-ready", () => {
     win.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
     win.webContents.executeJavaScript(_fpScript).catch(() => {});
+    // Ghost browser: keep mobile viewport active on every navigation so
+    // Instagram always serves the mobile UI, even during manual browsing.
+    if (isGhostBrowser) {
+      try {
+        win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+          width: 393, height: 851, deviceScaleFactor: 2.75, mobile: true,
+          screenOrientation: { type: "portraitPrimary", angle: 0 },
+        }).catch(() => {});
+        win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+          enabled: true, maxTouchPoints: 10,
+        }).catch(() => {});
+      } catch { /* CDP not yet ready — ghost-signup will re-apply before navigation */ }
+    }
   });
 
   // Chrome-error recovery: auto-navigate back to Instagram when the page hits
@@ -4518,7 +4554,7 @@ export function startEbIpcServer(
             await wc.debugger.sendCommand("Page.enable");
           } catch {}
           try {
-            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: MOUSE_HOVER_BLOCKER_JS });
+            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: GHOST_MOUSE_BLOCKER_JS });
           } catch {}
           try {
             await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: GHOST_SIGNUP_FP_PATCH_JS });
@@ -4528,11 +4564,11 @@ export function startEbIpcServer(
           } catch {}
           // Also execute on the currently-loaded page (addScriptToEvaluateOnNewDocument
           // only applies to future navigations — we need it on the page that's already open)
-          wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
+          wc.executeJavaScript(GHOST_MOUSE_BLOCKER_JS).catch(() => {});
           wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
           wc.executeJavaScript(_ghostCanvasScript).catch(() => {});
           wc.on("dom-ready", () => {
-            wc.executeJavaScript(MOUSE_HOVER_BLOCKER_JS).catch(() => {});
+            wc.executeJavaScript(GHOST_MOUSE_BLOCKER_JS).catch(() => {});
             wc.executeJavaScript(GHOST_SIGNUP_FP_PATCH_JS).catch(() => {});
             wc.executeJavaScript(_ghostCanvasScript).catch(() => {});
           });
@@ -5356,6 +5392,12 @@ export function startEbIpcServer(
               await sleep(800);
 
               // ── Method 3: Combined text input "Birthday (MM/DD/YYYY)" ──────────
+              // IMPORTANT: do NOT use clearAndType here.
+              // clearAndType taps the field first → on mobile Instagram that opens
+              // the drum picker overlay → then it tries to type text while the picker
+              // is open → characters land nowhere.  Instead: tap → wait → re-probe
+              // for the picker (it only appears AFTER a tap) → if found scroll it,
+              // if not found set value via the JS native-value-setter (React-safe).
               const dobDiag = await js(`(function(){
                 var selects=Array.from(document.querySelectorAll('select')).filter(function(s){var r=s.getBoundingClientRect();return r.width>0;});
                 var inputs=Array.from(document.querySelectorAll('input')).filter(function(i){
@@ -5387,9 +5429,81 @@ export function startEbIpcServer(
                   const mm = String(dobMonth).padStart(2, "0");
                   const dd = String(dobDay).padStart(2, "0");
                   const dateStr = `${mm}/${dd}/${dobYear}`;
-                  relay(`[debug] DOB combined input at (${(dobTextInputPos as any).x},${(dobTextInputPos as any).y}) — typing "${dateStr}"`);
-                  await clearAndType((dobTextInputPos as any).x, (dobTextInputPos as any).y, dateStr);
-                  await sleep(500);
+                  relay(`[debug] DOB text input at (${(dobTextInputPos as any).x},${(dobTextInputPos as any).y}) — tapping to check if picker opens…`);
+
+                  // Step 1: tap field (may open drum picker overlay on mobile)
+                  await tap((dobTextInputPos as any).x, (dobTextInputPos as any).y);
+                  await sleep(900); // wait for picker animation
+
+                  // Step 2: re-probe for drum picker AFTER the tap
+                  const drumAfterTap = await js(`(function(){
+                    var cols=Array.from(document.querySelectorAll('[role="listbox"]'));
+                    if(!cols.length)return null;
+                    var result=[];
+                    for(var i=0;i<cols.length;i++){
+                      var col=cols[i];var items=Array.from(col.querySelectorAll('[role="option"]'));
+                      if(items.length<2)continue;
+                      var rect=col.getBoundingClientRect();if(!rect.width||!rect.height)continue;
+                      var r0=items[0].getBoundingClientRect();
+                      var r1=items.length>1?items[1].getBoundingClientRect():null;
+                      var itemH=r1?Math.abs(r1.top-r0.top):44;if(itemH<8)itemH=44;
+                      var midY=rect.top+rect.height/2,bestK=0,bestD=1e9;
+                      for(var k=0;k<items.length;k++){var ir=items[k].getBoundingClientRect();var d=Math.abs((ir.top+ir.height/2)-midY);if(d<bestD){bestD=d;bestK=k;}}
+                      result.push({label:(col.getAttribute('aria-label')||'').toLowerCase(),cx:Math.round(rect.left+rect.width/2),cy:Math.round(rect.top+rect.height/2),items:items.map(function(it){return(it.innerText||it.textContent||'').trim();}),curIdx:bestK,itemH:Math.round(itemH)});
+                    }
+                    return result.length>=2?result:null;
+                  })()`);
+
+                  if (drumAfterTap && (drumAfterTap as any[]).length >= 2) {
+                    // Drum picker appeared after the tap — scroll each column to target
+                    relay(`[debug] DOB: drum picker appeared after tap (${(drumAfterTap as any[]).length} cols) — scrolling…`);
+                    const monthNamesM3 = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+                    for (const col of drumAfterTap as {label:string;cx:number;cy:number;items:string[];curIdx:number;itemH:number}[]) {
+                      const lbl = col.label; const items = col.items;
+                      let targetIdx = -1;
+                      const isMonthCol = lbl.includes("month") || items.some(v => monthNamesM3.includes(v.toLowerCase()));
+                      const isYearCol  = lbl.includes("year")  || items.some(v => parseInt(v) > 1900 && parseInt(v) < 2100);
+                      const isDayCol   = lbl.includes("day")   || (!isMonthCol && !isYearCol);
+                      if (isMonthCol)     { targetIdx = items.findIndex(v => { const n=parseInt(v); if(!isNaN(n)) return n===dobMonth; return monthNamesM3.indexOf(v.toLowerCase())+1===dobMonth; }); }
+                      else if (isYearCol) { targetIdx = items.findIndex(v => parseInt(v) === dobYear); }
+                      else if (isDayCol)  { targetIdx = items.findIndex(v => parseInt(v) === dobDay); }
+                      if (targetIdx === -1) { relay(`[debug] DOB drum post-tap: col="${lbl}" target not found`); continue; }
+                      const delta = targetIdx - col.curIdx;
+                      if (delta === 0) { relay(`[debug] DOB drum post-tap: col="${lbl}" already at target`); continue; }
+                      relay(`[debug] DOB drum post-tap: col="${lbl}" delta=${delta} yDist=${-(delta*col.itemH)}`);
+                      try {
+                        await wc.debugger.sendCommand("Input.synthesizeScrollGesture", {
+                          x: col.cx, y: col.cy, xDistance: 0, yDistance: -(delta * col.itemH),
+                          speed: 350 + Math.round(Math.random() * 100), gestureSourceType: "touch",
+                        });
+                      } catch {}
+                      await sleep(500 + Math.round(Math.random() * 300));
+                    }
+                    await sleep(800);
+                  } else {
+                    // No picker — plain editable text input.
+                    // Set value via JS native setter so React's controlled state updates
+                    // without any keyboard or touch simulation (most reliable approach).
+                    relay(`[debug] DOB: no picker after tap — setting "${dateStr}" via JS native setter…`);
+                    const jsSetResult = await js(`(function(){
+                      var el=document.activeElement;
+                      if(!el||(el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')){
+                        var inputs=Array.from(document.querySelectorAll('input'));
+                        el=inputs.find(function(i){var lbl=(i.getAttribute('aria-label')||i.placeholder||'').toLowerCase();return lbl.includes('birthday')||lbl.includes('mm/dd')||lbl.includes('date');});
+                      }
+                      if(!el)return null;
+                      var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+                      if(setter&&setter.set){
+                        setter.set.call(el,'${dateStr}');
+                        el.dispatchEvent(new Event('input',{bubbles:true,composed:true}));
+                        el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+                        return el.value;
+                      }
+                      return null;
+                    })()`);
+                    relay(`[debug] DOB native setter result: "${jsSetResult}"`);
+                    await sleep(500);
+                  }
                 } else {
                   relay("⚠ DOB: no drum, no selects, no text input found — tapping Next anyway");
                 }
