@@ -467,6 +467,166 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
   return merged;
 }
 
+// ── go-ios binary (DLL-free replacement for all libimobiledevice tools) ───────
+// go-ios (https://github.com/danielpaulus/go-ios) is a pure Go binary — no DLL
+// dependencies at all. It replaces idevice_id.exe, iproxy.exe, and ideviceinstaller.exe
+// on systems where usbmuxd.dll is absent (modern iTunes no longer ships it).
+// We download it once from GitHub releases and cache it next to our other binaries.
+
+const GO_IOS_RELEASE_API = "https://api.github.com/repos/danielpaulus/go-ios/releases/latest";
+let _goIosResolved = false;
+let _goIosExe: string | null = null;
+
+/** Returns the path to go-ios ios.exe, downloading it on first call if needed. */
+async function getGoIosExe(): Promise<string | null> {
+  if (_goIosResolved) return _goIosExe;
+  if (process.platform !== "win32") { _goIosResolved = true; return null; }
+
+  const binDir = getBinDir();
+  if (!binDir) { _goIosResolved = true; return null; }
+
+  const candidate = path.join(binDir, "ios.exe");
+  if (fs.existsSync(candidate)) {
+    mlog.info({ path: candidate }, "[mirror] go-ios: found cached ios.exe");
+    _goIosExe = candidate;
+    _goIosResolved = true;
+    return candidate;
+  }
+
+  try {
+    mlog.info("[mirror] go-ios: ios.exe not found — fetching latest release from GitHub");
+    const apiRes = await fetch(GO_IOS_RELEASE_API, {
+      headers: { "User-Agent": "Equinox/1.0" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!apiRes.ok) throw new Error(`GitHub API returned ${apiRes.status}`);
+    const release = await apiRes.json() as any;
+    const asset = ((release.assets ?? []) as any[]).find(
+      (a: any) => typeof a.name === "string" && a.name.includes("windows") && a.name.endsWith(".zip"),
+    );
+    if (!asset) throw new Error("No Windows ZIP found in go-ios release assets");
+
+    const zipDest = path.join(binDir, "_go-ios-win.zip");
+    mlog.info({ url: asset.browser_download_url }, "[mirror] go-ios: downloading Windows ZIP");
+    await downloadFile(asset.browser_download_url, zipDest);
+
+    // Extract using PowerShell Expand-Archive (always available on Win 10+)
+    const extractDir = path.join(binDir, "_go-ios-extract");
+    await execAsync(
+      `powershell -NoProfile -NonInteractive -Command "Expand-Archive -Force '${zipDest}' '${extractDir}'"`,
+      { timeout: 30000 },
+    );
+    const { stdout: foundRaw } = await execAsync(
+      `powershell -NoProfile -NonInteractive -Command "Get-ChildItem -Recurse '${extractDir}' -Filter 'ios.exe' | Select-Object -First 1 -ExpandProperty FullName"`,
+      { timeout: 5000 },
+    );
+    const foundPath = foundRaw.trim();
+    if (!foundPath) throw new Error("ios.exe not found inside go-ios ZIP");
+    fs.copyFileSync(foundPath, candidate);
+
+    try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch {}
+    try { fs.unlinkSync(zipDest); } catch {}
+
+    mlog.info({ dest: candidate }, "[mirror] go-ios: ios.exe downloaded and cached");
+    _goIosExe = candidate;
+    _goIosResolved = true;
+    return candidate;
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] go-ios: download failed — will rely on TCP fallbacks");
+    _goIosResolved = true;
+    _goIosExe = null;
+    return null;
+  }
+}
+
+async function goIosList(): Promise<IosDevice[] | null> {
+  const exe = await getGoIosExe();
+  if (!exe) return null;
+  try {
+    const { stdout } = await execAsync(`"${exe}" list`, { timeout: 6000 });
+    const raw = stdout.trim();
+    if (!raw) return [];
+
+    // Parse UDID list — go-ios v1+ returns JSON {"deviceList":["udid1"]}
+    // Older builds returned a bare array or plain text (one UDID per line)
+    let validUdids: string[] = [];
+    try {
+      const parsed = JSON.parse(raw) as any;
+      const udids: string[] = parsed?.deviceList
+        ?? (Array.isArray(parsed) ? parsed.map((d: any) => typeof d === "string" ? d : String(d?.udid ?? "")) : []);
+      validUdids = udids.filter(Boolean);
+    } catch {
+      // Plain-text fallback: one UDID per line
+      validUdids = raw.split("\n").map(l => l.trim()).filter(l => /^[0-9a-f-]{36,}/i.test(l));
+    }
+
+    if (validUdids.length === 0) return [];
+
+    const devices: IosDevice[] = [];
+    for (const udid of validUdids) {
+      let name = "iPhone";
+      let ios  = "Unknown";
+      try {
+        const { stdout: infoOut } = await execAsync(`"${exe}" info --udid "${udid}"`, { timeout: 5000 });
+        const info = JSON.parse(infoOut.trim()) as any;
+        name = info?.DeviceName  ?? info?.deviceName  ?? "iPhone";
+        ios  = info?.ProductVersion ?? info?.productVersion ?? "Unknown";
+      } catch {}
+      devices.push({ udid, name, ios, connected: "usb" });
+    }
+    mlog.info({ count: devices.length }, "[mirror] go-ios: listDevices OK");
+    return devices;
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] go-ios: list failed");
+    return null;
+  }
+}
+
+let _goIosFwdProc:  ChildProcess | null = null;
+let _goIosFwdUdid:  string | null       = null;
+
+function stopGoIosFwd(): void {
+  if (_goIosFwdProc) {
+    try { _goIosFwdProc.kill(); } catch {}
+    _goIosFwdProc = null;
+    _goIosFwdUdid = null;
+  }
+}
+
+async function startIproxyViaGoIos(
+  udid: string,
+  localPort: number,
+  devicePort: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const exe = await getGoIosExe();
+  if (!exe) return { ok: false, error: "go-ios not available" };
+  if (_goIosFwdProc && _goIosFwdUdid === udid) return { ok: true };
+  stopGoIosFwd();
+
+  return new Promise((resolve) => {
+    try {
+      // go-ios forward <local> <device> [--udid <udid>]
+      const args = ["forward", `${localPort}`, `${devicePort}`, "--udid", udid];
+      _goIosFwdProc = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"], detached: false });
+      _goIosFwdUdid = udid;
+
+      _goIosFwdProc.on("error", (err) => {
+        _goIosFwdProc = null; _goIosFwdUdid = null;
+        resolve({ ok: false, error: `go-ios forward error: ${err.message}` });
+      });
+      _goIosFwdProc.on("exit", () => { _goIosFwdProc = null; _goIosFwdUdid = null; });
+
+      setTimeout(() => {
+        if (_goIosFwdProc) resolve({ ok: true });
+        else resolve({ ok: false, error: "go-ios forward exited immediately" });
+      }, 900);
+    } catch (err: any) {
+      _goIosFwdProc = null; _goIosFwdUdid = null;
+      resolve({ ok: false, error: String(err?.message ?? err) });
+    }
+  });
+}
+
 // ── Runtime Apple DLL bootstrap ───────────────────────────────────────────────
 // PATH env injection fails for DLLs in the static import table — those are resolved
 // by the Windows loader BEFORE the process starts, so the process's own PATH env is
@@ -482,6 +642,12 @@ const APPLE_DLLS_NEEDED = [
 ];
 
 let _dllsBootstrapped = false;
+
+/** Pre-warm go-ios in the background at server startup so it's cached before the user needs it. */
+export function prewarmGoIos(): void {
+  if (process.platform !== "win32") return;
+  getGoIosExe().catch(() => {});
+}
 
 export async function bootstrapAppleDlls(): Promise<void> {
   if (process.platform !== "win32" || _dllsBootstrapped) return;
@@ -731,6 +897,20 @@ export async function listConnectedDevices(): Promise<IosDevice[]> {
     mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: PATH idevice_id also failed");
   }
 
+  // 2b. go-ios — DLL-free alternative, downloaded on first use
+  try {
+    const goDevs = await goIosList();
+    if (goDevs && goDevs.length > 0) {
+      mlog.info({ count: goDevs.length }, "[mirror] listConnectedDevices: devices found via go-ios");
+      return goDevs;
+    }
+    if (goDevs !== null) {
+      mlog.info("[mirror] listConnectedDevices: go-ios returned no devices");
+    }
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] listConnectedDevices: go-ios threw");
+  }
+
   // 3. Direct TCP usbmuxd — works when usbmuxd.dll is absent (modern iTunes no longer ships it).
   //    Apple's AMDS service still listens on 127.0.0.1:27015 using the standard usbmuxd protocol.
   mlog.info("[mirror] listConnectedDevices: trying direct TCP usbmuxd (no DLL required)");
@@ -757,15 +937,16 @@ let iproxyUdid: string | null = null;
 let iproxyPort = 8100;
 
 export function getIproxyStatus(): { running: boolean; udid: string | null; port: number } {
-  return { running: iproxyProc !== null || _tcpTunnelServer !== null, udid: iproxyUdid ?? _tcpTunnelUdid, port: iproxyPort };
+  const running = iproxyProc !== null || _goIosFwdProc !== null || _tcpTunnelServer !== null;
+  const udid = iproxyUdid ?? _goIosFwdUdid ?? _tcpTunnelUdid;
+  return { running, udid, port: iproxyPort };
 }
 
 export async function startIproxy(udid: string, localPort = 8100, devicePort = 8100): Promise<{ ok: boolean; error?: string }> {
   // Stop existing iproxy if for a different device
-  if ((iproxyProc && iproxyUdid !== udid) || (_tcpTunnelServer && _tcpTunnelUdid !== udid)) {
-    stopIproxy();
-  }
-  if (iproxyProc || _tcpTunnelServer) return { ok: true }; // already running for this device
+  const activeUdid = iproxyUdid ?? _goIosFwdUdid ?? _tcpTunnelUdid;
+  if (activeUdid && activeUdid !== udid) stopIproxy();
+  if (iproxyProc || _goIosFwdProc || _tcpTunnelServer) return { ok: true }; // already running for this device
 
   iproxyPort = localPort;
   iproxyUdid = udid;
@@ -786,9 +967,8 @@ export async function startIproxy(udid: string, localPort = 8100, devicePort = 8
         resolve({ ok: false, error: `iproxy.exe error: ${err.message}` });
       });
 
-      iproxyProc.on("exit", (code) => {
+      iproxyProc.on("exit", () => {
         iproxyProc = null;
-        // If it exited before our 800ms check fires, report failure
       });
 
       setTimeout(() => {
@@ -806,9 +986,18 @@ export async function startIproxy(udid: string, localPort = 8100, devicePort = 8
 
   if (exeResult.ok) return exeResult;
 
-  // iproxy.exe failed (most likely usbmuxd.dll missing) — fall back to TCP tunnel
-  mlog.warn({ exeError: exeResult.error }, "[mirror] iproxy.exe failed — falling back to TCP usbmuxd tunnel");
+  // iproxy.exe failed (most likely usbmuxd.dll missing) — try go-ios next
+  mlog.warn({ exeError: exeResult.error }, "[mirror] iproxy.exe failed — trying go-ios forward");
   iproxyUdid = null;
+
+  const goResult = await startIproxyViaGoIos(udid, localPort, devicePort);
+  if (goResult.ok) {
+    mlog.info("[mirror] iproxy: go-ios forward running");
+    return goResult;
+  }
+
+  // go-ios also failed — fall back to TCP tunnel
+  mlog.warn({ goError: goResult.error }, "[mirror] go-ios forward failed — falling back to TCP usbmuxd tunnel");
   return startIproxyViaTcp(udid, localPort, devicePort);
 }
 
@@ -818,15 +1007,53 @@ export function stopIproxy(): void {
     iproxyProc = null;
     iproxyUdid = null;
   }
+  stopGoIosFwd();
   stopIproxyTcp();
 }
 
 // ── WDA download + install ────────────────────────────────────────────────────
-// Downloads a pre-built WDA IPA from GitHub and installs it on the device
-// using bundled ideviceinstaller.exe. Zero CMD prompts required.
+// Downloads a pre-built WDA IPA from GitHub and installs it on the device.
+// Uses go-ios for installation (no DLL deps). Falls back to ideviceinstaller.exe.
 
-const WDA_IPA_URL = "https://github.com/nicowillis/webdriveragent-ipa/releases/download/v1.0.0/WebDriverAgent.ipa";
+// Primary: dynamic lookup against appium/WebDriverAgent releases API so we
+// always pick up the latest signed build without hardcoded version strings.
+// Fallbacks: known-good versioned URLs in case the API is unreachable.
+const WDA_RELEASE_API  = "https://api.github.com/repos/appium/WebDriverAgent/releases";
+const WDA_IPA_FALLBACKS = [
+  // nicowillis archive (original URL — may still work in some regions via CDN cache)
+  "https://github.com/nicowillis/webdriveragent-ipa/releases/download/v1.0.0/WebDriverAgent.ipa",
+  // appium WDA v9 known-good builds
+  "https://github.com/appium/WebDriverAgent/releases/download/v9.4.0/WebDriverAgentRunner-Runner.ipa",
+  "https://github.com/appium/WebDriverAgent/releases/download/v9.3.3/WebDriverAgentRunner-Runner.ipa",
+  "https://github.com/appium/WebDriverAgent/releases/download/v9.2.0/WebDriverAgentRunner-Runner.ipa",
+];
 const WDA_BUNDLE_ID = "com.facebook.WebDriverAgentRunner.xctrunner";
+
+/** Try to fetch the latest WDA IPA URL from appium/WebDriverAgent GitHub releases API. */
+async function resolveWdaIpaUrl(): Promise<string | null> {
+  try {
+    mlog.info("[mirror] resolveWdaIpaUrl: checking appium/WebDriverAgent releases");
+    const res = await fetch(`${WDA_RELEASE_API}?per_page=10`, {
+      headers: { "User-Agent": "Equinox/1.0" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const releases = await res.json() as any[];
+    for (const release of releases) {
+      const asset = ((release.assets ?? []) as any[]).find(
+        (a: any) => typeof a.name === "string" && a.name.endsWith(".ipa"),
+      );
+      if (asset?.browser_download_url) {
+        mlog.info({ url: asset.browser_download_url, tag: release.tag_name }, "[mirror] resolveWdaIpaUrl: found IPA in release");
+        return asset.browser_download_url as string;
+      }
+    }
+    mlog.warn("[mirror] resolveWdaIpaUrl: no .ipa asset found in recent releases");
+  } catch (err: any) {
+    mlog.warn({ err: String(err?.message ?? err) }, "[mirror] resolveWdaIpaUrl: GitHub API request failed");
+  }
+  return null;
+}
 
 export type WdaInstallStatus = {
   step: "downloading" | "installing" | "done" | "error";
@@ -908,52 +1135,92 @@ export async function installWdaOnDevice(
   udid: string,
   sessionId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const env = await buildEnvWithApplePath(); // inject Apple DLLs for ideviceinstaller.exe
+  const env = await buildEnvWithApplePath();
   const tmpIpa = path.join(os.tmpdir(), `wda_${Date.now()}.ipa`);
   let ipaPath: string | null = null;
   let usedTmp = false;
 
   try {
-    // Step 1: use bundled IPA if present, otherwise download
+    // ── Step 1: Resolve IPA ────────────────────────────────────────────────────
     const bundled = getBundledIpaPath();
     if (bundled) {
       ipaPath = bundled;
       emitStatus(sessionId, { step: "downloading", progress: 100, message: "Using bundled control agent. Installing on iPhone…" });
     } else {
       emitStatus(sessionId, { step: "downloading", progress: 0, message: "Downloading control agent (one-time)…" });
+
+      // Build URL list: dynamic (GitHub API) + static fallbacks
+      const dynamicUrl = await resolveWdaIpaUrl();
+      const urls = [...(dynamicUrl ? [dynamicUrl] : []), ...WDA_IPA_FALLBACKS];
+
       let downloaded = false;
-      const urls = [WDA_IPA_URL];
       for (const url of urls) {
         try {
+          mlog.info({ url }, "[mirror] installWdaOnDevice: trying download URL");
           await downloadFile(url, tmpIpa, (pct) => {
             emitStatus(sessionId, { step: "downloading", progress: pct, message: `Downloading control agent… ${pct}%` });
           });
           downloaded = true;
           usedTmp = true;
           ipaPath = tmpIpa;
+          mlog.info({ url }, "[mirror] installWdaOnDevice: download succeeded");
           break;
         } catch (dlErr: any) {
-          mlog.warn({ url, err: String(dlErr?.message ?? dlErr) }, "[mirror] installWdaOnDevice: download failed");
+          mlog.warn({ url, err: String(dlErr?.message ?? dlErr) }, "[mirror] installWdaOnDevice: download URL failed");
         }
       }
+
       if (!downloaded) {
-        emitStatus(sessionId, {
-          step: "error",
-          message: "⚠ Could not download the control agent. The download URL is unavailable. A newer version of Equinox will include the control agent bundled — please update.",
-        });
-        return { ok: false, error: "IPA download failed — no bundled IPA and all download URLs returned errors" };
+        const sideloadyMsg = [
+          "⚠ Could not download the control agent automatically.",
+          "To install it manually (free, takes ~2 min):",
+          "1. Download Sideloadly from sideloadly.io",
+          "2. Download WebDriverAgent from github.com/appium/WebDriverAgent/releases",
+          "3. Open Sideloadly, drag the .ipa in, sign with your Apple ID, install to your iPhone.",
+          "4. Trust the app: iPhone Settings → General → VPN & Device Management → your Apple ID → Trust.",
+          "5. Come back here — the mirror will connect automatically once WDA is running.",
+        ].join("\n");
+        emitStatus(sessionId, { step: "error", message: sideloadyMsg });
+        return { ok: false, error: "IPA download failed — all URLs returned errors" };
       }
       emitStatus(sessionId, { step: "downloading", progress: 100, message: "Download complete. Installing on iPhone…" });
     }
 
-    // Step 2: Install via bundled ideviceinstaller.exe (with Apple DLL env injected)
-    const installer = binPath("ideviceinstaller.exe");
+    // ── Step 2: Install the IPA ────────────────────────────────────────────────
     emitStatus(sessionId, { step: "installing", message: "Installing on iPhone — keep it unlocked, this takes ~30 seconds…" });
 
-    await execAsync(`"${installer}" -u "${udid}" -i "${ipaPath}"`, { timeout: 120_000, env });
+    // Prefer go-ios (static binary, no DLL deps — works even when usbmuxd.dll is absent)
+    const goIosExe = await getGoIosExe();
+    if (goIosExe) {
+      mlog.info({ udid, ipa: ipaPath }, "[mirror] installWdaOnDevice: installing via go-ios");
+      await execAsync(`"${goIosExe}" install --path "${ipaPath}" --udid "${udid}"`, { timeout: 120_000 });
+      emitStatus(sessionId, { step: "done", message: "✅ Control agent installed! Starting connection…" });
+      return { ok: true };
+    }
 
-    emitStatus(sessionId, { step: "done", message: "✅ Control agent installed! Starting connection…" });
-    return { ok: true };
+    // Fall back to ideviceinstaller.exe (requires Apple DLLs in PATH)
+    const installer = binPath("ideviceinstaller.exe");
+    mlog.info({ udid, ipa: ipaPath }, "[mirror] installWdaOnDevice: installing via ideviceinstaller.exe");
+    try {
+      await execAsync(`"${installer}" -u "${udid}" -i "${ipaPath}"`, { timeout: 120_000, env });
+      emitStatus(sessionId, { step: "done", message: "✅ Control agent installed! Starting connection…" });
+      return { ok: true };
+    } catch (instErr: any) {
+      const code = (instErr as any)?.code;
+      if (code === DLL_NOT_FOUND_EXIT_CODE) {
+        const msg = [
+          "⚠ Cannot install automatically — a required system component (usbmuxd.dll) is missing from your iTunes installation.",
+          "Install WDA manually using Sideloadly (free):",
+          "1. Download Sideloadly from sideloadly.io",
+          "2. Download WebDriverAgent IPA from github.com/appium/WebDriverAgent/releases",
+          "3. Drag the IPA into Sideloadly, sign with your Apple ID, install.",
+          "4. Trust: iPhone Settings → General → VPN & Device Management → your Apple ID → Trust.",
+        ].join("\n");
+        emitStatus(sessionId, { step: "error", message: msg });
+        return { ok: false, error: "ideviceinstaller.exe: DLL_NOT_FOUND (usbmuxd.dll missing)" };
+      }
+      throw instErr;
+    }
   } catch (err: any) {
     const msg = String(err?.message ?? err);
     emitStatus(sessionId, { step: "error", message: `⚠ ${msg}` });

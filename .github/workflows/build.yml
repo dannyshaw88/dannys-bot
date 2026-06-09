@@ -113,23 +113,44 @@ jobs:
         shell: pwsh
         run: |
           $dest = "artifacts/electron/resources/WebDriverAgent.ipa"
-          $urls = @(
-            "https://github.com/nicowillis/WebDriverAgent-Binaries/releases/download/latest/WebDriverAgent.ipa",
-            "https://github.com/appium/WebDriverAgent/releases/download/latest/WebDriverAgent.ipa",
-            "https://github.com/ios-control/ios-deploy/releases/download/latest/WebDriverAgent.ipa"
+          New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+
+          # 1. Try GitHub Releases API to find the latest signed IPA from Appium
+          $apiUrls = @()
+          try {
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/appium/WebDriverAgent/releases?per_page=10" -Headers @{Accept="application/vnd.github+json"} -TimeoutSec 15
+            foreach ($rel in $releases) {
+              foreach ($asset in $rel.assets) {
+                if ($asset.name -match "\.ipa$") {
+                  Write-Host "Found IPA via API: $($asset.browser_download_url)"
+                  $apiUrls += $asset.browser_download_url
+                }
+              }
+            }
+          } catch {
+            Write-Host "GitHub API lookup failed: $_"
+          }
+
+          # 2. Static fallback URLs for known Appium WDA releases
+          $staticUrls = @(
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.4.0/WebDriverAgent.ipa",
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.3.3/WebDriverAgent.ipa",
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.2.0/WebDriverAgent.ipa"
           )
+
+          $urls = $apiUrls + $staticUrls
           $ok = $false
           foreach ($url in $urls) {
             try {
               Write-Host "Trying $url"
-              Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 30 -ErrorAction Stop
+              Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 60 -ErrorAction Stop
               $bytes = [System.IO.File]::ReadAllBytes($dest)
               if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b) {
-                Write-Host "Downloaded real IPA ($($bytes.Length) bytes) from $url"
+                Write-Host "Downloaded real IPA ($($bytes.Length) bytes)"
                 $ok = $true
                 break
               } else {
-                Write-Host "Downloaded file is not a valid IPA — skipping"
+                Write-Host "Not a valid ZIP/IPA — skipping"
                 Remove-Item $dest -Force -ErrorAction SilentlyContinue
               }
             } catch {

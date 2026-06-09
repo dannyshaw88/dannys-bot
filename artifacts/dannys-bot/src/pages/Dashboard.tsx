@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.856",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: Switched to go-ios (a DLL-free replacement binary) for device listing, port forwarding, and WDA installation — eliminates the usbmuxd.dll crash that has been blocking the mirror on all modern iTunes installs." },
+      { category: "Fix", text: "Mirror: WDA download now tries the Appium GitHub releases API first to always grab the latest signed IPA, with 3 versioned fallback URLs — the dead nicowillis URL is no longer the only option." },
+      { category: "Fix", text: "Mirror: If all automatic install paths fail, the error message now shows clear Sideloadly instructions instead of a generic 'download failed' error." },
+      { category: "Improvement", text: "Mirror: go-ios is downloaded once in the background at startup and cached, so it's ready by the time you open the Mirror page." },
+    ],
+  },
+  {
     version: "1.0.855",
     date: "9 Jun 2026",
     items: [

@@ -43,6 +43,10 @@ export function registerMirrorRoutes(app: Express, httpServer?: Server): void {
   // can find them in their own directory (Windows DLL search order step 1 — exe's directory).
   // PATH env injection doesn't work for statically-imported DLLs loaded before process init.
   bootstrapAppleDlls().catch(() => {});
+  // Pre-download go-ios in the background on startup so it's ready when the user
+  // opens the Mirror page. Runs silently — failures are logged and the TCP fallbacks
+  // cover any gap until go-ios is available.
+  import("../instagram/iphoneMirror").then(m => (m as any).prewarmGoIos?.()).catch(() => {});
 
   // ── AirPlay wireless mirror ────────────────────────────────────────────────
 
