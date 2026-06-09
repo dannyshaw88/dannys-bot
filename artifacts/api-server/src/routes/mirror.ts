@@ -23,6 +23,11 @@ import {
   onWdaInstallStatus,
   offWdaInstallStatus,
   bootstrapAppleDlls,
+  isGoIosAvailable,
+  goIosScreenshot,
+  goIosHidTap,
+  goIosHidSwipe,
+  goIosHidKey,
   type IphoneSignupParams,
 } from "../instagram/iphoneMirror";
 import {
@@ -396,6 +401,64 @@ export function registerMirrorRoutes(app: Express, httpServer?: Server): void {
       await wdaTypeText(code);
       await wdaTap(195, 480);
       res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // ── go-ios native routes (screenshot + HID touch — no WDA or certificate needed) ──
+
+  /** Whether go-ios is downloaded and ready. Frontend polls this to know when it's available. */
+  app.get("/api/mirror/goios/status", (_req, res) => {
+    res.json({ ok: true, available: isGoIosAvailable() });
+  });
+
+  /** Take a screenshot via go-ios screenshotr protocol (no WDA). Returns base64 PNG. */
+  app.post("/api/mirror/goios/screenshot", async (req, res) => {
+    try {
+      const { udid } = req.body ?? {};
+      if (!udid) return res.status(400).json({ ok: false, error: "udid required" });
+      const png = await goIosScreenshot(udid);
+      if (!png) return res.json({ ok: false, error: "Screenshot failed" });
+      res.json({ ok: true, png });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  /** Send a tap via go-ios HID (no WDA). */
+  app.post("/api/mirror/goios/tap", async (req, res) => {
+    try {
+      const { udid, x, y } = req.body ?? {};
+      if (!udid || x == null || y == null) return res.status(400).json({ ok: false, error: "udid, x, y required" });
+      const ok = await goIosHidTap(udid, Number(x), Number(y));
+      res.json({ ok });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  /** Send a swipe via go-ios HID (no WDA). */
+  app.post("/api/mirror/goios/swipe", async (req, res) => {
+    try {
+      const { udid, fromX, fromY, toX, toY } = req.body ?? {};
+      if (!udid || fromX == null || fromY == null || toX == null || toY == null) {
+        return res.status(400).json({ ok: false, error: "udid, fromX, fromY, toX, toY required" });
+      }
+      const ok = await goIosHidSwipe(udid, Number(fromX), Number(fromY), Number(toX), Number(toY));
+      res.json({ ok });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  /** Send a hardware key press via go-ios HID (no WDA). key: home | volumeUp | volumeDown | power */
+  app.post("/api/mirror/goios/key", async (req, res) => {
+    try {
+      const { udid, key } = req.body ?? {};
+      if (!udid || !key) return res.status(400).json({ ok: false, error: "udid, key required" });
+      const ok = await goIosHidKey(udid, String(key));
+      res.json({ ok });
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
     }

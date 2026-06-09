@@ -62,6 +62,7 @@ type SetupStage =
   | "device_found"    // phone detected, need to check WDA
   | "installing_wda"  // downloading + installing WDA
   | "starting_iproxy" // iproxy launching
+  | "goios_ready"     // go-ios connected — screenshot + HID active, no WDA needed
   | "ready";          // WDA connected, full control active
 
 const IPHONE_W = 390;
@@ -71,13 +72,14 @@ const IPHONE_H = 844;
 
 interface PhoneFrameProps {
   jpeg: string | null;
+  imgType: "jpeg" | "png";
   streaming: boolean;
   fps: number;
   onTap: (x: number, y: number) => void;
   onSwipe: (fx: number, fy: number, tx: number, ty: number) => void;
 }
 
-function PhoneFrame({ jpeg, streaming, fps, onTap, onSwipe }: PhoneFrameProps) {
+function PhoneFrame({ jpeg, imgType, streaming, fps, onTap, onSwipe }: PhoneFrameProps) {
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const toCoords = (e: React.MouseEvent<HTMLElement>) => {
@@ -114,7 +116,7 @@ function PhoneFrame({ jpeg, streaming, fps, onTap, onSwipe }: PhoneFrameProps) {
         >
           {jpeg ? (
             <img
-              src={`data:image/jpeg;base64,${jpeg}`}
+              src={`data:image/${imgType};base64,${jpeg}`}
               className="w-full h-full object-cover"
               draggable={false}
               alt="iPhone screen"
@@ -1219,11 +1221,13 @@ export function MirrorPage() {
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
   const [wdaConnected, setWdaConnected] = useState(false);
   const [iproxyRunning, setIproxyRunning] = useState(false);
+  const [goIosReady, setGoIosReady]     = useState(false);
   const [stage, setStage]               = useState<SetupStage>("no_device");
   // Persisted evidence that WDA was actually installed on this machine (not just iproxy running)
   const [wdaInstalledOnce, setWdaInstalledOnce] = useState(() => localStorage.getItem("wdaInstalledOnce") === "1");
   const [streaming, setStreaming]       = useState(false);
   const [jpeg, setJpeg]                 = useState<string | null>(null);
+  const [imgType, setImgType]           = useState<"jpeg" | "png">("jpeg");
   const [fps, setFps]                   = useState(0);
   const [tab, setTab]                   = useState<"controls" | "wireless" | "signup">("controls");
   const airplayCanvasRef                = useRef<HTMLCanvasElement | null>(null);
@@ -1286,6 +1290,9 @@ export function MirrorPage() {
   useEffect(() => {
     if (wdaConnected) {
       setStage("ready");
+    } else if (goIosReady && devices.length > 0) {
+      setStage("goios_ready");
+      setDiagnosis(null);
     } else if (iproxyRunning) {
       setStage("starting_iproxy");
     } else if (installSessionId) {
@@ -1296,7 +1303,7 @@ export function MirrorPage() {
     } else {
       setStage("no_device");
     }
-  }, [devices, wdaConnected, iproxyRunning, installSessionId]);
+  }, [devices, wdaConnected, goIosReady, iproxyRunning, installSessionId]);
 
   // ── Run diagnosis once when we hit no_device, with a short delay ────────────
 
@@ -1323,18 +1330,20 @@ export function MirrorPage() {
     }
   }, [selectedUdid, stage, iproxyRunning, installSessionId]);
 
-  // ── Poll devices + WDA status ──────────────────────────────────────────────
+  // ── Poll devices + WDA status + go-ios status ─────────────────────────────
 
   const refreshStatus = useCallback(async () => {
     try {
-      const [dr, wr] = await Promise.all([
+      const [dr, wr, gi] = await Promise.all([
         fetch("/api/mirror/devices").then(r => r.json()),
         fetch("/api/mirror/wda-status").then(r => r.json()),
+        fetch("/api/mirror/goios/status").then(r => r.json()).catch(() => ({ available: false })),
       ]);
       const devs: IosDevice[] = (dr as any).devices ?? [];
       setDevices(devs);
       setWdaConnected(!!(wr as any).connected);
       setIproxyRunning(!!(wr as any).iproxy?.running);
+      setGoIosReady(!!(gi as any).available);
       if (devs.length && !selectedUdid) {
         setSelectedUdid(devs[0].udid);
       }
@@ -1352,13 +1361,42 @@ export function MirrorPage() {
     return () => clearInterval(t);
   }, [refreshStatus]);
 
-  // ── Auto-start stream when WDA connects ───────────────────────────────────
+  // ── go-ios screenshot stream ───────────────────────────────────────────────
+
+  const startGoIosStream = useCallback(() => {
+    if (streamRef.current) return;
+    setStreaming(true);
+    setImgType("png");
+    const capture = async () => {
+      if (!selectedUdid) return;
+      try {
+        const r = await fetch("/api/mirror/goios/screenshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ udid: selectedUdid }),
+        });
+        const j = await r.json() as any;
+        if (j.ok && j.png) {
+          setJpeg(j.png);
+          fpsCountRef.current++;
+        }
+      } catch {}
+    };
+    capture();
+    streamRef.current = setInterval(capture, 400); // ~2.5fps — go-ios screenshot takes ~200-350ms
+  }, [selectedUdid]);
+
+  // ── Auto-start stream when WDA connects or go-ios becomes ready ───────────
 
   useEffect(() => {
     if (wdaConnected && !streaming && selectedUdid) {
+      setImgType("jpeg");
       startStream();
+    } else if (goIosReady && !wdaConnected && !streaming && selectedUdid) {
+      startGoIosStream();
     }
-  }, [wdaConnected, selectedUdid]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wdaConnected, goIosReady, selectedUdid]);
 
   // ── FPS counter ────────────────────────────────────────────────────────────
 
@@ -1479,16 +1517,24 @@ export function MirrorPage() {
     }
   };
 
-  // ── WDA control commands ───────────────────────────────────────────────────
+  // ── Control commands — WDA first, fall back to go-ios HID ──────────────────
 
   const handleCommand = async (cmd: string, payload?: any) => {
     try {
       if (cmd === "pressButton") {
-        await fetch("/api/mirror/press-button", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: payload }),
-        });
+        if (wdaConnected) {
+          await fetch("/api/mirror/press-button", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: payload }),
+          });
+        } else if (goIosReady && selectedUdid) {
+          await fetch("/api/mirror/goios/key", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ udid: selectedUdid, key: payload }),
+          });
+        }
       } else if (cmd === "type") {
+        if (!wdaConnected) { toast("⚠ Text input requires control agent"); return; }
         await fetch("/api/mirror/type", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: payload }),
@@ -1505,12 +1551,20 @@ export function MirrorPage() {
         };
         if (map[dir]) {
           const [fx, fy, tx, ty] = map[dir];
-          await fetch("/api/mirror/swipe", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fromX: fx, fromY: fy, toX: tx, toY: ty }),
-          });
+          if (wdaConnected) {
+            await fetch("/api/mirror/swipe", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fromX: fx, fromY: fy, toX: tx, toY: ty }),
+            });
+          } else if (goIosReady && selectedUdid) {
+            await fetch("/api/mirror/goios/swipe", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ udid: selectedUdid, fromX: fx, fromY: fy, toX: tx, toY: ty }),
+            });
+          }
         }
       } else if (cmd === "openApp") {
+        if (!wdaConnected) { toast("⚠ Open App requires control agent"); return; }
         await fetch("/api/mirror/open-app", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bundleId: payload }),
@@ -1523,23 +1577,39 @@ export function MirrorPage() {
   };
 
   const handleTap = async (x: number, y: number) => {
-    if (!wdaConnected) return;
-    try {
-      await fetch("/api/mirror/tap", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x, y }),
-      });
-    } catch {}
+    if (wdaConnected) {
+      try {
+        await fetch("/api/mirror/tap", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x, y }),
+        });
+      } catch {}
+    } else if (goIosReady && selectedUdid) {
+      try {
+        await fetch("/api/mirror/goios/tap", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ udid: selectedUdid, x, y }),
+        });
+      } catch {}
+    }
   };
 
   const handleSwipe = async (fx: number, fy: number, tx: number, ty: number) => {
-    if (!wdaConnected) return;
-    try {
-      await fetch("/api/mirror/swipe", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromX: fx, fromY: fy, toX: tx, toY: ty }),
-      });
-    } catch {}
+    if (wdaConnected) {
+      try {
+        await fetch("/api/mirror/swipe", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromX: fx, fromY: fy, toX: tx, toY: ty }),
+        });
+      } catch {}
+    } else if (goIosReady && selectedUdid) {
+      try {
+        await fetch("/api/mirror/goios/swipe", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ udid: selectedUdid, fromX: fx, fromY: fy, toX: tx, toY: ty }),
+        });
+      } catch {}
+    }
   };
 
   return (
@@ -1573,10 +1643,17 @@ export function MirrorPage() {
             "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
             wdaConnected
               ? "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800"
-              : "text-muted-foreground bg-muted/60 border-border",
+              : stage === "goios_ready"
+                ? "text-cyan-700 bg-cyan-50 border-cyan-200 dark:bg-cyan-950/40 dark:border-cyan-800"
+                : "text-muted-foreground bg-muted/60 border-border",
           )}>
             <CircleDot className="w-3 h-3" />
-            {wdaConnected ? "Connected" : stage === "no_device" ? "No device" : stage === "installing_wda" ? "Installing…" : stage === "starting_iproxy" ? "Connecting…" : "Not connected"}
+            {wdaConnected ? "Connected"
+              : stage === "goios_ready" ? "go-ios active"
+              : stage === "no_device" ? "No device"
+              : stage === "installing_wda" ? "Installing…"
+              : stage === "starting_iproxy" ? "Connecting…"
+              : "Not connected"}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
@@ -1586,9 +1663,13 @@ export function MirrorPage() {
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
-            {wdaConnected && (
+            {(wdaConnected || stage === "goios_ready") && (
               <button
-                onClick={() => streaming ? stopStream() : startStream()}
+                onClick={() => {
+                  if (streaming) { stopStream(); setJpeg(null); }
+                  else if (wdaConnected) { setImgType("jpeg"); startStream(); }
+                  else { startGoIosStream(); }
+                }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors",
                   streaming
@@ -1610,6 +1691,7 @@ export function MirrorPage() {
           <div className="flex flex-col items-center justify-center w-[310px] shrink-0 py-6 px-4 border-r border-border bg-muted/10">
             <PhoneFrame
               jpeg={jpeg}
+              imgType={imgType}
               streaming={streaming}
               fps={fps}
               onTap={handleTap}
@@ -1642,7 +1724,30 @@ export function MirrorPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {tab === "controls" && (
                 <>
-                  {stage !== "ready" && (
+                  {stage === "goios_ready" ? (
+                    /* go-ios connected banner — no WDA setup needed */
+                    <div className="rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 p-5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <CircleDot className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                        <p className="text-sm font-bold text-cyan-800 dark:text-cyan-300">go-ios connected</p>
+                      </div>
+                      <p className="text-xs text-cyan-700 dark:text-cyan-400 leading-relaxed">
+                        Screen is live and controls are active via go-ios — <strong>no certificate install needed</strong>. Click anywhere on the phone screen to tap, drag to swipe. Buttons below work too.
+                      </p>
+                      <p className="text-[10px] text-cyan-600 dark:text-cyan-500 leading-relaxed">
+                        Tip: for higher FPS and text input, install the <strong>Control Agent</strong> from the Install button below.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[10px] border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-900"
+                        onClick={handleInstallWda}
+                        disabled={!selectedUdid}
+                      >
+                        <Download className="w-3 h-3 mr-1" />Install Control Agent (optional)
+                      </Button>
+                    </div>
+                  ) : stage !== "ready" ? (
                     <SetupPanel
                       stage={stage}
                       devices={devices}
@@ -1658,8 +1763,8 @@ export function MirrorPage() {
                       restartingAmds={restartingAmds}
                       wdaInstalledOnce={wdaInstalledOnce}
                     />
-                  )}
-                  <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />
+                  ) : null}
+                  <ControlPad onCommand={handleCommand} disabled={!wdaConnected && !goIosReady} />
                 </>
               )}
               {tab === "wireless" && (

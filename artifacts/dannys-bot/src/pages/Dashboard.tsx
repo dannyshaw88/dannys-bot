@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.857",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: go-ios download now uses a case-insensitive asset name filter — the real cause of 'No Windows ZIP found' was that GitHub release assets are named 'Windows' (capital W) but the filter checked for 'windows' (lowercase). Fixed plus added 4 versioned fallback URLs so download still works even if the GitHub API is rate-limited." },
+      { category: "New", text: "Mirror: Screen now works without any certificate or app install. Once go-ios downloads, your iPhone screen appears immediately — no WDA, no Apple developer trust step needed." },
+      { category: "New", text: "Mirror: Touch, swipe, and hardware buttons (Home, Volume, Power) now work through go-ios HID — same approach, no certificate install needed." },
+      { category: "New", text: "Mirror: New 'go-ios active' status badge and banner replace the old WDA setup checklist when go-ios is connected. Install Control Agent remains available as an optional upgrade for higher FPS and text input." },
+    ],
+  },
+  {
     version: "1.0.856",
     date: "9 Jun 2026",
     items: [

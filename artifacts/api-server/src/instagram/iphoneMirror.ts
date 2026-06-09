@@ -474,12 +474,27 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
 // We download it once from GitHub releases and cache it next to our other binaries.
 
 const GO_IOS_RELEASE_API = "https://api.github.com/repos/danielpaulus/go-ios/releases/latest";
-let _goIosResolved = false;
+// Static fallback URLs — used if the GitHub API is rate-limited or the asset-name filter misses
+const GO_IOS_FALLBACK_URLS = [
+  "https://github.com/danielpaulus/go-ios/releases/download/v1.0.141/go-ios_Windows_x86_64.zip",
+  "https://github.com/danielpaulus/go-ios/releases/download/v1.0.139/go-ios_Windows_x86_64.zip",
+  "https://github.com/danielpaulus/go-ios/releases/download/v1.0.135/go-ios_Windows_x86_64.zip",
+  "https://github.com/danielpaulus/go-ios/releases/download/v1.0.130/go-ios_Windows_x86_64.zip",
+];
+let _goIosResolved  = false;
+let _goIosFailedAt  = 0;
 let _goIosExe: string | null = null;
 
 /** Returns the path to go-ios ios.exe, downloading it on first call if needed. */
 async function getGoIosExe(): Promise<string | null> {
-  if (_goIosResolved) return _goIosExe;
+  if (_goIosResolved) {
+    // Allow retry 60 s after a failed download
+    if (_goIosExe === null && Date.now() - _goIosFailedAt > 60_000) {
+      _goIosResolved = false;
+    } else {
+      return _goIosExe;
+    }
+  }
   if (process.platform !== "win32") { _goIosResolved = true; return null; }
 
   const binDir = getBinDir();
@@ -493,47 +508,79 @@ async function getGoIosExe(): Promise<string | null> {
     return candidate;
   }
 
+  const zipDest   = path.join(binDir, "_go-ios-win.zip");
+  const extractDir = path.join(binDir, "_go-ios-extract");
+
+  /** Download zip from url, extract ios.exe to candidate path. Returns true on success. */
+  const tryInstall = async (url: string): Promise<boolean> => {
+    try {
+      mlog.info({ url }, "[mirror] go-ios: downloading ZIP");
+      await downloadFile(url, zipDest);
+      await execAsync(
+        `powershell -NoProfile -NonInteractive -Command "Expand-Archive -Force '${zipDest}' '${extractDir}'"`,
+        { timeout: 30000 },
+      );
+      const { stdout: foundRaw } = await execAsync(
+        `powershell -NoProfile -NonInteractive -Command "Get-ChildItem -Recurse '${extractDir}' -Filter 'ios.exe' | Select-Object -First 1 -ExpandProperty FullName"`,
+        { timeout: 5000 },
+      );
+      const foundPath = foundRaw.trim();
+      if (!foundPath) return false;
+      fs.copyFileSync(foundPath, candidate);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch {}
+      try { if (fs.existsSync(zipDest)) fs.unlinkSync(zipDest); } catch {}
+    }
+  };
+
   try {
-    mlog.info("[mirror] go-ios: ios.exe not found — fetching latest release from GitHub");
-    const apiRes = await fetch(GO_IOS_RELEASE_API, {
-      headers: { "User-Agent": "Equinox/1.0" },
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!apiRes.ok) throw new Error(`GitHub API returned ${apiRes.status}`);
-    const release = await apiRes.json() as any;
-    const asset = ((release.assets ?? []) as any[]).find(
-      (a: any) => typeof a.name === "string" && a.name.includes("windows") && a.name.endsWith(".zip"),
-    );
-    if (!asset) throw new Error("No Windows ZIP found in go-ios release assets");
+    // 1. Try GitHub Releases API
+    let urlsToTry: string[] = [];
+    try {
+      mlog.info("[mirror] go-ios: fetching latest release from GitHub API");
+      const apiRes = await fetch(GO_IOS_RELEASE_API, {
+        headers: { "User-Agent": "Equinox/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (apiRes.ok) {
+        const release = await apiRes.json() as any;
+        const assets: any[] = release.assets ?? [];
+        mlog.info({ names: assets.map((a: any) => a.name) }, "[mirror] go-ios: API release assets");
+        const hit = assets.find(
+          (a: any) => typeof a.name === "string"
+            && a.name.toLowerCase().includes("windows")
+            && (a.name.toLowerCase().includes("x86_64") || a.name.toLowerCase().includes("amd64") || !a.name.toLowerCase().includes("arm"))
+            && a.name.endsWith(".zip"),
+        ) ?? assets.find(
+          (a: any) => typeof a.name === "string" && a.name.toLowerCase().includes("windows") && a.name.endsWith(".zip"),
+        );
+        if (hit) urlsToTry.push(hit.browser_download_url);
+      }
+    } catch (apiErr: any) {
+      mlog.warn({ err: String(apiErr?.message ?? apiErr) }, "[mirror] go-ios: API lookup failed — using static fallbacks");
+    }
 
-    const zipDest = path.join(binDir, "_go-ios-win.zip");
-    mlog.info({ url: asset.browser_download_url }, "[mirror] go-ios: downloading Windows ZIP");
-    await downloadFile(asset.browser_download_url, zipDest);
+    // 2. Append static fallbacks (tried if API didn't find anything or download fails)
+    urlsToTry = [...urlsToTry, ...GO_IOS_FALLBACK_URLS];
 
-    // Extract using PowerShell Expand-Archive (always available on Win 10+)
-    const extractDir = path.join(binDir, "_go-ios-extract");
-    await execAsync(
-      `powershell -NoProfile -NonInteractive -Command "Expand-Archive -Force '${zipDest}' '${extractDir}'"`,
-      { timeout: 30000 },
-    );
-    const { stdout: foundRaw } = await execAsync(
-      `powershell -NoProfile -NonInteractive -Command "Get-ChildItem -Recurse '${extractDir}' -Filter 'ios.exe' | Select-Object -First 1 -ExpandProperty FullName"`,
-      { timeout: 5000 },
-    );
-    const foundPath = foundRaw.trim();
-    if (!foundPath) throw new Error("ios.exe not found inside go-ios ZIP");
-    fs.copyFileSync(foundPath, candidate);
+    for (const url of urlsToTry) {
+      const ok = await tryInstall(url);
+      if (ok) {
+        mlog.info({ dest: candidate }, "[mirror] go-ios: ios.exe ready");
+        _goIosExe = candidate;
+        _goIosResolved = true;
+        return candidate;
+      }
+    }
 
-    try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch {}
-    try { fs.unlinkSync(zipDest); } catch {}
-
-    mlog.info({ dest: candidate }, "[mirror] go-ios: ios.exe downloaded and cached");
-    _goIosExe = candidate;
-    _goIosResolved = true;
-    return candidate;
+    throw new Error("All download URLs exhausted — go-ios unavailable");
   } catch (err: any) {
     mlog.warn({ err: String(err?.message ?? err) }, "[mirror] go-ios: download failed — will rely on TCP fallbacks");
     _goIosResolved = true;
+    _goIosFailedAt = Date.now();
     _goIosExe = null;
     return null;
   }
@@ -647,6 +694,96 @@ let _dllsBootstrapped = false;
 export function prewarmGoIos(): void {
   if (process.platform !== "win32") return;
   getGoIosExe().catch(() => {});
+}
+
+/** Returns true once go-ios is downloaded and ready to use. */
+export function isGoIosAvailable(): boolean {
+  return _goIosResolved && _goIosExe !== null;
+}
+
+/**
+ * Take a screenshot using go-ios (no WDA or certificate needed).
+ * Returns base64-encoded PNG string, or null on failure.
+ */
+export async function goIosScreenshot(udid: string): Promise<string | null> {
+  const exe = await getGoIosExe();
+  if (!exe) return null;
+  const tmpFile = path.join(os.tmpdir(), `equinox_ss_${udid.slice(0, 8)}_${Date.now()}.png`);
+  try {
+    await execAsync(`"${exe}" screenshot "${tmpFile}" --udid ${udid}`, { timeout: 6000 });
+    if (!fs.existsSync(tmpFile)) return null;
+    const data = fs.readFileSync(tmpFile);
+    if (data.length < 100) return null; // empty/invalid
+    return data.toString("base64");
+  } catch (err: any) {
+    mlog.debug({ err: String(err?.message ?? err) }, "[mirror] go-ios: screenshot failed");
+    return null;
+  } finally {
+    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
+  }
+}
+
+/**
+ * Send a tap/touch event via go-ios HID (no WDA needed).
+ * Returns true if the command ran without error.
+ */
+export async function goIosHidTap(udid: string, x: number, y: number): Promise<boolean> {
+  const exe = await getGoIosExe();
+  if (!exe) return false;
+  try {
+    await execAsync(`"${exe}" hid touch ${Math.round(x)} ${Math.round(y)} --udid ${udid}`, { timeout: 5000 });
+    return true;
+  } catch (err: any) {
+    mlog.debug({ err: String(err?.message ?? err), x, y }, "[mirror] go-ios: hid touch failed");
+    return false;
+  }
+}
+
+/**
+ * Send a swipe gesture via go-ios HID (no WDA needed).
+ * Returns true if the command ran without error.
+ */
+export async function goIosHidSwipe(
+  udid: string, x1: number, y1: number, x2: number, y2: number,
+): Promise<boolean> {
+  const exe = await getGoIosExe();
+  if (!exe) return false;
+  try {
+    await execAsync(
+      `"${exe}" hid swipe ${Math.round(x1)} ${Math.round(y1)} ${Math.round(x2)} ${Math.round(y2)} --udid ${udid}`,
+      { timeout: 5000 },
+    );
+    return true;
+  } catch (err: any) {
+    mlog.debug({ err: String(err?.message ?? err) }, "[mirror] go-ios: hid swipe failed");
+    return false;
+  }
+}
+
+/**
+ * Send a hardware key press via go-ios HID (no WDA needed).
+ * key: "home" | "volumeUp" | "volumeDown" | "power"
+ * Returns true if the command ran without error.
+ */
+export async function goIosHidKey(udid: string, key: string): Promise<boolean> {
+  const exe = await getGoIosExe();
+  if (!exe) return false;
+  // go-ios key names: home, volumeUp, volumeDown, power, lock, etc.
+  const keyMap: Record<string, string> = {
+    home: "home",
+    volumeUp: "volumeUp",
+    volumeDown: "volumeDown",
+    power: "power",
+    lock: "power",
+  };
+  const goKey = keyMap[key] ?? key;
+  try {
+    await execAsync(`"${exe}" hid key ${goKey} --udid ${udid}`, { timeout: 5000 });
+    return true;
+  } catch (err: any) {
+    mlog.debug({ err: String(err?.message ?? err), key }, "[mirror] go-ios: hid key failed");
+    return false;
+  }
 }
 
 export async function bootstrapAppleDlls(): Promise<void> {
