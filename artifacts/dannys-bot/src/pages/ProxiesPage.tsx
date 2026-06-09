@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2,
   Upload, Download, Trash, Search,
-  ArrowUp, ArrowDown, ArrowUpDown, Settings2, ChevronDown, ChevronUp,
+  ArrowUp, ArrowDown, ArrowUpDown, Settings2, ChevronDown, ChevronUp, Smartphone,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -322,6 +322,7 @@ export function ProxiesPage() {
   const [pasteImporting, setPasteImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [splitGroup, setSplitGroup] = useState<string>("");
+  const [showPhone4gTip, setShowPhone4gTip] = useState(false);
 
   type SortKey = "proxy" | "username" | "status" | "accounts" | null;
   type SortDir = "asc" | "desc";
@@ -683,6 +684,38 @@ export function ProxiesPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Phone 4G tip ──────────────────────────────────────────────────── */}
+      <div className="mb-3 shrink-0">
+        <button
+          onClick={() => setShowPhone4gTip(v => !v)}
+          className="flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-700 font-medium transition-colors"
+        >
+          <Smartphone className="w-3.5 h-3.5" />
+          Want to use your phone's 4G in the Ghost Browser?
+          {showPhone4gTip ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+        {showPhone4gTip && (
+          <div className="mt-2 p-3 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-900 space-y-2 max-w-2xl">
+            <p className="font-semibold text-sky-800">Why hotspot still shows your home broadband IP</p>
+            <p>When Windows is connected to both home broadband and your phone hotspot simultaneously, Windows uses <strong>network adapter priority (metric)</strong> to pick the default route. Home broadband almost always has the lower metric and wins — so all traffic still goes through it even though the hotspot shows as "Connected".</p>
+
+            <p className="font-semibold text-sky-800 pt-1">Option A — use your phone as a proxy (recommended)</p>
+            <ol className="list-decimal list-inside space-y-1 ml-1">
+              <li>Install <strong>Every Proxy</strong> (free) from the Google Play Store on your Android phone.</li>
+              <li>Open Every Proxy → tap <strong>HTTP</strong> → tap <strong>Start</strong>. Note the port shown (default: 8080).</li>
+              <li>Connect your laptop to your phone's Wi-Fi hotspot.</li>
+              <li>In Equinox, click <strong>Add Proxy</strong> and enter: host = <code className="bg-sky-100 px-1 rounded">192.168.43.1</code>, port = <code className="bg-sky-100 px-1 rounded">8080</code>, type = <strong>HTTP</strong>.</li>
+              <li>Assign that proxy to the account you want to run on 4G — done.</li>
+            </ol>
+
+            <p className="font-semibold text-sky-800 pt-1">Option B — disconnect home broadband first</p>
+            <p>Unplug your ethernet cable or disable your home Wi-Fi adapter in Windows before opening the Ghost Browser. With only the hotspot active, Windows automatically routes all traffic through 4G — no proxy app needed.</p>
+
+            <p className="text-sky-600 pt-1">Tip: Use the <strong>🌐 My IP</strong> button in the Ghost Browser toolbar to instantly see your current exit IP and confirm which network is active before you start a session.</p>
+          </div>
+        )}
       </div>
 
       {/* ── Search + Add Proxy ──────────────────────────────────────────────── */}

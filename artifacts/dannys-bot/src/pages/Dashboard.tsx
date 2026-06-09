@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.858",
+    date: "9 Jun 2026",
+    items: [
+      { category: "New", text: "Ghost Browser toolbar: added a 'My IP' button — click it at any time to instantly see your current exit IP and confirm whether the Ghost Browser is routing through your proxy, phone hotspot, or home broadband." },
+      { category: "Improvement", text: "Proxy Manager: added a 'Using Phone 4G?' tip panel explaining why hotspotting your laptop still shows your home broadband IP and giving step-by-step instructions for both the proxy-app fix and the disconnect-home-broadband fix." },
+    ],
+  },
+  {
     version: "1.0.857",
     date: "9 Jun 2026",
     items: [
