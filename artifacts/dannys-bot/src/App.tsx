@@ -15,7 +15,6 @@ import { StandaloneBrowserPage } from "@/pages/StandaloneBrowserPage";
 import { ReadmePage } from "@/pages/ReadmePage";
 import { BulkImportPage } from "@/pages/BulkImportPage";
 import { MobilePage } from "@/pages/MobilePage";
-import { MirrorPage } from "@/pages/MirrorPage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -45,7 +44,6 @@ function Router() {
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
       <Route path="/bulk-import"><Redirect to="/settings" /></Route>
       <Route path="/mobile" component={MobilePage} />
-      <Route path="/mirror" component={MirrorPage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
       <Route path="/readme" component={ReadmePage} />

@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import { registerMirrorRoutes } from "./mirror";
 import { WebSocketServer } from "ws";
 import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
@@ -2163,11 +2162,8 @@ export async function registerInstagramRoutes(
 
     const match = url.pathname.match(/^\/api\/browser\/(\d+)\/stream$/);
     if (!match) {
-      // Let other registered upgrade handlers claim the socket for non-browser paths
-      // (e.g., /api/mirror/airplay/video handled by mirror routes)
-      if (url.pathname !== "/api/mirror/airplay/video") {
-        socket.destroy();
-      }
+      // No other upgrade handlers — destroy unrecognised upgrade sockets
+      socket.destroy();
       return;
     }
     const profileId = Number(match[1]);
@@ -4450,7 +4446,5 @@ export async function registerInstagramRoutes(
       res.json({ ok: true });
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
-
-  registerMirrorRoutes(app, httpServer);
 
 }

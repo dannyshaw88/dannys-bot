@@ -712,7 +712,7 @@ export function CreateGhostPage() {
       <div className="flex gap-3" style={{ height: "calc(100vh - 170px)" }}>
 
         {/* ── Left: Controls ── */}
-        <div className="w-[280px] shrink-0 flex flex-col gap-2 overflow-y-auto">
+        <div className="w-[280px] shrink-0 flex flex-col gap-1 overflow-y-auto">
 
           {/* Proxy Card */}
           <div className="desktop-card p-2.5 space-y-1.5">
@@ -808,7 +808,7 @@ export function CreateGhostPage() {
                   value={usernameSpin}
                   onChange={e => setUsernameSpin(e.target.value)}
                   placeholder="{john|jane}.{smith|jones}{1|23|456}"
-                  className="h-8 text-xs font-mono flex-1 min-w-0"
+                  className="h-8 text-xs font-mono placeholder:font-sans flex-1 min-w-0"
                   spellCheck={false}
                   autoComplete="off"
                 />
@@ -863,7 +863,7 @@ export function CreateGhostPage() {
                 value={dob}
                 onChange={e => setDob(e.target.value)}
                 placeholder="DD/MM/YYYY"
-                className="h-8 text-xs font-mono"
+                className="h-8 text-xs font-mono placeholder:font-sans"
                 spellCheck={false}
                 autoComplete="off"
               />
@@ -902,7 +902,7 @@ export function CreateGhostPage() {
                   value={emailPass}
                   onChange={e => setEmailPass(e.target.value)}
                   placeholder="Email account password"
-                  className="h-7 text-xs font-mono"
+                  className="h-7 text-xs font-mono placeholder:font-sans"
                   type="password"
                   autoComplete="off"
                 />

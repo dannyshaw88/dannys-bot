@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.859",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Removed", text: "Mirror tab has been removed from the sidebar and all of its backend code has been deleted." },
+      { category: "Fix", text: "Ghost Browser: placeholder text in Username Spin, Date of Birth, and Email Password fields now uses the same font as the IMAP fields (was monospace, now matches)." },
+      { category: "Improvement", text: "Ghost Browser: Proxy, Device Identity, and Fingerprint cards are now closer together vertically." },
+    ],
+  },
+  {
     version: "1.0.858",
     date: "9 Jun 2026",
     items: [
