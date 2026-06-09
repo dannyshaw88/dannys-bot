@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.864",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser now shows a blocked (no-entry) cursor when you hover over it during automation — Instagram cannot track mouse movements and you get a clear visual that the window is under automation control." },
+      { category: "Fix", text: "Date of birth drum picker now appears correctly — the browser was incorrectly advertising hover/pointer capability like a desktop, causing Instagram to show a plain text input instead of the phone-style spinning picker." },
+    ],
+  },
+  {
     version: "1.0.863",
     date: "9 Jun 2026",
     items: [

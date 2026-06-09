@@ -393,6 +393,10 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
 // Blocking 'click' kills that final event and React button handlers never fire.
 // 'mousedown' / 'mouseup' are sufficient to defeat Instagram's mouse-detection:
 // those events only fire for real mouse buttons and are never part of a touch sequence.
+//
+// Also injects a 'not-allowed' cursor style so the user sees a red stop icon when
+// hovering over the Ghost Browser — a visual indicator that the window is in
+// automation mode and mouse input is blocked.
 const GHOST_MOUSE_BLOCKER_JS = `(function(){
   var BLOCK=['mousemove','mouseover','mouseout','mouseenter','mouseleave',
              'pointermove','pointerover','pointerout','pointerenter','pointerleave',
@@ -402,6 +406,20 @@ const GHOST_MOUSE_BLOCKER_JS = `(function(){
     window.addEventListener(t, block, true);
     document.addEventListener(t, block, true);
   });
+  // Inject cursor style so the user sees a blocked cursor over the ghost window.
+  // Uses DOMContentLoaded if document.head isn't ready yet.
+  function _injectCursor(){
+    if(document.getElementById('__ghost-cur__')) return;
+    var s=document.createElement('style');
+    s.id='__ghost-cur__';
+    s.textContent='html,body,*,*::before,*::after{cursor:not-allowed!important}';
+    (document.head||document.documentElement).appendChild(s);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',_injectCursor,{once:true});
+  } else {
+    _injectCursor();
+  }
 })();`;
 
 // Ghost signup mobile fingerprint patch — injected AFTER the main _fpScript so it
@@ -2228,6 +2246,17 @@ export async function openEbWindow(opts: {
         }).catch(() => {});
         win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
           enabled: true, maxTouchPoints: 10,
+        }).catch(() => {});
+        // CRITICAL for drum picker: without hover:none + pointer:coarse, Chromium
+        // reports (hover:hover) to CSS media queries even in mobile mode, and Instagram
+        // serves a plain text input instead of the drum-picker date selector.
+        win.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", {
+          features: [
+            { name: "hover",       value: "none"   },
+            { name: "any-hover",   value: "none"   },
+            { name: "pointer",     value: "coarse" },
+            { name: "any-pointer", value: "coarse" },
+          ],
         }).catch(() => {});
       } catch { /* CDP not yet ready — ghost-signup will re-apply before navigation */ }
     }
@@ -4782,7 +4811,20 @@ export function startEbIpcServer(
               await wc.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
                 enabled: true, maxTouchPoints: 10,
               });
-              relay("[mobile-setup] ✅ Mobile UA=Pixel 8 Chrome/131 viewport=393x851 dpr=2.75 touch=on");
+              // CRITICAL for drum picker: setDeviceMetricsOverride does NOT change CSS
+              // media query hover/pointer features. Without this, Chromium still reports
+              // (hover:hover) and (pointer:fine) — desktop media queries — even at mobile
+              // dimensions. Instagram checks (hover:none) + (pointer:coarse) to decide
+              // whether to render the drum-picker date selector or a plain text input.
+              await wc.debugger.sendCommand("Emulation.setEmulatedMedia", {
+                features: [
+                  { name: "hover",       value: "none"   },
+                  { name: "any-hover",   value: "none"   },
+                  { name: "pointer",     value: "coarse" },
+                  { name: "any-pointer", value: "coarse" },
+                ],
+              });
+              relay("[mobile-setup] ✅ Mobile UA=Pixel 8 Chrome/131 viewport=393x851 dpr=2.75 touch=on hover=none pointer=coarse");
             } catch (mobileErr: any) {
               relay(`[mobile-setup] ⚠ Could not set mobile layout: ${mobileErr?.message ?? String(mobileErr)} — desktop layout may be active, signup flow may fail`);
             }
