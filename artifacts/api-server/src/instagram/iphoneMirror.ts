@@ -454,11 +454,17 @@ async function buildEnvWithApplePath(): Promise<NodeJS.ProcessEnv> {
     { binDir, amdPath, usbmuxdSocket: usbmuxd, injectedDirs: extraDirs },
     "[mirror] buildEnvWithApplePath: env ready",
   );
-  return {
-    ...process.env,
-    PATH: finalPath,
-    USBMUXD_SOCKET_ADDRESS: usbmuxd,
-  };
+  // On Windows process.env spreads with key "Path" (mixed case), not "PATH".
+  // If we just do { ...process.env, PATH: finalPath } the object contains BOTH "Path" and "PATH"
+  // and Windows child processes use the first matching key — our injection is silently ignored.
+  // Fix: delete every case variant of the path key before setting ours.
+  const merged: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(merged)) {
+    if (key.toLowerCase() === "path") delete merged[key];
+  }
+  merged.PATH = finalPath;
+  merged.USBMUXD_SOCKET_ADDRESS = usbmuxd;
+  return merged;
 }
 
 // ── Device detection ──────────────────────────────────────────────────────────

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.854",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mirror: iPhone was never detected because Windows was silently ignoring the Apple DLL path injection — a Windows-specific bug where 'Path' and 'PATH' are treated as different keys. Fixed by stripping all case variants before setting the correct one." },
+      { category: "Fix", text: "Mirror: 'Install control agent' step in the checklist no longer shows as ticked when the agent was never actually installed — it only ticks after a confirmed successful install now." },
+    ],
+  },
+  {
     version: "1.0.853",
     date: "9 Jun 2026",
     items: [

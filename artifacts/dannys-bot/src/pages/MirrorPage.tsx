@@ -167,11 +167,13 @@ interface SetupPanelProps {
   restartingAmds: boolean;
 }
 
-function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onReinstall, onRetry, onRestartAmds, restartingAmds }: SetupPanelProps) {
+function SetupPanel({ stage, devices, selectedUdid, installProgress, installMessage, diagnosis, diagnosing, onInstallWda, onReinstall, onRetry, onRestartAmds, restartingAmds, wdaInstalledOnce }: SetupPanelProps & { wdaInstalledOnce: boolean }) {
   const steps = [
     { id: "plug",    label: "Plug in iPhone",             done: stage !== "no_device" },
     { id: "trust",   label: "Tap \"Trust\" on iPhone",    done: stage === "installing_wda" || stage === "starting_iproxy" || stage === "ready" },
-    { id: "agent",   label: "Install control agent",      done: stage === "starting_iproxy" || stage === "ready" },
+    // Only mark as done when we have actual evidence the agent was installed —
+    // NOT just because iproxy happened to be running (it auto-starts on device detection).
+    { id: "agent",   label: "Install control agent",      done: wdaInstalledOnce || stage === "ready" },
     { id: "connect", label: "Connect",                    done: stage === "ready" },
   ];
 
@@ -1218,6 +1220,8 @@ export function MirrorPage() {
   const [wdaConnected, setWdaConnected] = useState(false);
   const [iproxyRunning, setIproxyRunning] = useState(false);
   const [stage, setStage]               = useState<SetupStage>("no_device");
+  // Persisted evidence that WDA was actually installed on this machine (not just iproxy running)
+  const [wdaInstalledOnce, setWdaInstalledOnce] = useState(() => localStorage.getItem("wdaInstalledOnce") === "1");
   const [streaming, setStreaming]       = useState(false);
   const [jpeg, setJpeg]                 = useState<string | null>(null);
   const [fps, setFps]                   = useState(0);
@@ -1424,6 +1428,9 @@ export function MirrorPage() {
             installPollRef.current = null;
             setInstallSessionId(null);
             if (s.step === "done") {
+              // Record that WDA was actually installed on this machine
+              localStorage.setItem("wdaInstalledOnce", "1");
+              setWdaInstalledOnce(true);
               // Start iproxy now that WDA is installed
               await fetch("/api/mirror/iproxy/start", {
                 method: "POST",
@@ -1455,6 +1462,9 @@ export function MirrorPage() {
     // Lock the ref BEFORE stopping iproxy so the auto-start-iproxy effect can't
     // race in and restart iproxy before the reinstall begins.
     reinstallingRef.current = true;
+    // Clear the "installed" flag so the checklist reflects reality during the reinstall
+    localStorage.removeItem("wdaInstalledOnce");
+    setWdaInstalledOnce(false);
     try {
       try {
         await fetch("/api/mirror/iproxy/stop", { method: "POST" });
@@ -1646,6 +1656,7 @@ export function MirrorPage() {
                       onRetry={() => { setDiagnosis(null); refreshStatus(); setTimeout(runDiagnose, 1500); }}
                       onRestartAmds={handleRestartAmds}
                       restartingAmds={restartingAmds}
+                      wdaInstalledOnce={wdaInstalledOnce}
                     />
                   )}
                   <ControlPad onCommand={handleCommand} disabled={!wdaConnected} />
