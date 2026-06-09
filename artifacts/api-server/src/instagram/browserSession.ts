@@ -7687,14 +7687,90 @@ export async function createInstagramAccountViaEBForm(params: {
         step(`EB: select DOB fill — month:${dobResult.mf} day:${dobResult.df} year:${dobResult.yf} → filled:${dobFilled}`);
       }
 
-      // ── Path B: single text input (current Instagram flow) ─────────────────
-      // Instagram now uses ONE combined text field for the birthday. Its placeholder
-      // attribute may not be in the DOM at query time (React-controlled), so we do NOT
-      // rely on attribute matching. Instead we take the FIRST visible non-hidden,
-      // non-password input on the page (there is only one on the birthday screen).
-      // We type via real keyboard events so React's onChange fires on every character.
+      // ── Path B: Mobile drum/wheel picker ──────────────────────────────────
+      // Instagram's mobile web signup shows a 3-column scroll-wheel picker for
+      // date of birth (Day | Month | Year). Each column is a scrollable container
+      // whose children are role="option" items. We find each column, calculate how
+      // far we need to scroll to centre the target value, then use CDP
+      // synthesizeScrollGesture so Instagram's touch listeners fire correctly.
       if (!dobFilled) {
-        // Try labelled selectors first (belt-and-suspenders), then fall back to first visible input
+        const MONTHS_WHEEL = ["", "January", "February", "March", "April", "May", "June",
+                              "July", "August", "September", "October", "November", "December"];
+
+        // Step 1: Collect info about each listbox column from the DOM
+        const colInfo = await page.evaluate((targetM: number, targetD: number, targetY: number, monthNames: string[]) => {
+          const listboxes = Array.from(document.querySelectorAll<HTMLElement>('[role="listbox"]'))
+            .filter(lb => { const r = lb.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+          if (listboxes.length < 2) return [];
+
+          return listboxes.map(lb => {
+            const r = lb.getBoundingClientRect();
+            const opts = Array.from(lb.querySelectorAll<HTMLElement>('[role="option"]'));
+            const texts = opts.map(o => (o.textContent || "").trim()).filter(Boolean);
+
+            // Determine column type by label or content
+            const ariaLabel = (lb.getAttribute("aria-label") || "").toLowerCase();
+            const isMonth = ariaLabel.includes("month") || texts.some(t => monthNames.slice(1).some(mn => t.startsWith(mn.slice(0, 3))));
+            const isYear  = ariaLabel.includes("year")  || texts.some(t => /^(19|20)\d{2}$/.test(t));
+            const isDay   = !isMonth && !isYear;
+
+            const targetText = isMonth ? monthNames[targetM] : isDay ? String(targetD) : String(targetY);
+            // Find the target option element and compute how far the column must scroll
+            let scrollDelta = 0;
+            let found = false;
+            const centerY = r.top + r.height / 2;
+            for (const opt of opts) {
+              const ot = (opt.textContent || "").trim();
+              const matches = isMonth
+                ? monthNames[targetM] && ot.startsWith(monthNames[targetM].slice(0, 3))
+                : ot === targetText;
+              if (matches) {
+                const or = opt.getBoundingClientRect();
+                scrollDelta = Math.round((or.top + or.height / 2) - centerY);
+                found = true;
+                break;
+              }
+            }
+
+            return {
+              cx: Math.round(r.left + r.width / 2),
+              cy: Math.round(centerY),
+              scrollDelta,
+              found,
+              isMonth, isDay, isYear,
+            };
+          });
+        }, month, day, year, MONTHS_WHEEL).catch(() => [] as any[]);
+
+        if (Array.isArray(colInfo) && colInfo.length >= 2) {
+          step(`EB: wheel picker detected — ${colInfo.length} column(s), scrolling to target values...`);
+          for (const col of colInfo) {
+            if (!col.found || col.scrollDelta === 0) continue;
+            const which = col.isMonth ? "Month" : col.isDay ? "Day" : "Year";
+            step(`EB: scrolling ${which} wheel by ${col.scrollDelta}px...`);
+            try {
+              // synthesizeScrollGesture fires real touch scroll events that Instagram's
+              // wheel picker reacts to. Positive scrollDelta means the target is below
+              // centre — we scroll the content UP (yDistance negative) to bring it up.
+              await cdp?.send("Input.synthesizeScrollGesture", {
+                x: col.cx, y: col.cy,
+                xDistance: 0,
+                yDistance: -col.scrollDelta,
+                speed: 250,
+                gestureSourceType: "touch",
+              });
+            } catch { /* non-fatal */ }
+            await delay(700);
+          }
+          dobFilled = true;
+          step("EB: wheel picker columns scrolled ✓");
+        }
+      }
+
+      // ── Path C: single text input (older / desktop fallback flow) ──────────
+      // Instagram sometimes shows ONE combined text field for the birthday date.
+      // We tap to focus (touch event), then insert via IME — no keyboard codes.
+      if (!dobFilled) {
         const dobInputHandle = await page.$([
           'input[placeholder*="Birthday" i]',
           'input[aria-label*="Birthday" i]',
@@ -7703,31 +7779,32 @@ export async function createInstagramAccountViaEBForm(params: {
           'input[placeholder*="MM/DD" i]',
           'input[placeholder*="DD/MM" i]',
           'input[placeholder*="date" i]',
-          // Broad fallback: first visible text-like input on the page
           'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="password"])',
         ].join(", ")).catch(() => null);
 
         if (dobInputHandle) {
-          // Triple-click to select-all, then type overwrites whatever is there
-          await dobInputHandle.click({ clickCount: 3 });
-          await delay(200);
-          // Also select-all via keyboard in case triple-click didn't work
-          await page.keyboard.down("Control");
-          await page.keyboard.press("a");
-          await page.keyboard.up("Control");
-          await delay(100);
-          // Type the date character by character so React sees each keypress
-          await page.keyboard.type(dateStr, { delay: 80 });
-          await delay(400);
-          const actualVal = await page.evaluate(el => (el as HTMLInputElement).value, dobInputHandle).catch(() => "?");
-          step(`EB: typed date "${dateStr}" into first visible input — field now shows "${actualVal}"`);
-          dobFilled = actualVal.replace(/\D/g, "").length >= 6;
-          if (!dobFilled) {
-            step(`EB: WARNING — field value "${actualVal}" looks wrong after typing, will try Next anyway`);
-            dobFilled = true; // proceed — the value may be formatted by Instagram
+          const dobBox = await dobInputHandle.boundingBox().catch(() => null);
+          if (dobBox) {
+            // Touch tap to focus
+            await tap(Math.round(dobBox.x + dobBox.width / 2), Math.round(dobBox.y + dobBox.height / 2));
+            await delay(300);
+            // JS clear via native setter
+            await page.evaluate(() => {
+              const el = document.activeElement as HTMLInputElement | null;
+              if (!el) return;
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+              if (setter) { setter.call(el, ""); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); }
+            }).catch(() => {});
+            await delay(120);
+            // Insert date via IME (no key codes)
+            try { if (cdp) await cdp.send("Input.insertText", { text: dateStr }); } catch {}
+            await delay(400);
+            const actualVal = await page.evaluate(el => (el as HTMLInputElement).value, dobInputHandle).catch(() => "?");
+            step(`EB: inserted date "${dateStr}" into text input — field shows "${actualVal}"`);
+            dobFilled = true;
           }
         } else {
-          step("EB: WARNING — no input element found on birthday page at all");
+          step("EB: WARNING — no DOB input element found on birthday page");
         }
       }
 
@@ -7830,6 +7907,16 @@ export async function submitSignupCodeViaEB(sessionId: string, code: string): Pr
 
   step(`EB: entering verification code...`);
   try {
+    // CDP session for touch events — same approach as the main signup form
+    let cdp: any = null;
+    try { cdp = await page.createCDPSession(); } catch { /* non-fatal */ }
+
+    const tapTouch = async (x: number, y: number) => {
+      if (!cdp) return;
+      try { await cdp.send("Input.synthesizeTapGesture", { x, y, duration: 60, tapCount: 1, gestureSourceType: "touch" }); } catch {}
+      await delay(120);
+    };
+
     let filled = false;
     for (const sel of [
       'input[name="email_confirmation_code"]', 'input[autocomplete="one-time-code"]',
@@ -7840,72 +7927,108 @@ export async function submitSignupCodeViaEB(sessionId: string, code: string): Pr
       const box = await el.boundingBox().catch(() => null);
       if (!box || box.width === 0) continue;
 
-      // Check whether Instagram is using individual single-digit input boxes
-      // (common on newer signup flows) — if so, type each digit into its own box.
-      const isMultiBox = await page.evaluate((selector: string) => {
+      // Count visible inputs matching this selector — mobile Instagram shows 6 separate boxes
+      const visibleCount = await page.evaluate((selector: string) => {
         const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(selector));
-        const visible = inputs.filter(i => { const r = i.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-        return visible.length > 1;
-      }, sel).catch(() => false);
+        return inputs.filter(i => { const r = i.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).length;
+      }, sel).catch(() => 1);
 
-      if (isMultiBox) {
-        // Multi-box OTP: type one digit per box, relying on auto-advance.
+      if (visibleCount > 1) {
+        // ── Multi-box OTP (6 separate digit boxes) ───────────────────────────
+        // Each box accepts exactly one digit. Tap the box (touch event, not mouse),
+        // then insert the digit via IME (Input.insertText — no key codes at all).
+        // Instagram auto-advances focus to the next box after each digit; we do NOT
+        // press Tab or Enter between digits. When the 6th digit lands, Instagram
+        // auto-submits — we do NOT click any Confirm button.
         const inputs = await page.$$(sel);
         for (let i = 0; i < inputs.length && i < code.length; i++) {
           const b = await inputs[i].boundingBox().catch(() => null);
           if (!b) continue;
-          await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-          await delay(80);
-          await page.keyboard.type(code[i], { delay: 50 });
-          // Fire React-compatible event on each digit box.
+          // Touch tap to focus this box
+          await tapTouch(Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2));
+          await delay(150);
+          // Clear any stale value via native setter so React sees the change
           await page.evaluate(() => {
             const el = document.activeElement as HTMLInputElement | null;
             if (!el) return;
             const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-            if (setter) { setter.call(el, el.value); el.dispatchEvent(new Event("input", { bubbles: true })); }
+            if (setter) { setter.call(el, ""); el.dispatchEvent(new Event("input", { bubbles: true })); }
           }).catch(() => {});
           await delay(80);
+          // Insert digit via IME (mobile keyboard style — no keyDown/keyUp codes)
+          if (cdp) {
+            try { await cdp.send("Input.insertText", { text: code[i] }); } catch {}
+          }
+          await delay(100 + Math.random() * 80);
         }
+        step("EB: 6-digit code tapped into separate boxes ✓ — waiting for auto-submit...");
         filled = true;
         break;
       }
 
-      // Single input box: click → clear → type code.
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-      await delay(150);
-      await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
-      await delay(80);
-      await page.keyboard.press("Backspace");
-      await delay(100);
-      await page.keyboard.type(code, { delay: 70 });
-      // Fire React-compatible input event so Instagram's controlled input registers the value.
+      // ── Single input box ─────────────────────────────────────────────────────
+      // Touch tap to focus → JS clear → IME insert full code.
+      // No Ctrl+A, no keyboard events. Instagram auto-submits when it sees a valid
+      // 6-digit value — we wait up to 5 s before falling back to a confirm tap.
+      await tapTouch(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2));
+      await delay(300);
       await page.evaluate(() => {
         const el = document.activeElement as HTMLInputElement | null;
         if (!el) return;
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-        if (setter) {
-          setter.call(el, el.value);
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+        if (setter) { setter.call(el, ""); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); }
       }).catch(() => {});
+      await delay(120);
+      if (cdp) { try { await cdp.send("Input.insertText", { text: code }); } catch {} }
+      // Fire React-compatible events so the controlled input registers the value
+      await page.evaluate(() => {
+        const el = document.activeElement as HTMLInputElement | null;
+        if (!el) return;
+        el.dispatchEvent(new Event("input",  { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }).catch(() => {});
+      step("EB: code inserted into single input ✓ — waiting for auto-submit...");
       filled = true;
       break;
     }
     if (!filled) return { status: "error", steps, message: "Could not find the verification code input on the page" };
 
-    await delay(500);
-    await page.evaluate(() => {
-      for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
-        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        if (["confirm", "next", "continue", "verify", "submit"].some(l => txt.includes(l))) {
-          const r = btn.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) { btn.click(); return; }
+    // ── Wait for Instagram to auto-submit (up to 6 s) ──────────────────────
+    // On mobile, filling the last digit triggers immediate auto-submission.
+    // Only fall back to a manual confirm tap if no navigation is detected.
+    const preCodeUrl = page.url();
+    let autoSubmitted = false;
+    for (let _i = 0; _i < 12; _i++) {
+      await delay(500);
+      if (page.url() !== preCodeUrl) { autoSubmitted = true; break; }
+      const done = await page.evaluate(() => {
+        const t = (document.body?.innerText || "").toLowerCase();
+        return t.includes("welcome") || t.includes("your account") || t.includes("set up") || t.includes("add a photo");
+      }).catch(() => false);
+      if (done) { autoSubmitted = true; break; }
+    }
+
+    if (!autoSubmitted) {
+      // Fallback: tap the Confirm/Next button (desktop-style flow)
+      const confirmPos = await page.evaluate(() => {
+        for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
+          const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+          if (["confirm", "next", "continue", "verify", "submit"].some(l => txt.includes(l))) {
+            const r = btn.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+          }
         }
+        return null;
+      }).catch(() => null);
+      if (confirmPos) {
+        await tapTouch(confirmPos.x, confirmPos.y);
+        step("EB: tapped Confirm button (auto-submit did not fire) ✓");
       }
-    });
-    step("EB: clicked Confirm ✓");
-    await delay(5000);
+      await delay(5000);
+    } else {
+      step("EB: auto-submitted ✓");
+      await delay(2000);
+    }
 
     const url = page.url();
     const allCookies = await page.cookies("https://www.instagram.com", "https://i.instagram.com") as Array<{ name: string; value: string }>;

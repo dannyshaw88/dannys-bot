@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.860",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Removed", text: "Ghost Browser toolbar: removed the 'My IP' button that was added without approval." },
+      { category: "Fix", text: "Signup automation: all input fields now use touch tap events instead of desktop keyboard events — matches real mobile Instagram behaviour." },
+      { category: "Fix", text: "Signup automation: the 6-digit verification code is now entered one digit per box using touch taps and IME input — Instagram auto-submits when the last box is filled, with no Confirm button click needed." },
+      { category: "Fix", text: "Signup automation: Date of Birth now detects and interacts with Instagram's mobile scroll-wheel picker (Day / Month / Year columns) using touch scroll gestures, rather than trying to type into a text field." },
+    ],
+  },
+  {
     version: "1.0.859",
     date: "9 Jun 2026",
     items: [
