@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.866",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Removed the 'Open Browser Only' button — CREATE ACCOUNT is the only trigger for opening the Ghost Browser." },
+      { category: "Improvement", text: "Ghost Browser now opens directly on the first website in your warm-up list instead of Instagram's homepage." },
+      { category: "Improvement", text: "All four X–Y range fields (Websites to Visit, Internal Links, Time on Site, Time on Links) are now on one compact row so the settings panel is shorter." },
+      { category: "Improvement", text: "Verification code input is now compact (8 characters wide) instead of stretching across the full row." },
+      { category: "Improvement", text: "CREATE ACCOUNT, ADD TO EQUINOX and NUKE ENVIRONMENT buttons are now 20% narrower and centred rather than spanning the full panel width." },
+      { category: "Fix", text: "Native Ghost Browser toolbar buttons no longer overlap or show garbled text when the window is made smaller — text is now clipped cleanly at the toolbar edge." },
+    ],
+  },
+  {
     version: "1.0.865",
     date: "9 Jun 2026",
     items: [

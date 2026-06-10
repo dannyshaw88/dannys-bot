@@ -532,6 +532,11 @@ export function CreateGhostPage() {
     proxySelection.kind !== "manual" ||
     (manualHost.trim() !== "" && /^\d+$/.test(manualPort) && parseInt(manualPort, 10) > 0 && parseInt(manualPort, 10) <= 65535);
 
+  const firstWebsiteUrl = (): string | undefined => {
+    const urls = websitesToVisit.split("\n").map(s => s.trim()).filter(s => s.startsWith("http"));
+    return urls[0];
+  };
+
   const handleOpen = async () => {
     if (!manualValid) return;
     setBrowserState("opening");
@@ -548,6 +553,7 @@ export function CreateGhostPage() {
         proxyPassword: resolvedProxy?.password,
         proxyType: (resolvedProxy as any)?.proxyType,
         fingerprint,
+        initialUrl: firstWebsiteUrl(),
       }),
     }).catch(() => {});
     setBrowserState("open");
@@ -654,6 +660,7 @@ export function CreateGhostPage() {
           proxyPassword: resolvedProxy?.password,
           proxyType: (resolvedProxy as any)?.proxyType,
           fingerprint,
+          initialUrl: firstWebsiteUrl(),
         }),
       }).catch(() => {});
       setBrowserState("open");
@@ -828,50 +835,39 @@ export function CreateGhostPage() {
             </div>
           </div>
 
-          {/* ── ROW 2: Websites to Visit | X-Y Websites | X-Y Internal Links ── */}
+          {/* ── ROW 2: Websites textarea only ── */}
           <div className="desktop-card p-2.5">
             <div className="flex items-center gap-1.5 mb-2">
               <Link className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Website Warm-Up (visits before signup)</p>
             </div>
-            <div className="flex gap-3 items-start">
-              {/* Websites textarea */}
-              <div className="flex-1 space-y-1">
-                <p className="text-[10px] text-muted-foreground font-medium">Websites to Visit</p>
-                <textarea
-                  value={websitesToVisit}
-                  onChange={e => setWebsitesToVisit(e.target.value)}
-                  placeholder={"https://example.com\nhttps://another-site.com\nhttps://thirdsite.org"}
-                  rows={5}
-                  className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs font-mono placeholder:font-sans placeholder:text-muted-foreground shadow-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  spellCheck={false}
-                />
-                <p className="text-[10px] text-muted-foreground/70">One URL per line. Ghost Browser visits in random order before signup.</p>
-              </div>
-
-              {/* X-Y Websites to Visit */}
-              <div className="shrink-0">
-                <XYField
-                  label="Websites to Visit"
-                  min={websitesMin} max={websitesMax}
-                  onMin={setWebsitesMin} onMax={setWebsitesMax}
-                />
-              </div>
-
-              {/* X-Y Internal Links */}
-              <div className="shrink-0">
-                <XYField
-                  label="Internal Links per Site"
-                  min={internalLinksMin} max={internalLinksMax}
-                  onMin={setInternalLinksMin} onMax={setInternalLinksMax}
-                />
-              </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground font-medium">Websites to Visit</p>
+              <textarea
+                value={websitesToVisit}
+                onChange={e => setWebsitesToVisit(e.target.value)}
+                placeholder={"https://example.com\nhttps://another-site.com\nhttps://thirdsite.org"}
+                rows={5}
+                className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs font-mono placeholder:font-sans placeholder:text-muted-foreground shadow-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                spellCheck={false}
+              />
+              <p className="text-[10px] text-muted-foreground/70">One URL per line. Ghost Browser visits in random order before signup. First URL loads on open.</p>
             </div>
           </div>
 
-          {/* ── ROW 3: Time on Website | Time on Internal Links ── */}
+          {/* ── ROW 3: All 4 XY range fields side by side ── */}
           <div className="desktop-card p-2.5">
-            <div className="flex gap-6">
+            <div className="flex gap-4 flex-wrap">
+              <XYField
+                label="Websites to Visit"
+                min={websitesMin} max={websitesMax}
+                onMin={setWebsitesMin} onMax={setWebsitesMax}
+              />
+              <XYField
+                label="Internal Links per Site"
+                min={internalLinksMin} max={internalLinksMax}
+                onMin={setInternalLinksMin} onMax={setInternalLinksMax}
+              />
               <XYField
                 label="Time Spent on Website (minutes)"
                 min={timeOnSiteMin} max={timeOnSiteMax}
@@ -1069,13 +1065,13 @@ export function CreateGhostPage() {
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verification Code</p>
             </div>
             <div className="flex gap-2 items-end">
-              <div className="flex-1 space-y-1">
+              <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Code (6-digit)</p>
                 <Input
                   value={manualCode}
                   onChange={e => setManualCode(e.target.value)}
-                  placeholder="Enter or auto-fetch verification code"
-                  className="h-7 text-xs font-mono"
+                  placeholder="000000"
+                  className="h-7 text-xs font-mono w-28"
                   maxLength={8}
                   autoComplete="off"
                 />
@@ -1133,12 +1129,12 @@ export function CreateGhostPage() {
 
           {/* ── ROW 7: CREATE ACCOUNT | ADD TO EQUINOX | NUKE ENVIRONMENT ── */}
           <div className="desktop-card p-2.5">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex gap-2 justify-center">
 
               {/* CREATE ACCOUNT */}
               <Button
                 className={cn(
-                  "gap-2 text-xs font-semibold tracking-wide uppercase",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
                   signupRunning || browserState === "opening"
                     ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
                     : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
@@ -1157,7 +1153,7 @@ export function CreateGhostPage() {
               <Button
                 variant="outline"
                 className={cn(
-                  "gap-2 text-xs font-semibold tracking-wide uppercase",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
                   addedToEquinox
                     ? "border-green-400 text-green-700 bg-green-50 hover:bg-green-50"
                     : "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
@@ -1175,7 +1171,7 @@ export function CreateGhostPage() {
               {/* NUKE ENVIRONMENT */}
               <Button
                 variant="outline"
-                className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
+                className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400 w-[200px]"
                 onClick={handleFresh}
                 disabled={browserState === "opening" || browserState === "resetting"}
               >
@@ -1185,21 +1181,15 @@ export function CreateGhostPage() {
               </Button>
             </div>
 
-            {/* Open / Close browser secondary controls */}
-            <div className="flex gap-2 mt-2">
-              {!isOpen && browserState !== "opening" && (
-                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handleOpen} disabled={!manualValid}>
-                  <Wifi className="w-3.5 h-3.5" />
-                  Open Browser Only
-                </Button>
-              )}
-              {isOpen && (
+            {/* Close browser secondary control */}
+            {isOpen && (
+              <div className="flex gap-2 mt-2">
                 <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
                   <WifiOff className="w-3.5 h-3.5" />
                   Close Browser
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
         </div>

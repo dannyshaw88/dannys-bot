@@ -2309,14 +2309,14 @@ export async function registerInstagramRoutes(
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
       try {
-        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body as any;
+        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint, initialUrl: reqInitialUrl } = req.body as any;
 
         const body = {
           profileId: -1,
           username: "Ghost",
-          // Open directly on Instagram's homepage so signup starts immediately
-          // (no blank-page flash that forces a second "Create Account" click)
-          initialUrl: "https://www.instagram.com/",
+          // If the caller supplies an initialUrl (first warm-up website), load that
+          // instead of Instagram so the browser lands on a real site from the start.
+          initialUrl: reqInitialUrl || "https://www.instagram.com/",
           proxy: proxyHost && proxyPort
             ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined, type: (proxyType ?? "http") as "http" | "socks5" }
             : undefined,
