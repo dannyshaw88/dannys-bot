@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.877",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed blank white screen on startup — a crash in any component now shows a readable error report instead of an empty window, so you can see exactly what went wrong." },
+      { category: "Fix", text: "Ghost Browser verification code fetch now correctly targets the active tab slot so multi-tab signups don't mix up codes between tabs." },
+    ],
+  },
+  {
     version: "1.0.876",
     date: "10 Jun 2026",
     items: [

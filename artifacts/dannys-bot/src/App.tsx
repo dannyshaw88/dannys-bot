@@ -2,7 +2,7 @@ import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
@@ -25,6 +25,73 @@ import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
+
+// ── Top-level Error Boundary ─────────────────────────────────────────────────
+// React 18 in production mode: if ANY component throws during render and there
+// is no error boundary, React unmounts the ENTIRE tree → blank white screen.
+// This boundary catches those crashes and shows a readable error report instead.
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[AppErrorBoundary] Render crash:", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      const msg = this.state.error?.message ?? "Unknown error";
+      const stack = this.state.error?.stack ?? "";
+      return (
+        <div style={{
+          position: "fixed", inset: 0, background: "#0f172a", color: "#f1f5f9",
+          fontFamily: "monospace", padding: "32px", overflowY: "auto",
+          display: "flex", flexDirection: "column", gap: "16px",
+        }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#f87171" }}>
+            ⚠ Equinox failed to start
+          </div>
+          <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+            A component crashed on startup. Please copy this error and report it.
+          </div>
+          <div style={{
+            background: "#1e293b", borderRadius: "8px", padding: "16px",
+            fontSize: "12px", whiteSpace: "pre-wrap", wordBreak: "break-all",
+            color: "#fca5a5", lineHeight: "1.6",
+          }}>
+            {msg}
+          </div>
+          {stack && (
+            <div style={{
+              background: "#1e293b", borderRadius: "8px", padding: "16px",
+              fontSize: "11px", whiteSpace: "pre-wrap", wordBreak: "break-all",
+              color: "#94a3b8", lineHeight: "1.5",
+            }}>
+              {stack}
+            </div>
+          )}
+          <button
+            onClick={() => this.setState({ error: null })}
+            style={{
+              alignSelf: "flex-start", padding: "8px 20px", borderRadius: "6px",
+              background: "#2563eb", color: "#fff", border: "none",
+              fontSize: "13px", cursor: "pointer", fontWeight: 600,
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const SAVED_LOGIN_KEY = "equinox:savedLogin";
 
@@ -245,19 +312,21 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <NavigationHistoryProvider>
-          <SidebarSlotProvider>
-            <BrowserWindowsProvider>
-              <LicenseGate>
-                <AppInner />
-              </LicenseGate>
-            </BrowserWindowsProvider>
-          </SidebarSlotProvider>
-        </NavigationHistoryProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <NavigationHistoryProvider>
+            <SidebarSlotProvider>
+              <BrowserWindowsProvider>
+                <LicenseGate>
+                  <AppInner />
+                </LicenseGate>
+              </BrowserWindowsProvider>
+            </SidebarSlotProvider>
+          </NavigationHistoryProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }
 
