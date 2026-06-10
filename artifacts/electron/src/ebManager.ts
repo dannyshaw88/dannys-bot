@@ -62,7 +62,7 @@ function renderTabs(){
 renderTabs();
 `;
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body><div id="navbar">${isGhost ? ghostNavHtml : navHtml}</div><div id="tabbar"></div><script>${script}<\/script></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body><div id="navbar">${navHtml}</div><div id="tabbar"></div><script>${script}<\/script></body></html>`;
 }
 
 // ── Minimal page-level utilities ───────────────────────────────────────────────

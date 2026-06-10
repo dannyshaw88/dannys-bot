@@ -505,6 +505,9 @@ export function CreateGhostPage() {
         const j = await r.json() as any;
         if (j.msg) {
           setSignupStatus(j.msg);
+          // When the backend reaches step 4 (email verification), show the
+          // code input UI.  This is the ONLY place codePending becomes true.
+          if (j.msg.includes("Waiting for verification code")) setCodePending(true);
           // Remove any visited URL from the website list
           setWebsitesToVisit(prev => {
             const urls = prev.split("\n").map(s => s.trim()).filter(Boolean);
@@ -711,9 +714,10 @@ export function CreateGhostPage() {
       if (!j.ok) {
         setSignupStatus(`⚠ ${j.error ?? "Failed to start signup"}`);
         setSignupRunning(false);
-      } else {
-        setCodePending(true);
       }
+      // Do NOT set codePending here — the signup runs in the background.
+      // codePending is set by the poll loop when the backend relay message
+      // actually reaches "Waiting for verification code" (step 4 of signup).
     } catch (err: any) {
       setSignupStatus(`⚠ ${err?.message ?? "Error"}`);
       setSignupRunning(false);

@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.871",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser no longer shows 'Waiting for verification code' immediately when you click CREATE ACCOUNT — that message now only appears when the signup flow actually reaches the email verification step." },
+      { category: "Fix", text: "Warmup websites now load correctly — the signup flow visits all configured sites before starting Instagram registration as expected." },
+      { category: "Fix", text: "Restored all toolbar buttons (Login, 2FA, Phone, Email, Email Pass) to the Ghost Browser window." },
+    ],
+  },
+  {
     version: "1.0.870",
     date: "10 Jun 2026",
     items: [
