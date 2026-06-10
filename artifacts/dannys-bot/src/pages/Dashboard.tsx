@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.868",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser no longer opens a blank page — the browser now navigates directly to the first website in your warm-up list (or Instagram if the list is empty)." },
+      { category: "Fix", text: "Removed the 'Close Browser' button from the Ghost Browser panel — use Nuke Environment to reset the session." },
+      { category: "Improvement", text: "Fingerprint expand button is now centred below the section title (like the Proxy and Device dropdowns) instead of being right-aligned with the heading." },
+      { category: "Improvement", text: "CREATE ACCOUNT, ADD TO EQUINOX and NUKE ENVIRONMENT buttons are now left-aligned." },
+      { category: "Improvement", text: "Websites in the warm-up list are automatically removed one by one as the Ghost Browser finishes visiting each one." },
+    ],
+  },
+  {
     version: "1.0.867",
     date: "10 Jun 2026",
     items: [

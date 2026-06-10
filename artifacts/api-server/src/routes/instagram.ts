@@ -2335,8 +2335,8 @@ export async function registerInstagramRoutes(
     }
     // Non-Electron: Puppeteer screencast
     try {
-      const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body as any;
-      const result = await openSignupBrowser({ proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent });
+      const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent, initialUrl } = req.body as any;
+      const result = await openSignupBrowser({ proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent, initialUrl });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message });

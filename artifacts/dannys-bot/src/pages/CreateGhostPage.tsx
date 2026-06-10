@@ -503,7 +503,16 @@ export function CreateGhostPage() {
       try {
         const r = await fetch("/api/signup/browser/ghost-signup-status");
         const j = await r.json() as any;
-        if (j.msg) setSignupStatus(j.msg);
+        if (j.msg) {
+          setSignupStatus(j.msg);
+          // Remove any visited URL from the website list
+          setWebsitesToVisit(prev => {
+            const urls = prev.split("\n").map(s => s.trim()).filter(Boolean);
+            const remaining = urls.filter(url => !j.msg.includes(url));
+            if (remaining.length === urls.length) return prev;
+            return remaining.join("\n");
+          });
+        }
         if (j.done) setSignupRunning(false);
       } catch {}
     }, 2000);
@@ -800,14 +809,19 @@ export function CreateGhostPage() {
             </div>
 
             {/* Fingerprint */}
-            <div className="desktop-card p-2.5">
+            <div className="desktop-card p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setFingerprintExpanded(e => !e)}
-                className="flex items-center gap-1.5 w-full"
+                className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-transparent px-2.5 py-1 text-xs shadow-sm transition-colors hover:bg-accent/60"
               >
-                <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
+                <span className="text-xs text-muted-foreground">
+                  {fingerprintExpanded ? "Hide details" : "Show details"}
+                </span>
                 {fingerprintExpanded
                   ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
                   : <Plus className="w-3 h-3 text-muted-foreground" />}
@@ -1129,7 +1143,7 @@ export function CreateGhostPage() {
 
           {/* ── ROW 7: CREATE ACCOUNT | ADD TO EQUINOX | NUKE ENVIRONMENT ── */}
           <div className="desktop-card p-2.5">
-            <div className="flex gap-2 justify-center">
+            <div className="flex gap-2 justify-start">
 
               {/* CREATE ACCOUNT */}
               <Button
@@ -1181,15 +1195,6 @@ export function CreateGhostPage() {
               </Button>
             </div>
 
-            {/* Close browser secondary control */}
-            {isOpen && (
-              <div className="flex gap-2 mt-2">
-                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
-                  <WifiOff className="w-3.5 h-3.5" />
-                  Close Browser
-                </Button>
-              </div>
-            )}
           </div>
 
         </div>

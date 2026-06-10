@@ -6736,6 +6736,7 @@ export async function openSignupBrowser(opts?: {
   proxyUsername?: string;
   proxyPassword?: string;
   userAgent?: string;
+  initialUrl?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   // Always close any existing browser and wipe its data dir before launching a
   // fresh one.  This guarantees every attempt starts as a brand-new device with
@@ -6968,7 +6969,7 @@ export async function openSignupBrowser(opts?: {
     // fail silently on the second and subsequent attempts (Chrome is in a transitional
     // state during launch), which meant no frames ever arrived and the EB appeared
     // to constantly refresh or showed a frozen/blank canvas.
-    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(opts?.initialUrl || "https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
     // Auto-dismiss cookie banner on initial load.  Wait 2.5 s so React has time
     // to paint the dialog before we probe for it — the framenavigated handler
