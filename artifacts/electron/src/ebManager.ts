@@ -1953,7 +1953,12 @@ export async function openEbWindow(opts: {
   win.once("ready-to-show", () => {
     win.show();
     if (isGhostBrowser) {
-      win.center();
+      // Position ghost browser at the absolute right edge of the primary display
+      const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
+      const { width: ww, height: wh } = win.getBounds();
+      const gx = Math.max(0, sw - ww - 8);
+      const gy = Math.max(0, Math.floor((sh - wh) / 2));
+      win.setPosition(gx, gy);
     } else {
       win.maximize();
     }
@@ -4494,8 +4499,20 @@ export function startEbIpcServer(
           return send(res, 200, { ok: false, error: "Ghost Browser is not open" });
         }
 
-        const { email, username, password, dob } = body as {
+        const {
+          email, username, password, dob,
+          websitesToVisit = [],
+          websitesMin = 1, websitesMax = 3,
+          internalLinksMin = 2, internalLinksMax = 5,
+          timeOnSiteMin = 1, timeOnSiteMax = 3,
+          timeOnLinksMin = 1, timeOnLinksMax = 2,
+        } = body as {
           email: string; username: string; password: string; dob: string;
+          websitesToVisit?: string[];
+          websitesMin?: number; websitesMax?: number;
+          internalLinksMin?: number; internalLinksMax?: number;
+          timeOnSiteMin?: number; timeOnSiteMax?: number;
+          timeOnLinksMin?: number; timeOnLinksMax?: number;
         };
         if (!email || !username || !password || !dob) {
           return send(res, 200, { ok: false, error: "email, username, password, and dob are required" });
@@ -4769,6 +4786,119 @@ export function startEbIpcServer(
             });
             await sleep(2000);
           };
+
+          // ── Website Warm-Up (visits BEFORE Instagram signup) ────────────────
+          // Visits a shuffled random selection of user-supplied websites first.
+          // On each site: accepts cookie consent, spends time reading, clicks
+          // internal links, spends time on those too. This establishes a
+          // natural browsing history in the browser session before any
+          // Instagram touchpoint — exactly as Jarvee's warm-up phase works.
+          const _rndInt = (min: number, max: number) =>
+            min >= max ? min : min + Math.floor(Math.random() * (max - min + 1));
+
+          const _shuffle = <T,>(arr: T[]): T[] => {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+          };
+
+          if (websitesToVisit.length > 0) {
+            const pickCount = Math.min(
+              _rndInt(websitesMin, websitesMax),
+              websitesToVisit.length,
+            );
+            const sites = _shuffle(websitesToVisit).slice(0, pickCount);
+            relay(`🌐 Warm-up: visiting ${sites.length} website(s) before signup…`);
+
+            for (const siteUrl of sites) {
+              try {
+                relay(`🌐 Warm-up: navigating to ${siteUrl}…`);
+                await new Promise<void>(resolve => {
+                  let done = false;
+                  const finish = () => {
+                    if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", onF); wc.removeListener("did-fail-load", onFail2); resolve(); }
+                  };
+                  const onF = () => finish();
+                  const onFail2 = (_: any, code: number) => { if (code === -3) return; finish(); };
+                  const t = setTimeout(finish, 30000);
+                  wc.on("did-finish-load", onF);
+                  wc.on("did-fail-load", onFail2);
+                  wc.loadURL(siteUrl).catch(() => {});
+                });
+                await sleep(2500);
+
+                // Accept cookie consent — try many common patterns
+                const _cookieAcceptScript = `(async function(){
+                  var selectors = [
+                    'button[id*="accept"]','button[id*="cookie"]','button[id*="consent"]',
+                    'button[class*="accept"]','button[class*="cookie"]','button[class*="consent"]',
+                    'button[class*="agree"]','button[class*="allow"]',
+                    'a[id*="accept"]','a[class*="accept"]','a[class*="consent"]',
+                    '#accept-all','#acceptAll','#accept_all','#cookieAccept',
+                    '.cookie-accept','.cookieAccept','.cookie-ok','.accept-cookies',
+                    '[data-testid="accept"]','[data-action*="accept"]',
+                  ];
+                  var texts = ['accept all','accept cookies','i agree','allow all','ok, i agree','agree','allow','accept','got it','i understand','dismiss','close'];
+                  // Try selector match first
+                  for (var s of selectors) {
+                    var el = document.querySelector(s);
+                    if (el) { el.click(); return 'selector:'+s; }
+                  }
+                  // Text content match on visible buttons/links
+                  var candidates = Array.from(document.querySelectorAll('button,a,div[role="button"],span[role="button"]'));
+                  for (var t of texts) {
+                    var found = candidates.find(function(c){ return (c.innerText||c.textContent||'').trim().toLowerCase().startsWith(t); });
+                    if (found) { found.click(); return 'text:'+t; }
+                  }
+                  return null;
+                })()`;
+                try {
+                  const accepted = await wc.executeJavaScript(_cookieAcceptScript).catch(() => null);
+                  if (accepted) relay(`🍪 Warm-up: accepted cookie consent (${accepted})`);
+                } catch {}
+                await sleep(1500);
+
+                // Spend time on this site
+                const siteWaitMs = _rndInt(timeOnSiteMin, timeOnSiteMax) * 60 * 1000;
+                relay(`⏱ Warm-up: spending ${Math.round(siteWaitMs/60000)} min on ${siteUrl}…`);
+                await sleep(siteWaitMs);
+
+                // Click internal links
+                const linkCount = _rndInt(internalLinksMin, internalLinksMax);
+                relay(`🔗 Warm-up: clicking ${linkCount} internal link(s)…`);
+                for (let li = 0; li < linkCount; li++) {
+                  try {
+                    const _origin = new URL(siteUrl).origin;
+                    const _linkScript = `(function(){
+                      var links = Array.from(document.querySelectorAll('a[href]')).filter(function(a){
+                        try { var h = new URL(a.href); return h.origin === '${_origin}' && h.pathname !== location.pathname && !a.href.includes('#'); } catch { return false; }
+                      });
+                      if (!links.length) return null;
+                      var l = links[Math.floor(Math.random()*links.length)];
+                      var r = l.getBoundingClientRect();
+                      if (r.width > 0 && r.height > 0) { l.click(); return l.href; }
+                      return null;
+                    })()`;
+                    const href = await wc.executeJavaScript(_linkScript).catch(() => null);
+                    if (href) {
+                      relay(`🔗 Warm-up: clicked internal link → ${href}`);
+                      await sleep(2500);
+                      // Accept cookies on sub-page too
+                      try { await wc.executeJavaScript(_cookieAcceptScript).catch(() => null); } catch {}
+                      const linkWaitMs = _rndInt(timeOnLinksMin, timeOnLinksMax) * 60 * 1000;
+                      await sleep(linkWaitMs);
+                    }
+                  } catch {}
+                }
+              } catch (wErr: any) {
+                relay(`⚠ Warm-up: error on ${siteUrl}: ${wErr?.message ?? String(wErr)}`);
+              }
+            }
+            relay(`✅ Warm-up complete — starting Instagram signup now…`);
+          }
 
           try {
             // ── Mobile emulation setup (MUST run before Step 0) ─────────────

@@ -10,7 +10,7 @@ import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
   Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus, ExternalLink,
   ClipboardPaste, Copy, RefreshCw, UserPlus, Key,
-  CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare,
+  CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare, Link,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -143,7 +143,7 @@ function generatePassword(length = 14): string {
 }
 
 function generateDob(): string {
-  const age = Math.floor(Math.random() * 22) + 18; // 18–39
+  const age = Math.floor(Math.random() * 22) + 18;
   const now = new Date();
   const year = now.getFullYear() - age;
   const month = Math.floor(Math.random() * 12) + 1;
@@ -211,50 +211,48 @@ function ProxySelect({
       <button
         type="button"
         onClick={toggle}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-transparent px-2.5 py-1 text-xs shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <span className="flex items-center gap-2 min-w-0">
-          <Globe className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+        <span className="flex items-center gap-1.5 min-w-0">
+          <Globe className="w-3 h-3 shrink-0 text-muted-foreground" />
           {label
             ? <span className="truncate text-left">{label}</span>
             : <span className="text-muted-foreground">No proxy (direct)</span>}
         </span>
-        <ChevronDown className={`ml-2 w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`ml-1.5 w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-lg max-h-60 overflow-y-auto py-1">
+        <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-lg max-h-52 overflow-y-auto py-1">
           <button
             type="button"
             onClick={() => pick({ kind: "none" })}
-            className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent ${value.kind === "none" ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
+            className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent ${value.kind === "none" ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
           >
-            <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
             No proxy (direct)
           </button>
           {proxies.length === 0 && (
-            <p className="px-3 py-2 text-xs text-muted-foreground text-center">No proxies saved in Proxy Manager.</p>
+            <p className="px-3 py-1.5 text-xs text-muted-foreground text-center">No proxies saved in Proxy Manager.</p>
           )}
           {proxies.map(p => (
             <button
               key={p.id}
               type="button"
               onClick={() => pick({ kind: "saved", id: p.id })}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent ${value.kind === "saved" && value.id === p.id ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent ${value.kind === "saved" && value.id === p.id ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
             >
-              <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate text-left">
-                {p.name ? p.name : `${p.host}:${p.port}`}
-              </span>
+              <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="truncate text-left">{p.name ? p.name : `${p.host}:${p.port}`}</span>
             </button>
           ))}
           <div className="border-t border-border mt-1 pt-1">
             <button
               type="button"
               onClick={() => pick({ kind: "manual" })}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent ${value.kind === "manual" ? "text-primary font-medium bg-accent/40" : "text-cyan-600 dark:text-cyan-400"}`}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent ${value.kind === "manual" ? "text-primary font-medium bg-accent/40" : "text-cyan-600 dark:text-cyan-400"}`}
             >
-              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <Plus className="w-3 h-3 shrink-0" />
               Add Proxy
             </button>
           </div>
@@ -284,12 +282,12 @@ function StatusChip({ state }: { state: BrowserState }) {
   );
 }
 
-// ── Field action buttons (Paste into browser + Copy to clipboard) ──────────────
+// ── Field action buttons (Type into browser + Copy to clipboard) ───────────────
 
 function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
   const [copied, setCopied] = useState(false);
 
-  const handlePaste = () => {
+  const handleType = () => {
     fetch("/api/signup/browser/input", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -307,18 +305,18 @@ function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
     <div className="flex gap-1 shrink-0">
       <button
         type="button"
-        onClick={handlePaste}
+        onClick={handleType}
         disabled={!isOpen || !value}
-        title={isOpen ? "Paste into active browser field" : "Open browser first"}
+        title={isOpen ? "Type into active browser field" : "Open browser first"}
         className={cn(
-          "flex items-center gap-1 px-2 h-8 rounded-md border border-input text-[10px] font-medium transition-colors",
+          "flex items-center gap-1 px-1.5 h-7 rounded-md border border-input text-[10px] font-medium transition-colors",
           isOpen && value
             ? "bg-muted/50 text-muted-foreground hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-400 dark:hover:bg-cyan-950/40"
             : "bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
         )}
       >
-        <ClipboardPaste className="w-3 h-3" />
-        Paste
+        <ClipboardPaste className="w-2.5 h-2.5" />
+        Type
       </button>
       <button
         type="button"
@@ -326,13 +324,40 @@ function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
         disabled={!value}
         title="Copy to clipboard"
         className={cn(
-          "flex items-center gap-1 px-2 h-8 rounded-md border border-input bg-muted/50 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
+          "flex items-center gap-1 px-1.5 h-7 rounded-md border border-input bg-muted/50 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
           copied && "text-green-600 border-green-400"
         )}
       >
-        <Copy className="w-3 h-3" />
+        <Copy className="w-2.5 h-2.5" />
         {copied ? "Copied" : "Copy"}
       </button>
+    </div>
+  );
+}
+
+// ── XY Range field (two 3-digit inputs with dash between) ─────────────────────
+
+function XYField({
+  min, max, onMin, onMax, label,
+}: { min: string; max: string; onMin: (v: string) => void; onMax: (v: string) => void; label: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] text-muted-foreground font-medium">{label}</p>
+      <div className="flex items-center gap-1">
+        <Input
+          value={min}
+          onChange={e => onMin(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          placeholder="Min"
+          className="h-7 text-xs w-16 text-center font-mono"
+        />
+        <span className="text-muted-foreground text-xs">–</span>
+        <Input
+          value={max}
+          onChange={e => onMax(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          placeholder="Max"
+          className="h-7 text-xs w-16 text-center font-mono"
+        />
+      </div>
     </div>
   );
 }
@@ -358,9 +383,8 @@ export function CreateGhostPage() {
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
   const [isNative, setIsNative]                 = useState(false);
 
-  // ── localStorage persistence for form fields ────────────────────────────────
-  // Reads saved values on first render so restarts don't wipe the form.
-  const _LS_KEY = "ghost-browser-fields-v1";
+  // ── localStorage persistence ────────────────────────────────────────────────
+  const _LS_KEY = "ghost-browser-fields-v2";
   const _lsLoad = (): Record<string, string> => {
     try { return JSON.parse(localStorage.getItem(_LS_KEY) ?? "{}"); } catch { return {}; }
   };
@@ -370,6 +394,7 @@ export function CreateGhostPage() {
   const [usernameSpin, setUsernameSpin] = useState(() => _ls.usernameSpin ?? "");
   const [password, setPassword]         = useState(() => _ls.password ?? generatePassword());
   const [bioSpin, setBioSpin]           = useState(() => _ls.bioSpin ?? "");
+  const [dob, setDob]                   = useState(() => _ls.dob ?? generateDob());
 
   // Email / IMAP fields
   const [emailAddr, setEmailAddr]   = useState(() => _ls.emailAddr   ?? "");
@@ -378,16 +403,24 @@ export function CreateGhostPage() {
   const [imapPort, setImapPort]     = useState(() => _ls.imapPort    ?? "993");
   const [imapSecure, setImapSecure] = useState(() => (_ls.imapSecure ?? "true") === "true");
 
+  // Website warmup fields
+  const [websitesToVisit, setWebsitesToVisit]       = useState(() => _ls.websitesToVisit ?? "");
+  const [websitesMin, setWebsitesMin]               = useState(() => _ls.websitesMin ?? "1");
+  const [websitesMax, setWebsitesMax]               = useState(() => _ls.websitesMax ?? "3");
+  const [internalLinksMin, setInternalLinksMin]     = useState(() => _ls.internalLinksMin ?? "2");
+  const [internalLinksMax, setInternalLinksMax]     = useState(() => _ls.internalLinksMax ?? "5");
+  const [timeOnSiteMin, setTimeOnSiteMin]           = useState(() => _ls.timeOnSiteMin ?? "1");
+  const [timeOnSiteMax, setTimeOnSiteMax]           = useState(() => _ls.timeOnSiteMax ?? "3");
+  const [timeOnLinksMin, setTimeOnLinksMin]         = useState(() => _ls.timeOnLinksMin ?? "1");
+  const [timeOnLinksMax, setTimeOnLinksMax]         = useState(() => _ls.timeOnLinksMax ?? "2");
+
   // Verification code
   const [manualCode, setManualCode]       = useState("");
   const [fetchingCode, setFetchingCode]   = useState(false);
   const [fetchCodeMsg, setFetchCodeMsg]   = useState("");
   const [codePending, setCodePending]     = useState(false);
 
-  // DOB
-  const [dob, setDob] = useState(() => _ls.dob ?? generateDob());
-
-  // Ghost fingerprint — regenerated on every Nuke Environment
+  // Ghost fingerprint
   const [fingerprint, setFingerprint]                 = useState<GhostFingerprint>(() => generateGhostFingerprint());
   const [fingerprintExpanded, setFingerprintExpanded] = useState(false);
 
@@ -400,28 +433,35 @@ export function CreateGhostPage() {
   const [addedToEquinox, setAddedToEquinox]   = useState(false);
   const [addingToEquinox, setAddingToEquinox] = useState(false);
 
-  // Code-wait countdown timer (counts up from 0, shown when codePending)
+  // Code-wait countdown
   const [codeWaitSecs, setCodeWaitSecs] = useState(0);
   const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isOpen = browserState === "open";
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
 
-  // ── Persist form fields to localStorage whenever they change ─────────────
+  // ── Persist form fields ────────────────────────────────────────────────────
   useEffect(() => {
     try {
       localStorage.setItem(_LS_KEY, JSON.stringify({
         usernameSpin, password, dob, bioSpin,
         emailAddr, emailPass, imapHost, imapPort,
         imapSecure: String(imapSecure),
+        websitesToVisit, websitesMin, websitesMax,
+        internalLinksMin, internalLinksMax,
+        timeOnSiteMin, timeOnSiteMax,
+        timeOnLinksMin, timeOnLinksMax,
       }));
     } catch {}
-  }, [usernameSpin, password, dob, bioSpin, emailAddr, emailPass, imapHost, imapPort, imapSecure]);
+  }, [
+    usernameSpin, password, dob, bioSpin,
+    emailAddr, emailPass, imapHost, imapPort, imapSecure,
+    websitesToVisit, websitesMin, websitesMax,
+    internalLinksMin, internalLinksMax,
+    timeOnSiteMin, timeOnSiteMax, timeOnLinksMin, timeOnLinksMax,
+  ]);
 
-  // ── Browser status check (mount + continuous poll) ────────────────────────
-  // Run once on mount, then every 5 s so the "Ghost Browser is not open"
-  // indicator stays accurate even if the browser was opened/closed externally
-  // (e.g. after a software restart or a Nuke Environment reset).
+  // ── Browser status check ───────────────────────────────────────────────────
   useEffect(() => {
     const checkStatus = async () => {
       try {
@@ -431,14 +471,6 @@ export function CreateGhostPage() {
         ]);
         setIsNative(!!(elData as any).electron);
         setBrowserState(prev => {
-          // The poll ONLY auto-discovers a browser that's already open
-          // (e.g. after an app restart).  It must NEVER set the state to
-          // "closed" — the fire-and-forget /eb/open call returns before
-          // openEbWindow registers the window in ebMap, so the first few
-          // polls after clicking "Open Browser" legitimately return
-          // running:false even though the window is visible.  Treating
-          // running:false as "closed" is what caused the regression.
-          // Only handleClose / handleFresh should ever set "closed".
           if ((statusData as any).running && prev === "closed") return "open";
           return prev;
         });
@@ -449,7 +481,7 @@ export function CreateGhostPage() {
     return () => clearInterval(poll);
   }, []);
 
-  // Code-wait timer — starts counting when codePending, resets when done
+  // Code-wait timer
   useEffect(() => {
     if (codePending && signupRunning) {
       setCodeWaitSecs(0);
@@ -461,7 +493,7 @@ export function CreateGhostPage() {
     return () => { if (codeTimerRef.current) clearInterval(codeTimerRef.current); };
   }, [codePending, signupRunning]);
 
-  // Poll signup status while automation is running
+  // Poll signup status
   useEffect(() => {
     if (!signupRunning) {
       if (signupPollRef.current) { clearInterval(signupPollRef.current); signupPollRef.current = null; }
@@ -472,12 +504,7 @@ export function CreateGhostPage() {
         const r = await fetch("/api/signup/browser/ghost-signup-status");
         const j = await r.json() as any;
         if (j.msg) setSignupStatus(j.msg);
-        if (j.msg && (j.msg.startsWith("✅") || j.msg.includes("error") || j.msg.includes("⚠"))) {
-          // Done or error — stop spinning, but don't stop polling in case more msgs come
-        }
-        if (j.done) {
-          setSignupRunning(false);
-        }
+        if (j.done) setSignupRunning(false);
       } catch {}
     }, 2000);
     return () => {
@@ -548,7 +575,7 @@ export function CreateGhostPage() {
     setBrowserState("closed");
   };
 
-  // IMAP: fetch verification code from email inbox
+  // IMAP: fetch verification code
   const handleFetchCode = async () => {
     if (!imapHost.trim() || !emailAddr.trim() || !emailPass.trim()) {
       setFetchCodeMsg("⚠ Fill in email address, email password, and IMAP host first.");
@@ -572,7 +599,6 @@ export function CreateGhostPage() {
       if (j.ok && j.code) {
         setManualCode(j.code);
         setFetchCodeMsg(`✅ Got code: ${j.code}`);
-        // Auto-submit to the signup flow
         await fetch("/api/signup/browser/ghost-code", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -588,7 +614,7 @@ export function CreateGhostPage() {
     setFetchingCode(false);
   };
 
-  // Submit manual code to the running signup flow
+  // Submit manual code
   const handleSubmitCode = async () => {
     if (!manualCode.trim()) return;
     await fetch("/api/signup/browser/ghost-code", {
@@ -600,7 +626,7 @@ export function CreateGhostPage() {
     setCodePending(false);
   };
 
-  // Create Account — opens the browser if needed, then runs the full signup flow
+  // Create Account — visits websites first, then runs signup
   const handleCreateAccount = async () => {
     const uname = (generatedUsername || usernameSpin).trim();
     if (!uname || !password.trim() || !emailAddr.trim() || !dob.trim()) {
@@ -608,7 +634,6 @@ export function CreateGhostPage() {
       return;
     }
 
-    // Open the browser first if it's not already running
     if (!isOpen) {
       if (!manualValid) {
         setSignupStatus("⚠ Fix proxy settings before opening browser.");
@@ -632,7 +657,6 @@ export function CreateGhostPage() {
         }),
       }).catch(() => {});
       setBrowserState("open");
-      // Give the browser a moment to fully initialise before starting signup
       await new Promise(r => setTimeout(r, 1500));
     }
 
@@ -640,6 +664,12 @@ export function CreateGhostPage() {
     setSignupStatus("Starting automated signup…");
     setCodePending(false);
     setFetchCodeMsg("");
+
+    // Parse websites list
+    const websiteUrls = websitesToVisit
+      .split("\n")
+      .map(s => s.trim())
+      .filter(s => s.startsWith("http"));
 
     try {
       const r = await fetch("/api/signup/browser/ghost-signup", {
@@ -650,6 +680,15 @@ export function CreateGhostPage() {
           username: uname,
           password: password.trim(),
           dob: dob.trim(),
+          websitesToVisit: websiteUrls,
+          websitesMin: parseInt(websitesMin, 10) || 1,
+          websitesMax: parseInt(websitesMax, 10) || 3,
+          internalLinksMin: parseInt(internalLinksMin, 10) || 2,
+          internalLinksMax: parseInt(internalLinksMax, 10) || 5,
+          timeOnSiteMin: parseInt(timeOnSiteMin, 10) || 1,
+          timeOnSiteMax: parseInt(timeOnSiteMax, 10) || 3,
+          timeOnLinksMin: parseInt(timeOnLinksMin, 10) || 1,
+          timeOnLinksMax: parseInt(timeOnLinksMax, 10) || 2,
         }),
       });
       const j = await r.json() as any;
@@ -708,175 +747,245 @@ export function CreateGhostPage() {
         <StatusChip state={browserState} />
       </div>
 
-      {/* Body: two columns */}
+      {/* Body: settings left, phone right */}
       <div className="flex gap-3" style={{ height: "calc(100vh - 170px)" }}>
 
-        {/* ── Left: Controls ── */}
-        <div className="w-[280px] shrink-0 flex flex-col gap-1 overflow-y-auto">
+        {/* ── Left: Wide Controls Panel ── */}
+        <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
 
-          {/* Proxy Card */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proxy</p>
-            </div>
+          {/* ── ROW 1: Proxy | Device Identity | Fingerprint ── */}
+          <div className="grid grid-cols-3 gap-2">
 
-            <ProxySelect proxies={proxies as SavedProxy[]} value={proxySelection} onChange={setProxySelection} />
-
-            {proxySelection.kind === "manual" && (
-              <div className="space-y-1 pt-0.5">
-                <div className="flex gap-1">
-                  <Input value={manualHost} onChange={e => setManualHost(e.target.value)} placeholder="host or IP" className="h-7 text-xs flex-1" />
-                  <Input value={manualPort} onChange={e => setManualPort(e.target.value)} placeholder="port" className="h-7 text-xs w-16" />
-                </div>
-                <div className="flex gap-1">
-                  <Input value={manualUser} onChange={e => setManualUser(e.target.value)} placeholder="username (opt)" className="h-7 text-xs flex-1" />
-                  <Input value={manualPass} onChange={e => setManualPass(e.target.value)} placeholder="password (opt)" className="h-7 text-xs flex-1" type="password" />
-                </div>
+            {/* Proxy */}
+            <div className="desktop-card p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Proxy</p>
               </div>
-            )}
-
-            {isOpen && (
-              <p className="text-[10px] text-muted-foreground">
-                Active: <span className="font-mono">{activeProxyLabel}</span>
-              </p>
-            )}
-          </div>
-
-          {/* Device Identity */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
-            </div>
-            <UaPickerDropdown
-              value={selectedUA.api}
-              onSelect={setSelectedUA}
-            />
-            {isOpen && (
-              <p className="text-[10px] text-muted-foreground">
-                Active: <span className="font-medium">{activeDeviceLabel}</span>
-              </p>
-            )}
-          </div>
-
-          {/* Fingerprint — collapsed by default */}
-          <div className="desktop-card p-2.5">
-            <button
-              type="button"
-              onClick={() => setFingerprintExpanded(e => !e)}
-              className="flex items-center gap-2 w-full"
-            >
-              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
-              {fingerprintExpanded
-                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                : <Plus className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
-            {fingerprintExpanded && (
-              <div className="space-y-1 pt-0.5 border-t border-border/50 mt-1.5">
-                {([
-                  ["WebGL GPU",     `${fingerprint.webglRenderer}`],
-                  ["Canvas Seed",   String(fingerprint.canvasNoise)],
-                  ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
-                  ["Font Seed",     `${fingerprint.fontSeed} / 99`],
-                  ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
-                  ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
-                  ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
-                  ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
-                ] as [string, string][]).map(([label, val]) => (
-                  <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
-                    <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
-                    <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+              <ProxySelect proxies={proxies as SavedProxy[]} value={proxySelection} onChange={setProxySelection} />
+              {proxySelection.kind === "manual" && (
+                <div className="space-y-1 pt-0.5">
+                  <div className="flex gap-1">
+                    <Input value={manualHost} onChange={e => setManualHost(e.target.value)} placeholder="host or IP" className="h-7 text-xs flex-1" />
+                    <Input value={manualPort} onChange={e => setManualPort(e.target.value)} placeholder="port" className="h-7 text-xs w-14" />
                   </div>
-                ))}
-                <p className="text-[10px] text-muted-foreground/60 pt-1">
-                  Regenerates automatically on Nuke Environment.
-                </p>
+                  <div className="flex gap-1">
+                    <Input value={manualUser} onChange={e => setManualUser(e.target.value)} placeholder="user (opt)" className="h-7 text-xs flex-1" />
+                    <Input value={manualPass} onChange={e => setManualPass(e.target.value)} placeholder="pass (opt)" className="h-7 text-xs flex-1" type="password" />
+                  </div>
+                </div>
+              )}
+              {isOpen && (
+                <p className="text-[10px] text-muted-foreground">Active: <span className="font-mono">{activeProxyLabel}</span></p>
+              )}
+            </div>
+
+            {/* Device Identity */}
+            <div className="desktop-card p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
-            )}
+              <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
+              {isOpen && (
+                <p className="text-[10px] text-muted-foreground">Active: <span className="font-medium">{activeDeviceLabel}</span></p>
+              )}
+            </div>
+
+            {/* Fingerprint */}
+            <div className="desktop-card p-2.5">
+              <button
+                type="button"
+                onClick={() => setFingerprintExpanded(e => !e)}
+                className="flex items-center gap-1.5 w-full"
+              >
+                <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
+                {fingerprintExpanded
+                  ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
+                  : <Plus className="w-3 h-3 text-muted-foreground" />}
+              </button>
+              {fingerprintExpanded && (
+                <div className="space-y-1 pt-0.5 border-t border-border/50 mt-1.5">
+                  {([
+                    ["WebGL GPU",   `${fingerprint.webglRenderer}`],
+                    ["Canvas Seed", String(fingerprint.canvasNoise)],
+                    ["Audio Noise", fingerprint.audioNoise.toFixed(10)],
+                    ["Font Seed",   `${fingerprint.fontSeed} / 99`],
+                    ["Speech",      FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
+                    ["Video Dev",   fingerprint.mediaVideoId.slice(0, 12) + "…"],
+                    ["Audio In",    fingerprint.mediaAudioId.slice(0, 12) + "…"],
+                    ["Speaker Out", fingerprint.mediaSpeakerId.slice(0, 12) + "…"],
+                  ] as [string, string][]).map(([label, val]) => (
+                    <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
+                      <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
+                      <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-muted-foreground/60 pt-1">Regenerates on Nuke Environment.</p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Account Fields + Actions */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-
-            {/* Username Spin */}
-            <div className="pt-0.5 space-y-1">
-              <p className="text-[10px] text-muted-foreground font-medium">Username Spin</p>
-              <div className="flex gap-1">
-                <Input
-                  value={usernameSpin}
-                  onChange={e => setUsernameSpin(e.target.value)}
-                  placeholder="{john|jane}.{smith|jones}{1|23|456}"
-                  className="h-8 text-xs font-mono placeholder:font-sans flex-1 min-w-0"
+          {/* ── ROW 2: Websites to Visit | X-Y Websites | X-Y Internal Links ── */}
+          <div className="desktop-card p-2.5">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Link className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Website Warm-Up (visits before signup)</p>
+            </div>
+            <div className="flex gap-3 items-start">
+              {/* Websites textarea */}
+              <div className="flex-1 space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Websites to Visit</p>
+                <textarea
+                  value={websitesToVisit}
+                  onChange={e => setWebsitesToVisit(e.target.value)}
+                  placeholder={"https://example.com\nhttps://another-site.com\nhttps://thirdsite.org"}
+                  rows={5}
+                  className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs font-mono placeholder:font-sans placeholder:text-muted-foreground shadow-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   spellCheck={false}
-                  autoComplete="off"
                 />
-                <FieldActions value={generatedUsername || resolveSpintax(usernameSpin || "user")} isOpen={isOpen} />
+                <p className="text-[10px] text-muted-foreground/70">One URL per line. Ghost Browser visits in random order before signup.</p>
+              </div>
+
+              {/* X-Y Websites to Visit */}
+              <div className="shrink-0">
+                <XYField
+                  label="Websites to Visit"
+                  min={websitesMin} max={websitesMax}
+                  onMin={setWebsitesMin} onMax={setWebsitesMax}
+                />
+              </div>
+
+              {/* X-Y Internal Links */}
+              <div className="shrink-0">
+                <XYField
+                  label="Internal Links per Site"
+                  min={internalLinksMin} max={internalLinksMax}
+                  onMin={setInternalLinksMin} onMax={setInternalLinksMax}
+                />
               </div>
             </div>
+          </div>
 
-            {/* Password — directly under username */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] text-muted-foreground font-medium">Password</p>
-                <button
-                  type="button"
-                  onClick={() => setPassword(generatePassword())}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  title="Generate new password"
-                >
-                  <RefreshCw className="w-2.5 h-2.5" />
-                  Regenerate
-                </button>
-              </div>
-              <div className="flex gap-1">
-                <Input
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="h-8 text-xs font-mono flex-1 min-w-0"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <FieldActions value={password} isOpen={isOpen} />
-              </div>
-            </div>
-
-            {/* DOB */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-cyan-500" />
-                  <p className="text-[10px] text-muted-foreground font-medium">Date of Birth (DD/MM/YYYY)</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDob(generateDob())}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  title="Generate random 18+ DOB"
-                >
-                  <RefreshCw className="w-2.5 h-2.5" />
-                  Random
-                </button>
-              </div>
-              <Input
-                value={dob}
-                onChange={e => setDob(e.target.value)}
-                placeholder="DD/MM/YYYY"
-                className="h-8 text-xs font-mono placeholder:font-sans"
-                spellCheck={false}
-                autoComplete="off"
+          {/* ── ROW 3: Time on Website | Time on Internal Links ── */}
+          <div className="desktop-card p-2.5">
+            <div className="flex gap-6">
+              <XYField
+                label="Time Spent on Website (minutes)"
+                min={timeOnSiteMin} max={timeOnSiteMax}
+                onMin={setTimeOnSiteMin} onMax={setTimeOnSiteMax}
+              />
+              <XYField
+                label="Spent Time on Internal Links (minutes)"
+                min={timeOnLinksMin} max={timeOnLinksMax}
+                onMin={setTimeOnLinksMin} onMax={setTimeOnLinksMax}
               />
             </div>
+          </div>
 
-            {/* Email section */}
-            <div className="pt-1 space-y-1.5 border-t border-border/50">
-              <div className="flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Email / IMAP</p>
+          {/* ── ROW 4: Username | Password | DOB | Bio Spin ── */}
+          <div className="desktop-card p-2.5">
+            <div className="grid grid-cols-4 gap-2">
+
+              {/* Username Spin */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Username Spin</p>
+                <div className="flex gap-1">
+                  <Input
+                    value={usernameSpin}
+                    onChange={e => setUsernameSpin(e.target.value)}
+                    placeholder="{john|jane}.{smith}{1|23}"
+                    className="h-7 text-xs font-mono placeholder:font-sans flex-1 min-w-0"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <FieldActions value={generatedUsername || resolveSpintax(usernameSpin || "user")} isOpen={isOpen} />
+                </div>
+                {generatedUsername && (
+                  <p className="text-[10px] text-cyan-600 font-mono truncate">→ {generatedUsername}</p>
+                )}
               </div>
 
-              {/* Email address */}
+              {/* Password */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-muted-foreground font-medium">Password</p>
+                  <button
+                    type="button"
+                    onClick={() => setPassword(generatePassword())}
+                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Spin
+                  </button>
+                </div>
+                <div className="flex gap-1">
+                  <Input
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="h-7 text-xs font-mono flex-1 min-w-0"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <FieldActions value={password} isOpen={isOpen} />
+                </div>
+              </div>
+
+              {/* DOB */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-2.5 h-2.5 text-cyan-500" />
+                    <p className="text-[10px] text-muted-foreground font-medium">DOB (DD/MM/YYYY)</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDob(generateDob())}
+                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Spin
+                  </button>
+                </div>
+                <Input
+                  value={dob}
+                  onChange={e => setDob(e.target.value)}
+                  placeholder="DD/MM/YYYY"
+                  className="h-7 text-xs font-mono placeholder:font-sans"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Bio Spin */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
+                <div className="flex gap-1">
+                  <Input
+                    value={bioSpin}
+                    onChange={e => setBioSpin(e.target.value)}
+                    placeholder="{Photographer|Artist} 📸"
+                    className="h-7 text-xs font-mono placeholder:font-sans flex-1 min-w-0"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── ROW 5: Email | Email Password | IMAP | Port ── */}
+          <div className="desktop-card p-2.5">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Mail className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email / IMAP</p>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+
+              {/* Email Address */}
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Email Address</p>
                 <div className="flex gap-1">
@@ -884,7 +993,7 @@ export function CreateGhostPage() {
                     value={emailAddr}
                     onChange={e => setEmailAddr(e.target.value)}
                     placeholder="user@example.com"
-                    className="h-8 text-xs flex-1 min-w-0"
+                    className="h-7 text-xs flex-1 min-w-0"
                     type="email"
                     autoComplete="off"
                   />
@@ -892,10 +1001,10 @@ export function CreateGhostPage() {
                 </div>
               </div>
 
-              {/* Email password */}
+              {/* Email Password */}
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-muted-foreground" />
+                  <Lock className="w-2.5 h-2.5 text-muted-foreground" />
                   <p className="text-[10px] text-muted-foreground font-medium">Email Password</p>
                 </div>
                 <Input
@@ -908,26 +1017,31 @@ export function CreateGhostPage() {
                 />
               </div>
 
-              {/* IMAP Settings */}
+              {/* IMAP Host */}
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
-                  <Server className="w-3 h-3 text-muted-foreground" />
-                  <p className="text-[10px] text-muted-foreground font-medium">IMAP Settings</p>
+                  <Server className="w-2.5 h-2.5 text-muted-foreground" />
+                  <p className="text-[10px] text-muted-foreground font-medium">IMAP Host</p>
                 </div>
+                <Input
+                  value={imapHost}
+                  onChange={e => setImapHost(e.target.value)}
+                  placeholder="imap.gmail.com"
+                  className="h-7 text-xs flex-1"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* IMAP Port + TLS */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Port</p>
                 <div className="flex gap-1">
-                  <Input
-                    value={imapHost}
-                    onChange={e => setImapHost(e.target.value)}
-                    placeholder="imap.gmail.com"
-                    className="h-7 text-xs flex-1 min-w-0"
-                    spellCheck={false}
-                    autoComplete="off"
-                  />
                   <Input
                     value={imapPort}
                     onChange={e => setImapPort(e.target.value)}
                     placeholder="993"
-                    className="h-7 text-xs w-14"
+                    className="h-7 text-xs flex-1"
                     autoComplete="off"
                   />
                   <button
@@ -935,7 +1049,7 @@ export function CreateGhostPage() {
                     onClick={() => setImapSecure(s => !s)}
                     title={imapSecure ? "TLS enabled" : "TLS disabled"}
                     className={cn(
-                      "h-7 px-1.5 rounded-md border text-[10px] font-medium transition-colors shrink-0",
+                      "h-7 px-2 rounded-md border text-[10px] font-medium transition-colors shrink-0",
                       imapSecure
                         ? "border-green-400 text-green-700 bg-green-50 dark:bg-green-950/30"
                         : "border-border text-muted-foreground bg-muted/30"
@@ -945,149 +1059,111 @@ export function CreateGhostPage() {
                   </button>
                 </div>
               </div>
-
-              {/* Verification code + fetch */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-1">
-                  <Key className="w-3 h-3 text-muted-foreground" />
-                  <p className="text-[10px] text-muted-foreground font-medium">Verification Code</p>
-                </div>
-                <div className="flex gap-1">
-                  <Input
-                    value={manualCode}
-                    onChange={e => setManualCode(e.target.value)}
-                    placeholder="6-digit code (manual fallback)"
-                    className="h-8 text-xs font-mono flex-1 min-w-0"
-                    maxLength={8}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 h-7 text-[10px] gap-1 border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
-                    onClick={handleFetchCode}
-                    disabled={fetchingCode || !imapHost.trim() || !emailAddr.trim() || !emailPass.trim()}
-                    title="Connect via IMAP and extract the Instagram code from your inbox"
-                  >
-                    {fetchingCode ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-                    Fetch from IMAP
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 h-7 text-[10px] gap-1"
-                    onClick={handleSubmitCode}
-                    disabled={!manualCode.trim()}
-                    title="Submit the code you typed to the running signup flow"
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    Submit Code
-                  </Button>
-                </div>
-                {fetchCodeMsg && (
-                  <p className={cn(
-                    "text-[10px]",
-                    fetchCodeMsg.startsWith("✅") ? "text-green-600" : "text-amber-600"
-                  )}>
-                    {fetchCodeMsg}
-                  </p>
-                )}
-              </div>
             </div>
+          </div>
 
-            {/* Bio Spin */}
-            <div className="pt-1 space-y-1 border-t border-border/50">
-              <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
-              <div className="flex gap-1">
+          {/* ── ROW 6: Verification Code | Submit Code | Fetch IMAP ── */}
+          <div className="desktop-card p-2.5">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Key className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verification Code</p>
+            </div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 space-y-1">
+                <p className="text-[10px] text-muted-foreground font-medium">Code (6-digit)</p>
                 <Input
-                  value={bioSpin}
-                  onChange={e => setBioSpin(e.target.value)}
-                  placeholder="{Photographer|Artist|Creator} 📸"
-                  className="h-8 text-xs font-mono flex-1 min-w-0"
-                  spellCheck={false}
+                  value={manualCode}
+                  onChange={e => setManualCode(e.target.value)}
+                  placeholder="Enter or auto-fetch verification code"
+                  className="h-7 text-xs font-mono"
+                  maxLength={8}
                   autoComplete="off"
                 />
-                <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} />
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[10px] gap-1"
+                onClick={handleSubmitCode}
+                disabled={!manualCode.trim()}
+              >
+                <MessageSquare className="w-3 h-3" />
+                Submit Code
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[10px] gap-1 border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
+                onClick={handleFetchCode}
+                disabled={fetchingCode || !imapHost.trim() || !emailAddr.trim() || !emailPass.trim()}
+              >
+                {fetchingCode ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                Fetch IMAP
+              </Button>
             </div>
-
-            {/* Signup status + code-pending message */}
-            {(signupStatus || (codePending && signupRunning)) && (
-              <div className="pt-1 border-t border-border/50 space-y-1.5">
-                {signupStatus && (
-                  <div className={cn(
-                    "rounded-md border px-2 py-1.5 text-[10px] leading-relaxed",
-                    signupStatus.startsWith("✅")
-                      ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
-                      : signupStatus.includes("⚠") || signupStatus.includes("error")
-                      ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
-                      : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
-                  )}>
-                    {signupRunning && <Loader2 className="w-2.5 h-2.5 animate-spin inline mr-1" />}
-                    {signupStatus}
-                  </div>
-                )}
-              </div>
+            {fetchCodeMsg && (
+              <p className={cn(
+                "text-[10px] mt-1.5",
+                fetchCodeMsg.startsWith("✅") ? "text-green-600" : "text-amber-600"
+              )}>
+                {fetchCodeMsg}
+              </p>
             )}
+            {codePending && signupRunning && codeWaitSecs > 0 && (
+              <p className="text-[10px] text-cyan-600 mt-1">
+                Waiting for verification code… {codeWaitSecs}s
+              </p>
+            )}
+          </div>
 
-            {/* Action buttons — Create Account, Nuke Environment, Close Browser */}
-            <div className="pt-1 border-t border-border/50 space-y-1.5">
-              {/* Create Account — opens browser then runs full signup */}
+          {/* Signup status bar */}
+          {signupStatus && (
+            <div className={cn(
+              "rounded-md border px-3 py-2 text-xs leading-relaxed",
+              signupStatus.startsWith("✅")
+                ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
+                : signupStatus.includes("⚠") || signupStatus.includes("error")
+                ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
+                : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
+            )}>
+              {signupRunning && <Loader2 className="w-3 h-3 animate-spin inline mr-1.5" />}
+              {signupStatus}
+            </div>
+          )}
+
+          {/* ── ROW 7: CREATE ACCOUNT | ADD TO EQUINOX | NUKE ENVIRONMENT ── */}
+          <div className="desktop-card p-2.5">
+            <div className="grid grid-cols-3 gap-2">
+
+              {/* CREATE ACCOUNT */}
               <Button
                 className={cn(
-                  "w-full gap-2 text-xs",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase",
                   signupRunning || browserState === "opening"
                     ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
                     : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
                 )}
                 onClick={handleCreateAccount}
                 disabled={signupRunning || browserState === "opening" || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
-                title="Opens the browser and runs the full signup flow automatically"
               >
                 {signupRunning
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
                   : browserState === "opening"
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Browser…</>
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening…</>
                   : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
               </Button>
 
-              {/* Nuke Environment — always clickable, even while signup is running */}
-              <Button
-                variant="outline"
-                className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
-                onClick={handleFresh}
-                disabled={browserState === "opening" || browserState === "resetting"}
-                title="Wipes all cookies, cache, localStorage, picks a new device identity, and regenerates DOB"
-              >
-                {browserState === "resetting"
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
-                  : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
-              </Button>
-
-              {/* Close Browser — only shown when browser is open */}
-              {isOpen && (
-                <Button variant="outline" className="w-full gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
-                  <WifiOff className="w-3.5 h-3.5" />
-                  Close Browser
-                </Button>
-              )}
-            </div>
-
-            {/* Add to Equinox */}
-            <div className="pt-1 border-t border-border/50">
+              {/* ADD TO EQUINOX */}
               <Button
                 variant="outline"
                 className={cn(
-                  "w-full gap-2 text-xs",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase",
                   addedToEquinox
                     ? "border-green-400 text-green-700 bg-green-50 hover:bg-green-50"
                     : "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
                 )}
                 onClick={handleAddToEquinox}
                 disabled={addingToEquinox || !usernameSpin.trim() || !password.trim()}
-                title="Save this account (username, password, email, UA) to Equinox accounts"
               >
                 {addingToEquinox
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Adding…</>
@@ -1095,23 +1171,51 @@ export function CreateGhostPage() {
                   ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Equinox!</>
                   : <><UserPlus className="w-3.5 h-3.5" />Add to Equinox</>}
               </Button>
+
+              {/* NUKE ENVIRONMENT */}
+              <Button
+                variant="outline"
+                className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
+                onClick={handleFresh}
+                disabled={browserState === "opening" || browserState === "resetting"}
+              >
+                {browserState === "resetting"
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
+                  : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
+              </Button>
+            </div>
+
+            {/* Open / Close browser secondary controls */}
+            <div className="flex gap-2 mt-2">
+              {!isOpen && browserState !== "opening" && (
+                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handleOpen} disabled={!manualValid}>
+                  <Wifi className="w-3.5 h-3.5" />
+                  Open Browser Only
+                </Button>
+              )}
+              {isOpen && (
+                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handleClose} disabled={signupRunning}>
+                  <WifiOff className="w-3.5 h-3.5" />
+                  Close Browser
+                </Button>
+              )}
             </div>
           </div>
 
         </div>
 
-        {/* ── Right: Phone frame ── */}
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
+        {/* ── Right: Phone frame (absolute right of viewport) ── */}
+        <div className="flex-1 min-w-0 flex flex-col items-end justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
 
           {isOpen && isNative ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
+            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full">
               <div className="w-20 h-20 rounded-3xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center">
                 <Monitor className="w-10 h-10 text-green-600" />
               </div>
               <div className="space-y-1.5 max-w-xs">
                 <p className="text-base font-semibold text-foreground">Browser is open</p>
                 <p className="text-sm text-muted-foreground">
-                  The Ghost Browser is running as its own window. Check your taskbar to find it.
+                  The Ghost Browser is running as its own window on the right side of your screen.
                 </p>
               </div>
               <Button
@@ -1129,22 +1233,22 @@ export function CreateGhostPage() {
             </div>
 
           ) : !isOpen ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
+            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full">
               <div className="w-20 h-20 rounded-3xl bg-muted/60 flex items-center justify-center">
                 <Ghost className="w-10 h-10 text-muted-foreground/50" />
               </div>
               <div className="space-y-1.5 max-w-xs">
                 <p className="text-base font-semibold text-foreground">Browser not started</p>
                 <p className="text-sm text-muted-foreground">
-                  Fill in your account details, then click <span className="font-medium">Create Account</span> to launch the browser and run the signup automatically.
+                  Fill in your account details, then click <span className="font-medium">Create Account</span> to launch the browser — it will visit your warm-up websites first, then run the signup automatically.
                 </p>
               </div>
             </div>
 
           ) : (
-            /* ── Phone shell ── */
-            <div className="h-full flex items-center justify-center py-3">
-              {/* Phone body — Pixel 8 proportions (393×851) */}
+            /* ── Phone shell (absolute right edge) ── */
+            <div className="h-full flex items-center justify-end py-3 pr-2">
+              {/* Phone body — Pixel 8 proportions */}
               <div
                 className="relative flex-shrink-0"
                 style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}
@@ -1152,27 +1256,24 @@ export function CreateGhostPage() {
                 {/* Outer bezel */}
                 <div className="absolute inset-0 rounded-[2.2rem] bg-[#1c1c1e] shadow-2xl ring-1 ring-white/5" />
 
-                {/* Power button (right side) */}
+                {/* Power button */}
                 <div className="absolute right-[-3px] top-[28%] h-[9%] w-[3px] rounded-r bg-[#2e2e30]" />
-                {/* Volume up (left side) */}
+                {/* Volume up */}
                 <div className="absolute left-[-3px] top-[22%] h-[6%] w-[3px] rounded-l bg-[#2e2e30]" />
-                {/* Volume down (left side) */}
+                {/* Volume down */}
                 <div className="absolute left-[-3px] top-[31%] h-[9%] w-[3px] rounded-l bg-[#2e2e30]" />
 
-                {/* Inner screen frame (slight inset from the bezel) */}
+                {/* Inner screen */}
                 <div className="absolute inset-[3%] rounded-[1.7rem] overflow-hidden bg-black flex flex-col">
 
-                  {/* Android status bar — time + icons */}
+                  {/* Android status bar */}
                   <div className="shrink-0 flex items-center justify-between px-4 bg-black text-white" style={{ height: "4%" }}>
                     <span className="text-[10px] font-semibold tabular-nums">
                       {new Date().getHours().toString().padStart(2,"0")}:{new Date().getMinutes().toString().padStart(2,"0")}
                     </span>
                     <div className="flex items-center gap-1">
-                      {/* Wifi */}
                       <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
-                      {/* Signal */}
                       <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M17 4h3v16h-3V4zM5 14h3v6H5v-6zm6-5h3v11h-3V9z"/></svg>
-                      {/* Battery */}
                       <svg className="w-3 h-2.5 text-white fill-current" viewBox="0 0 24 16"><rect x="0" y="2" width="20" height="12" rx="2" ry="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="20" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="1.5" y="3.5" width="14" height="9" rx="1" fill="currentColor"/></svg>
                     </div>
                   </div>
@@ -1182,7 +1283,7 @@ export function CreateGhostPage() {
                     <div className="w-3 h-3 rounded-full bg-[#111] border border-[#2a2a2a] self-center" />
                   </div>
 
-                  {/* Browser stream fills remaining space */}
+                  {/* Browser stream */}
                   <div className="flex-1 overflow-hidden min-h-0">
                     <BrowserPanel
                       profileId={0}

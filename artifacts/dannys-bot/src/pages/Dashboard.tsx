@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.865",
+    date: "9 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser settings panel is now 3x wider with all controls laid out in clearly labelled rows — proxy, device identity and fingerprint sit side by side on row 1 so you can see everything at a glance." },
+      { category: "Feature", text: "New Website Warm-Up section: add a list of websites for the Ghost Browser to visit in random order before signup. It automatically accepts cookie consent banners on every page." },
+      { category: "Feature", text: "X–Y range controls for how many websites to visit, how many internal links to click per site, and how many minutes to spend on each — all configurable with three-digit-wide inputs." },
+      { category: "Feature", text: "Ghost Browser now browses your warm-up websites (clicking internal links, spending natural time on each page) before ever touching Instagram — creates a genuine browsing history in the session." },
+      { category: "Improvement", text: "CREATE ACCOUNT and ADD TO EQUINOX buttons now display in uppercase for clarity. All field action buttons renamed from 'Paste' to 'Type' to better reflect what they do." },
+      { category: "Improvement", text: "Ghost Browser native window now opens at the absolute right edge of your screen instead of centred, keeping it out of the way of the settings panel." },
+    ],
+  },
+  {
     version: "1.0.864",
     date: "9 Jun 2026",
     items: [
