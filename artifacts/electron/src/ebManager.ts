@@ -5002,10 +5002,14 @@ export function startEbIpcServer(
               });
               if (isAborted()) return;
 
-              // Wait for YouTube SPA to fully render (thumbnails are lazy-loaded)
-              await sleep(4000);
+              // Wait for YouTube SPA to initially render
+              await sleep(3000);
 
-              // Accept YouTube cookie / consent overlay if present
+              // Accept YouTube cookie / consent overlay if present.
+              // NOTE: the existing CookieBanner system (which runs on all EB pages) may dismiss
+              // the overlay before this script runs. In that case this returns null. Either way
+              // we wait for the post-consent page reload below — that wait must happen regardless
+              // of who dismissed the banner, because YouTube does a full page reload after consent.
               const _ytConsentScript = `(async function(){
                 var texts = ['accept all','i agree','agree to the use','accept the use','accept'];
                 var cands = Array.from(document.querySelectorAll(
@@ -5021,40 +5025,81 @@ export function startEbIpcServer(
               })()`;
               try {
                 const accepted = await wc.executeJavaScript(_ytConsentScript).catch(() => null);
-                if (accepted) {
-                  relay(`🍪 YouTube: dismissed consent overlay (${accepted})`);
-                  await sleep(2000);
-                }
+                if (accepted) relay(`🍪 YouTube: dismissed consent overlay (${accepted})`);
               } catch {}
+
+              // Always wait for the post-consent page reload + SPA render.
+              // YouTube reloads the full page after consent regardless of who dismissed it,
+              // so we listen for did-finish-load and then add an extra buffer for the SPA.
+              relay(`📺 YouTube warm-up: waiting for page to load…`);
+              await new Promise<void>(resolve => {
+                let done = false;
+                const finish = () => { if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", onF); resolve(); } };
+                const onF = () => finish();
+                const t = setTimeout(finish, 12000);
+                wc.on("did-finish-load", onF);
+              });
+              await sleep(4000); // extra buffer for lazy-loaded SPA video grid
+              if (isAborted()) return;
+
+              // Helper: scan the current page for a /watch?v= video URL.
+              // YouTube serves either the desktop SPA (ytd-* elements) or the mobile SPA
+              // (ytm-* elements) depending on what window.innerWidth returns. The fingerprint
+              // patch in Ghost Browser injects window.innerWidth=393, so YouTube usually renders
+              // the mobile layout — we must include mobile selectors here.
+              const _findVideoScript = `(function(){
+                var thumbs = [];
+                // Desktop YouTube selectors
+                thumbs = Array.from(document.querySelectorAll(
+                  'ytd-rich-item-renderer a#thumbnail[href],' +
+                  'ytd-video-renderer a#thumbnail[href],' +
+                  'ytd-compact-video-renderer a.ytd-thumbnail[href],' +
+                  'a.ytd-thumbnail[href^="/watch"]'
+                ));
+                // Mobile YouTube selectors (ytm-* elements, used when window.innerWidth<=480)
+                if (!thumbs.length) {
+                  thumbs = Array.from(document.querySelectorAll(
+                    'ytm-compact-video-renderer a.media-item-thumbnail-container[href],' +
+                    'ytm-rich-item-renderer a[href*="/watch"],' +
+                    'ytm-video-with-context-renderer a[href*="/watch"],' +
+                    'ytm-slim-video-metadata-renderer a[href*="/watch"]'
+                  ));
+                }
+                // Universal fallback: any /watch?v= link on the page
+                if (!thumbs.length) {
+                  thumbs = Array.from(document.querySelectorAll('a[href*="/watch?v="]'));
+                }
+                if (!thumbs.length) return null;
+                var pick = thumbs[Math.floor(Math.random() * Math.min(8, thumbs.length))];
+                var href = pick ? pick.getAttribute('href') : null;
+                if (!href) return null;
+                try { return new URL(href, 'https://www.youtube.com').href; } catch { return null; }
+              })()`;
 
               for (let vi = 0; vi < _ytCount; vi++) {
                 if (isAborted()) break;
                 try {
-                  // Find a video link on the current page
-                  const _findVideoScript = `(function(){
-                    // Desktop YouTube uses ytd-rich-item-renderer on the homepage grid
-                    var thumbs = Array.from(document.querySelectorAll(
-                      'ytd-rich-item-renderer a#thumbnail[href],' +
-                      'ytd-video-renderer a#thumbnail[href],' +
-                      'ytd-compact-video-renderer a.ytd-thumbnail[href],' +
-                      'a.ytd-thumbnail[href^="/watch"]'
-                    ));
-                    if (!thumbs.length) {
-                      // Fallback: any /watch?v= link that isn't a shelf or playlist
-                      thumbs = Array.from(document.querySelectorAll('a[href^="/watch?v="]'));
-                    }
-                    if (!thumbs.length) return null;
-                    // Pick from the first 8 to avoid edge-of-page items
-                    var pick = thumbs[Math.floor(Math.random() * Math.min(8, thumbs.length))];
-                    var href = pick ? pick.getAttribute('href') : null;
-                    if (!href) return null;
-                    // Ensure full URL (href may be a relative path like /watch?v=xxx)
-                    try { return new URL(href, 'https://www.youtube.com').href; } catch { return null; }
-                  })()`;
+                  let videoUrl = await wc.executeJavaScript(_findVideoScript).catch(() => null);
 
-                  const videoUrl = await wc.executeJavaScript(_findVideoScript).catch(() => null);
+                  // If homepage has no videos (rare but can happen on first load), try a
+                  // YouTube search results page which always has video links even on mobile.
                   if (!videoUrl || typeof videoUrl !== "string") {
-                    relay(`📺 YouTube warm-up: no videos found on page, skipping`);
+                    relay(`📺 YouTube warm-up: no videos on homepage, trying search page…`);
+                    await new Promise<void>(resolve => {
+                      let done = false;
+                      const finish = () => { if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", onF); resolve(); } };
+                      const onF = () => finish();
+                      const t = setTimeout(finish, 15000);
+                      wc.on("did-finish-load", onF);
+                      wc.loadURL("https://www.youtube.com/results?search_query=trending+videos+2024").catch(() => {});
+                    });
+                    await sleep(3000);
+                    if (isAborted()) break;
+                    videoUrl = await wc.executeJavaScript(_findVideoScript).catch(() => null);
+                  }
+
+                  if (!videoUrl || typeof videoUrl !== "string") {
+                    relay(`📺 YouTube warm-up: no videos found, skipping remaining`);
                     break;
                   }
 

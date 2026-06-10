@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.874",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "YouTube warm-up now reliably finds and watches videos — fixed a timing issue where the video selector ran before the page finished reloading after the consent banner was dismissed." },
+      { category: "Fix", text: "YouTube warm-up now works with the mobile layout that Ghost Browser renders — added mobile YouTube selectors alongside desktop ones." },
+      { category: "Fix", text: "If no videos are found on the YouTube homepage, the warm-up now automatically tries the YouTube search results page as a fallback before giving up." },
+    ],
+  },
+  {
     version: "1.0.873",
     date: "10 Jun 2026",
     items: [
