@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.870",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser URL bar is now always visible and usable — the toolbar no longer squishes it to zero width on the 430px Ghost Browser window." },
+      { category: "Improvement", text: "Ghost Browser toolbar now shows only the essential buttons (Back, Forward, Reload, Home, URL bar, Leak Check) — Login, 2FA, Phone, Email and Email Pass are account-window tools not needed during signup." },
+    ],
+  },
+  {
     version: "1.0.869",
     date: "10 Jun 2026",
     items: [
