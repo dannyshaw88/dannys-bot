@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.878",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed blank screen on startup — the Ghost Browser device picker was passing the wrong value type to the UI component, crashing React before any page could load." },
+      { category: "Fix", text: "Ghost Browser device picker now correctly shows the selected device and responds to selection changes." },
+    ],
+  },
+  {
     version: "1.0.877",
     date: "10 Jun 2026",
     items: [

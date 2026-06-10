@@ -879,7 +879,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
-              <UaPickerDropdown value={selectedUA} onChange={setSelectedUA} />
+              <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
               <p className="text-[10px] text-muted-foreground leading-snug truncate" title={activeDeviceLabel}>
                 Active: {activeDeviceLabel}
               </p>
