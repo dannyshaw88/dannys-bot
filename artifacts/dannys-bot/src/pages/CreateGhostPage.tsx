@@ -414,6 +414,12 @@ export function CreateGhostPage() {
   const [timeOnLinksMin, setTimeOnLinksMin]         = useState(() => _ls.timeOnLinksMin ?? "1");
   const [timeOnLinksMax, setTimeOnLinksMax]         = useState(() => _ls.timeOnLinksMax ?? "2");
 
+  // YouTube warm-up fields
+  const [youtubeVideosMin, setYoutubeVideosMin]     = useState(() => _ls.youtubeVideosMin ?? "1");
+  const [youtubeVideosMax, setYoutubeVideosMax]     = useState(() => _ls.youtubeVideosMax ?? "3");
+  const [youtubeWatchMin, setYoutubeWatchMin]       = useState(() => _ls.youtubeWatchMin ?? "2");
+  const [youtubeWatchMax, setYoutubeWatchMax]       = useState(() => _ls.youtubeWatchMax ?? "5");
+
   // Verification code
   const [manualCode, setManualCode]       = useState("");
   const [fetchingCode, setFetchingCode]   = useState(false);
@@ -451,6 +457,8 @@ export function CreateGhostPage() {
         internalLinksMin, internalLinksMax,
         timeOnSiteMin, timeOnSiteMax,
         timeOnLinksMin, timeOnLinksMax,
+        youtubeVideosMin, youtubeVideosMax,
+        youtubeWatchMin, youtubeWatchMax,
       }));
     } catch {}
   }, [
@@ -459,6 +467,7 @@ export function CreateGhostPage() {
     websitesToVisit, websitesMin, websitesMax,
     internalLinksMin, internalLinksMax,
     timeOnSiteMin, timeOnSiteMax, timeOnLinksMin, timeOnLinksMax,
+    youtubeVideosMin, youtubeVideosMax, youtubeWatchMin, youtubeWatchMax,
   ]);
 
   // ── Browser status check ───────────────────────────────────────────────────
@@ -708,6 +717,10 @@ export function CreateGhostPage() {
           timeOnSiteMax: parseInt(timeOnSiteMax, 10) || 3,
           timeOnLinksMin: parseInt(timeOnLinksMin, 10) || 1,
           timeOnLinksMax: parseInt(timeOnLinksMax, 10) || 2,
+          youtubeVideosMin: parseInt(youtubeVideosMin, 10) || 1,
+          youtubeVideosMax: parseInt(youtubeVideosMax, 10) || 3,
+          youtubeWatchMin: parseInt(youtubeWatchMin, 10) || 2,
+          youtubeWatchMax: parseInt(youtubeWatchMax, 10) || 5,
         }),
       });
       const j = await r.json() as any;
@@ -795,9 +808,6 @@ export function CreateGhostPage() {
                   </div>
                 </div>
               )}
-              {isOpen && (
-                <p className="text-[10px] text-muted-foreground">Active: <span className="font-mono">{activeProxyLabel}</span></p>
-              )}
             </div>
 
             {/* Device Identity */}
@@ -807,9 +817,6 @@ export function CreateGhostPage() {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
               <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
-              {isOpen && (
-                <p className="text-[10px] text-muted-foreground">Active: <span className="font-medium">{activeDeviceLabel}</span></p>
-              )}
             </div>
 
             {/* Fingerprint */}
@@ -873,7 +880,7 @@ export function CreateGhostPage() {
             </div>
           </div>
 
-          {/* ── ROW 3: All 4 XY range fields side by side ── */}
+          {/* ── ROW 3: All XY range fields side by side ── */}
           <div className="desktop-card p-2.5">
             <div className="flex gap-4 flex-wrap">
               <XYField
@@ -895,6 +902,16 @@ export function CreateGhostPage() {
                 label="Spent Time on Internal Links (minutes)"
                 min={timeOnLinksMin} max={timeOnLinksMax}
                 onMin={setTimeOnLinksMin} onMax={setTimeOnLinksMax}
+              />
+              <XYField
+                label="YouTube Videos to Watch"
+                min={youtubeVideosMin} max={youtubeVideosMax}
+                onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax}
+              />
+              <XYField
+                label="Minutes to Watch Each Video"
+                min={youtubeWatchMin} max={youtubeWatchMax}
+                onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax}
               />
             </div>
           </div>

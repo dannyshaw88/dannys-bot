@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.873",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser warm-up now supports watching YouTube videos — set how many videos (X–Y) and how many minutes to watch each one (X–Y) before signup." },
+      { category: "Fix", text: "YouTube warm-up now opens the full desktop YouTube and actually finds and plays videos — no more blank page or mobile (m.) version." },
+      { category: "Improvement", text: "Removed the 'Active device' and 'Active proxy' labels that appeared under the proxy and device fields when the Ghost Browser was running — less clutter." },
+    ],
+  },
+  {
     version: "1.0.872",
     date: "10 Jun 2026",
     items: [

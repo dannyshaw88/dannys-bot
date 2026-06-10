@@ -4529,6 +4529,8 @@ export function startEbIpcServer(
           internalLinksMin = 2, internalLinksMax = 5,
           timeOnSiteMin = 1, timeOnSiteMax = 3,
           timeOnLinksMin = 1, timeOnLinksMax = 2,
+          youtubeVideosMin = 0, youtubeVideosMax = 0,
+          youtubeWatchMin = 2, youtubeWatchMax = 5,
         } = body as {
           email: string; username: string; password: string; dob: string;
           websitesToVisit?: string[];
@@ -4536,6 +4538,8 @@ export function startEbIpcServer(
           internalLinksMin?: number; internalLinksMax?: number;
           timeOnSiteMin?: number; timeOnSiteMax?: number;
           timeOnLinksMin?: number; timeOnLinksMax?: number;
+          youtubeVideosMin?: number; youtubeVideosMax?: number;
+          youtubeWatchMin?: number; youtubeWatchMax?: number;
         };
         if (!email || !username || !password || !dob) {
           return send(res, 200, { ok: false, error: "email, username, password, and dob are required" });
@@ -4951,8 +4955,175 @@ export function startEbIpcServer(
               }
             }
             if (isAborted()) return; // don't proceed to Instagram signup
-            relay(`✅ Warm-up complete — starting Instagram signup now…`);
+            relay(`✅ Website warm-up complete`);
           }
+
+          // ── YouTube Warm-Up ─────────────────────────────────────────────────
+          // Visits YouTube and watches X–Y random videos for X–Y minutes each.
+          // Runs BEFORE mobile UA is set so YouTube serves the desktop version.
+          const _ytCount = _rndInt(youtubeVideosMin, youtubeVideosMax);
+          if (_ytCount > 0) {
+            if (isAborted()) return;
+            try {
+              relay(`📺 YouTube warm-up: watching ${_ytCount} video(s)…`);
+
+              // Force desktop viewport so YouTube does NOT redirect to m.youtube.com.
+              // The fingerprint patch injected earlier overrides screen dimensions in JS
+              // but does not affect the Emulation layer that Chrome uses for responsive
+              // redirect decisions. Setting a wide desktop viewport here ensures YouTube
+              // serves the full desktop SPA, not the mobile version.
+              try {
+                await wc.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+                  width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+                  screenWidth: 1280, screenHeight: 800,
+                });
+              } catch {}
+
+              // Navigate to desktop YouTube homepage
+              relay("📺 YouTube warm-up: navigating to YouTube…");
+              await new Promise<void>(resolve => {
+                let done = false;
+                const finish = () => {
+                  if (!done) {
+                    done = true;
+                    clearTimeout(t);
+                    wc.removeListener("did-finish-load", onF);
+                    wc.removeListener("did-fail-load", onFail);
+                    resolve();
+                  }
+                };
+                const onF = () => finish();
+                const onFail = (_: any, code: number) => { if (code === -3) return; finish(); };
+                const t = setTimeout(finish, 30000);
+                wc.on("did-finish-load", onF);
+                wc.on("did-fail-load", onFail);
+                // Use ?app=desktop as belt-and-suspenders to force the full site
+                wc.loadURL("https://www.youtube.com/?app=desktop").catch(() => {});
+              });
+              if (isAborted()) return;
+
+              // Wait for YouTube SPA to fully render (thumbnails are lazy-loaded)
+              await sleep(4000);
+
+              // Accept YouTube cookie / consent overlay if present
+              const _ytConsentScript = `(async function(){
+                var texts = ['accept all','i agree','agree to the use','accept the use','accept'];
+                var cands = Array.from(document.querySelectorAll(
+                  'button, div[role="button"], tp-yt-paper-button, ytd-button-renderer button'
+                ));
+                for (var i = 0; i < texts.length; i++) {
+                  var found = cands.find(function(c){
+                    return (c.innerText||c.textContent||'').trim().toLowerCase().startsWith(texts[i]);
+                  });
+                  if (found) { found.click(); return 'accepted:' + texts[i]; }
+                }
+                return null;
+              })()`;
+              try {
+                const accepted = await wc.executeJavaScript(_ytConsentScript).catch(() => null);
+                if (accepted) {
+                  relay(`🍪 YouTube: dismissed consent overlay (${accepted})`);
+                  await sleep(2000);
+                }
+              } catch {}
+
+              for (let vi = 0; vi < _ytCount; vi++) {
+                if (isAborted()) break;
+                try {
+                  // Find a video link on the current page
+                  const _findVideoScript = `(function(){
+                    // Desktop YouTube uses ytd-rich-item-renderer on the homepage grid
+                    var thumbs = Array.from(document.querySelectorAll(
+                      'ytd-rich-item-renderer a#thumbnail[href],' +
+                      'ytd-video-renderer a#thumbnail[href],' +
+                      'ytd-compact-video-renderer a.ytd-thumbnail[href],' +
+                      'a.ytd-thumbnail[href^="/watch"]'
+                    ));
+                    if (!thumbs.length) {
+                      // Fallback: any /watch?v= link that isn't a shelf or playlist
+                      thumbs = Array.from(document.querySelectorAll('a[href^="/watch?v="]'));
+                    }
+                    if (!thumbs.length) return null;
+                    // Pick from the first 8 to avoid edge-of-page items
+                    var pick = thumbs[Math.floor(Math.random() * Math.min(8, thumbs.length))];
+                    var href = pick ? pick.getAttribute('href') : null;
+                    if (!href) return null;
+                    // Ensure full URL (href may be a relative path like /watch?v=xxx)
+                    try { return new URL(href, 'https://www.youtube.com').href; } catch { return null; }
+                  })()`;
+
+                  const videoUrl = await wc.executeJavaScript(_findVideoScript).catch(() => null);
+                  if (!videoUrl || typeof videoUrl !== "string") {
+                    relay(`📺 YouTube warm-up: no videos found on page, skipping`);
+                    break;
+                  }
+
+                  relay(`📺 YouTube warm-up: watching video ${vi + 1}/${_ytCount}…`);
+                  await new Promise<void>(resolve => {
+                    let done = false;
+                    const finish = () => {
+                      if (!done) {
+                        done = true;
+                        clearTimeout(t);
+                        wc.removeListener("did-finish-load", onF);
+                        wc.removeListener("did-fail-load", onFail);
+                        resolve();
+                      }
+                    };
+                    const onF = () => finish();
+                    const onFail = (_: any, code: number) => { if (code === -3) return; finish(); };
+                    const t = setTimeout(finish, 20000);
+                    wc.on("did-finish-load", onF);
+                    wc.on("did-fail-load", onFail);
+                    wc.loadURL(videoUrl).catch(() => {});
+                  });
+                  if (isAborted()) break;
+
+                  await sleep(2500);
+                  const watchMs = _rndInt(youtubeWatchMin, youtubeWatchMax) * 60 * 1000;
+                  relay(`📺 YouTube warm-up: watching for ${Math.round(watchMs / 60000)} min…`);
+                  await sleepOrAbort(watchMs);
+
+                  if (isAborted()) break;
+
+                  // Navigate back to homepage for the next video pick
+                  if (vi < _ytCount - 1) {
+                    await new Promise<void>(resolve => {
+                      let done = false;
+                      const finish = () => {
+                        if (!done) {
+                          done = true;
+                          clearTimeout(t);
+                          wc.removeListener("did-finish-load", onF);
+                          wc.removeListener("did-fail-load", onFail);
+                          resolve();
+                        }
+                      };
+                      const onF = () => finish();
+                      const onFail = (_: any, code: number) => { if (code === -3) return; finish(); };
+                      const t = setTimeout(finish, 15000);
+                      wc.on("did-finish-load", onF);
+                      wc.on("did-fail-load", onFail);
+                      wc.loadURL("https://www.youtube.com/?app=desktop").catch(() => {});
+                    });
+                    await sleep(3000);
+                  }
+                } catch (ytVidErr: any) {
+                  if (isAborted()) break;
+                  relay(`⚠ YouTube warm-up: video ${vi + 1} error: ${ytVidErr?.message ?? String(ytVidErr)}`);
+                }
+              }
+
+              if (!isAborted()) relay(`✅ YouTube warm-up complete`);
+            } catch (ytErr: any) {
+              if (!isAborted()) relay(`⚠ YouTube warm-up error: ${ytErr?.message ?? String(ytErr)}`);
+            }
+          }
+
+          if (_ytCount > 0 || websitesToVisit.length > 0) {
+            relay(`✅ All warm-up complete — starting Instagram signup now…`);
+          }
+
           // One final guard: if closed between warm-up ending and signup starting
           if (isAborted()) return;
 
