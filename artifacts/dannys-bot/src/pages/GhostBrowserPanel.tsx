@@ -428,8 +428,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const [signupRunning, setSignupRunning] = useState(false);
   const [signupStatus, setSignupStatus]   = useState("");
   const [signupLog, setSignupLog]         = useState<string[]>([]);
-  const signupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const signupLogRef  = useRef<HTMLDivElement | null>(null);
+  const signupPollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const signupLogRef     = useRef<HTMLDivElement | null>(null);
+  const imapAutoPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Add to Equinox
   const [addedToEquinox, setAddedToEquinox]   = useState(false);
@@ -499,6 +500,51 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     }
     return () => { if (codeTimerRef.current) clearInterval(codeTimerRef.current); };
   }, [codePending, signupRunning]);
+
+  // Auto-IMAP: when signup is waiting for a code and IMAP creds are filled, poll automatically
+  useEffect(() => {
+    const hasImap = imapHost.trim() && emailAddr.trim() && emailPass.trim();
+    if (codePending && signupRunning && hasImap) {
+      const doPoll = async () => {
+        setFetchCodeMsg("Checking IMAP for verification code…");
+        try {
+          const r = await fetch("/api/imap/fetch-code", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              host: imapHost.trim(),
+              port: parseInt(imapPort, 10) || 993,
+              secure: imapSecure,
+              email: emailAddr.trim(),
+              password: emailPass.trim(),
+            }),
+          });
+          const j = await r.json() as any;
+          if (j.ok && j.code) {
+            setManualCode(j.code);
+            setFetchCodeMsg(`✅ Auto-fetched: ${j.code} — submitting…`);
+            await fetch("/api/signup/browser/ghost-code", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: j.code, slot }),
+            }).catch(() => {});
+            setCodePending(false);
+            if (imapAutoPollRef.current) { clearInterval(imapAutoPollRef.current); imapAutoPollRef.current = null; }
+          } else {
+            setFetchCodeMsg(`No code yet — retrying every 12s… (${j.error ?? "not found"})`);
+          }
+        } catch (err: any) {
+          setFetchCodeMsg(`IMAP check failed: ${err?.message ?? "error"} — retrying…`);
+        }
+      };
+      doPoll(); // immediate first attempt
+      imapAutoPollRef.current = setInterval(doPoll, 12_000);
+    } else {
+      if (imapAutoPollRef.current) { clearInterval(imapAutoPollRef.current); imapAutoPollRef.current = null; }
+    }
+    return () => { if (imapAutoPollRef.current) { clearInterval(imapAutoPollRef.current); imapAutoPollRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codePending, signupRunning, imapHost, emailAddr, emailPass, imapPort, imapSecure, slot]);
 
   // On mount: check if a signup is already running for this slot (user may have navigated away).
   useEffect(() => {
@@ -680,6 +726,23 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     }).catch(() => {});
     setFetchCodeMsg(`✅ Code ${manualCode.trim()} submitted to signup flow`);
     setCodePending(false);
+  };
+
+  // Stop a running signup
+  const handleStopSignup = async () => {
+    try {
+      await fetch("/api/signup/browser/ghost-stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot }),
+      });
+    } catch {}
+    if (imapAutoPollRef.current) { clearInterval(imapAutoPollRef.current); imapAutoPollRef.current = null; }
+    setSignupRunning(false);
+    setCodePending(false);
+    setFetchCodeMsg("");
+    setSignupStatus("🛑 Stopped by user.");
+    setSignupLog(prev => [...prev, "🛑 Stopped by user."]);
   };
 
   // Create Account — visits websites first, then runs signup
@@ -1135,15 +1198,17 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <Button
                 className={cn(
                   "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
-                  signupRunning || browserState === "opening"
+                  signupRunning
+                    ? "bg-red-500 hover:bg-red-600 text-white border-0"
+                    : browserState === "opening"
                     ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
                     : "bg-cyan-500 hover:bg-cyan-600 text-white border-0"
                 )}
-                onClick={handleCreateAccount}
-                disabled={signupRunning || browserState === "opening" || browserState === "resetting" || !usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()}
+                onClick={signupRunning ? handleStopSignup : handleCreateAccount}
+                disabled={browserState === "opening" || browserState === "resetting" || (!signupRunning && (!usernameSpin.trim() || !password.trim() || !emailAddr.trim() || !dob.trim()))}
               >
                 {signupRunning
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Running…</>
+                  ? <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop</>
                   : browserState === "opening"
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening…</>
                   : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
@@ -1180,9 +1245,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           </div>
 
-          {/* Signup log */}
-          {signupLog.length > 0 && (
-            <div className="desktop-card border border-border overflow-hidden">
+          {/* Signup log — always visible when running, or when there are entries */}
+          {(signupRunning || signupLog.length > 0) && (
+            <div className="desktop-card border border-border">
               <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/30">
                 <div className="flex items-center gap-1.5">
                   {signupRunning && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
@@ -1196,7 +1261,10 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </button>
                 )}
               </div>
-              <div ref={signupLogRef} className="overflow-y-auto px-2.5 py-1.5 space-y-1 font-mono" style={{ maxHeight: 320, minHeight: 80 }}>
+              <div ref={signupLogRef} className="overflow-y-auto px-2.5 py-2 space-y-1 font-mono" style={{ minHeight: 120, maxHeight: 400 }}>
+                {signupLog.length === 0 && signupRunning && (
+                  <p className="text-[10px] text-muted-foreground/50 italic">Starting…</p>
+                )}
                 {signupLog.map((line, i) => (
                   <p key={i} className={cn(
                     "text-[10px] leading-relaxed break-words whitespace-pre-wrap",

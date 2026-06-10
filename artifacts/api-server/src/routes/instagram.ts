@@ -2579,6 +2579,27 @@ export async function registerInstagramRoutes(
     return res.json({ ok: true });
   });
 
+  // Stop a running ghost signup for a slot
+  app.post("/api/signup/browser/ghost-stop", (req, res) => {
+    const { slot: _slot } = (req.body ?? {}) as { slot?: number };
+    const slot = Number(_slot ?? 1) || 1;
+    const st = _getGhostSlot(slot);
+    st.done = true;
+    st.log.push("🛑 Stopped by user.");
+    st.latestStep = "🛑 Stopped by user.";
+    sendSignupWsMsg({ type: "signupStep", msg: "🛑 Stopped by user." });
+    // Best-effort: tell the EB process to abort
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot }),
+      }).catch(() => {});
+    }
+    return res.json({ ok: true });
+  });
+
   // EB polls this to get the code once the frontend has provided it (consumed on read)
   app.get("/api/signup/browser/ghost-code-peek", (req, res) => {
     const slot = _getReqSlot(req);

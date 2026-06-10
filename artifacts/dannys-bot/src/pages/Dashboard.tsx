@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.880",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Feature", text: "IMAP verification codes are now fetched and submitted automatically — when Instagram asks for the code, the app polls your inbox every 12 seconds, enters the code, and continues the signup without any manual clicks." },
+      { category: "Feature", text: "Create Account button turns into a red Stop button while a signup is running — click it to immediately halt the process." },
+      { category: "Fix", text: "Signup log now appears as soon as you press Create Account (not just when entries arrive) and grows up to 400px tall with full text wrapping so every line is visible." },
+    ],
+  },
+  {
     version: "1.0.879",
     date: "10 Jun 2026",
     items: [
