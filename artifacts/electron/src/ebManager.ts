@@ -4585,6 +4585,12 @@ export function startEbIpcServer(
             }
           };
 
+          // wc was previously missing from this scope — the IIFE crashed
+          // silently at the first bare wc.executeJavaScript() call, before
+          // relay() was ever invoked, so zero progress ever reached the UI.
+          const wc = e.win.webContents;
+          console.log(`[ghost-signup] IIFE started — wc ok=${!wc.isDestroyed()} serverPort=${_serverPort}`);
+
           // Attach debugger (no-op if already attached)
           try { wc.debugger.attach("1.3"); } catch {}
 

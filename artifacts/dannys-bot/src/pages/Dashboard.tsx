@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.872",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost signup flow now actually runs — the progress log will show each step (warmup sites, form fill, verification) instead of sitting silent forever." },
+      { category: "Fix", text: "Debug log now shows '[ghost-signup] IIFE started' on every run so you can confirm the flow is alive and see the server port it is using." },
+    ],
+  },
+  {
     version: "1.0.871",
     date: "10 Jun 2026",
     items: [
