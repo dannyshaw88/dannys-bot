@@ -2406,7 +2406,18 @@ export async function openEbWindow(opts: {
     views: new Map(),
   });
   // Push initial tab list to toolbar once its BrowserView has loaded.
-  toolbarView.webContents.once("did-finish-load", () => pushTabUpdate(profileId));
+  // Also seed the URL bar — did-navigate may have fired before the toolbar JS
+  // was ready (data: URI loads fast but not instant), so without this the URL
+  // bar stays blank until the next navigation event.
+  toolbarView.webContents.once("did-finish-load", () => {
+    pushTabUpdate(profileId);
+    const currentPageUrl = win.isDestroyed() ? "" : win.webContents.getURL();
+    if (currentPageUrl && currentPageUrl !== "about:blank") {
+      toolbarView.webContents.executeJavaScript(
+        `window.updateUrl && window.updateUrl(${JSON.stringify(currentPageUrl)})`
+      ).catch(() => {});
+    }
+  });
 
   // Position the toolbar at the very top of the window.
   // setAutoResize keeps the width in sync with window resize automatically.

@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.869",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser URL bar now shows the correct address immediately on open — fixed a race condition where the toolbar loaded after the first navigation event." },
+      { category: "Fix", text: "Removed the username preview line that kept flickering under the Username Spin field." },
+      { category: "Improvement", text: "Signup status message now appears below the CREATE ACCOUNT button instead of above it." },
+    ],
+  },
+  {
     version: "1.0.868",
     date: "10 Jun 2026",
     items: [

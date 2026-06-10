@@ -913,9 +913,6 @@ export function CreateGhostPage() {
                   />
                   <FieldActions value={generatedUsername || resolveSpintax(usernameSpin || "user")} isOpen={isOpen} />
                 </div>
-                {generatedUsername && (
-                  <p className="text-[10px] text-cyan-600 font-mono truncate">→ {generatedUsername}</p>
-                )}
               </div>
 
               {/* Password */}
@@ -1126,21 +1123,6 @@ export function CreateGhostPage() {
             )}
           </div>
 
-          {/* Signup status bar */}
-          {signupStatus && (
-            <div className={cn(
-              "rounded-md border px-3 py-2 text-xs leading-relaxed",
-              signupStatus.startsWith("✅")
-                ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
-                : signupStatus.includes("⚠") || signupStatus.includes("error")
-                ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
-                : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
-            )}>
-              {signupRunning && <Loader2 className="w-3 h-3 animate-spin inline mr-1.5" />}
-              {signupStatus}
-            </div>
-          )}
-
           {/* ── ROW 7: CREATE ACCOUNT | ADD TO EQUINOX | NUKE ENVIRONMENT ── */}
           <div className="desktop-card p-2.5">
             <div className="flex gap-2 justify-start">
@@ -1196,6 +1178,21 @@ export function CreateGhostPage() {
             </div>
 
           </div>
+
+          {/* Signup status bar — below the action buttons */}
+          {signupStatus && (
+            <div className={cn(
+              "rounded-md border px-3 py-2 text-xs leading-relaxed",
+              signupStatus.startsWith("✅")
+                ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
+                : signupStatus.includes("⚠") || signupStatus.includes("error")
+                ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
+                : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
+            )}>
+              {signupRunning && <Loader2 className="w-3 h-3 animate-spin inline mr-1.5" />}
+              {signupStatus}
+            </div>
+          )}
 
         </div>
 
