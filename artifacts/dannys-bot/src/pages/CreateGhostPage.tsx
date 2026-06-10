@@ -433,7 +433,9 @@ export function CreateGhostPage() {
   // Signup automation
   const [signupRunning, setSignupRunning] = useState(false);
   const [signupStatus, setSignupStatus]   = useState("");
+  const [signupLog, setSignupLog]         = useState<string[]>([]);
   const signupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const signupLogRef  = useRef<HTMLDivElement | null>(null);
 
   // Add to Equinox
   const [addedToEquinox, setAddedToEquinox]   = useState(false);
@@ -502,6 +504,31 @@ export function CreateGhostPage() {
     return () => { if (codeTimerRef.current) clearInterval(codeTimerRef.current); };
   }, [codePending, signupRunning]);
 
+  // On mount: check if a signup is already running (user may have navigated away and back).
+  // If so, resume polling and seed the log with whatever the server has so far.
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/signup/browser/ghost-signup-status");
+        const j = await r.json() as any;
+        if (j.running && !j.done) {
+          if (Array.isArray(j.log) && j.log.length > 0) setSignupLog(j.log);
+          if (j.msg) setSignupStatus(j.msg);
+          if (j.msg?.includes("Waiting for verification code")) setCodePending(true);
+          setSignupRunning(true);
+        }
+      } catch {}
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-scroll signup log to bottom whenever it grows
+  useEffect(() => {
+    if (signupLogRef.current) {
+      signupLogRef.current.scrollTop = signupLogRef.current.scrollHeight;
+    }
+  }, [signupLog]);
+
   // Poll signup status
   useEffect(() => {
     if (!signupRunning) {
@@ -512,6 +539,9 @@ export function CreateGhostPage() {
       try {
         const r = await fetch("/api/signup/browser/ghost-signup-status");
         const j = await r.json() as any;
+        if (Array.isArray(j.log)) {
+          setSignupLog(j.log);
+        }
         if (j.msg) {
           setSignupStatus(j.msg);
           // When the backend reaches step 4 (email verification), show the
@@ -880,7 +910,7 @@ export function CreateGhostPage() {
             </div>
           </div>
 
-          {/* ── ROW 3: All XY range fields side by side ── */}
+          {/* ── ROW 3: Website warm-up XY fields ── */}
           <div className="desktop-card p-2.5">
             <div className="flex gap-4 flex-wrap">
               <XYField
@@ -903,13 +933,26 @@ export function CreateGhostPage() {
                 min={timeOnLinksMin} max={timeOnLinksMax}
                 onMin={setTimeOnLinksMin} onMax={setTimeOnLinksMax}
               />
+            </div>
+          </div>
+
+          {/* ── ROW 3b: YouTube warm-up ── */}
+          <div className="desktop-card p-2.5 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#FF0000" }}>
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">YouTube Warm-Up</p>
+              <p className="text-[10px] text-muted-foreground/60 ml-1">— watches random videos before signup. Set both to 0 to skip.</p>
+            </div>
+            <div className="flex gap-4 flex-wrap">
               <XYField
-                label="YouTube Videos to Watch"
+                label="Videos to Watch"
                 min={youtubeVideosMin} max={youtubeVideosMax}
                 onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax}
               />
               <XYField
-                label="Minutes to Watch Each Video"
+                label="Minutes per Video"
                 min={youtubeWatchMin} max={youtubeWatchMax}
                 onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax}
               />
@@ -1200,18 +1243,46 @@ export function CreateGhostPage() {
 
           </div>
 
-          {/* Signup status bar — below the action buttons */}
-          {signupStatus && (
-            <div className={cn(
-              "rounded-md border px-3 py-2 text-xs leading-relaxed",
-              signupStatus.startsWith("✅")
-                ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-950/30"
-                : signupStatus.includes("⚠") || signupStatus.includes("error")
-                ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30"
-                : "border-cyan-200 bg-cyan-50/50 text-cyan-800 dark:bg-cyan-950/20"
-            )}>
-              {signupRunning && <Loader2 className="w-3 h-3 animate-spin inline mr-1.5" />}
-              {signupStatus}
+          {/* Signup log — scrollable list of all relay messages */}
+          {signupLog.length > 0 && (
+            <div className="desktop-card border border-border overflow-hidden">
+              <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/30">
+                <div className="flex items-center gap-1.5">
+                  {signupRunning && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {signupRunning ? "Signup in Progress" : "Signup Log"}
+                  </p>
+                </div>
+                {!signupRunning && (
+                  <button
+                    type="button"
+                    onClick={() => setSignupLog([])}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div
+                ref={signupLogRef}
+                className="overflow-y-auto px-2.5 py-1.5 space-y-0.5 font-mono"
+                style={{ maxHeight: 140, minHeight: 48 }}
+              >
+                {signupLog.map((line, i) => (
+                  <p
+                    key={i}
+                    className={cn(
+                      "text-[10px] leading-relaxed",
+                      line.startsWith("✅") ? "text-green-600 dark:text-green-400"
+                      : line.includes("⚠") || line.toLowerCase().includes("error") ? "text-amber-600 dark:text-amber-400"
+                      : line.startsWith("🛑") ? "text-red-500"
+                      : "text-muted-foreground"
+                    )}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
 

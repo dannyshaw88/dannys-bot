@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.875",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup now continues running even when you switch to another tab or tool — the progress log picks up exactly where it left off when you return." },
+      { category: "Feature", text: "Signup log: a scrollable activity log now appears at the bottom of the Ghost Browser panel showing every step of the signup process as it happens." },
+      { category: "Improvement", text: "YouTube warm-up settings moved to their own clearly labelled card with the YouTube icon, separate from the website warm-up settings." },
+      { category: "Fix", text: "Date of birth is now typed character-by-character instead of pasted — prevents Instagram from flagging it as bot input." },
+      { category: "Fix", text: "Login button now correctly focuses the password field after filling the username — Instagram's form sometimes shifts after username validation and the tap now re-queries the live position." },
+    ],
+  },
+  {
     version: "1.0.874",
     date: "10 Jun 2026",
     items: [

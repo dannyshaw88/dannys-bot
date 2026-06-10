@@ -1496,8 +1496,26 @@ async function doAutoLogin(
     await delay(100);
     await typeTextCDP(wc.debugger, username);
 
+    // Wait for Instagram's async username validation to settle before tapping the
+    // password field. Instagram re-renders the form (shows a checking-username
+    // spinner / suggestion list) which shifts the password field position. Using
+    // the pre-computed stale coordinates causes the tap to land in the wrong spot —
+    // usually at the end of the username field or on the spinner — instead of the
+    // password input. Re-querying after 700 ms gets the fresh post-render position.
+    await delay(700);
+    const freshPwdPos = await wc.executeJavaScript(`
+      (() => {
+        const p = document.querySelector('input[name="password"]');
+        if (!p) return null;
+        const r = p.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+      })()
+    `).catch(() => null) as { x: number; y: number } | null;
+    const pwdCoords = freshPwdPos ?? fields.p;
+
     // Step 3: tap password field (touch event) + type via CDP
-    await cdpTapGesture(wc.debugger, fields.p.x, fields.p.y);
+    await cdpTapGesture(wc.debugger, pwdCoords.x, pwdCoords.y);
     await delay(150);
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -5931,27 +5949,13 @@ export function startEbIpcServer(
                     await sleep(800);
                   } else {
                     // No picker — plain editable text input.
-                    // Set value via JS native setter so React's controlled state updates
-                    // without any keyboard or touch simulation (most reliable approach).
-                    relay(`[debug] DOB: no picker after tap — setting "${dateStr}" via JS native setter…`);
-                    const jsSetResult = await js(`(function(){
-                      var el=document.activeElement;
-                      if(!el||(el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')){
-                        var inputs=Array.from(document.querySelectorAll('input'));
-                        el=inputs.find(function(i){var lbl=(i.getAttribute('aria-label')||i.placeholder||'').toLowerCase();return lbl.includes('birthday')||lbl.includes('mm/dd')||lbl.includes('date');});
-                      }
-                      if(!el)return null;
-                      var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
-                      if(setter&&setter.set){
-                        setter.set.call(el,'${dateStr}');
-                        el.dispatchEvent(new Event('input',{bubbles:true,composed:true}));
-                        el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
-                        return el.value;
-                      }
-                      return null;
-                    })()`);
-                    relay(`[debug] DOB native setter result: "${jsSetResult}"`);
-                    await sleep(500);
+                    // Use clearAndType (tap + native clear + typeTextCDP character-by-character)
+                    // so Instagram sees individual keystrokes instead of a programmatic paste.
+                    // The JS native setter approach looks like a paste to Instagram's input
+                    // heuristics and can trigger bot detection.
+                    relay(`[debug] DOB: no picker after tap — typing "${dateStr}" character by character…`);
+                    await clearAndType((dobTextInputPos as any).x, (dobTextInputPos as any).y, dateStr);
+                    await sleep(400);
                   }
                 } else {
                   relay("⚠ DOB: no drum, no selects, no text input found — tapping Next anyway");

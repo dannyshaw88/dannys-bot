@@ -2474,6 +2474,7 @@ export async function registerInstagramRoutes(
   let _ghostSignupCode: string | null = null;
   let _ghostSignupLatestStep = "";
   let _ghostSignupDone = false;
+  let _ghostSignupLog: string[] = [];
 
   // Frontend triggers the automated signup flow in the Ghost Browser
   app.post("/api/signup/browser/ghost-signup", async (req, res) => {
@@ -2482,6 +2483,7 @@ export async function registerInstagramRoutes(
     _ghostSignupCode = null;
     _ghostSignupLatestStep = "Starting…";
     _ghostSignupDone = false;
+    _ghostSignupLog = ["Starting…"];
     try {
       const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-signup`, {
         method: "POST",
@@ -2500,6 +2502,8 @@ export async function registerInstagramRoutes(
     const { msg, done } = (req.body ?? {}) as { msg?: string; done?: boolean };
     if (msg) {
       _ghostSignupLatestStep = msg;
+      _ghostSignupLog.push(msg);
+      if (_ghostSignupLog.length > 200) _ghostSignupLog = _ghostSignupLog.slice(-200);
       console.log(`[ghost-signup-step] ${msg}`);
       sendSignupWsMsg({ type: "signupStep", msg });
     }
@@ -2509,7 +2513,7 @@ export async function registerInstagramRoutes(
 
   // Frontend polls this to show live status in the Ghost Browser panel
   app.get("/api/signup/browser/ghost-signup-status", (_req, res) => {
-    return res.json({ ok: true, msg: _ghostSignupLatestStep, done: _ghostSignupDone });
+    return res.json({ ok: true, msg: _ghostSignupLatestStep, done: _ghostSignupDone, log: _ghostSignupLog, running: !!_ghostSignupLatestStep && !_ghostSignupDone });
   });
 
   // Frontend sets the verification code (from IMAP fetch or manual entry)
