@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.879",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser: added 'Skip all warm-up' checkbox next to Minutes per Video — tick it to go straight to the Instagram signup flow without visiting any websites or YouTube first." },
+      { category: "Fix", text: "Ghost Browser signup log now expands to show all entries with full line wrapping — no more entries being hidden in a single fixed-height row." },
+      { category: "Fix", text: "IMAP code fetch now works with GMX and other providers — fixed the UID lookup so the right messages are actually read, added TLS compatibility, and extended the search window to 30 minutes." },
+    ],
+  },
+  {
     version: "1.0.878",
     date: "10 Jun 2026",
     items: [

@@ -412,6 +412,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const [youtubeVideosMax, setYoutubeVideosMax]     = useState(() => _ls.youtubeVideosMax ?? "3");
   const [youtubeWatchMin, setYoutubeWatchMin]       = useState(() => _ls.youtubeWatchMin ?? "2");
   const [youtubeWatchMax, setYoutubeWatchMax]       = useState(() => _ls.youtubeWatchMax ?? "5");
+  const [skipWarmup, setSkipWarmup]                 = useState(() => (_ls.skipWarmup ?? "false") === "true");
 
   // Verification code
   const [manualCode, setManualCode]       = useState("");
@@ -454,6 +455,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         timeOnLinksMin, timeOnLinksMax,
         youtubeVideosMin, youtubeVideosMax,
         youtubeWatchMin, youtubeWatchMax,
+        skipWarmup: String(skipWarmup),
       }));
     } catch {}
   }, [
@@ -463,6 +465,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     internalLinksMin, internalLinksMax,
     timeOnSiteMin, timeOnSiteMax, timeOnLinksMin, timeOnLinksMax,
     youtubeVideosMin, youtubeVideosMax, youtubeWatchMin, youtubeWatchMax,
+    skipWarmup,
   ]);
 
   // ── Browser status check ──────────────────────────────────────────────────────
@@ -735,19 +738,20 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           username: uname,
           password: password.trim(),
           dob: dob.trim(),
-          websitesToVisit: websiteUrls,
-          websitesMin: parseInt(websitesMin, 10) || 1,
-          websitesMax: parseInt(websitesMax, 10) || 3,
-          internalLinksMin: parseInt(internalLinksMin, 10) || 2,
-          internalLinksMax: parseInt(internalLinksMax, 10) || 5,
-          timeOnSiteMin: parseInt(timeOnSiteMin, 10) || 1,
-          timeOnSiteMax: parseInt(timeOnSiteMax, 10) || 3,
-          timeOnLinksMin: parseInt(timeOnLinksMin, 10) || 1,
-          timeOnLinksMax: parseInt(timeOnLinksMax, 10) || 2,
-          youtubeVideosMin: parseInt(youtubeVideosMin, 10) || 1,
-          youtubeVideosMax: parseInt(youtubeVideosMax, 10) || 3,
-          youtubeWatchMin: parseInt(youtubeWatchMin, 10) || 2,
-          youtubeWatchMax: parseInt(youtubeWatchMax, 10) || 5,
+          skipWarmup,
+          websitesToVisit: skipWarmup ? [] : websiteUrls,
+          websitesMin: skipWarmup ? 0 : (parseInt(websitesMin, 10) || 1),
+          websitesMax: skipWarmup ? 0 : (parseInt(websitesMax, 10) || 3),
+          internalLinksMin: skipWarmup ? 0 : (parseInt(internalLinksMin, 10) || 2),
+          internalLinksMax: skipWarmup ? 0 : (parseInt(internalLinksMax, 10) || 5),
+          timeOnSiteMin: skipWarmup ? 0 : (parseInt(timeOnSiteMin, 10) || 1),
+          timeOnSiteMax: skipWarmup ? 0 : (parseInt(timeOnSiteMax, 10) || 3),
+          timeOnLinksMin: skipWarmup ? 0 : (parseInt(timeOnLinksMin, 10) || 1),
+          timeOnLinksMax: skipWarmup ? 0 : (parseInt(timeOnLinksMax, 10) || 2),
+          youtubeVideosMin: skipWarmup ? 0 : (parseInt(youtubeVideosMin, 10) || 1),
+          youtubeVideosMax: skipWarmup ? 0 : (parseInt(youtubeVideosMax, 10) || 3),
+          youtubeWatchMin: skipWarmup ? 0 : (parseInt(youtubeWatchMin, 10) || 2),
+          youtubeWatchMax: skipWarmup ? 0 : (parseInt(youtubeWatchMax, 10) || 5),
         }),
       });
       const j = await r.json() as any;
@@ -963,9 +967,18 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">YouTube Warm-Up</p>
               <p className="text-[10px] text-muted-foreground/60 ml-1">— watches random videos before signup. Set both to 0 to skip.</p>
             </div>
-            <div className="flex gap-4 flex-wrap">
+            <div className="flex gap-4 flex-wrap items-end">
               <XYField label="Videos to Watch" min={youtubeVideosMin} max={youtubeVideosMax} onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax} />
               <XYField label="Minutes per Video" min={youtubeWatchMin} max={youtubeWatchMax} onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax} />
+              <label className="flex items-center gap-1.5 cursor-pointer select-none pb-0.5">
+                <input
+                  type="checkbox"
+                  checked={skipWarmup}
+                  onChange={e => setSkipWarmup(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500"
+                />
+                <span className="text-[10px] font-medium text-muted-foreground">Skip all warm-up — go straight to signup</span>
+              </label>
             </div>
           </div>
 
@@ -1183,10 +1196,10 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </button>
                 )}
               </div>
-              <div ref={signupLogRef} className="overflow-y-auto px-2.5 py-1.5 space-y-0.5 font-mono" style={{ maxHeight: 140, minHeight: 48 }}>
+              <div ref={signupLogRef} className="overflow-y-auto px-2.5 py-1.5 space-y-1 font-mono" style={{ maxHeight: 320, minHeight: 80 }}>
                 {signupLog.map((line, i) => (
                   <p key={i} className={cn(
-                    "text-[10px] leading-relaxed",
+                    "text-[10px] leading-relaxed break-words whitespace-pre-wrap",
                     line.startsWith("✅") ? "text-green-600 dark:text-green-400"
                     : line.includes("⚠") || line.toLowerCase().includes("error") ? "text-amber-600 dark:text-amber-400"
                     : line.startsWith("🛑") ? "text-red-500"

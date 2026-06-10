@@ -2606,21 +2606,30 @@ export async function registerInstagramRoutes(
         secure: !!secure,
         auth: { user: email, pass: password },
         logger: false,
+        tls: { rejectUnauthorized: false },
       });
       await client.connect();
       const lock = await client.getMailboxLock("INBOX");
       let code: string | null = null;
       try {
-        const since = new Date(Date.now() - 20 * 60 * 1000); // last 20 min
+        // Search last 30 minutes (not 20) to give more headroom
+        const since = new Date(Date.now() - 30 * 60 * 1000);
+        // { uid: true } in the search options returns UIDs instead of sequence numbers
         const uids = await client.search({ since }, { uid: true });
         if (uids && uids.length > 0) {
-          // Fetch the last 10 messages, newest first
-          const slice = uids.slice(-10).reverse();
-          for await (const msg of client.fetch(slice, { source: true, uid: true })) {
+          // Fetch the last 15 messages, newest first
+          const slice = (uids as number[]).slice(-15).reverse();
+          // Third arg { uid: true } tells ImapFlow the range contains UIDs, not seq numbers
+          for await (const msg of client.fetch(slice, { source: true }, { uid: true })) {
             const src: string = msg.source.toString("utf8");
-            // Instagram codes are standalone 6-digit sequences
-            const m = src.match(/(?<![.\d])(\d{6})(?![.\d])/);
-            if (m) { code = m[1]; break; }
+            // Match standalone 6-digit code; also handle "123 456" spaced format
+            const m = src.match(/(?<![.\d])(\d{6})(?![.\d])/)
+              ?? src.match(/\b(\d{3})\s+(\d{3})\b/);
+            if (m) {
+              code = m[2] ? `${m[1]}${m[2]}` : m[1];
+              if (/^\d{6}$/.test(code)) break;
+              code = null;
+            }
           }
         }
       } finally {
@@ -2628,7 +2637,7 @@ export async function registerInstagramRoutes(
       }
       await client.logout();
       if (code) return res.json({ ok: true, code });
-      return res.json({ ok: false, error: "No 6-digit verification code found in the last 20 minutes of email" });
+      return res.json({ ok: false, error: "No 6-digit verification code found in the last 30 minutes of email" });
     } catch (err: any) {
       return res.status(500).json({ ok: false, error: err?.message ?? "IMAP connection failed" });
     }
