@@ -5661,7 +5661,7 @@ export function startEbIpcServer(
             while (!verifyCode && Date.now() < codeTimeout) {
               try {
                 if (_serverPort) {
-                  const cr = await fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-code-peek`);
+                  const cr = await fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-code-peek?slot=${slot}`);
                   const cj = await cr.json() as any;
                   if (cj.code) { verifyCode = String(cj.code).trim(); break; }
                 }
