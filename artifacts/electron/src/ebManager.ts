@@ -184,7 +184,7 @@ let _iconPath    = "";
 // Bumped every time a ghost-signup starts OR the ghost browser is closed/reset.
 // Each ghost-signup async block captures its own token at start and checks it
 // before every long-running step — ensures a stale run cannot bleed into the next.
-let _ghostSignupAbortToken = 0;
+const _ghostSignupAbortTokens = new Map<number, number>();
 
 interface EbEntry {
   win: BrowserWindow;
@@ -3919,7 +3919,7 @@ export function startEbIpcServer(
         }
         // Invalidate any running ghost-signup async block so it stops cleanly
         // rather than continuing to run against a destroyed WebContents.
-        if (pid === -1) _ghostSignupAbortToken++;
+        if (pid < 0) { const s = -pid; _ghostSignupAbortTokens.set(s, (_ghostSignupAbortTokens.get(s) ?? 0) + 1); }
         return send(res, 200, { ok: true });
       }
 
@@ -4535,12 +4535,8 @@ export function startEbIpcServer(
       // email" → fill email → wait for code → DOB → name → username → terms.
       // Progress is relayed to the API server via /api/signup/browser/ghost-signup-step.
       if (req.method === "POST" && u.pathname === "/eb/ghost-signup") {
-        const e = ebMap.get(-1);
-        if (!e || e.win.isDestroyed()) {
-          return send(res, 200, { ok: false, error: "Ghost Browser is not open" });
-        }
-
         const {
+          slot: _slot,
           email, username, password, dob,
           websitesToVisit = [],
           websitesMin = 1, websitesMax = 3,
@@ -4550,6 +4546,7 @@ export function startEbIpcServer(
           youtubeVideosMin = 0, youtubeVideosMax = 0,
           youtubeWatchMin = 2, youtubeWatchMax = 5,
         } = body as {
+          slot?: number;
           email: string; username: string; password: string; dob: string;
           websitesToVisit?: string[];
           websitesMin?: number; websitesMax?: number;
@@ -4559,6 +4556,12 @@ export function startEbIpcServer(
           youtubeVideosMin?: number; youtubeVideosMax?: number;
           youtubeWatchMin?: number; youtubeWatchMax?: number;
         };
+        const slot = Number(_slot ?? 1) || 1;
+        const e = ebMap.get(-slot);
+        if (!e || e.win.isDestroyed()) {
+          return send(res, 200, { ok: false, error: `Ghost Browser slot ${slot} is not open` });
+        }
+
         if (!email || !username || !password || !dob) {
           return send(res, 200, { ok: false, error: "email, username, password, and dob are required" });
         }
@@ -4566,12 +4569,13 @@ export function startEbIpcServer(
         send(res, 200, { ok: true });
 
         (async () => {
-          // Capture abort token for this specific signup run.
-          // If the ghost browser is closed (which bumps _ghostSignupAbortToken),
+          // Capture abort token for this specific signup run + slot.
+          // If the ghost browser is closed (which bumps the slot's abort token),
           // or a new signup is started, isAborted() returns true and all
           // polled sleeps reject immediately so the async block exits cleanly.
-          const _mySignupToken = ++_ghostSignupAbortToken;
-          const isAborted = () => _ghostSignupAbortToken !== _mySignupToken || e.win.isDestroyed();
+          _ghostSignupAbortTokens.set(slot, (_ghostSignupAbortTokens.get(slot) ?? 0) + 1);
+          const _mySignupToken = _ghostSignupAbortTokens.get(slot)!;
+          const isAborted = () => _ghostSignupAbortTokens.get(slot) !== _mySignupToken || e.win.isDestroyed();
           const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
           // Polled sleep that aborts within 500 ms when the browser is closed.
           const sleepOrAbort = (ms: number) => new Promise<void>((resolve, reject) => {
@@ -4587,22 +4591,40 @@ export function startEbIpcServer(
           });
 
           const relay = (msg: string) => {
-            console.log(`[ghost-signup] ${msg}`);
+            console.log(`[ghost-signup slot=${slot}] ${msg}`);
             if (_serverPort) {
               fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ msg }),
+                body: JSON.stringify({ msg, slot }),
               }).catch(() => {});
             }
           };
 
-          const relayDone = () => {
+          const relayDone = async () => {
+            // Extract Instagram session cookies from the ghost browser's Chrome session.
+            // These are stored server-side so "Add to Equinox" can include them in the profile.
+            let harvestedCookies: string | null = null;
+            try {
+              if (!e.win.isDestroyed()) {
+                const allCookies = await e.win.webContents.session.cookies.get({ url: "https://www.instagram.com" });
+                const wantedNames = new Set(["sessionid", "csrftoken", "ds_user_id", "mid", "ig_did", "ig_nrcb"]);
+                const parts = allCookies
+                  .filter(c => wantedNames.has(c.name))
+                  .map(c => `${c.name}=${c.value}`);
+                if (parts.some(p => p.startsWith("sessionid="))) harvestedCookies = parts.join(";");
+              }
+            } catch {}
             if (_serverPort) {
               fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ msg: "✅ Signup flow complete! Click 'Add to Equinox' to save the account.", done: true }),
+                body: JSON.stringify({
+                  msg: "✅ Signup flow complete! Click 'Add to Equinox' to save the account.",
+                  done: true,
+                  slot,
+                  cookies: harvestedCookies,
+                }),
               }).catch(() => {});
             }
           };
@@ -6042,14 +6064,14 @@ export function startEbIpcServer(
             await waitAndTap(["i agree", "agree to", "accept", "next", "continue", "done"], "I agree (terms)");
             await sleep(2000);
 
-            relayDone();
+            await relayDone();
           } catch (err: any) {
             relay(`⚠ Signup error: ${err?.message ?? String(err)}`);
             if (_serverPort) {
               fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/ghost-signup-step`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ msg: `⚠ Signup error: ${err?.message ?? String(err)}`, done: true }),
+                body: JSON.stringify({ msg: `⚠ Signup error: ${err?.message ?? String(err)}`, done: true, slot }),
               }).catch(() => {});
             }
           }

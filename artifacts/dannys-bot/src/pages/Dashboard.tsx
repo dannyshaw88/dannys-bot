@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.876",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser now has Tab 1 through Tab 5 at the top — each tab runs its own independent browser session so you can create multiple accounts simultaneously." },
+      { category: "Fix", text: "Add to Equinox now correctly saves the device UA, proxy settings, date of birth, fingerprint, IMAP email details, and session cookies — previously most of these fields were silently dropped." },
+      { category: "Feature", text: "When Add to Equinox is clicked for a username that already exists, the account's Notes field now logs a 'Re-added' timestamp instead of creating a duplicate." },
+      { category: "Improvement", text: "Account Details section in Account Settings is now expanded by default so device, proxy, and fingerprint info is visible immediately without extra clicks." },
+      { category: "Feature", text: "Ghost Browser cookies are now automatically captured at signup completion and attached to the account when you click Add to Equinox." },
+    ],
+  },
+  {
     version: "1.0.875",
     date: "10 Jun 2026",
     items: [

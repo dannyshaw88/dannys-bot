@@ -244,7 +244,7 @@ export function ProfileDetailsPage() {
   const [pendingUa, setPendingUa] = useState<UaEntry | null>(null);
   const [uaChangeConfirmOpen, setUaChangeConfirmOpen] = useState(false);
   const [showFingerprintPreview, setShowFingerprintPreview] = useState(false);
-  const [showAccountDetails, setShowAccountDetails] = useState(false);
+  const [showAccountDetails, setShowAccountDetails] = useState(true);
   const [showProfileSync, setShowProfileSync] = useState(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);

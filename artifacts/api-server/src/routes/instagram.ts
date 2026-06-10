@@ -400,6 +400,19 @@ export async function registerInstagramRoutes(
         proxyId: z.coerce.number().optional().nullable(),
       });
       const input = inputSchema.parse(req.body) as any;
+
+      // If username already exists, append a re-add timestamp to notes and return the
+      // existing profile updated. This supports the "Add to Equinox" re-import flow.
+      const existing = await storage.getProfileByUsername(input.username);
+      if (existing) {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const stamp = `Re-added: ${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
+        const updatedNotes = existing.notes ? `${existing.notes}\n${stamp}` : stamp;
+        const updated = await storage.updateProfile(existing.id, { notes: updatedNotes });
+        return res.status(200).json(updated);
+      }
+
       // Auto-assign paired UAs when the user leaves them blank on manual add
       if (!input.userAgentEmbedded || !input.userAgentApi) {
         const autoUA = pickUAForAccount(input.username || "");
@@ -2309,11 +2322,12 @@ export async function registerInstagramRoutes(
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
       try {
-        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint, initialUrl: reqInitialUrl } = req.body as any;
+        const { slot: _slot, proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint, initialUrl: reqInitialUrl } = req.body as any;
+        const slot = Number(_slot ?? 1) || 1;
 
         const body = {
-          profileId: -1,
-          username: "Ghost",
+          profileId: -slot,
+          username: `Ghost-${slot}`,
           // If the caller supplies an initialUrl (first warm-up website), load that
           // instead of Instagram so the browser lands on a real site from the start.
           initialUrl: reqInitialUrl || "https://www.instagram.com/",
@@ -2344,11 +2358,12 @@ export async function registerInstagramRoutes(
   });
 
   // Status check — lets the frontend detect a running browser after a page reload
-  app.get("/api/signup/browser/status", async (_req, res) => {
+  app.get("/api/signup/browser/status", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const slot = Number(req.query?.slot ?? 1) || 1;
     if (ipcPort) {
       try {
-        const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/state?profileId=-1`);
+        const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/state?profileId=${-slot}`);
         const data = await r.json().catch(() => ({ open: false })) as any;
         return res.json({ running: !!data.open, native: true });
       } catch {
@@ -2359,14 +2374,15 @@ export async function registerInstagramRoutes(
   });
 
   // Close the standalone signup / Ghost browser
-  app.post("/api/signup/browser/close", async (_req, res) => {
+  app.post("/api/signup/browser/close", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const slot = Number(req.body?.slot ?? req.query?.slot ?? 1) || 1;
     if (ipcPort) {
       try {
         await fetch(`http://127.0.0.1:${ipcPort}/eb/close`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ profileId: -1 }),
+          body:    JSON.stringify({ profileId: -slot }),
         });
         return res.json({ ok: true });
       } catch (err: any) {
@@ -2382,14 +2398,15 @@ export async function registerInstagramRoutes(
   });
 
   // Reset signup / Ghost browser — wipe session so next open is a fresh device identity
-  app.post("/api/signup/browser/reset", async (_req, res) => {
+  app.post("/api/signup/browser/reset", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const slot = Number(req.body?.slot ?? req.query?.slot ?? 1) || 1;
     if (ipcPort) {
       try {
         await fetch(`http://127.0.0.1:${ipcPort}/eb/wipe`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ profileId: -1 }),
+          body:    JSON.stringify({ profileId: -slot }),
         });
         return res.json({ ok: true });
       } catch (err: any) {
@@ -2470,25 +2487,44 @@ export async function registerInstagramRoutes(
     })().catch(() => {});
   });
 
-  // ── Ghost Browser automated signup — in-memory state ──────────────────────
-  let _ghostSignupCode: string | null = null;
-  let _ghostSignupLatestStep = "";
-  let _ghostSignupDone = false;
-  let _ghostSignupLog: string[] = [];
+  // ── Ghost Browser automated signup — per-slot in-memory state ────────────────
+  // Keyed by slot number (default 1). Allows up to 5 concurrent ghost browser tabs.
+  interface _GhostSlotState {
+    code: string | null;
+    latestStep: string;
+    done: boolean;
+    log: string[];
+    harvestedCookies: string | null;
+  }
+  const _ghostState = new Map<number, _GhostSlotState>();
+
+  function _getGhostSlot(slot: number): _GhostSlotState {
+    if (!_ghostState.has(slot)) {
+      _ghostState.set(slot, { code: null, latestStep: "", done: false, log: [], harvestedCookies: null });
+    }
+    return _ghostState.get(slot)!;
+  }
+
+  function _getReqSlot(req: any): number {
+    return Number(req.body?.slot ?? req.query?.slot ?? 1) || 1;
+  }
 
   // Frontend triggers the automated signup flow in the Ghost Browser
   app.post("/api/signup/browser/ghost-signup", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (!ipcPort) return res.json({ ok: false, error: "Not running in Electron mode" });
-    _ghostSignupCode = null;
-    _ghostSignupLatestStep = "Starting…";
-    _ghostSignupDone = false;
-    _ghostSignupLog = ["Starting…"];
+    const slot = _getReqSlot(req);
+    const st = _getGhostSlot(slot);
+    st.code = null;
+    st.latestStep = "Starting…";
+    st.done = false;
+    st.log = ["Starting…"];
+    st.harvestedCookies = null;
     try {
       const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify({ ...req.body, slot }),
       });
       const j = await r.json() as any;
       return res.json(j);
@@ -2499,35 +2535,56 @@ export async function registerInstagramRoutes(
 
   // EB posts progress steps here; frontend polls ghost-signup-status
   app.post("/api/signup/browser/ghost-signup-step", (req, res) => {
-    const { msg, done } = (req.body ?? {}) as { msg?: string; done?: boolean };
+    const { msg, done, cookies, slot: _slot } = (req.body ?? {}) as { msg?: string; done?: boolean; cookies?: string; slot?: number };
+    const slot = Number(_slot ?? 1) || 1;
+    const st = _getGhostSlot(slot);
     if (msg) {
-      _ghostSignupLatestStep = msg;
-      _ghostSignupLog.push(msg);
-      if (_ghostSignupLog.length > 200) _ghostSignupLog = _ghostSignupLog.slice(-200);
-      console.log(`[ghost-signup-step] ${msg}`);
+      st.latestStep = msg;
+      st.log.push(msg);
+      if (st.log.length > 200) st.log = st.log.slice(-200);
+      console.log(`[ghost-signup-step slot=${slot}] ${msg}`);
       sendSignupWsMsg({ type: "signupStep", msg });
     }
-    if (done) _ghostSignupDone = true;
+    if (done) {
+      st.done = true;
+      // Store harvested cookies if EB provided them
+      if (cookies && typeof cookies === "string" && cookies.includes("sessionid=")) {
+        st.harvestedCookies = cookies;
+        console.log(`[ghost-signup-step slot=${slot}] harvested ${cookies.split(";").length} cookie(s)`);
+      }
+    }
     return res.json({ ok: true });
   });
 
   // Frontend polls this to show live status in the Ghost Browser panel
-  app.get("/api/signup/browser/ghost-signup-status", (_req, res) => {
-    return res.json({ ok: true, msg: _ghostSignupLatestStep, done: _ghostSignupDone, log: _ghostSignupLog, running: !!_ghostSignupLatestStep && !_ghostSignupDone });
+  app.get("/api/signup/browser/ghost-signup-status", (req, res) => {
+    const slot = _getReqSlot(req);
+    const st = _getGhostSlot(slot);
+    return res.json({ ok: true, msg: st.latestStep, done: st.done, log: st.log, running: !!st.latestStep && !st.done });
+  });
+
+  // Frontend fetches harvested cookies after "Add to Equinox" (set by relayDone in EB)
+  app.get("/api/signup/browser/ghost-cookies", (req, res) => {
+    const slot = _getReqSlot(req);
+    const st = _getGhostSlot(slot);
+    return res.json({ ok: true, cookies: st.harvestedCookies ?? null });
   });
 
   // Frontend sets the verification code (from IMAP fetch or manual entry)
   app.post("/api/signup/browser/ghost-code", (req, res) => {
-    const { code } = (req.body ?? {}) as { code?: string };
+    const { code, slot: _slot } = (req.body ?? {}) as { code?: string; slot?: number };
     if (!code) return res.status(400).json({ ok: false, error: "code is required" });
-    _ghostSignupCode = String(code).trim();
+    const slot = Number(_slot ?? 1) || 1;
+    _getGhostSlot(slot).code = String(code).trim();
     return res.json({ ok: true });
   });
 
   // EB polls this to get the code once the frontend has provided it (consumed on read)
-  app.get("/api/signup/browser/ghost-code-peek", (_req, res) => {
-    const code = _ghostSignupCode;
-    if (code) _ghostSignupCode = null;
+  app.get("/api/signup/browser/ghost-code-peek", (req, res) => {
+    const slot = _getReqSlot(req);
+    const st = _getGhostSlot(slot);
+    const code = st.code;
+    if (code) st.code = null;
     return res.json({ ok: true, code: code ?? null });
   });
 
