@@ -23,7 +23,7 @@ import { createHmac } from "crypto";
 // of the page DOM, so challenge pages, iframes, CSS transforms, overflow:hidden,
 // and any other page-level styling CANNOT hide or remove it.
 function buildNativeToolbarHtml(): string {
-  const styles = `*{box-sizing:border-box;margin:0;padding:0}body{height:92px;max-height:92px;overflow:hidden;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}#navbar{height:58px;display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0;overflow:hidden}button{height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#6b7280;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap}button:hover{background:#f3f4f6;color:#374151}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:18px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:30px;padding:0 8px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{background:#fff;border-color:#3b82f6}#url::selection{background:#bfdbfe;color:#111827}#timer{font-size:11px;color:#9ca3af;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}#tabbar{height:34px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:2px;padding:0 6px;overflow-x:auto;overflow-y:hidden;flex-shrink:0}#tabbar::-webkit-scrollbar{height:3px}#tabbar::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}.tab{height:26px;max-width:160px;min-width:56px;display:flex;align-items:center;gap:3px;padding:0 8px;border-radius:4px;cursor:pointer;font-size:11px;color:#9ca3af;border:1px solid transparent;flex-shrink:0;overflow:hidden}.tab:hover{background:#f1f5f9;color:#374151}.tab.active{background:#fff;border-color:#d1d5db;color:#374151}.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.tab-x{border:none!important;min-width:0!important;height:14px!important;width:14px!important;padding:0!important;font-size:13px!important;line-height:1;color:#9ca3af;flex-shrink:0;background:none!important}.tab-x:hover{color:#374151!important}.newtab{height:22px;min-width:22px;max-width:22px;padding:0!important;font-size:13px;border-style:dashed!important;color:#9ca3af;flex-shrink:0}`;
+  const styles = `*{box-sizing:border-box;margin:0;padding:0}body{height:92px;max-height:92px;overflow:hidden;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}#navbar{height:58px;display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0;overflow:hidden}button{height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#6b7280;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap;flex-shrink:0}button:hover{background:#f3f4f6;color:#374151}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:18px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:30px;padding:0 8px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{background:#fff;border-color:#3b82f6}#url::selection{background:#bfdbfe;color:#111827}#timer{font-size:11px;color:#9ca3af;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}#tabbar{height:34px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:2px;padding:0 6px;overflow-x:auto;overflow-y:hidden;flex-shrink:0}#tabbar::-webkit-scrollbar{height:3px}#tabbar::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}.tab{height:26px;max-width:160px;min-width:56px;display:flex;align-items:center;gap:3px;padding:0 8px;border-radius:4px;cursor:pointer;font-size:11px;color:#9ca3af;border:1px solid transparent;flex-shrink:0;overflow:hidden}.tab:hover{background:#f1f5f9;color:#374151}.tab.active{background:#fff;border-color:#d1d5db;color:#374151}.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.tab-x{border:none!important;min-width:0!important;height:14px!important;width:14px!important;padding:0!important;font-size:13px!important;line-height:1;color:#9ca3af;flex-shrink:0;background:none!important}.tab-x:hover{color:#374151!important}.newtab{height:22px;min-width:22px;max-width:22px;padding:0!important;font-size:13px;border-style:dashed!important;color:#9ca3af;flex-shrink:0}`;
 
   const navHtml = `<button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields and submit" onclick="doLogin()">Login</button><button title="Generate TOTP code" onclick="cmd('totp')">2FA</button><button title="Type phone number" onclick="cmd('phone')">Phone</button><button title="Type email address" onclick="cmd('email-user')">Email</button><button title="Type email password" onclick="cmd('email-pass')">Email Pass</button><button title="Run in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more" onclick="cmd('leak-check')">&#128737; Leak Check</button><span class="sep"></span><span id="timer">0:00</span>`;
 
@@ -176,6 +176,10 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
 let _serverPort = 0;
 let _cookiesDir  = "";
 let _iconPath    = "";
+// Bumped every time a ghost-signup starts OR the ghost browser is closed/reset.
+// Each ghost-signup async block captures its own token at start and checks it
+// before every long-running step — ensures a stale run cannot bleed into the next.
+let _ghostSignupAbortToken = 0;
 
 interface EbEntry {
   win: BrowserWindow;
@@ -3879,6 +3883,9 @@ export function startEbIpcServer(
           // so this actually removes the window rather than hiding it to tray.
           e.win.destroy();
         }
+        // Invalidate any running ghost-signup async block so it stops cleanly
+        // rather than continuing to run against a destroyed WebContents.
+        if (pid === -1) _ghostSignupAbortToken++;
         return send(res, 200, { ok: true });
       }
 
@@ -4521,8 +4528,25 @@ export function startEbIpcServer(
         send(res, 200, { ok: true });
 
         (async () => {
-          const wc = e.win.webContents;
+          // Capture abort token for this specific signup run.
+          // If the ghost browser is closed (which bumps _ghostSignupAbortToken),
+          // or a new signup is started, isAborted() returns true and all
+          // polled sleeps reject immediately so the async block exits cleanly.
+          const _mySignupToken = ++_ghostSignupAbortToken;
+          const isAborted = () => _ghostSignupAbortToken !== _mySignupToken || e.win.isDestroyed();
           const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+          // Polled sleep that aborts within 500 ms when the browser is closed.
+          const sleepOrAbort = (ms: number) => new Promise<void>((resolve, reject) => {
+            const POLL = 500;
+            let elapsed = 0;
+            const check = () => {
+              if (isAborted()) return reject(new Error("ghost-signup aborted"));
+              elapsed += POLL;
+              if (elapsed >= ms) return resolve();
+              setTimeout(check, Math.min(POLL, ms - elapsed));
+            };
+            setTimeout(check, Math.min(POLL, ms));
+          });
 
           const relay = (msg: string) => {
             console.log(`[ghost-signup] ${msg}`);
@@ -4814,6 +4838,8 @@ export function startEbIpcServer(
             relay(`🌐 Warm-up: visiting ${sites.length} website(s) before signup…`);
 
             for (const siteUrl of sites) {
+              // Stop immediately if the browser was closed or a new signup started
+              if (isAborted()) break;
               try {
                 relay(`🌐 Warm-up: navigating to ${siteUrl}…`);
                 await new Promise<void>(resolve => {
@@ -4828,6 +4854,7 @@ export function startEbIpcServer(
                   wc.on("did-fail-load", onFail2);
                   wc.loadURL(siteUrl).catch(() => {});
                 });
+                if (isAborted()) break;
                 await sleep(2500);
 
                 // Accept cookie consent — try many common patterns
@@ -4861,10 +4888,12 @@ export function startEbIpcServer(
                 } catch {}
                 await sleep(1500);
 
-                // Spend time on this site
+                // Spend time on this site — use sleepOrAbort so closing the
+                // browser while sleeping doesn't leave a zombie run alive for minutes.
+                if (isAborted()) break;
                 const siteWaitMs = _rndInt(timeOnSiteMin, timeOnSiteMax) * 60 * 1000;
                 relay(`⏱ Warm-up: spending ${Math.round(siteWaitMs/60000)} min on ${siteUrl}…`);
-                await sleep(siteWaitMs);
+                await sleepOrAbort(siteWaitMs);
 
                 // Click internal links
                 const linkCount = _rndInt(internalLinksMin, internalLinksMax);
@@ -4894,11 +4923,16 @@ export function startEbIpcServer(
                   } catch {}
                 }
               } catch (wErr: any) {
+                // Abort errors from sleepOrAbort — stop the whole warm-up loop
+                if (isAborted()) { relay("🛑 Warm-up stopped — Ghost Browser was closed"); break; }
                 relay(`⚠ Warm-up: error on ${siteUrl}: ${wErr?.message ?? String(wErr)}`);
               }
             }
+            if (isAborted()) return; // don't proceed to Instagram signup
             relay(`✅ Warm-up complete — starting Instagram signup now…`);
           }
+          // One final guard: if closed between warm-up ending and signup starting
+          if (isAborted()) return;
 
           try {
             // ── Mobile emulation setup (MUST run before Step 0) ─────────────

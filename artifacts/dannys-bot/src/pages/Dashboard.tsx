@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.867",
+    date: "10 Jun 2026",
+    items: [
+      { category: "Fix", text: "Native Ghost Browser toolbar buttons no longer overlap when the window is narrower — buttons now hold their full width and any that don't fit are cleanly hidden at the edge." },
+      { category: "Fix", text: "Ghost Browser signup no longer continues running in the background after you close or reset the browser. Closing the window now immediately stops any in-progress warm-up or signup flow." },
+      { category: "Fix", text: "Closing and re-opening the Ghost Browser no longer causes the previous session's warm-up timer to fire into the new session, producing out-of-order status messages or jumping straight to 'waiting for verification code'." },
+    ],
+  },
+  {
     version: "1.0.866",
     date: "10 Jun 2026",
     items: [
