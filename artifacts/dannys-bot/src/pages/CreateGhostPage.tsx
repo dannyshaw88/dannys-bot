@@ -40,14 +40,14 @@ export function CreateGhostPage() {
   return (
     <AppLayout>
       {/* ── Tab bar ── */}
-      <div className="flex items-center gap-0.5 mb-3 border-b border-border pb-0 -mt-1 overflow-x-auto">
+      <div className="flex items-center gap-0.5 mb-1.5 border-b border-border pb-0 -mt-1 overflow-x-auto">
         {tabs.map((tab, i) => (
           <div key={tab.id} className="flex items-center shrink-0">
             <button
               type="button"
               onClick={() => setActiveTabIdx(i)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md border-t border-x border-border transition-colors select-none",
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-t-md border-t border-x border-border transition-colors select-none",
                 i === activeTabIdx
                   ? "bg-background text-foreground border-b-background -mb-px z-10 relative"
                   : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60 border-transparent"

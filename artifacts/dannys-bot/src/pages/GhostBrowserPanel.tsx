@@ -1032,7 +1032,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       </div>
 
       {/* Body: settings left, placeholder box right */}
-      <div className="flex gap-3" style={{ height: "calc(100vh - 210px)" }}>
+      <div className="flex gap-3" style={{ height: "calc(100vh - 196px)" }}>
 
         {/* ── Left: Controls Panel ── */}
         <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
