@@ -687,44 +687,30 @@ export function ProfilesPage() {
     if (selectedProfileIds.length === 0) return;
     try {
       for (const id of selectedProfileIds) {
-        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-        await updateProfileMutation.mutateAsync({
-          id,
-          userAgentApi: ua.api,
-          userAgentEmbedded: ua.embedded,
-          credentialsDirty: true,
-          accountStatus: "pending",
-        });
+        await fetch(`/api/profiles/${id}/reset-device-ids`, { method: "POST" });
       }
+      await queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
       setSelectedProfileIds([]);
       toast({ title: "Device IDs Reset", description: `${selectedProfileIds.length} account(s) assigned new device fingerprints.` });
     } catch {
       toast({ title: "Error", description: "Failed to reset some device IDs.", variant: "destructive" });
     }
-  }, [selectedProfileIds, updateProfileMutation, toast]);
+  }, [selectedProfileIds, queryClient, toast]);
 
   const handleBulkResetAndClear = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
     try {
       for (const id of selectedProfileIds) {
         await fetch(`/api/profiles/${id}/clear-session-cookies`, { method: "POST" }).catch(() => {});
+        await fetch(`/api/profiles/${id}/reset-device-ids`, { method: "POST" });
       }
-      for (const id of selectedProfileIds) {
-        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-        await updateProfileMutation.mutateAsync({
-          id,
-          userAgentApi: ua.api,
-          userAgentEmbedded: ua.embedded,
-          credentialsDirty: true,
-          accountStatus: "pending",
-        });
-      }
+      await queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
       setSelectedProfileIds([]);
       toast({ title: "Reset & Cleared", description: `${selectedProfileIds.length} account(s) had cookies cleared and device IDs reset.` });
     } catch {
       toast({ title: "Error", description: "Failed to reset some accounts.", variant: "destructive" });
     }
-  }, [selectedProfileIds, updateProfileMutation, toast]);
+  }, [selectedProfileIds, queryClient, toast]);
 
   const handleExportProfiles = useCallback(async () => {
     const toExport = selectedProfileIds.length > 0

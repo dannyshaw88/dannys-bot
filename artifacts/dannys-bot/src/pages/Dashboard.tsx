@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.884",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts page: Bulk Reset Device IDs now correctly resets device fingerprints — previously the button was silently blocked by the device guard and had no effect." },
+      { category: "Fix", text: "Accounts page: Reset Device IDs + Clear Cookies similarly fixed — it now clears the session and assigns a new device fingerprint as intended." },
+    ],
+  },
+  {
     version: "1.0.883",
     date: "11 Jun 2026",
     items: [
