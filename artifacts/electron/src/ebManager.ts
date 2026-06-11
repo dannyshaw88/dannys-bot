@@ -3017,10 +3017,10 @@ export async function openEbWindow(opts: {
   });
 
   // Navigate to the initial URL.
-  // Ghost Browser (profileId=-1): load the provided initialUrl (a trending reel) directly —
-  // never load the login page or homepage, the warmup handles all navigation.
+  // Ghost browsers (profileId < 0, any slot): load the provided initialUrl directly —
+  // never auto-navigate to Instagram, the warmup handles all navigation.
   // Regular account EBs: go to homepage if sessionid exists, otherwise login page.
-  if (profileId === -1) {
+  if (profileId < 0) {
     win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
   } else {
     const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
@@ -4814,6 +4814,18 @@ export function startEbIpcServer(
                 el.setAttribute('autocapitalize', 'none');
                 el.setAttribute('spellcheck', 'false');
               })()`);
+            } catch {}
+            // Ctrl+A then Backspace — select and remove any content Instagram
+            // re-populated in the field after the JS clear (e.g. "@gmail.com"
+            // domain suggestion). Without this the typed email appends to the
+            // suggestion and produces "user@gmail.com@gmail.com".
+            try {
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 });
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",      key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 });
+              await sleep(60);
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, modifiers: 0 });
+              await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",      key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, modifiers: 0 });
+              await sleep(60);
             } catch {}
             // Type character-by-character via typeTextCDP — fires rawKeyDown +
             // Input.insertText (1 char) + keyUp per character with 80–280 ms human

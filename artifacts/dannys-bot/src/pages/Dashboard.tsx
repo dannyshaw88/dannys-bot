@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.896",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: email domain no longer typed twice — added Ctrl+A + Backspace before typing to clear Instagram's re-populated domain suggestion before each field is filled." },
+      { category: "Fix", text: "Ghost Browser: browser no longer opens on Instagram.com for any slot — fixed a check that only exempted slot 1 from the Instagram auto-navigation, leaving slots 2+ still landing on Instagram." },
+    ],
+  },
+  {
     version: "1.0.895",
     date: "11 Jun 2026",
     items: [
