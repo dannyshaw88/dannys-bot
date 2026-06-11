@@ -404,7 +404,10 @@ export class DatabaseStorage implements IStorage {
         todayCount: sql<number>`SUM(CASE WHEN ${instagramApiCalls.date} LIKE ${likePattern} THEN 1 ELSE 0 END)`,
       })
       .from(instagramApiCalls)
-      .where(eq(instagramApiCalls.profileId, profileId))
+      .where(and(
+        eq(instagramApiCalls.profileId, profileId),
+        ne(instagramApiCalls.source, "HikerAPI"),
+      ))
       .groupBy(instagramApiCalls.operationName)
       .orderBy(desc(sql<number>`COUNT(*)`));
     return rows.map(r => ({

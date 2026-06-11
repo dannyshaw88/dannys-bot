@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
-  Ghost, ShieldCheck, Globe, Monitor, Cpu,
-  Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus, ExternalLink,
+  Ghost, ShieldCheck, Globe, Cpu,
+  Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus,
   ClipboardPaste, Copy, RefreshCw, UserPlus, Key,
   CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare, Link,
 } from "lucide-react";
@@ -381,7 +381,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // Browser
   const [browserState, setBrowserState]         = useState<BrowserState>("closed");
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
-  const [isNative, setIsNative]                 = useState(false);
 
   // Account fields
   const [usernameSpin, setUsernameSpin] = useState(() => _ls.usernameSpin ?? "");
@@ -413,6 +412,14 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const [youtubeWatchMin, setYoutubeWatchMin]       = useState(() => _ls.youtubeWatchMin ?? "2");
   const [youtubeWatchMax, setYoutubeWatchMax]       = useState(() => _ls.youtubeWatchMax ?? "5");
   const [skipWarmup, setSkipWarmup]                 = useState(() => (_ls.skipWarmup ?? "false") === "true");
+  const [skipYoutubePercentMin, setSkipYoutubePercentMin] = useState(() => _ls.skipYoutubePercentMin ?? "0");
+  const [skipYoutubePercentMax, setSkipYoutubePercentMax] = useState(() => _ls.skipYoutubePercentMax ?? "0");
+
+  // Scheduler fields
+  const [runEveryMin, setRunEveryMin]             = useState(() => _ls.runEveryMin ?? "5");
+  const [runEveryMax, setRunEveryMax]             = useState(() => _ls.runEveryMax ?? "10");
+  const [execAfterRunsMin, setExecAfterRunsMin]   = useState(() => _ls.execAfterRunsMin ?? "5");
+  const [execAfterRunsMax, setExecAfterRunsMax]   = useState(() => _ls.execAfterRunsMax ?? "10");
 
   // Verification code
   const [manualCode, setManualCode]       = useState("");
@@ -458,6 +465,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         youtubeVideosMin, youtubeVideosMax,
         youtubeWatchMin, youtubeWatchMax,
         skipWarmup: String(skipWarmup),
+        skipYoutubePercentMin, skipYoutubePercentMax,
+        runEveryMin, runEveryMax,
+        execAfterRunsMin, execAfterRunsMax,
       }));
     } catch {}
   }, [
@@ -467,18 +477,15 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     internalLinksMin, internalLinksMax,
     timeOnSiteMin, timeOnSiteMax, timeOnLinksMin, timeOnLinksMax,
     youtubeVideosMin, youtubeVideosMax, youtubeWatchMin, youtubeWatchMax,
-    skipWarmup,
+    skipWarmup, skipYoutubePercentMin, skipYoutubePercentMax,
+    runEveryMin, runEveryMax, execAfterRunsMin, execAfterRunsMax,
   ]);
 
   // ── Browser status check ──────────────────────────────────────────────────────
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const [elData, statusData] = await Promise.all([
-          fetch("/api/is-electron").then(r => r.json()).catch(() => ({ electron: false })),
-          fetch(`/api/signup/browser/status?slot=${slot}`).then(r => r.json()).catch(() => ({ running: false })),
-        ]);
-        setIsNative(!!(elData as any).electron);
+        const statusData = await fetch(`/api/signup/browser/status?slot=${slot}`).then(r => r.json()).catch(() => ({ running: false }));
         setBrowserState(prev => {
           if ((statusData as any).running && prev === "closed") return "open";
           return prev;
@@ -995,6 +1002,18 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           </div>
 
+          {/* ── ROW 1b: Scheduler ── */}
+          <div className="desktop-card p-2.5">
+            <div className="flex gap-4 flex-wrap items-center">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <svg className="w-3.5 h-3.5 text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Scheduler</p>
+              </div>
+              <XYField label="Run Every (minutes)" min={runEveryMin} max={runEveryMax} onMin={setRunEveryMin} onMax={setRunEveryMax} />
+              <XYField label="Execute Signup After (runs)" min={execAfterRunsMin} max={execAfterRunsMax} onMin={setExecAfterRunsMin} onMax={setExecAfterRunsMax} />
+            </div>
+          </div>
+
           {/* ── ROW 2: Website warm-up URL list ── */}
           <div className="desktop-card p-2.5 space-y-1.5">
             <div className="flex items-center gap-1.5">
@@ -1032,6 +1051,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               </div>
               <XYField label="Videos to Watch" min={youtubeVideosMin} max={youtubeVideosMax} onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax} />
               <XYField label="Minutes per Video" min={youtubeWatchMin} max={youtubeWatchMax} onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax} />
+              <XYField label="Skip YouTube %" min={skipYoutubePercentMin} max={skipYoutubePercentMax} onMin={setSkipYoutubePercentMin} onMax={setSkipYoutubePercentMax} />
               <label className="flex items-center gap-1.5 cursor-pointer select-none self-center">
                 <input
                   type="checkbox"
@@ -1308,32 +1328,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         {/* ── Right: Phone frame ── */}
         <div className="flex-1 min-w-0 flex flex-col items-end justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
 
-          {isOpen && isNative ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full">
-              <div className="w-20 h-20 rounded-3xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center">
-                <Monitor className="w-10 h-10 text-green-600" />
-              </div>
-              <div className="space-y-1.5 max-w-xs">
-                <p className="text-base font-semibold text-foreground">Browser is open</p>
-                <p className="text-sm text-muted-foreground">
-                  The Ghost Browser is running as its own window on the right side of your screen.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
-                onClick={() => fetch(`/api/profiles/-${slot}/eb-input`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ type: "navigate", url: "https://www.instagram.com/" }),
-                }).catch(() => {})}
-              >
-                <ExternalLink className="w-4 h-4" />
-                Bring Window to Front
-              </Button>
-            </div>
-
-          ) : !isOpen ? (
+          {!isOpen ? (
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full">
               <div className="w-20 h-20 rounded-3xl bg-muted/60 flex items-center justify-center">
                 <Ghost className="w-10 h-10 text-muted-foreground/50" />

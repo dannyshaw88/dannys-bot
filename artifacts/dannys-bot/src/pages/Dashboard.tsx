@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.886",
+    date: "11 Jun 2026",
+    items: [
+      { category: "New", text: "Ghost Browser: the browser is now embedded inline in the panel (phone frame) in all modes — no more separate window popping up on the side." },
+      { category: "Fix", text: "Metrics page: Account Sync calls made via HikerAPI no longer appear in the Raw API Endpoint Count table — only direct Instagram API calls are shown." },
+      { category: "New", text: "Ghost Browser: added Scheduler row with Run Every (minutes) and Execute Signup After (runs) X-Y range settings above the Warm-up Websites section." },
+      { category: "New", text: "Ghost Browser: added Skip YouTube % X-Y range setting beside the Skip Warmup checkbox so you can randomly skip YouTube warm-up on a percentage of runs." },
+    ],
+  },
+  {
     version: "1.0.885",
     date: "11 Jun 2026",
     items: [
