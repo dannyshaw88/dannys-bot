@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.888",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: removed the decorative phone frame wrapper — the browser now fills the panel directly so it's fully interactive and usable." },
+      { category: "Fix", text: "Ghost Browser: email address no longer gets typed twice — Chrome's email autocomplete was appending the @domain.com suffix mid-keystroke while CDP was also typing it; autocomplete is now disabled on the field before typing begins." },
+    ],
+  },
+  {
     version: "1.0.887",
     date: "11 Jun 2026",
     items: [

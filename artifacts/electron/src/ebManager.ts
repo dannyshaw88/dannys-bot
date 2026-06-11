@@ -4797,6 +4797,24 @@ export function startEbIpcServer(
               })()`);
             } catch {}
             await sleep(120);
+            // Suppress browser autocomplete BEFORE typing. Chrome's email-type input
+            // can auto-complete the @domain.com suffix mid-keystroke (e.g. while CDP
+            // types "user@gmail" character-by-character, Chrome appends ".com" from
+            // its suggestion — then CDP continues typing ".com" again, producing
+            // "user@gmail.com.com"). Killing autocomplete/autocorrect prevents this.
+            try {
+              await js(`(function(){
+                var el = document.activeElement;
+                if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                  el = document.elementFromPoint(${x}, ${y});
+                }
+                if (!el) return;
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocapitalize', 'none');
+                el.setAttribute('spellcheck', 'false');
+              })()`);
+            } catch {}
             // Type character-by-character via typeTextCDP — fires rawKeyDown +
             // Input.insertText (1 char) + keyUp per character with 80–280 ms human
             // inter-key delays. Instagram's keystroke-timing analyser sees natural
