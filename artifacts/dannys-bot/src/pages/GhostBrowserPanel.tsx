@@ -354,6 +354,72 @@ function XYField({
 
 // ── Main Panel ─────────────────────────────────────────────────────────────────
 
+// ── Step progress estimator ────────────────────────────────────────────────────
+// Estimates 0-100% done for the active step from server relay log lines.
+// Returns null when there is not enough data yet to show a number.
+
+function calcStepProgress(
+  log: string[],
+  stepName: string,
+  settings: {
+    websitesMin: number; websitesMax: number; websitesCount: number;
+    youtubeMin: number; youtubeMax: number;
+  },
+): number | null {
+  if (log.length === 0) return null;
+  const joined = "\n" + log.join("\n") + "\n";
+
+  if (stepName === "Visiting Sites") {
+    if (joined.includes("✅ Website warm-up complete")) return 100;
+    // The server relay emits the actual site count it picked — use that as the total.
+    const startMatch = joined.match(/Warm-up: visiting (\d+) website/);
+    const total = startMatch
+      ? parseInt(startMatch[1], 10)
+      : Math.max(1, Math.ceil((settings.websitesMin + settings.websitesMax) / 2));
+    const done = log.filter(l => l.includes("🌐 Warm-up: navigating to")).length;
+    if (done === 0 || total === 0) return null;
+    return Math.min(99, Math.round((done / total) * 100));
+  }
+
+  if (stepName === "YouTube Warm-up") {
+    if (joined.includes("✅ YouTube warm-up complete")) return 100;
+    // Server emits "watching video X/N" — parse the most recent occurrence.
+    const all = [...joined.matchAll(/watching video (\d+)\/(\d+)/g)];
+    if (all.length > 0) {
+      const last = all[all.length - 1];
+      const cur = parseInt(last[1], 10);
+      const total = parseInt(last[2], 10);
+      if (total > 0) return Math.min(99, Math.round((cur / total) * 100));
+    }
+    // Fallback before the per-video line appears: count "watching video" starts.
+    const done = log.filter(l => l.includes("📺 YouTube warm-up: watching video ")).length;
+    if (done === 0) return null;
+    const total = Math.max(1, Math.ceil((settings.youtubeMin + settings.youtubeMax) / 2));
+    return Math.min(99, Math.round((done / total) * 100));
+  }
+
+  if (stepName === "Instagram Signup") {
+    if (joined.includes("✅ Signup flow complete")) return 100;
+    // Fixed ordered list of milestone strings the server relays — in chronological order.
+    const milestones = [
+      "[mobile-setup]",
+      "Navigating to https://www.instagram.com/",
+      "Checking for cookie banner",
+      "[step2]",
+      "Waiting for verification code",
+      "[step2] Tapping",
+      "Typing DOB",
+      "Typing name",
+      "Typing username",
+    ];
+    const reached = milestones.filter(m => joined.includes(m)).length;
+    if (reached === 0) return null;
+    return Math.min(99, Math.round((reached / milestones.length) * 100));
+  }
+
+  return null;
+}
+
 interface GhostBrowserPanelProps {
   slot: number;
   proxies: SavedProxy[];
@@ -368,11 +434,20 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const _ls = _lsLoad();
 
   // Proxy
-  const [proxySelection, setProxySelection] = useState<ProxySelection>({ kind: "none" });
-  const [manualHost, setManualHost]         = useState("");
-  const [manualPort, setManualPort]         = useState("");
-  const [manualUser, setManualUser]         = useState("");
-  const [manualPass, setManualPass]         = useState("");
+  const [proxySelection, setProxySelection] = useState<ProxySelection>(() => {
+    try {
+      const raw = _ls.proxySelection;
+      if (raw) {
+        const parsed = JSON.parse(raw) as ProxySelection;
+        if (parsed && (parsed.kind === "none" || parsed.kind === "manual" || parsed.kind === "saved")) return parsed;
+      }
+    } catch {}
+    return { kind: "none" };
+  });
+  const [manualHost, setManualHost]         = useState(() => _ls.manualHost ?? "");
+  const [manualPort, setManualPort]         = useState(() => _ls.manualPort ?? "");
+  const [manualUser, setManualUser]         = useState(() => _ls.manualUser ?? "");
+  const [manualPass, setManualPass]         = useState(() => _ls.manualPass ?? "");
 
   // Device
   const [selectedUA, setSelectedUA] = useState<UaEntry>(() => randomUA());
@@ -468,6 +543,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         skipYoutubePercentMin, skipYoutubePercentMax,
         runEveryMin, runEveryMax,
         execAfterRunsMin, execAfterRunsMax,
+        proxySelection: JSON.stringify(proxySelection),
+        manualHost, manualPort, manualUser, manualPass,
       }));
     } catch {}
   }, [
@@ -479,6 +556,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     youtubeVideosMin, youtubeVideosMax, youtubeWatchMin, youtubeWatchMax,
     skipWarmup, skipYoutubePercentMin, skipYoutubePercentMax,
     runEveryMin, runEveryMax, execAfterRunsMin, execAfterRunsMax,
+    proxySelection, manualHost, manualPort, manualUser, manualPass,
   ]);
 
   // ── Browser status check ──────────────────────────────────────────────────────
@@ -1274,6 +1352,14 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               : s.includes("youtube") ? 1
               : (s.includes("instagram") || s.includes("signup") || s.includes("creating") || s.includes("registration")) ? 2
               : 0;
+            const websitesCount = websitesToVisit.split("\n").filter(u => u.trim().startsWith("http")).length;
+            const progressSettings = {
+              websitesMin: parseInt(websitesMin, 10) || 1,
+              websitesMax: parseInt(websitesMax, 10) || 3,
+              websitesCount,
+              youtubeMin: parseInt(youtubeVideosMin, 10) || 0,
+              youtubeMax: parseInt(youtubeVideosMax, 10) || 0,
+            };
             return (
             <div className="desktop-card border border-border">
               <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/30">
@@ -1281,17 +1367,26 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   {signupRunning && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
                   {signupRunning ? (
                     <div className="flex items-center gap-1.5">
-                      {steps.map((step, i) => (
+                      {steps.map((step, i) => {
+                        const isActive = i === cur;
+                        const pct = isActive ? calcStepProgress(signupLog, step, progressSettings) : null;
+                        return (
                         <span key={i} className="flex items-center gap-1.5">
                           <span className={cn(
-                            "text-[10px] font-semibold",
-                            i === cur ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground/30"
+                            "text-[10px] font-semibold flex items-center gap-1",
+                            isActive ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground/30"
                           )}>
                             Step {i + 1}: {step}
+                            {isActive && pct !== null && (
+                              <span className="inline-flex items-center px-1 py-0 rounded bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold tabular-nums leading-4">
+                                {pct}%
+                              </span>
+                            )}
                           </span>
                           {i < steps.length - 1 && <span className="text-muted-foreground/25 text-[10px] select-none">›</span>}
                         </span>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Signup Log</p>

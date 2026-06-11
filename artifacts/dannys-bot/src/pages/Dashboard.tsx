@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.887",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: selected proxy is now remembered when switching between tabs — it no longer resets to 'No Proxy' when you navigate away and come back." },
+      { category: "New", text: "Ghost Browser: the log header now shows a live progress percentage next to the active step — e.g. Step 1: Visiting Sites 37% — so you can see at a glance how far through each phase the run is." },
+    ],
+  },
+  {
     version: "1.0.886",
     date: "11 Jun 2026",
     items: [
