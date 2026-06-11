@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.893",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: restored the original full-width single-panel layout — the browser no longer appears embedded inline; it opens as a separate window as before." },
+      { category: "Fix", text: "Ghost Browser: Open Browser and Close Browser buttons are back so you can launch or dismiss the browser window independently from running a signup." },
+    ],
+  },
+  {
     version: "1.0.892",
     date: "11 Jun 2026",
     items: [

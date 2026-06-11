@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { BrowserPanel } from "@/components/BrowserPanel";
 import { UaPickerDropdown, type UaEntry } from "@/components/ui/ua-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1032,11 +1031,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         <StatusChip state={browserState} />
       </div>
 
-      {/* Body: settings left, phone right */}
-      <div className="flex gap-3" style={{ height: "calc(100vh - 210px)" }}>
-
-        {/* ── Left: Wide Controls Panel ── */}
-        <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
+      {/* Settings panel — full width, single column */}
+      <div className="flex flex-col gap-2">
 
           {/* ── ROW 1: Proxy | Device Identity | Fingerprint ── */}
           <div className="grid grid-cols-3 gap-2">
@@ -1324,7 +1320,33 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
           {/* ── ROW 7: Action Buttons ── */}
           <div className="desktop-card p-2.5">
-            <div className="flex gap-2 justify-start">
+            <div className="flex gap-2 flex-wrap">
+
+              {/* Open / Close Browser */}
+              {!isOpen ? (
+                <Button
+                  variant="outline"
+                  className="gap-2 text-xs font-semibold tracking-wide uppercase border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400 w-[200px]"
+                  onClick={handleOpen}
+                  disabled={browserState === "opening" || browserState === "resetting" || !manualValid}
+                >
+                  {browserState === "opening"
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening…</>
+                    : <><Globe className="w-3.5 h-3.5" />Open Browser</>}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="gap-2 text-xs font-semibold tracking-wide uppercase border-border text-muted-foreground hover:bg-muted/50 w-[200px]"
+                  onClick={handleClose}
+                  disabled={browserState === "resetting"}
+                >
+                  <WifiOff className="w-3.5 h-3.5" />
+                  Close Browser
+                </Button>
+              )}
+
+              {/* Create Account / Stop */}
               <Button
                 className={cn(
                   "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
@@ -1344,6 +1366,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   : <><Ghost className="w-3.5 h-3.5" />Create Account</>}
               </Button>
 
+              {/* Add to Equinox */}
               <Button
                 variant="outline"
                 className={cn(
@@ -1362,6 +1385,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   : <><UserPlus className="w-3.5 h-3.5" />Add to Equinox</>}
               </Button>
 
+              {/* Nuke Environment */}
               <Button
                 variant="outline"
                 className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400 w-[200px]"
@@ -1373,6 +1397,13 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
               </Button>
             </div>
+
+            {/* Active browser info */}
+            {isOpen && activeProxyLabel && (
+              <p className="text-[10px] text-muted-foreground mt-2">
+                Browser active · Proxy: {activeProxyLabel}
+              </p>
+            )}
           </div>
 
           {/* Signup log — always visible when running, or when there are entries */}
@@ -1451,42 +1482,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           );
           })()}
 
-        </div>
-
-        {/* ── Right: Phone frame ── */}
-        <div className="flex-1 min-w-0 flex flex-col items-end justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
-
-          {!isOpen ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full">
-              <div className="w-20 h-20 rounded-3xl bg-muted/60 flex items-center justify-center">
-                <Ghost className="w-10 h-10 text-muted-foreground/50" />
-              </div>
-              <div className="space-y-1.5 max-w-xs">
-                <p className="text-base font-semibold text-foreground">Browser not started</p>
-                <p className="text-sm text-muted-foreground">
-                  Fill in your account details, then click <span className="font-medium">Create Account</span> to launch the browser.
-                </p>
-              </div>
-            </div>
-
-          ) : (
-            <div className="h-full flex items-center justify-center p-2">
-              <div className="relative flex-shrink-0 overflow-hidden rounded-lg border border-border shadow-md" style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}>
-                <BrowserPanel
-                  profileId={0}
-                  userAgent={activeUA.embedded}
-                  username="ghost"
-                  streamUrl={`/api/signup/browser/stream?slot=${slot}`}
-                  inputUrl={`/api/signup/browser/input?slot=${slot}`}
-                  forceStream={true}
-                  browserWidth={393}
-                  browserHeight={851}
-                  noToolbar={true}
-                />
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </>
   );
