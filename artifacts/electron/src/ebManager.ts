@@ -4914,6 +4914,24 @@ export function startEbIpcServer(
           };
 
           if (websitesToVisit.length > 0) {
+            // Navigate to the first configured landing page immediately so the ghost
+            // browser is never sitting on Instagram/Facebook when Create Account fires.
+            // This matters when the browser was already open on a previous page.
+            const _landingPage = websitesToVisit[0];
+            relay(`🌐 Warm-up: navigating to landing page ${_landingPage}…`);
+            await new Promise<void>(resolve => {
+              let done = false;
+              const finish = () => { if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", onF); wc.removeListener("did-fail-load", onFail2); resolve(); } };
+              const onF = () => finish();
+              const onFail2 = (_: any, code: number) => { if (code === -3) return; finish(); };
+              const t = setTimeout(finish, 20000);
+              wc.on("did-finish-load", onF);
+              wc.on("did-fail-load", onFail2);
+              wc.loadURL(_landingPage).catch(() => {});
+            });
+            if (isAborted()) return;
+            await sleep(1500);
+
             const pickCount = Math.min(
               _rndInt(websitesMin, websitesMax),
               websitesToVisit.length,

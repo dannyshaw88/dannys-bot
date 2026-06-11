@@ -2346,7 +2346,7 @@ export async function registerInstagramRoutes(
             proxy,
             userAgent,
             ebFingerprint: fingerprint ?? null,
-            initialUrl: initialUrl ?? "https://www.instagram.com/",
+            initialUrl: initialUrl ?? "about:blank",
           }),
         });
         const j = await r.json() as any;

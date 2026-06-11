@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.895",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: Scheduler title now appears above the Run Every and Execute Signup After fields instead of inline on the same row." },
+      { category: "Fix", text: "Ghost Browser: YouTube Warm-Up label and Skip Warmup checkbox are now vertically centred in their row instead of pinned to the top." },
+      { category: "Fix", text: "Ghost Browser: browser now navigates to your first configured landing page immediately when Create Account fires, even if the window was already open on a different site." },
+    ],
+  },
+  {
     version: "1.0.894",
     date: "11 Jun 2026",
     items: [

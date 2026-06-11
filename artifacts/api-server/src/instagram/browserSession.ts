@@ -7337,8 +7337,12 @@ export async function createInstagramAccountViaEBForm(params: {
       } catch {}
     };
 
-    // Tap to focus → JS clear via React-safe native setter → Input.insertText (mobile IME style).
-    // No keyDown/keyUp key codes, no Ctrl+A, no mouse events.
+    // Tap to focus → JS clear via React-safe native setter → select-all → Input.insertText.
+    // The select-all step (Ctrl+A) is essential: Instagram's email field re-populates with a
+    // domain suggestion (e.g. " @gmx.com") in the gap between the JS clear and insertText.
+    // Without select-all, insertText inserts at cursor position 0 and the re-populated
+    // suggestion remains at the end, producing "nosov-pavel@gmx.com @gmx.com".
+    // Ctrl+A selects whatever React re-populated, then insertText replaces it entirely.
     const clearAndType = async (x: number, y: number, text: string) => {
       await tap(x, y);
       await delay(400);
@@ -7353,8 +7357,16 @@ export async function createInstagramAccountViaEBForm(params: {
           el.dispatchEvent(new Event("change", { bubbles: true }));
         });
       } catch {}
-      await delay(120);
-      try { if (cdp) await cdp.send("Input.insertText", { text }); } catch {}
+      await delay(150);
+      // Select-all then insertText — replaces any content React re-populated after the clear
+      try {
+        if (cdp) {
+          await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 }); // Ctrl+A
+          await cdp.send("Input.dispatchKeyEvent", { type: "keyUp",      key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 });
+          await delay(50);
+          await cdp.send("Input.insertText", { text });
+        }
+      } catch {}
     };
 
     // Apply stealth patches BEFORE any navigation so Instagram never sees the

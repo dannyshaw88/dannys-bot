@@ -1113,12 +1113,12 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           </div>
 
           {/* ── ROW 1b: Scheduler ── */}
-          <div className="desktop-card p-2.5">
+          <div className="desktop-card p-2.5 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Scheduler</p>
+            </div>
             <div className="flex gap-4 flex-wrap items-center">
-              <div className="flex items-center gap-1.5 shrink-0">
-                <svg className="w-3.5 h-3.5 text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Scheduler</p>
-              </div>
               <XYField label="Run Every (minutes)" min={runEveryMin} max={runEveryMax} onMin={setRunEveryMin} onMax={setRunEveryMax} />
               <XYField label="Execute Signup After (runs)" min={execAfterRunsMin} max={execAfterRunsMax} onMin={setExecAfterRunsMin} onMax={setExecAfterRunsMax} />
             </div>
@@ -1151,9 +1151,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           </div>
 
           {/* ── ROW 3b: YouTube warm-up ── */}
-          <div className="desktop-card p-2.5">
-            <div className="flex gap-4 flex-wrap items-center">
-              <div className="flex items-center gap-1.5 shrink-0">
+          <div className="desktop-card p-2.5 flex items-center">
+            <div className="flex gap-4 flex-wrap items-center w-full">
+              <div className="flex items-center gap-1.5 shrink-0 self-center">
                 <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#FF0000" }}>
                   <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                 </svg>
@@ -1400,18 +1400,33 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   {signupRunning ? (
                     <div className="flex items-center gap-1.5">
                       {steps.map((step, i) => {
+                        const isDone   = i < cur;
                         const isActive = i === cur;
-                        const pct = isActive ? calcStepProgress(signupLog, step, progressSettings) : null;
+                        // Compute progress for every stage:
+                        // • completed stages → always 100 (log has the done marker)
+                        // • active stage     → live % from log lines
+                        // • future stages    → null (not started yet)
+                        const pct = (isDone || isActive)
+                          ? calcStepProgress(signupLog, step, progressSettings)
+                          : null;
+                        const displayPct = isDone && (pct === null || pct < 100) ? 100 : pct;
                         return (
                         <span key={i} className="flex items-center gap-1.5">
                           <span className={cn(
                             "text-[10px] font-semibold flex items-center gap-1",
-                            isActive ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground/30"
+                            isDone   ? "text-green-600 dark:text-green-400"
+                            : isActive ? "text-cyan-600 dark:text-cyan-400"
+                            : "text-muted-foreground/30"
                           )}>
                             Step {i + 1}: {step}
-                            {isActive && pct !== null && (
-                              <span className="inline-flex items-center px-1 py-0 rounded bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold tabular-nums leading-4">
-                                {pct}%
+                            {displayPct !== null && (
+                              <span className={cn(
+                                "inline-flex items-center px-1 py-0 rounded text-[9px] font-bold tabular-nums leading-4",
+                                isDone
+                                  ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300"
+                                  : "bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300"
+                              )}>
+                                {displayPct}%
                               </span>
                             )}
                           </span>
