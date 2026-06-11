@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.885",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser: each account's stored device fingerprint (screen resolution, WebGL renderer, canvas noise, fake device IDs) is now loaded from the database when opening the EB, so the fingerprint is consistent across sessions instead of being randomised each time." },
+      { category: "Fix", text: "Embedded browser: the account's API User-Agent (used to derive exact device screen dimensions) is now passed to the EB, so screen size, DPI and pixel ratio always match the UA rather than being picked at random." },
+      { category: "Fix", text: "Embedded browser: if the profile config fails to load when opening the EB, a warning is now logged instead of silently opening with Electron's default desktop UA." },
+    ],
+  },
+  {
     version: "1.0.884",
     date: "11 Jun 2026",
     items: [

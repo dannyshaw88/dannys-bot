@@ -771,28 +771,42 @@ function setupBackupHandlers() {
       // can be configured correctly (same proxy the mobile API uses).
       let proxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
       let userAgent: string | undefined;
+      let apiUA: string | undefined;
+      let ebFingerprint: any | undefined;
       try {
         // Single call to /eb-proxy — the API server resolves proxyId → proxy
         // fields using resolveProxyConfig(), the same path used by eb-auto-login.
-        // This avoids a second /api/proxies fetch from main.ts and ensures
-        // format consistency regardless of whether the proxy is inline or via
-        // the Proxy Manager.
+        // Also returns apiUA + ebFingerprint so the fingerprint script uses the
+        // account's stored device profile instead of random values each session.
         const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}/eb-proxy`);
         if (r.ok) {
           const data = await r.json();
-          proxy     = data.proxy     || undefined;
-          userAgent = data.userAgent || undefined;
+          proxy         = data.proxy         || undefined;
+          userAgent     = data.userAgent     || undefined;
+          apiUA         = data.apiUA         || undefined;
+          ebFingerprint = data.ebFingerprint
+            ? (typeof data.ebFingerprint === "string" ? JSON.parse(data.ebFingerprint) : data.ebFingerprint)
+            : undefined;
           if (proxy) {
             console.log(`[EB] Profile ${profileId}: proxy resolved → ${proxy.host}:${proxy.port}`);
           }
+          if (!userAgent) {
+            console.warn(`[EB] Profile ${profileId}: userAgentEmbedded is missing — EB will open with Electron default UA. Instagram may challenge the session.`);
+          }
+        } else {
+          console.warn(`[EB] Profile ${profileId}: /eb-proxy fetch returned ${r.status} — EB will open with no UA override. Instagram may challenge the session.`);
         }
-      } catch {}
+      } catch (fetchErr: any) {
+        console.warn(`[EB] Profile ${profileId}: /eb-proxy fetch failed (${fetchErr?.message}) — EB will open with no UA override. Instagram may challenge the session.`);
+      }
 
       await openEbWindow({
         profileId,
         username: username || String(profileId),
         proxy,
         userAgent,
+        apiUA,
+        ebFingerprint,
       });
     } catch (err: any) {
       console.error(`[EB] open-browser-window error for profile ${profileId}:`, err?.message);

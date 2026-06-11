@@ -902,13 +902,15 @@ export async function registerInstagramRoutes(
     const resolvedEbProxy = await resolveProxyConfig(profile);
     const body = {
       profileId,
-      username:  profile.username,
-      password:  profile.password,
-      twoFAKey:  profile.twoFASecretKey ?? "",
-      proxy:     resolvedEbProxy
+      username:      profile.username,
+      password:      profile.password,
+      twoFAKey:      profile.twoFASecretKey ?? "",
+      proxy:         resolvedEbProxy
         ? { host: resolvedEbProxy.host, port: resolvedEbProxy.port, user: resolvedEbProxy.username, pass: resolvedEbProxy.password, type: resolvedEbProxy.type }
         : undefined,
-      userAgent: profile.userAgentEmbedded ?? "",
+      userAgent:     profile.userAgentEmbedded ?? "",
+      apiUA:         profile.userAgentApi      ?? undefined,
+      ebFingerprint: profile.ebFingerprint     ?? undefined,
     };
     try {
       const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/auto-login`, {
@@ -959,7 +961,9 @@ export async function registerInstagramRoutes(
       proxy: resolved
         ? { host: resolved.host, port: resolved.port, user: resolved.username ?? undefined, pass: resolved.password ?? undefined, type: resolved.type ?? "http" }
         : null,
-      userAgent: profile.userAgentEmbedded ?? null,
+      userAgent:     profile.userAgentEmbedded ?? null,
+      apiUA:         profile.userAgentApi      ?? null,
+      ebFingerprint: profile.ebFingerprint     ?? null,
     });
   });
 
