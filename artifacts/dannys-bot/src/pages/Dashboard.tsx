@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.894",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: pressing Create Account now actually opens a visible browser window and starts the signup automation — the browser was silently launching in headless mode and never appearing on screen." },
+      { category: "Fix", text: "Ghost Browser: Close Browser and Nuke buttons now correctly close the ghost window in all cases." },
+    ],
+  },
+  {
     version: "1.0.893",
     date: "11 Jun 2026",
     items: [

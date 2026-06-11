@@ -2319,11 +2319,45 @@ export async function registerInstagramRoutes(
   });
 
   // Open the standalone signup / Ghost browser.
-  // Always uses the Puppeteer + CDP screencast pipeline so the browser can be
-  // embedded inline in the Ghost Browser panel (BrowserPanel phone frame).
+  // In Electron mode: opens a real Electron BrowserWindow (profileId = -slot) via IPC so that
+  // the ghost-signup handler can find it in ebMap.get(-slot).
+  // In non-Electron mode: falls back to the Puppeteer headless pipeline.
   app.post("/api/signup/browser/open", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const { slot: _slot, proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, initialUrl, fingerprint } = req.body as any;
+    const slot = Number(_slot ?? 1) || 1;
+
+    if (ipcPort) {
+      // Electron mode — create an Electron BrowserWindow for this ghost slot.
+      // profileId=-slot registers it in ebMap so /eb/ghost-signup finds it immediately.
+      try {
+        const proxy = proxyHost ? {
+          host: proxyHost,
+          port: Number(proxyPort) || 80,
+          type: proxyType ?? "http",
+          ...(proxyUsername ? { user: proxyUsername, pass: proxyPassword ?? "" } : {}),
+        } : undefined;
+        const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profileId: -slot,
+            username: `ghost-${slot}`,
+            proxy,
+            userAgent,
+            ebFingerprint: fingerprint ?? null,
+            initialUrl: initialUrl ?? "https://www.instagram.com/",
+          }),
+        });
+        const j = await r.json() as any;
+        return res.json(j);
+      } catch (err: any) {
+        return res.status(500).json({ ok: false, error: err?.message });
+      }
+    }
+
+    // Non-Electron fallback: Puppeteer headless
     try {
-      const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent, initialUrl } = req.body as any;
       const result = await openSignupBrowser({ proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent, initialUrl });
       res.json(result);
     } catch (err: any) {
@@ -2332,12 +2366,37 @@ export async function registerInstagramRoutes(
   });
 
   // Status check — lets the frontend detect a running browser after a page reload
-  app.get("/api/signup/browser/status", async (_req, res) => {
+  app.get("/api/signup/browser/status", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const slot = _getReqSlot(req);
+    if (ipcPort) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/state?profileId=${-slot}`);
+        const j = await r.json() as any;
+        return res.json({ running: j.open === true, native: true });
+      } catch {
+        return res.json({ running: false, native: true });
+      }
+    }
     res.json({ running: isSignupBrowserOpen(), native: false });
   });
 
   // Close the standalone signup / Ghost browser
-  app.post("/api/signup/browser/close", async (_req, res) => {
+  app.post("/api/signup/browser/close", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    const slot = _getReqSlot(req);
+    if (ipcPort) {
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/close`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profileId: -slot }),
+        });
+        return res.json({ ok: true });
+      } catch (err: any) {
+        return res.status(500).json({ ok: false, error: err?.message });
+      }
+    }
     try {
       await closeSignupBrowser();
       res.json({ ok: true });
@@ -2346,8 +2405,23 @@ export async function registerInstagramRoutes(
     }
   });
 
-  // Reset signup / Ghost browser — wipe session so next open is a fresh device identity
-  app.post("/api/signup/browser/reset", async (_req, res) => {
+  // Reset signup / Ghost browser — wipe session so next open is a fresh device identity.
+  // In Electron mode the ghost BrowserWindow is always destroyed and recreated fresh on the
+  // next /eb/open call (profileId=-1 special path in openEbWindow), so nothing extra is needed.
+  app.post("/api/signup/browser/reset", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      // Close the ghost window if still open so the next open starts truly fresh
+      const slot = _getReqSlot(req);
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/close`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profileId: -slot }),
+        });
+      } catch { /* best effort */ }
+      return res.json({ ok: true });
+    }
     try {
       await resetSignupBrowser();
       res.json({ ok: true });
