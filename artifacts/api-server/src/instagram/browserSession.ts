@@ -712,13 +712,30 @@ export async function harvestSignupCookiesFromEB(opts?: {
               await organicScroll(3000 + Math.random() * 3000);
               // Click a random video from the homepage grid
               try {
-                await page.waitForSelector("ytd-rich-item-renderer a#thumbnail, ytd-video-renderer a#thumbnail", { timeout: 5000 });
-                const thumbs = await page.$$("ytd-rich-item-renderer a#thumbnail, ytd-video-renderer a#thumbnail");
+                const YT_SELECTORS = [
+                  "ytd-rich-item-renderer a#thumbnail",
+                  "ytd-video-renderer a#thumbnail",
+                  "ytd-thumbnail a",
+                  "a#thumbnail[href*='/watch']",
+                  "a[href*='/watch'][id='thumbnail']",
+                  "ytd-rich-grid-media a#thumbnail",
+                ];
+                let thumbs: any[] = [];
+                for (const sel of YT_SELECTORS) {
+                  try {
+                    await page.waitForSelector(sel, { timeout: 3000 });
+                    thumbs = await page.$$(sel);
+                    if (thumbs.length > 0) break;
+                  } catch {}
+                }
                 if (thumbs.length > 0) {
+                  opts?.onStep?.("Pre-bake: clicking YouTube video...");
                   await thumbs[Math.floor(Math.random() * Math.min(6, thumbs.length))].click();
                   await new Promise(r => setTimeout(r, 1500));
                   await dismissCookieBanner(page);
                   await organicScroll(4000 + Math.random() * 4000);
+                } else {
+                  opts?.onStep?.("Pre-bake: YouTube homepage loaded (no video grid found — continuing)");
                 }
               } catch {}
             } catch (e: any) {
@@ -7678,9 +7695,22 @@ export async function createInstagramAccountViaEBForm(params: {
             else if (!yf && (lbl.includes("year") || lbl.includes("yr"))) { const v = findOpt(sel, y, String(y)); if (v !== null) { setSelectNative(sel, v); yf = true; } }
           }
           if ((!mf || !df || !yf) && all.length >= 3) {
-            if (!mf) { const v = findOpt(all[0], m, mn); if (v !== null) { setSelectNative(all[0], v); mf = true; } }
-            if (!df) { const v = findOpt(all[1], d, String(d)); if (v !== null) { setSelectNative(all[1], v); df = true; } }
-            if (!yf) { const v = findOpt(all[2], y, String(y)); if (v !== null) { setSelectNative(all[2], v); yf = true; } }
+            // Filter out non-date selects (e.g. language selectors) before positional fallback.
+            // A date-related select will have at least one option whose value is numeric
+            // OR whose text matches a month name prefix — language selects have neither.
+            function isDateSelect(sel: HTMLSelectElement): boolean {
+              const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+              return Array.from(sel.options).some(opt => {
+                const v = opt.value.trim();
+                const t = opt.text.trim().toLowerCase();
+                return /^\d+$/.test(v) || MONTHS.some(mo => t.startsWith(mo));
+              });
+            }
+            const dateAll = all.filter(isDateSelect);
+            const pos = dateAll.length >= 3 ? dateAll : all;
+            if (!mf) { const v = findOpt(pos[0], m, mn); if (v !== null) { setSelectNative(pos[0], v); mf = true; } }
+            if (!df) { const v = findOpt(pos[1], d, String(d)); if (v !== null) { setSelectNative(pos[1], v); df = true; } }
+            if (!yf) { const v = findOpt(pos[2], y, String(y)); if (v !== null) { setSelectNative(pos[2], v); yf = true; } }
           }
           return { mf, df, yf };
         }, month, mName, day, year);

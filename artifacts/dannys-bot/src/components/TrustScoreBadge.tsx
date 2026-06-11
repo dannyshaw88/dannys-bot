@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Snail, Hourglass, Coffee, Anchor, Turtle,
   Scan, Activity, TrendingUp, Ghost, Diamond, Rocket, Crown, Zap,
@@ -294,15 +295,15 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         )}
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
           style={{
             position: "fixed",
             zIndex: 99999,
-            background: "#ffffff",
+            background: "hsl(var(--background, 0 0% 100%))",
             border: "1px solid var(--border, #e5e7eb)",
             borderRadius: 8,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.24)",
             width: 200,
             padding: "4px 0",
             maxHeight: 380,
@@ -317,11 +318,9 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             const spaceBelow = window.innerHeight - rect.bottom - 8;
             const spaceAbove = rect.top - 8;
             if (spaceBelow >= Math.min(dropdownMaxH, 120) || spaceBelow >= spaceAbove) {
-              // Open downward, capping height to available space
               el.style.top = `${rect.bottom + 4}px`;
               el.style.maxHeight = `${Math.min(dropdownMaxH, spaceBelow)}px`;
             } else {
-              // Flip upward
               const maxH = Math.min(dropdownMaxH, spaceAbove);
               el.style.top = `${rect.top - maxH - 4}px`;
               el.style.maxHeight = `${maxH}px`;
@@ -377,7 +376,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
               <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280", letterSpacing: "0.05em" }}>Clear score</span>
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

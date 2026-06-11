@@ -516,11 +516,20 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     <div className="w-[88px] shrink-0 flex items-center justify-center">
                       {tsLevel ? (
                         <span
-                          className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 w-fit"
-                          style={{ background: "#1AD2F2" }}
+                          className="flex items-center gap-0.5 rounded-full px-1.5"
+                          style={{
+                            background: tsLevel.bg,
+                            border: `1px solid ${tsLevel.border}`,
+                            height: 20,
+                            width: 72,
+                            minWidth: 72,
+                            maxWidth: 72,
+                            overflow: "hidden",
+                            flexShrink: 0,
+                          }}
                         >
-                          <tsLevel.icon size={8} color="#fff" fill="#fff" strokeWidth={2} />
-                          <span style={{ fontSize: 8, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                          <tsLevel.icon size={10} color={tsLevel.text} fill={tsLevel.text} strokeWidth={2} style={{ flexShrink: 0 }} />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: tsLevel.text, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0 }}>
                             {tsLevel.label}
                           </span>
                         </span>

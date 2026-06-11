@@ -62,6 +62,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.883",
+    date: "11 Jun 2026",
+    items: [
+      { category: "Fix", text: "Activity ticker: system startup events no longer show as '@#0 Equinox started' in the top bar — startup events are now hidden from the ticker." },
+      { category: "Fix", text: "Trust Score badge: the score list no longer appears transparent when the account row is greyed out (stopped) — it now renders on top with the correct solid background." },
+      { category: "Fix", text: "Copy Settings dialog: trust score badges in the account list now display at a consistent fixed width, matching the badges on the Accounts page." },
+      { category: "Fix", text: "Ghost Browser: IMAP fetch status message now appears inline to the right of the Fetch IMAP button instead of below it." },
+      { category: "Fix", text: "Ghost Browser: YouTube warm-up step now tries multiple video selectors with fallback so it no longer silently skips when YouTube loads a different grid layout." },
+      { category: "Fix", text: "Ghost Browser: signup birthday step no longer accidentally clicks the language selector — date dropdowns are now identified by their options rather than page position." },
+      { category: "Fix", text: "Human Session tool: Randomise Timing setting now works — accounts with this enabled spread their first session start across the delay window even when manually toggled on." },
+    ],
+  },
+  {
     version: "1.0.882",
     date: "11 Jun 2026",
     items: [

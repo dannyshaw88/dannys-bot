@@ -775,6 +775,11 @@ class AutomationEngine {
         state.nextHumanSessionAt = Date.now() + waitMs;
         console.log(`[engine] @${profile.username}: startup — first human session in ${Math.round(waitMs / 60000)}min`);
       }
+    } else if (si.randomiseTiming && runImmediately) {
+      // Randomise timing enabled: spread accounts across the delay window even on manual toggle-on
+      const waitMs = randInt(0, (si.delayMax ?? 60) * 60_000);
+      state.nextHumanSessionAt = Date.now() + waitMs;
+      console.log(`[engine] @${profile.username}: randomise timing — first human session in ${Math.round(waitMs / 60000)}min`);
     }
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);

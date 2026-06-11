@@ -111,6 +111,7 @@ export function LiveActivityTicker() {
   const latest = activities?.[0];
 
   if (!latest) return null;
+  if (latest.profileId === 0) return null;
 
   const label = buildLabel(latest, profiles);
   if (!label) return null;

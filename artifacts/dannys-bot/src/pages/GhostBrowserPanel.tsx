@@ -1180,12 +1180,12 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 {fetchingCode ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
                 Fetch IMAP
               </Button>
+              {fetchCodeMsg && (
+                <span className={cn("text-[10px] ml-1", fetchCodeMsg.startsWith("✅") ? "text-green-600" : "text-amber-600")}>
+                  {fetchCodeMsg}
+                </span>
+              )}
             </div>
-            {fetchCodeMsg && (
-              <p className={cn("text-[10px] mt-1.5", fetchCodeMsg.startsWith("✅") ? "text-green-600" : "text-amber-600")}>
-                {fetchCodeMsg}
-              </p>
-            )}
             {codePending && signupRunning && codeWaitSecs > 0 && (
               <p className="text-[10px] text-cyan-600 mt-1">Waiting for verification code… {codeWaitSecs}s</p>
             )}
