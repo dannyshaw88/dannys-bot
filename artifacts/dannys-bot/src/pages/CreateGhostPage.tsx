@@ -11,21 +11,17 @@ interface Tab {
 }
 
 const INITIAL_TABS: Tab[] = [
-  { id: 1, label: "Tab 1" },
-  { id: 2, label: "Tab 2" },
-  { id: 3, label: "Tab 3" },
-  { id: 4, label: "Tab 4" },
-  { id: 5, label: "Tab 5" },
+  { id: 1, label: "Signup 1" },
 ];
 
 export function CreateGhostPage() {
   const { data: proxies = [] } = useProxies();
   const [tabs, setTabs]           = useState<Tab[]>(INITIAL_TABS);
-  const [nextSlot, setNextSlot]   = useState(6);
+  const [nextSlot, setNextSlot]   = useState(2);
   const [activeTabIdx, setActiveTabIdx] = useState(0);
 
   const addTab = () => {
-    const newTab: Tab = { id: nextSlot, label: `Tab ${nextSlot}` };
+    const newTab: Tab = { id: nextSlot, label: `Signup ${nextSlot}` };
     setTabs(prev => [...prev, newTab]);
     setNextSlot(n => n + 1);
     setActiveTabIdx(tabs.length);

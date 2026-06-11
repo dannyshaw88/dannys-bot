@@ -447,11 +447,30 @@ export function StatsPage() {
     refetchInterval: 30000,
   });
 
-  const { data: endpointCountsData } = useQuery<{ operationName: string; todayCount: number; totalCount: number }[]>({
+  const { data: endpointCountsRaw } = useQuery<{ operationName: string; todayCount: number; totalCount: number }[]>({
     queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-endpoint-counts`] : ["no-profile-endpoint"],
     enabled: !!selectedProfile,
     refetchInterval: 60000,
   });
+
+  // Filter out HikerAPI calls (not made by the account itself)
+  const endpointCountsData = useMemo(
+    () => (endpointCountsRaw ?? []).filter(r => r.operationName !== "HikerAPI"),
+    [endpointCountsRaw],
+  );
+
+  // Sortable columns for the Raw API Endpoint table
+  const [epSortCol, setEpSortCol] = useState<"endpoint" | "today" | "total" | "preAccount" | "preGlobal">("endpoint");
+  const [epSortDir, setEpSortDir] = useState<"asc" | "desc">("asc");
+
+  const cycleEpSort = (col: typeof epSortCol) => {
+    if (epSortCol === col) {
+      setEpSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setEpSortCol(col);
+      setEpSortDir(col === "endpoint" ? "asc" : "desc");
+    }
+  };
 
   const { data: preStatusChangeHitsData } = useQuery<{
     perAccount: { operationName: string; perAccountCount: number }[];
@@ -473,6 +492,19 @@ export function StatsPage() {
     for (const r of preStatusChangeHitsData?.global ?? []) m[r.operationName] = r.globalCount;
     return m;
   }, [preStatusChangeHitsData]);
+
+  const sortedEndpointData = useMemo(() => {
+    if (!endpointCountsData.length) return endpointCountsData;
+    const dir = epSortDir === "asc" ? 1 : -1;
+    return [...endpointCountsData].sort((a, b) => {
+      if (epSortCol === "endpoint") return dir * a.operationName.localeCompare(b.operationName);
+      if (epSortCol === "today")    return dir * (a.todayCount - b.todayCount);
+      if (epSortCol === "total")    return dir * (a.totalCount - b.totalCount);
+      if (epSortCol === "preAccount") return dir * ((perAccountHitsMap[a.operationName] ?? 0) - (perAccountHitsMap[b.operationName] ?? 0));
+      if (epSortCol === "preGlobal")  return dir * ((globalHitsMap[a.operationName] ?? 0) - (globalHitsMap[b.operationName] ?? 0));
+      return 0;
+    });
+  }, [endpointCountsData, epSortCol, epSortDir, perAccountHitsMap, globalHitsMap]);
 
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
@@ -937,19 +969,33 @@ export function StatsPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-border/50">
-                              <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Endpoint</th>
-                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Today</th>
-                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Total</th>
-                              <th className="text-center py-2 px-3 text-[10px] font-bold uppercase tracking-wide text-amber-500/80 whitespace-nowrap" title="Times this endpoint was the last API call before this account's status changed">Pre-Change (Account)</th>
-                              <th className="text-center py-2 pl-3 text-[10px] font-bold uppercase tracking-wide text-red-500/80 whitespace-nowrap" title="Times this endpoint was the last API call before any account's status changed">Pre-Change (Global)</th>
+                              {([ 
+                                { key: "endpoint" as const, label: "Endpoint", align: "left", cls: "text-muted-foreground", pad: "py-2 pr-4" },
+                                { key: "today" as const, label: "Today", align: "center", cls: "text-muted-foreground", pad: "py-2 px-3" },
+                                { key: "total" as const, label: "Total", align: "center", cls: "text-muted-foreground", pad: "py-2 px-3" },
+                                { key: "preAccount" as const, label: "Pre-Change (Account)", align: "center", cls: "text-amber-500/80", pad: "py-2 px-3", title: "Times this endpoint was the last API call before this account's status changed" },
+                                { key: "preGlobal" as const, label: "Pre-Change (Global)", align: "center", cls: "text-red-500/80", pad: "py-2 pl-3", title: "Times this endpoint was the last API call before any account's status changed" },
+                              ] as const).map(col => (
+                                <th
+                                  key={col.key}
+                                  onClick={() => cycleEpSort(col.key)}
+                                  title={col.title ?? undefined}
+                                  className={`${col.pad} text-${col.align} text-[10px] font-bold uppercase tracking-wide ${col.cls} whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors`}
+                                >
+                                  {col.label}
+                                  {epSortCol === col.key && (
+                                    <span className="ml-1 opacity-60">{epSortDir === "asc" ? "↑" : "↓"}</span>
+                                  )}
+                                </th>
+                              ))}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/30">
-                            {endpointCountsData.map(row => (
+                            {sortedEndpointData.map(row => (
                               <tr key={row.operationName} className="hover:bg-muted/5 transition-colors">
-                                <td className="py-1.5 pr-4 text-[12px] font-mono text-foreground/80">{row.operationName}</td>
+                                <td className="py-1.5 pr-4 text-[12px] text-foreground">{row.operationName}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-foreground">{row.todayCount.toLocaleString()}</td>
-                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] text-muted-foreground">{row.totalCount.toLocaleString()}</td>
+                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] text-foreground">{row.totalCount.toLocaleString()}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-amber-500">{(perAccountHitsMap[row.operationName] ?? 0) > 0 ? (perAccountHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
                                 <td className="py-1.5 pl-3 text-center tabular-nums text-[12px] font-bold text-red-500">{(globalHitsMap[row.operationName] ?? 0) > 0 ? (globalHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
                               </tr>
@@ -961,14 +1007,14 @@ export function StatsPage() {
                               <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-foreground">
                                 {endpointCountsData.reduce((s, r) => s + r.todayCount, 0).toLocaleString()}
                               </td>
-                              <td className="py-2 px-3 text-center tabular-nums text-[11px] text-muted-foreground">
+                              <td className="py-2 px-3 text-center tabular-nums text-[11px] text-foreground">
                                 {endpointCountsData.reduce((s, r) => s + r.totalCount, 0).toLocaleString()}
                               </td>
                               <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-amber-500">
-                                {preStatusChangeHitsData?.perAccount.reduce((s, r) => s + r.perAccountCount, 0).toLocaleString() ?? "—"}
+                                {endpointCountsData.reduce((s, r) => s + (perAccountHitsMap[r.operationName] ?? 0), 0).toLocaleString()}
                               </td>
                               <td className="py-2 pl-3 text-center tabular-nums text-[11px] font-bold text-red-500">
-                                {preStatusChangeHitsData?.global.reduce((s, r) => s + r.globalCount, 0).toLocaleString() ?? "—"}
+                                {endpointCountsData.reduce((s, r) => s + (globalHitsMap[r.operationName] ?? 0), 0).toLocaleString()}
                               </td>
                             </tr>
                           </tfoot>

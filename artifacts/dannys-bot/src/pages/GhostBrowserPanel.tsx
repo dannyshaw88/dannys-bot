@@ -430,6 +430,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const [signupLog, setSignupLog]         = useState<string[]>([]);
   const signupPollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const signupLogRef     = useRef<HTMLDivElement | null>(null);
+  const userScrolledUpRef = useRef(false);
   const imapAutoPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Add to Equinox
@@ -563,12 +564,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slot]);
 
-  // Auto-scroll signup log to bottom whenever it grows
+  // Auto-scroll signup log to bottom whenever it grows (only if user hasn't scrolled up)
   useEffect(() => {
-    if (signupLogRef.current) {
+    if (!userScrolledUpRef.current && signupLogRef.current) {
       signupLogRef.current.scrollTop = signupLogRef.current.scrollHeight;
     }
   }, [signupLog]);
+
+  const handleLogScroll = useCallback(() => {
+    const el = signupLogRef.current;
+    if (!el) return;
+    const atBottom = el.scrollTop >= el.scrollHeight - el.clientHeight - 20;
+    userScrolledUpRef.current = !atBottom;
+  }, []);
 
   // Poll signup status
   useEffect(() => {
@@ -674,6 +682,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     setManualCode("");
     setSignupStatus("");
     setSignupRunning(false);
+    setSignupLog([]);
+    userScrolledUpRef.current = false;
     setBrowserState("closed");
   };
 
@@ -932,12 +942,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </div>
                 </div>
               )}
-              {activeProxyLabel && (
-                <p className="text-[10px] text-cyan-600 dark:text-cyan-400 flex items-center gap-1">
-                  <Link className="w-2.5 h-2.5" />
-                  Active: {activeProxyLabel}
-                </p>
-              )}
             </div>
 
             {/* Device Identity */}
@@ -947,9 +951,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
               <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
-              <p className="text-[10px] text-muted-foreground leading-snug truncate" title={activeDeviceLabel}>
-                Active: {activeDeviceLabel}
-              </p>
             </div>
 
             {/* Fingerprint */}
@@ -1001,14 +1002,13 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Warm-up Websites</p>
             </div>
             <textarea
+              rows={5}
               className="flex w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-              style={{ minHeight: 52, maxHeight: 80 }}
               placeholder={"https://example.com\nhttps://news.ycombinator.com"}
               value={websitesToVisit}
               onChange={e => setWebsitesToVisit(e.target.value)}
               spellCheck={false}
             />
-            <p className="text-[10px] text-muted-foreground/70">One URL per line. Ghost Browser visits in random order before signup. First URL loads on open.</p>
           </div>
 
           {/* ── ROW 3: Website warm-up XY fields ── */}
@@ -1022,25 +1022,24 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           </div>
 
           {/* ── ROW 3b: YouTube warm-up ── */}
-          <div className="desktop-card p-2.5 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#FF0000" }}>
-                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-              </svg>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">YouTube Warm-Up</p>
-              <p className="text-[10px] text-muted-foreground/60 ml-1">— watches random videos before signup. Set both to 0 to skip.</p>
-            </div>
-            <div className="flex gap-4 flex-wrap items-end">
+          <div className="desktop-card p-2.5">
+            <div className="flex gap-4 flex-wrap items-center">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#FF0000" }}>
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">YouTube Warm-Up</p>
+              </div>
               <XYField label="Videos to Watch" min={youtubeVideosMin} max={youtubeVideosMax} onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax} />
               <XYField label="Minutes per Video" min={youtubeWatchMin} max={youtubeWatchMax} onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax} />
-              <label className="flex items-center gap-1.5 cursor-pointer select-none pb-0.5">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none self-center">
                 <input
                   type="checkbox"
                   checked={skipWarmup}
                   onChange={e => setSkipWarmup(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-cyan-500"
+                  className="w-3.5 h-3.5 accent-cyan-500 shrink-0"
                 />
-                <span className="text-[10px] font-medium text-muted-foreground">Skip all warm-up — go straight to signup</span>
+                <span className="text-[10px] font-medium text-muted-foreground">Skip Warmup</span>
               </label>
             </div>
           </div>
@@ -1246,14 +1245,37 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           </div>
 
           {/* Signup log — always visible when running, or when there are entries */}
-          {(signupRunning || signupLog.length > 0) && (
+          {(signupRunning || signupLog.length > 0) && (() => {
+            const steps = skipWarmup
+              ? ["Instagram Signup"]
+              : ["Visiting Sites", "YouTube Warm-up", "Instagram Signup"];
+            const s = signupStatus.toLowerCase();
+            const cur = skipWarmup ? 0
+              : s.includes("youtube") ? 1
+              : (s.includes("instagram") || s.includes("signup") || s.includes("creating") || s.includes("registration")) ? 2
+              : 0;
+            return (
             <div className="desktop-card border border-border">
               <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/30">
                 <div className="flex items-center gap-1.5">
                   {signupRunning && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {signupRunning ? "Signup in Progress" : "Signup Log"}
-                  </p>
+                  {signupRunning ? (
+                    <div className="flex items-center gap-1.5">
+                      {steps.map((step, i) => (
+                        <span key={i} className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "text-[10px] font-semibold",
+                            i === cur ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground/30"
+                          )}>
+                            Step {i + 1}: {step}
+                          </span>
+                          {i < steps.length - 1 && <span className="text-muted-foreground/25 text-[10px] select-none">›</span>}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Signup Log</p>
+                  )}
                 </div>
                 {!signupRunning && (
                   <button type="button" onClick={() => setSignupLog([])} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
@@ -1261,7 +1283,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </button>
                 )}
               </div>
-              <div ref={signupLogRef} className="overflow-y-auto px-2.5 py-2 space-y-1 font-mono" style={{ minHeight: 120, maxHeight: 400 }}>
+              <div ref={signupLogRef} onScroll={handleLogScroll} className="overflow-y-auto px-2.5 py-2 space-y-1" style={{ maxHeight: 300 }}>
                 {signupLog.length === 0 && signupRunning && (
                   <p className="text-[10px] text-muted-foreground/50 italic">Starting…</p>
                 )}
@@ -1271,14 +1293,15 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                     line.startsWith("✅") ? "text-green-600 dark:text-green-400"
                     : line.includes("⚠") || line.toLowerCase().includes("error") ? "text-amber-600 dark:text-amber-400"
                     : line.startsWith("🛑") ? "text-red-500"
-                    : "text-muted-foreground"
+                    : "text-foreground/80"
                   )}>
                     {line}
                   </p>
                 ))}
               </div>
             </div>
-          )}
+          );
+          })()}
 
         </div>
 

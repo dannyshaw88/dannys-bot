@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.881",
+    date: "11 Jun 2026",
+    items: [
+      { category: "UI", text: "Ghost Browser: signup log header now shows step-by-step progress (Step 1: Visiting Sites → Step 2: YouTube Warm-up → Step 3: Instagram Signup) with the active step highlighted — skips warmup steps when Skip Warmup is ticked." },
+      { category: "UI", text: "Ghost Browser: signup log text changed to the standard app font and capped at 15 visible rows; scrolling up pauses auto-scroll so you can read previous entries." },
+      { category: "Fix", text: "Ghost Browser: Nuke Environment now clears the signup log." },
+      { category: "UI", text: "Ghost Browser: default view now opens with 1 signup tab instead of 5; tabs are labelled Signup 1, Signup 2, etc." },
+      { category: "UI", text: "Ghost Browser: YouTube Warm-Up card condensed to a single row (icon, name, and settings side by side); checkbox renamed to Skip Warmup." },
+      { category: "UI", text: "Ghost Browser: removed Active IP and Active Device preview labels from the Proxy and Device Identity cards." },
+      { category: "UI", text: "Ghost Browser: warm-up websites textarea is now 5 rows tall." },
+      { category: "Fix", text: "Metrics page: HikerAPI calls are no longer shown in the Raw API Endpoint Count table — only calls made by the account itself are listed." },
+      { category: "UI", text: "Metrics page: Raw API Endpoint Count table text is now black and in the standard font; click any column header to sort ascending or descending." },
+    ],
+  },
+  {
     version: "1.0.880",
     date: "10 Jun 2026",
     items: [
