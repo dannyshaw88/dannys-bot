@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.882",
+    date: "11 Jun 2026",
+    items: [
+      { category: "New", text: "Equinox Bot: AI assistant available from the bottom-right corner — ask it anything about how to use the software. Click the robot icon to open, minimise back to the bubble, or close it entirely and re-open from Settings → General → Talk to Equinox Bot." },
+      { category: "Fix", text: "Dashboard: importing an account via .eqx no longer shows the account username as a 'target' in the activity log — it is now shown only in the detail text." },
+      { category: "Improvement", text: "Dashboard: exporting accounts as .eqx now logs each export with a position counter (e.g. '@username exported as .eqx 1/3')." },
+    ],
+  },
+  {
     version: "1.0.881",
     date: "11 Jun 2026",
     items: [

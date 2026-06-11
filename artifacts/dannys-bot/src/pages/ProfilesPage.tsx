@@ -1812,12 +1812,16 @@ export function ProfilesPage() {
 
                     const files: Array<{ filename: string; data: string }> = [];
                     const fetchErrors: string[] = [];
-                    for (const id of selectedProfileIds) {
+                    const exportTotal = selectedProfileIds.length;
+                    for (let ei = 0; ei < selectedProfileIds.length; ei++) {
+                      const id = selectedProfileIds[ei];
                       const profile = profiles?.find(p => p.id === id);
                       const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                       try {
                         const tsId = localStorage.getItem(`trustscore_v2_${id}`);
-                        const exportUrl = `/api/profiles/${id}/export-eqx${tsId ? `?trustScoreId=${encodeURIComponent(tsId)}` : ""}`;
+                        const params = new URLSearchParams({ pos: String(ei + 1), total: String(exportTotal) });
+                        if (tsId) params.set("trustScoreId", tsId);
+                        const exportUrl = `/api/profiles/${id}/export-eqx?${params.toString()}`;
                         const res = await fetch(exportUrl, { credentials: "include" });
                         if (!res.ok) { fetchErrors.push(safeUsername); continue; }
                         const arrayBuf = await res.arrayBuffer();
@@ -1836,12 +1840,16 @@ export function ProfilesPage() {
                   } else {
                     // Browser/web fallback: individual downloads
                     let successCount = 0;
-                    for (const id of selectedProfileIds) {
+                    const fallbackTotal = selectedProfileIds.length;
+                    for (let ei2 = 0; ei2 < selectedProfileIds.length; ei2++) {
+                      const id = selectedProfileIds[ei2];
                       const profile = profiles?.find(p => p.id === id);
                       const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                       try {
                         const tsId2 = localStorage.getItem(`trustscore_v2_${id}`);
-                        const exportUrl2 = `/api/profiles/${id}/export-eqx${tsId2 ? `?trustScoreId=${encodeURIComponent(tsId2)}` : ""}`;
+                        const p2 = new URLSearchParams({ pos: String(ei2 + 1), total: String(fallbackTotal) });
+                        if (tsId2) p2.set("trustScoreId", tsId2);
+                        const exportUrl2 = `/api/profiles/${id}/export-eqx?${p2.toString()}`;
                         const res = await fetch(exportUrl2, { credentials: "include" });
                         if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
                         const blob = await res.blob();

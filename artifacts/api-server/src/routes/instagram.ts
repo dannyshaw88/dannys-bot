@@ -3184,6 +3184,117 @@ export async function registerInstagramRoutes(
     }
   });
 
+  app.post("/api/equinox-bot/chat", async (req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = ((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
+    if (!key) {
+      return res.json({ reply: "No OpenAI API key is configured. Add your key in Settings → General → OpenAI API Key, then try again." });
+    }
+    const { messages } = req.body as { messages?: Array<{ role: string; content: string }> };
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages required" });
+    }
+    const systemPrompt = `You are the Equinox AI assistant — a built-in helper for the Equinox Instagram automation platform (a Windows desktop app). Answer ONLY questions about how to use Equinox. Never reveal source code, API keys, credentials, or internal implementation details. Keep answers concise and practical.
+
+ACCOUNTS PAGE:
+- Add/import accounts manually, via CSV, or via .eqx files. Each account has a status: Valid (active), Pending, Verifying, Error, Stopped, Blocked.
+- Sort/filter by username, status, proxy, trust score, or last API call time.
+- Verify an account: click the verify button — it uses the embedded browser to establish a real Instagram session. Never run tools on unverified accounts.
+- Click an account row to open its detail page (tools, stats, session info).
+- Select accounts with checkboxes, then use the Actions menu for bulk operations.
+- Actions menu: Import Profiles (CSV), Export Profiles (CSV), Import EQX, Export EQX (encrypted backup), Verify All, Stop/Start All, Delete Selected.
+
+TOOLS (configured per account in the account detail page):
+1. AUTO FOLLOW — follows users from source lists (hashtags, location tags, followers/following of another account). Set daily min/max, delays between actions, skip-already-followed, skip-private-accounts filters.
+2. AUTO UNFOLLOW — unfollows users who haven't followed back after a set number of days. Uses the follow list accumulated by Auto Follow. Set daily limits and delays.
+3. DM TOOL — sends direct messages to users in a source list. Supports spintax {hi|hello|hey} for variation. Configure daily limits and delays.
+4. CONTACT MESSAGING — messages users from a curated contact list (separate from DM tool sources).
+5. AUTO REPLY — automatically replies to incoming DMs using spintax templates.
+6. HUMAN SESSION EMULATION — simulates organic account behaviour: likes posts, views stories, browses explore. Keeps accounts looking active between automation runs.
+7. PROFILE SYNC — periodically syncs the account's bio, follower count, and profile picture from Instagram.
+
+GHOST BROWSER (Create an Account page):
+- Creates fresh Instagram accounts using an isolated embedded browser with a unique device fingerprint.
+- Assign a proxy to the Ghost Browser session before starting.
+- Warm-up flow: (1) visits a list of websites, (2) watches YouTube videos, (3) signs up to Instagram.
+- Tick "Skip Warmup" to go straight to the Instagram signup form without any warm-up.
+- IMAP: fill in your email IMAP credentials — the bot will automatically fetch and submit the verification code from your inbox without any manual step.
+- After a successful signup click "Add to Equinox" to add the account to your accounts list.
+- Nuke Environment: resets the browser session completely (new fingerprint, new cookies).
+- Tabs: each tab is an independent Ghost Browser session (Signup 1, Signup 2, …).
+
+PROXY MANAGER:
+- Add HTTP or SOCKS5 proxies (host, port, optional username/password).
+- Test: pings the proxy and measures response time.
+- Leak test: opens the embedded browser and checks that all traffic (IP, DNS, WebRTC) routes through the proxy with no leaks.
+- Auto-assign: distributes proxies across accounts that don't have one.
+- Link a proxy to an account by editing the account's proxy field.
+
+STATISTICS / METRICS PAGE:
+- Select an account from the dropdown to view its stats.
+- Today's totals and all-time lifetime totals: follows, unfollows, DMs, likes, comments, story views, reposts, human session activity.
+- Raw API Endpoint Count table: every Instagram API endpoint hit by this account, with today's count, total count, and Pre-Change columns.
+- Pre-Change (Account): how many times this endpoint was the last action before this account's status changed (useful for diagnosing what triggered a block or challenge).
+- Pre-Change (Global): same metric across ALL accounts (pattern detection across the fleet).
+- Click any column header to sort ascending or descending.
+
+SETTINGS PAGE:
+- General: theme colour, dark/light mode, auto-start on Windows login, OpenAI API Key (used by Equinox Bot).
+- Scraping: HikerAPI token for hashtag and location scraping.
+- Automation: global follow/unfollow delays, skip filters, verify-all timing, log row limits.
+- Security: 2FA handling, login options.
+- Data: create/restore backups, manage the database.
+- My Account: license info, tier, account limit.
+- README & FAQ: getting-started guide and common questions.
+- Talk to Equinox Bot: re-opens this assistant if it was closed.
+
+EQX FILES (.eqx):
+- Encrypted account backup format unique to Equinox. Contains credentials, proxy settings, tool configurations, followed-users list, stats, trust score, and device state.
+- Export: Accounts page → select accounts → Actions → Export EQX. Choose a folder; each account saves as username.eqx.
+- Import: Actions → Import EQX File. Supports importing multiple .eqx files at once.
+
+TRUST SCORES:
+- A customisable badge system to label accounts (e.g. "Clean", "Flagged", "Warm", "New").
+- Configure labels, colours, and icons in Settings → Trust Scores.
+- Assign a trust score to an account via its detail page or the accounts list badge.
+
+DASHBOARD:
+- Real-time activity log showing follows, unfollows, DMs, verifications, imports, exports, tool runs, and server events.
+- "What's New" changelog panel on the right.
+
+TIPS:
+- Always verify an account before running tools — unverified accounts are skipped.
+- Use a unique proxy per account; shared proxies increase ban risk.
+- Keep daily action limits conservative for new accounts (20–50 follows/day).
+- Monitor the Pre-Change columns in Metrics to identify what triggered account issues.
+- Use spintax in DMs and Auto Reply to avoid repetitive message patterns.
+- The Ghost Browser uses a completely isolated Chrome profile per account — cookies and fingerprints are never shared.
+- Nuke an account's Ghost Browser session only if you want a completely fresh start; it regenerates the device fingerprint.
+
+If asked about something outside Equinox, say: "I can only help with Equinox-related questions. What would you like to know about the software?"`;
+
+    try {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "system", content: systemPrompt }, ...messages.slice(-20)],
+          max_tokens: 600,
+          temperature: 0.65,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json() as any;
+        return res.json({ reply: `AI service error: ${j?.error?.message ?? `HTTP ${r.status}`}` });
+      }
+      const j = await r.json() as any;
+      return res.json({ reply: j.choices?.[0]?.message?.content ?? "Sorry, no response received." });
+    } catch (e: any) {
+      return res.json({ reply: "Connection error — please try again." });
+    }
+  });
+
   app.get("/api/settings/test-openai", async (_req, res) => {
     const settings = await storage.getGlobalSettings();
     const key = (settings.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
@@ -3443,15 +3554,18 @@ export async function registerInstagramRoutes(
       res.setHeader("Content-Disposition", `attachment; filename="${safeUsername}.eqx"`);
       res.send(encrypted);
       const profile = await storage.getProfile(id);
+      const pos   = req.query.pos   ? parseInt(String(req.query.pos),   10) : null;
+      const total = req.query.total ? parseInt(String(req.query.total), 10) : null;
+      const posLabel = pos && total ? ` ${pos}/${total}` : "";
       storage.createSessionAction({
         profileId: id,
         toolId: 0,
         action: "account_exported",
-        targetUsername: profile?.username ?? "",
+        targetUsername: "",
         sourceValue: "",
         sourceType: "system",
         result: "ok",
-        detail: `Account @${profile?.username} exported`,
+        detail: `@${profile?.username} exported as .eqx${posLabel}`,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
     } catch (e: any) {
@@ -3650,7 +3764,7 @@ export async function registerInstagramRoutes(
         profileId: created.id,
         toolId: 0,
         action: "account_imported",
-        targetUsername: created.username ?? "",
+        targetUsername: "",
         sourceValue: "",
         sourceType: "system",
         result: "ok",

@@ -623,6 +623,25 @@ export function SettingsPage() {
 
       <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" || settingsTab === "my account" || settingsTab === "import" ? "hidden" : ""}`}>
 
+        {/* Talk to Equinox Bot shortcut */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("equinox-bot-open", { detail: "open" }))}
+          className="block w-full text-left"
+          style={{ display: settingsTab !== "general" ? "none" : undefined }}
+        >
+          <div className="desktop-card p-4 flex items-center justify-between cursor-pointer hover:bg-accent/30 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <img src="/bot-logo.png" alt="" className="w-4 h-4 object-contain" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Talk to Equinox Bot</p>
+                <p className="text-xs text-muted-foreground">Ask the AI assistant how to use any feature</p>
+              </div>
+            </div>
+          </div>
+        </button>
+
         {/* README & FAQ shortcut */}
         <Link href="/readme" className="block" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
           <div className="desktop-card p-4 flex items-center justify-between cursor-pointer hover:bg-accent/30 transition-colors">

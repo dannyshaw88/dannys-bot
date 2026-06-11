@@ -22,6 +22,7 @@ import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
+import { EquinoxBot } from "@/components/EquinoxBot";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
@@ -307,7 +308,7 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
     return <LoginSplash />;
   }
 
-  return <>{children}</>;
+  return <>{children}<EquinoxBot /></>;
 }
 
 function App() {
