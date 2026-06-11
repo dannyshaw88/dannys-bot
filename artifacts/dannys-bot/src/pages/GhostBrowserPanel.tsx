@@ -1437,19 +1437,15 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
 
           ) : (
-            <div className="h-full flex items-center justify-center p-2">
-              <div className="relative flex-shrink-0 overflow-hidden rounded-lg border border-border shadow-md" style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}>
-                <BrowserPanel
-                  profileId={0}
-                  userAgent={activeUA.embedded}
-                  username="ghost"
-                  streamUrl={`/api/signup/browser/stream?slot=${slot}`}
-                  inputUrl={`/api/signup/browser/input?slot=${slot}`}
-                  forceStream={true}
-                  browserWidth={393}
-                  browserHeight={851}
-                  noToolbar={true}
-                />
+            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full h-full">
+              <div className="w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
+                <Ghost className="w-10 h-10 text-green-500" />
+              </div>
+              <div className="space-y-1.5 max-w-xs">
+                <p className="text-base font-semibold text-foreground">Browser is running</p>
+                <p className="text-sm text-muted-foreground">
+                  The browser window is open on your desktop. Switch to it from the taskbar to interact with it.
+                </p>
               </div>
             </div>
           )}

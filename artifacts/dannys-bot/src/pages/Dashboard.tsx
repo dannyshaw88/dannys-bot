@@ -62,10 +62,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.890",
+    version: "1.0.891",
     date: "11 Jun 2026",
     items: [
-      { category: "Fix", text: "Ghost Browser: removed the phone frame decorations — the browser stream now shows in a plain panel with the correct aspect ratio and no fake phone chrome around it." },
+      { category: "Fix", text: "Ghost Browser: removed the embedded browser stream — the browser now opens as a separate window on the desktop as it did before." },
       { category: "Fix", text: "Ghost Browser: email address no longer gets typed twice — autocomplete is disabled on the field before CDP begins typing." },
     ],
   },
