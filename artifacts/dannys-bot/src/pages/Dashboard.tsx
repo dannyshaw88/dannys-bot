@@ -62,10 +62,11 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.891",
+    version: "1.0.892",
     date: "11 Jun 2026",
     items: [
-      { category: "Fix", text: "Ghost Browser: removed the embedded browser stream — the browser now opens as a separate window on the desktop as it did before." },
+      { category: "Fix", text: "Ghost Browser: browser stream is back embedded in the panel — no phone chrome, correct aspect ratio, fully interactive." },
+      { category: "Fix", text: "Ghost Browser: Create Account no longer flashes back immediately after clicking — the open call is now properly awaited and a retry handles the edge case where Electron hasn't registered the browser yet." },
       { category: "Fix", text: "Ghost Browser: email address no longer gets typed twice — autocomplete is disabled on the field before CDP begins typing." },
     ],
   },

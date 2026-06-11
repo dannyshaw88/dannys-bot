@@ -857,23 +857,33 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       setSignupStatus("Opening browser…");
       setActiveUA(selectedUA);
       setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
-      await fetch("/api/signup/browser/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slot,
-          userAgent: selectedUA.api,
-          proxyHost: resolvedProxy?.host,
-          proxyPort: resolvedProxy?.port,
-          proxyUsername: resolvedProxy?.username,
-          proxyPassword: resolvedProxy?.password,
-          proxyType: resolvedProxy?.proxyType,
-          fingerprint,
-          initialUrl: firstWebsiteUrl(),
-        }),
-      }).catch(() => {});
+      try {
+        await fetch("/api/signup/browser/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slot,
+            userAgent: selectedUA.api,
+            proxyHost: resolvedProxy?.host,
+            proxyPort: resolvedProxy?.port,
+            proxyUsername: resolvedProxy?.username,
+            proxyPassword: resolvedProxy?.password,
+            proxyType: resolvedProxy?.proxyType,
+            fingerprint,
+            initialUrl: firstWebsiteUrl(),
+          }),
+        });
+      } catch {
+        // IPC error opening browser — do not proceed
+        setSignupStatus("⚠ Failed to open browser (IPC error). Try again.");
+        setBrowserState("closed");
+        return;
+      }
       setBrowserState("open");
-      await new Promise(r => setTimeout(r, 1500));
+      // Give Electron enough time to register the browser in its EB map before
+      // calling ghost-signup. A 1.5 s delay was too short when browser setup
+      // took 3+ seconds — the IPC call would return { ok: false } immediately.
+      await new Promise(r => setTimeout(r, 3000));
     }
 
     setSignupRunning(true);
@@ -886,36 +896,59 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       .map(s => s.trim())
       .filter(s => s.startsWith("http"));
 
+    const signupPayload = {
+      slot,
+      email: emailAddr.trim(),
+      username: uname,
+      password: password.trim(),
+      dob: dob.trim(),
+      skipWarmup,
+      websitesToVisit: skipWarmup ? [] : websiteUrls,
+      websitesMin: skipWarmup ? 0 : (parseInt(websitesMin, 10) || 1),
+      websitesMax: skipWarmup ? 0 : (parseInt(websitesMax, 10) || 3),
+      internalLinksMin: skipWarmup ? 0 : (parseInt(internalLinksMin, 10) || 2),
+      internalLinksMax: skipWarmup ? 0 : (parseInt(internalLinksMax, 10) || 5),
+      timeOnSiteMin: skipWarmup ? 0 : (parseInt(timeOnSiteMin, 10) || 1),
+      timeOnSiteMax: skipWarmup ? 0 : (parseInt(timeOnSiteMax, 10) || 3),
+      timeOnLinksMin: skipWarmup ? 0 : (parseInt(timeOnLinksMin, 10) || 1),
+      timeOnLinksMax: skipWarmup ? 0 : (parseInt(timeOnLinksMax, 10) || 2),
+      youtubeVideosMin: skipWarmup ? 0 : (parseInt(youtubeVideosMin, 10) || 1),
+      youtubeVideosMax: skipWarmup ? 0 : (parseInt(youtubeVideosMax, 10) || 3),
+      youtubeWatchMin: skipWarmup ? 0 : (parseInt(youtubeWatchMin, 10) || 2),
+      youtubeWatchMax: skipWarmup ? 0 : (parseInt(youtubeWatchMax, 10) || 5),
+    };
+
     try {
       const r = await fetch("/api/signup/browser/ghost-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slot,
-          email: emailAddr.trim(),
-          username: uname,
-          password: password.trim(),
-          dob: dob.trim(),
-          skipWarmup,
-          websitesToVisit: skipWarmup ? [] : websiteUrls,
-          websitesMin: skipWarmup ? 0 : (parseInt(websitesMin, 10) || 1),
-          websitesMax: skipWarmup ? 0 : (parseInt(websitesMax, 10) || 3),
-          internalLinksMin: skipWarmup ? 0 : (parseInt(internalLinksMin, 10) || 2),
-          internalLinksMax: skipWarmup ? 0 : (parseInt(internalLinksMax, 10) || 5),
-          timeOnSiteMin: skipWarmup ? 0 : (parseInt(timeOnSiteMin, 10) || 1),
-          timeOnSiteMax: skipWarmup ? 0 : (parseInt(timeOnSiteMax, 10) || 3),
-          timeOnLinksMin: skipWarmup ? 0 : (parseInt(timeOnLinksMin, 10) || 1),
-          timeOnLinksMax: skipWarmup ? 0 : (parseInt(timeOnLinksMax, 10) || 2),
-          youtubeVideosMin: skipWarmup ? 0 : (parseInt(youtubeVideosMin, 10) || 1),
-          youtubeVideosMax: skipWarmup ? 0 : (parseInt(youtubeVideosMax, 10) || 3),
-          youtubeWatchMin: skipWarmup ? 0 : (parseInt(youtubeWatchMin, 10) || 2),
-          youtubeWatchMax: skipWarmup ? 0 : (parseInt(youtubeWatchMax, 10) || 5),
-        }),
+        body: JSON.stringify(signupPayload),
       });
       const j = await r.json() as any;
       if (!j.ok) {
-        setSignupStatus(`⚠ ${j.error ?? "Failed to start signup"}`);
-        setSignupRunning(false);
+        // "Not open" means the browser didn't register in time — wait and retry once
+        if (typeof j.error === "string" && j.error.toLowerCase().includes("not open")) {
+          setSignupStatus("Browser registering… retrying in 3 s");
+          await new Promise(r => setTimeout(r, 3000));
+          try {
+            const r2 = await fetch("/api/signup/browser/ghost-signup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(signupPayload),
+            });
+            const j2 = await r2.json() as any;
+            if (!j2.ok) {
+              setSignupStatus(`⚠ ${j2.error ?? "Failed to start signup after retry"}`);
+              setSignupRunning(false);
+            }
+          } catch (err2: any) {
+            setSignupStatus(`⚠ ${err2?.message ?? "Error on retry"}`);
+            setSignupRunning(false);
+          }
+        } else {
+          setSignupStatus(`⚠ ${j.error ?? "Failed to start signup"}`);
+          setSignupRunning(false);
+        }
       }
     } catch (err: any) {
       setSignupStatus(`⚠ ${err?.message ?? "Error"}`);
@@ -1437,15 +1470,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
 
           ) : (
-            <div className="flex flex-col items-center justify-center gap-4 text-center p-8 w-full h-full">
-              <div className="w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
-                <Ghost className="w-10 h-10 text-green-500" />
-              </div>
-              <div className="space-y-1.5 max-w-xs">
-                <p className="text-base font-semibold text-foreground">Browser is running</p>
-                <p className="text-sm text-muted-foreground">
-                  The browser window is open on your desktop. Switch to it from the taskbar to interact with it.
-                </p>
+            <div className="h-full flex items-center justify-center p-2">
+              <div className="relative flex-shrink-0 overflow-hidden rounded-lg border border-border shadow-md" style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}>
+                <BrowserPanel
+                  profileId={0}
+                  userAgent={activeUA.embedded}
+                  username="ghost"
+                  streamUrl={`/api/signup/browser/stream?slot=${slot}`}
+                  inputUrl={`/api/signup/browser/input?slot=${slot}`}
+                  forceStream={true}
+                  browserWidth={393}
+                  browserHeight={851}
+                  noToolbar={true}
+                />
               </div>
             </div>
           )}
