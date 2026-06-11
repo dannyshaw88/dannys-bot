@@ -1437,43 +1437,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
 
           ) : (
-            <div className="h-full flex items-center justify-end py-3 pr-2">
-              <div className="relative flex-shrink-0" style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}>
-                <div className="absolute inset-0 rounded-[2.2rem] bg-[#1c1c1e] shadow-2xl ring-1 ring-white/5" />
-                <div className="absolute right-[-3px] top-[28%] h-[9%] w-[3px] rounded-r bg-[#2e2e30]" />
-                <div className="absolute left-[-3px] top-[22%] h-[6%] w-[3px] rounded-l bg-[#2e2e30]" />
-                <div className="absolute left-[-3px] top-[31%] h-[9%] w-[3px] rounded-l bg-[#2e2e30]" />
-                <div className="absolute inset-[3%] rounded-[1.7rem] overflow-hidden bg-black flex flex-col">
-                  <div className="shrink-0 flex items-center justify-between px-4 bg-black text-white" style={{ height: "4%" }}>
-                    <span className="text-[10px] font-semibold tabular-nums">
-                      {new Date().getHours().toString().padStart(2,"0")}:{new Date().getMinutes().toString().padStart(2,"0")}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
-                      <svg className="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 24 24"><path d="M17 4h3v16h-3V4zM5 14h3v6H5v-6zm6-5h3v11h-3V9z"/></svg>
-                      <svg className="w-3 h-2.5 text-white fill-current" viewBox="0 0 24 16"><rect x="0" y="2" width="20" height="12" rx="2" ry="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="20" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="1.5" y="3.5" width="14" height="9" rx="1" fill="currentColor"/></svg>
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex justify-center bg-black" style={{ height: "2.5%" }}>
-                    <div className="w-3 h-3 rounded-full bg-[#111] border border-[#2a2a2a] self-center" />
-                  </div>
-                  <div className="flex-1 overflow-hidden min-h-0">
-                    <BrowserPanel
-                      profileId={0}
-                      userAgent={activeUA.embedded}
-                      username="ghost"
-                      streamUrl={`/api/signup/browser/stream?slot=${slot}`}
-                      inputUrl={`/api/signup/browser/input?slot=${slot}`}
-                      forceStream={true}
-                      browserWidth={393}
-                      browserHeight={851}
-                      noToolbar={true}
-                    />
-                  </div>
-                  <div className="shrink-0 flex justify-center items-center bg-black" style={{ height: "2.5%" }}>
-                    <div className="w-[32%] h-[3px] rounded-full bg-white/30" />
-                  </div>
-                </div>
+            <div className="h-full flex items-center justify-center p-2">
+              <div className="relative flex-shrink-0 overflow-hidden rounded-lg border border-border shadow-md" style={{ aspectRatio: "393/851", height: "calc(100% - 8px)", maxHeight: "100%" }}>
+                <BrowserPanel
+                  profileId={0}
+                  userAgent={activeUA.embedded}
+                  username="ghost"
+                  streamUrl={`/api/signup/browser/stream?slot=${slot}`}
+                  inputUrl={`/api/signup/browser/input?slot=${slot}`}
+                  forceStream={true}
+                  browserWidth={393}
+                  browserHeight={851}
+                  noToolbar={true}
+                />
               </div>
             </div>
           )}
