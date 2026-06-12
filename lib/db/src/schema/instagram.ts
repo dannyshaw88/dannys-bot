@@ -364,6 +364,19 @@ export const insertApiCreatedAccountSchema = createInsertSchema(apiCreatedAccoun
 export type ApiCreatedAccount = typeof apiCreatedAccounts.$inferSelect;
 export type InsertApiCreatedAccount = z.infer<typeof insertApiCreatedAccountSchema>;
 
+export const bannedAccountsAnalytics = sqliteTable("banned_accounts_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  bannedAt: text("banned_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+});
+
+export const insertBannedAccountAnalyticsSchema = createInsertSchema(bannedAccountsAnalytics).omit({ id: true });
+export type BannedAccountAnalytics = typeof bannedAccountsAnalytics.$inferSelect;
+export type InsertBannedAccountAnalytics = z.infer<typeof insertBannedAccountAnalyticsSchema>;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
   proxyType: z.enum(["http", "socks5"]).optional().default("http"),

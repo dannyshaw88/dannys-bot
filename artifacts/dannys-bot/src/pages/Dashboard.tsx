@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.898",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser warm-up: websites are now visited in fully random order — the first website was previously used as a fixed landing page, causing it to be visited twice before any other site." },
+      { category: "Fix", text: "Ghost Browser: Verification Code title now appears inline on the same row as the code input field instead of on its own separate row above." },
+      { category: "Fix", text: "Human Session: Skip Chance renamed to Run Chance for Follow, Unfollow, and Contact tools — setting Run Chance to 5% now correctly means the tool runs 5% of sessions, not 95%." },
+      { category: "New", text: "Ban Analytics: Flag as Banned in Accounts → Actions snapshots the account's full API call history, saves it to a ban analytics database, then removes the account — the new Ban Analytics page in the sidebar shows which endpoints appear most before bans." },
+    ],
+  },
+  {
     version: "1.0.897",
     date: "12 Jun 2026",
     items: [

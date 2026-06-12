@@ -10,7 +10,7 @@ statusEvents.setMaxListeners(200);
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
-  hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts,
+  hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, bannedAccountsAnalytics,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -22,6 +22,7 @@ import {
   type ContactDmSent, type InsertContactDmSent,
   type ContactPendingMessage, type InsertContactPendingMessage,
   type ApiCreatedAccount, type InsertApiCreatedAccount,
+  type BannedAccountAnalytics,
 } from "./shared/schema";
 import { eq, desc, and, sql, like, gt, ne, or, isNull, not } from "drizzle-orm";
 
@@ -137,6 +138,10 @@ export interface IStorage {
   getApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
   listApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
   deleteApiCreatedAccount(id: number): Promise<void>;
+
+  // Ban Analytics
+  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  getBanAnalytics(): Promise<BannedAccountAnalytics[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -868,6 +873,14 @@ export class DatabaseStorage implements IStorage {
 
   async deleteApiCreatedAccount(id: number): Promise<void> {
     await db.delete(apiCreatedAccounts).where(eq(apiCreatedAccounts.id, id));
+  }
+
+  async insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+    await db.insert(bannedAccountsAnalytics).values(entry);
+  }
+
+  async getBanAnalytics(): Promise<BannedAccountAnalytics[]> {
+    return await db.select().from(bannedAccountsAnalytics).orderBy(desc(bannedAccountsAnalytics.id));
   }
 }
 

@@ -226,6 +226,15 @@ sqlite.exec(`
     created_at TEXT NOT NULL,
     expires_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS banned_accounts_analytics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    proxy_host TEXT DEFAULT '',
+    banned_at TEXT NOT NULL,
+    endpoint_count INTEGER DEFAULT 0,
+    endpoint_snapshot TEXT DEFAULT '[]'
+  );
 `);
 
 // Seed owner license account if not already present

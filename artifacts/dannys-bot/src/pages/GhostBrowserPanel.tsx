@@ -1287,13 +1287,12 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
           {/* ── ROW 6: Verification Code ── */}
           <div className="desktop-card p-2.5">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Key className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verification Code</p>
-            </div>
             <div className="flex gap-2 items-end">
               <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground font-medium">Code (6-digit)</p>
+                <div className="flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verification Code</p>
+                </div>
                 <Input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder="000000" className="h-7 text-xs font-mono w-28" maxLength={8} autoComplete="off" />
               </div>
               <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={handleSubmitCode} disabled={!manualCode.trim()}>

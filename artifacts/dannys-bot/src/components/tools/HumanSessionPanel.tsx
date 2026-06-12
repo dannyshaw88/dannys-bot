@@ -1573,15 +1573,15 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Run Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).followSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).followSkipMin ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, followSkipMin: 100 - Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).followSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followSkipMax: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).followSkipMax ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, followSkipMax: 100 - Number(e.target.value) } as any)}
                   />
                 </div>
               </div>
@@ -1626,15 +1626,15 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Run Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).unfollowSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).unfollowSkipMin ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, unfollowSkipMin: 100 - Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).unfollowSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowSkipMax: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).unfollowSkipMax ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, unfollowSkipMax: 100 - Number(e.target.value) } as any)}
                   />
                 </div>
               </div>
@@ -1679,15 +1679,15 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Run Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).contactSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).contactSkipMin ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, contactSkipMin: 100 - Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                    value={(settings as any).contactSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactSkipMax: Number(e.target.value) } as any)}
+                    value={100 - ((settings as any).contactSkipMax ?? 0)}
+                    onChange={(e) => setSettings({ ...settings, contactSkipMax: 100 - Number(e.target.value) } as any)}
                   />
                 </div>
               </div>

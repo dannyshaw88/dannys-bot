@@ -77,6 +77,16 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
   );
 }
 
+function FilledBanAnalyticsIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" stroke="none" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <line x1="8" y1="8" x2="16" y2="16" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
+      <line x1="16" y1="8" x2="8" y2="16" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 export function Sidebar() {
   const [location, setLocation] = useLocation();
   const slot = useSidebarSlot();
@@ -91,8 +101,9 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",  icon: FilledGhostIcon       },
-    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon          },
+    { name: "Ban Analytics",   shortLabel: "BAN ANALYTICS",  path: "/ban-analytics",  icon: FilledBanAnalyticsIcon   },
+    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
   ];
 
   return (

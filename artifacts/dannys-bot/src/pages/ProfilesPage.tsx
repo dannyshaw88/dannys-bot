@@ -2022,6 +2022,33 @@ export function ProfilesPage() {
                   : `Flag Accounts${selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}`
                 }
               </button>
+              <button
+                onClick={async () => {
+                  if (selectedProfileIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to flag as banned.", variant: "destructive" });
+                    return;
+                  }
+                  setActionsOpen(false);
+                  const confirmed = window.confirm(
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as banned?\n\nThis will:\n• Snapshot their full API call history for ban analytics\n• Permanently delete them from Equinox\n\nThis cannot be undone.`
+                  );
+                  if (!confirmed) return;
+                  let successCount = 0;
+                  for (const id of selectedProfileIds) {
+                    try {
+                      const r = await fetch(`/api/profiles/${id}/flag-banned`, { method: "POST", credentials: "include" });
+                      if (r.ok) successCount++;
+                    } catch {}
+                  }
+                  toast({ title: "Flagged as Banned", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in ban analytics and removed.` });
+                  queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-red-600"
+              >
+                <Ban className="w-4 h-4 shrink-0" />
+                Flag as Banned{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Trash2 className="w-4 h-4 shrink-0" /><span className="flex-1">Delete Selected</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+D</span>

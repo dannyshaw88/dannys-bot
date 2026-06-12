@@ -601,6 +601,42 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  // ── Flag as Banned: snapshot API calls → save to analytics → delete profile ──
+  app.post("/api/profiles/:id/flag-banned", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      await storage.insertBanAnalytics({
+        username: profile.username,
+        proxyHost: profile.proxyHost ?? "",
+        bannedAt: new Date().toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+      });
+      await storage.deleteProfile(profileId);
+      closeSession(profileId, { skipCookieSave: true }).catch(() => {});
+      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-banned] error");
+      res.status(500).json({ error: "Failed to flag account as banned" });
+    }
+  });
+
+  // ── Ban Analytics: return all ban event records ─────────────────────────────
+  app.get("/api/analytics/ban-patterns", async (req, res) => {
+    try {
+      const records = await storage.getBanAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[ban-analytics] error");
+      res.status(500).json({ error: "Failed to fetch ban analytics" });
+    }
+  });
+
   // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
   // Called by both the bulk import and EQX import routes immediately after a
   // profile is created/updated with igApiCookies.  Without this file Chrome
