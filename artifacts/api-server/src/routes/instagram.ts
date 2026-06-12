@@ -601,7 +601,18 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
-  // ── Flag as Banned: snapshot API calls → save to analytics → delete profile ──
+  // ── Shared helper: resolve proxy host for analytics snapshots ───────────────
+  async function resolveProxyHost(profile: { proxyHost?: string | null; proxyId?: number | null }): Promise<string> {
+    if (profile.proxyHost) return profile.proxyHost;
+    if (profile.proxyId) {
+      const allProxies = await storage.getProxies().catch(() => []);
+      const linked = allProxies.find((p: { id: number; host: string }) => p.id === profile.proxyId);
+      if (linked) return linked.host;
+    }
+    return "";
+  }
+
+  // ── Flag as Banned: snapshot API calls → save to analytics → set status to banned (no deletion) ──
   app.post("/api/profiles/:id/flag-banned", async (req, res) => {
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
@@ -609,16 +620,16 @@ export async function registerInstagramRoutes(
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const proxyHost = await resolveProxyHost(profile);
       await storage.insertBanAnalytics({
         username: profile.username,
-        proxyHost: profile.proxyHost ?? "",
+        proxyHost,
         bannedAt: new Date().toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
       });
-      await storage.deleteProfile(profileId);
-      closeSession(profileId, { skipCookieSave: true }).catch(() => {});
-      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      await storage.updateProfile(profileId, { accountStatus: "banned" });
+      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted, status set to banned`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
       req.log.error({ err }, "[flag-banned] error");
@@ -645,9 +656,10 @@ export async function registerInstagramRoutes(
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const proxyHost = await resolveProxyHost(profile);
       await storage.insertAutomatedBehaviourAnalytics({
         username: profile.username,
-        proxyHost: profile.proxyHost ?? "",
+        proxyHost,
         flaggedAt: new Date().toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
@@ -669,9 +681,10 @@ export async function registerInstagramRoutes(
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const proxyHost = await resolveProxyHost(profile);
       await storage.insertCaptchaAnalytics({
         username: profile.username,
-        proxyHost: profile.proxyHost ?? "",
+        proxyHost,
         flaggedAt: new Date().toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
@@ -715,9 +728,10 @@ export async function registerInstagramRoutes(
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const proxyHost = await resolveProxyHost(profile);
       await storage.insertLockedAnalytics({
         username: profile.username,
-        proxyHost: profile.proxyHost ?? "",
+        proxyHost,
         flaggedAt: new Date().toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,

@@ -2028,7 +2028,7 @@ export function ProfilesPage() {
                   }
                   setActionsOpen(false);
                   const confirmed = window.confirm(
-                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as banned?\n\nThis will:\n• Snapshot their full API call history for ban analytics\n• Permanently delete them from Equinox\n\nThis cannot be undone.`
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Banned?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Banned\n• Keep the accounts in Equinox (not deleted)\n\nYou can still access and recover these accounts.`
                   );
                   if (!confirmed) return;
                   let successCount = 0;
@@ -2038,7 +2038,7 @@ export function ProfilesPage() {
                       if (r.ok) successCount++;
                     } catch {}
                   }
-                  toast({ title: "Flagged as Banned", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in ban analytics and removed.` });
+                  toast({ title: "Flagged as Banned", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in Evasion Stats. Status set to Banned.` });
                   queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
                 }}
                 disabled={selectedProfileIds.length === 0}

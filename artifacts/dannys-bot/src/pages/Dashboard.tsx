@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.914",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Flag as Banned no longer deletes the account — it now sets the status to Banned and keeps the account in Equinox so you can still access and recover it, matching the behaviour of all other flag actions." },
+      { category: "Fix", text: "Proxy shown as 'no proxy' in Evasion Stats is fixed — all four flag actions now correctly resolve the proxy host from the Proxy Manager when the account uses a linked proxy rather than manual host settings." },
+      { category: "Improved", text: "Evasion Stats completely overhauled: each flagged account now shows a smart diagnosis explaining why it was flagged — follow/DM/like call counts, API call rate, high-risk endpoint identification, and plain-English findings instead of raw endpoint lists." },
+      { category: "Improved", text: "Evasion Stats: cross-account pattern analysis now highlights endpoints that appear in 50%+ of all flagged accounts, making it easy to spot which tool or behaviour is consistently triggering flags." },
+    ],
+  },
+  {
     version: "1.0.913",
     date: "12 Jun 2026",
     items: [
