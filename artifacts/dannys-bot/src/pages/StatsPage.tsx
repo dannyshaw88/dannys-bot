@@ -171,10 +171,8 @@ function ProfileStatsRow({
         }
         if (key === "trustscore") {
           return (
-            <td key="trustscore" style={{ width: colWidths.trustscore }} className="px-4 py-3 text-center">
-              <div className="flex justify-center">
-                <TrustScoreBadge profileId={profile.id} />
-              </div>
+            <td key="trustscore" style={{ width: colWidths.trustscore, textAlign: "center" }} className="px-4 py-3 align-middle">
+              <TrustScoreBadge profileId={profile.id} />
             </td>
           );
         }

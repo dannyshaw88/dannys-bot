@@ -771,7 +771,7 @@ function setupBackupHandlers() {
     // the entire window setup (proxy fetch + cookie load + Chromium launch)
     // keeps the UI frozen for up to 10 s before the browser icon reacts.
     // Returning immediately unblocks the caller; the window appears shortly after.
-    (async () => {
+    void (async () => {
       try {
         let proxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
         let userAgent: string | undefined;

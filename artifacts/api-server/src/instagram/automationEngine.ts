@@ -2232,7 +2232,7 @@ class AutomationEngine {
 
     // Build the ordered action queue.
     // Each entry: { order: number (random from OrderMin/Max), run: async fn }
-    // Actions are sorted ascending by order before executing, so lower numbers
+    // Actions are sorted descending by order before executing, so higher numbers
     // run first. Ties preserve insertion order (stable sort).
     // Actions that are disabled or skipped by the NotUsed chance are excluded.
     type QueueEntry = { order: number; label: string; run: () => Promise<void> };
@@ -2927,8 +2927,8 @@ class AutomationEngine {
       );
     }
 
-    // Sort ascending by order value (stable — ties keep insertion order)
-    queue.sort((a, b) => a.order - b.order);
+    // Sort descending by order value (higher order = runs first — ties keep insertion order)
+    queue.sort((a, b) => b.order - a.order);
 
     const orderSummary = queue.map(e => e.label).join(" → ");
     console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);

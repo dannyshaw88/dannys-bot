@@ -2973,69 +2973,75 @@ export async function openEbWindow(opts: {
   // resets whenever a page with actual content loads successfully.
   let _blankRecoveryCount = 0;
   win.webContents.on("did-finish-load", async () => {
-    if (win.isDestroyed()) return;
-    const url = win.webContents.getURL();
-    if (!url.startsWith("http")) return; // skip about:blank, devtools, data: etc.
-
-    // ── Diagnostic snapshot ───────────────────────────────────────────────
-    let snapshot = "{}";
+    // Wrap entire body — async event handlers with no outer catch create
+    // unhandled promise rejections that crash the Electron main process.
     try {
-      snapshot = await win.webContents.executeJavaScript(`
-        JSON.stringify({
-          childCount: document.body ? document.body.children.length : -1,
-          bodyLen: document.body ? document.body.innerHTML.trim().length : -1,
-          title: document.title.slice(0, 80),
-          readyState: document.readyState,
-        })
-      `);
-    } catch {}
-    const diagSes = electronSession.fromPartition(`persist:eb-${profileId}`);
-    const diagCks = await diagSes.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
-    console.log(`[ebDiag:${profileId}] did-finish-load url="${url}" session=${diagCks.length > 0 ? "present" : "absent"} body=${snapshot}`);
+      if (win.isDestroyed()) return;
+      const url = win.webContents.getURL();
+      if (!url.startsWith("http")) return; // skip about:blank, devtools, data: etc.
 
-    // ── General blank-screen recovery ─────────────────────────────────────
-    if (!url.includes("instagram.com")) {
-      _blankRecoveryCount = 0; // reset on non-Instagram pages
-      return;
-    }
-    let snap: { childCount?: number; bodyLen?: number } = {};
-    try { snap = JSON.parse(snapshot); } catch {}
-    if ((snap.bodyLen ?? 9999) > 200) {
-      _blankRecoveryCount = 0; // page rendered content — nothing to do, reset counter
-      return;
-    }
+      // ── Diagnostic snapshot ───────────────────────────────────────────────
+      let snapshot = "{}";
+      try {
+        snapshot = await win.webContents.executeJavaScript(`
+          JSON.stringify({
+            childCount: document.body ? document.body.children.length : -1,
+            bodyLen: document.body ? document.body.innerHTML.trim().length : -1,
+            title: document.title.slice(0, 80),
+            readyState: document.readyState,
+          })
+        `);
+      } catch {}
+      const diagSes = electronSession.fromPartition(`persist:eb-${profileId}`);
+      const diagCks = await diagSes.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+      console.log(`[ebDiag:${profileId}] did-finish-load url="${url}" session=${diagCks.length > 0 ? "present" : "absent"} body=${snapshot}`);
 
-    // Don't interrupt 2FA entry
-    const has2FA: boolean = await win.webContents.executeJavaScript(`
-      !!(document.querySelector(
-        'input[name="verificationCode"],input[name="verification_code"],' +
-        'input[name="totp_code"],input[name="security_code"],' +
-        'input[autocomplete="one-time-code"],input[inputmode="numeric"][maxlength="6"],' +
-        'input[aria-label*="code" i],input[aria-label*="digit" i]'
-      ))
-    `).catch(() => false);
-    if (has2FA) {
-      console.log(`[ebDiag:${profileId}] blank body but 2FA form present — not recovering`);
-      return;
-    }
+      // ── General blank-screen recovery ─────────────────────────────────────
+      if (!url.includes("instagram.com")) {
+        _blankRecoveryCount = 0; // reset on non-Instagram pages
+        return;
+      }
+      let snap: { childCount?: number; bodyLen?: number } = {};
+      try { snap = JSON.parse(snapshot); } catch {}
+      if ((snap.bodyLen ?? 9999) > 200) {
+        _blankRecoveryCount = 0; // page rendered content — nothing to do, reset counter
+        return;
+      }
 
-    _blankRecoveryCount++;
-    if (_blankRecoveryCount > 3) {
-      console.warn(`[ebDiag:${profileId}] blank-screen recovery reached retry limit (${_blankRecoveryCount}) — stopping to avoid reload loop. User can manually reload.`);
-      return;
-    }
+      // Don't interrupt 2FA entry
+      const has2FA: boolean = await win.webContents.executeJavaScript(`
+        !!(document.querySelector(
+          'input[name="verificationCode"],input[name="verification_code"],' +
+          'input[name="totp_code"],input[name="security_code"],' +
+          'input[autocomplete="one-time-code"],input[inputmode="numeric"][maxlength="6"],' +
+          'input[aria-label*="code" i],input[aria-label*="digit" i]'
+        ))
+      `).catch(() => false);
+      if (has2FA) {
+        console.log(`[ebDiag:${profileId}] blank body but 2FA form present — not recovering`);
+        return;
+      }
 
-    // Wait 1500 ms before reloading so the proxy has time to settle.
-    // Without this delay the recovery reload fires into the same race condition
-    // that caused the blank page, gets another blank, and loops.
-    console.warn(`[ebDiag:${profileId}] BLANK BODY on "${url}" (bodyLen=${snap.bodyLen ?? "?"},children=${snap.childCount ?? "?"}) — attempt ${_blankRecoveryCount}/3, recovering in 1500 ms to ${diagCks.length > 0 ? "feed" : "login"}`);
-    await new Promise(r => setTimeout(r, 1500));
-    if (win.isDestroyed()) return;
-    // Abort recovery if the user navigated away during the delay
-    if (win.webContents.getURL() !== url) return;
-    win.webContents.loadURL(
-      diagCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
-    ).catch(() => {});
+      _blankRecoveryCount++;
+      if (_blankRecoveryCount > 3) {
+        console.warn(`[ebDiag:${profileId}] blank-screen recovery reached retry limit (${_blankRecoveryCount}) — stopping to avoid reload loop. User can manually reload.`);
+        return;
+      }
+
+      // Wait 1500 ms before reloading so the proxy has time to settle.
+      // Without this delay the recovery reload fires into the same race condition
+      // that caused the blank page, gets another blank, and loops.
+      console.warn(`[ebDiag:${profileId}] BLANK BODY on "${url}" (bodyLen=${snap.bodyLen ?? "?"},children=${snap.childCount ?? "?"}) — attempt ${_blankRecoveryCount}/3, recovering in 1500 ms to ${diagCks.length > 0 ? "feed" : "login"}`);
+      await new Promise(r => setTimeout(r, 1500));
+      if (win.isDestroyed()) return;
+      // Abort recovery if the user navigated away during the delay
+      if (win.webContents.getURL() !== url) return;
+      win.webContents.loadURL(
+        diagCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+      ).catch(() => {});
+    } catch (err) {
+      console.warn(`[ebDiag:${profileId}] did-finish-load handler error (non-fatal):`, err);
+    }
   });
 
   win.webContents.on("did-fail-load", (_e, errorCode, errorDesc, validatedUrl, isMainFrame) => {

@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.902",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Clicking the browser icon on Accounts no longer crashes the app — the blank-screen recovery handler was missing error protection and could crash the main process on unexpected page states." },
+      { category: "Fix", text: "TrustScore badges on the Statistics page are now correctly centred in their column." },
+      { category: "Fix", text: "Execution order is now respected — Human Session (set to order 75) runs before Follow (set to order 1). Higher order number = runs first." },
+    ],
+  },
+  {
     version: "1.0.901",
     date: "12 Jun 2026",
     items: [
