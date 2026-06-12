@@ -1535,8 +1535,11 @@ async function doAutoLogin(
       btnPos = await wc.executeJavaScript(`
         (() => {
           const b = document.querySelector('button[type="submit"]')
-            || Array.from(document.querySelectorAll('button')).find(b => /log[\\s-]*in|sign[\\s-]*in/i.test((b.innerText || b.textContent || '').trim()))
-            || document.querySelector('form button:not([type="button"])');
+            || Array.from(document.querySelectorAll('button')).find(b => {
+                const t = (b.innerText || b.textContent || '').trim();
+                const r = b.getBoundingClientRect();
+                return /log[\\s-]*in|sign[\\s-]*in/i.test(t) && r.width > 80;
+              });
           if (!b || b.disabled) return null;
           const r = b.getBoundingClientRect();
           if (r.width <= 0 || r.height <= 0) return null;
@@ -1753,7 +1756,12 @@ export async function openEbWindow(opts: {
       }
       const _wasHidden = !existing.win.isVisible();
       if (existing.win.isMinimized()) existing.win.restore();
-      if (!isGhostBrowser && !existing.win.isMaximized()) existing.win.maximize();
+      if (!isGhostBrowser && !existing.win.isMaximized()) {
+        // Use explicit workArea bounds so the window never covers the Windows taskbar.
+        const _eb = existing.win.getBounds();
+        const _disp = eScreen.getDisplayNearestPoint({ x: _eb.x, y: _eb.y });
+        existing.win.setBounds(_disp.workArea);
+      }
       if (!existing.win.isVisible()) existing.win.show();
       existing.win.focus();
 
@@ -1987,7 +1995,11 @@ export async function openEbWindow(opts: {
       const gy = Math.max(0, Math.floor((sh - wh) / 2));
       win.setPosition(gx, gy);
     } else {
-      win.maximize();
+      // Use explicit workArea bounds instead of maximize() so the window never
+      // covers the Windows taskbar or hides the close/min/max buttons.
+      // win.maximize() can exceed workArea on some Windows DPI/taskbar configs.
+      const _wa = eScreen.getPrimaryDisplay().workArea;
+      win.setBounds({ x: _wa.x, y: _wa.y, width: _wa.width, height: _wa.height });
     }
   });
 
@@ -3392,17 +3404,27 @@ function setupToolbarIpc(): void {
             await _ms(100);
             await typeTextCDP(_d, _lgUsr);
 
-            // Tab key advances focus to the password field (most reliable on
-            // Instagram's mobile login page — coordinate tapping alone can land
-            // on the wrong element if Instagram rerenders between the username
-            // type and the tap).
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(50);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(300);
+            // Wait for Instagram's async username validation to settle before
+            // tapping the password field. Instagram re-renders the form after
+            // username input (shows a clear × button, spinner, or suggestions)
+            // which shifts the password field position downward. Using stale
+            // pre-typing coordinates causes the tap to land on the × clear
+            // button at the end of the username field instead. Re-query after
+            // 700 ms to get the fresh post-render position.
+            await _ms(700);
+            const _freshPwd = await targetWc.executeJavaScript(`
+              (() => {
+                const p = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+                if (!p) return null;
+                const r = p.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) return null;
+                return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+              })()
+            `).catch(() => null) as { x: number; y: number } | null;
+            const _pwdCoords = _freshPwd ?? _flds.p;
 
-            // Belt-and-suspenders: also tap the password field by coordinate
-            await cdpTapGesture(_d, _flds.p.x, _flds.p.y);
+            // Tap the password field using fresh post-render coordinates
+            await cdpTapGesture(_d, _pwdCoords.x, _pwdCoords.y);
             await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -3420,13 +3442,19 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(500 + Math.floor(Math.random() * 400));
 
-            // Poll for submit button, tap via touch gesture
+            // Poll for submit button, tap via touch gesture.
+            // NOTE: the "form button:not([type='button'])" fallback is intentionally
+            // omitted — it matches the password eye/reveal icon (no type attr) before
+            // the Log In button becomes enabled and causes the eye to be tapped instead.
             for (let _bi = 0; _bi < 20; _bi++) {
               const _bp = await targetWc.executeJavaScript(`
                 (() => {
                   const b = document.querySelector('button[type="submit"]')
-                    || Array.from(document.querySelectorAll('button')).find(b => /log[\\s-]*in|sign[\\s-]*in/i.test((b.innerText||b.textContent||'').trim()))
-                    || document.querySelector('form button:not([type="button"])');
+                    || Array.from(document.querySelectorAll('button')).find(b => {
+                        const t = (b.innerText||b.textContent||'').trim();
+                        const r = b.getBoundingClientRect();
+                        return /log[\\s-]*in|sign[\\s-]*in/i.test(t) && r.width > 80;
+                      });
                   if (!b || b.disabled) return null;
                   const r = b.getBoundingClientRect();
                   if (r.width <= 0 || r.height <= 0) return null;

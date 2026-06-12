@@ -489,7 +489,7 @@ export function SettingsPage() {
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
   const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
-  const [settingsTab, setSettingsTab] = useState("general");
+  const [settingsTab, setSettingsTab] = useState("my account");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
   const jarveeFileRef = useRef<HTMLInputElement>(null);

@@ -62,6 +62,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.900",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login button: after filling in username the app was clicking the clear × button inside the field instead of tapping the password field — now re-queries the password field position after username validation settles." },
+      { category: "Fix", text: "Login button: after filling in password the app was clicking the eye/reveal icon instead of the Sign In button — removed the overly broad button fallback that was matching icon buttons." },
+      { category: "Fix", text: "Verify: silent background login now correctly taps the Sign In button instead of the password reveal icon." },
+      { category: "Fix", text: "Embedded browser window no longer hides the Windows taskbar or obscures the close button — uses explicit work area bounds instead of maximize." },
+      { category: "Fix", text: "Browser icon button on Accounts page now responds instantly — was previously frozen for up to 10 seconds while the window set itself up in the background." },
+      { category: "Fix", text: "Accounts page no longer shifts layout when importing or deleting accounts — scrollbar space is now always reserved." },
+      { category: "Fix", text: "TrustScore badges on the Statistics page are now centred in their column." },
+      { category: "Fix", text: "Settings button now opens directly on the My Account tab instead of the General tab." },
+    ],
+  },
+  {
     version: "1.0.899",
     date: "12 Jun 2026",
     items: [
