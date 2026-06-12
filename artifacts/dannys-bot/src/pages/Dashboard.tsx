@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.907",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Removed the screenOrientation field from the browser device setup — it was crashing Chromium on Windows in Electron 33 when combined with mobile mode. The browser now opens correctly." },
+    ],
+  },
+  {
     version: "1.0.906",
     date: "12 Jun 2026",
     items: [

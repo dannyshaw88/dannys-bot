@@ -2255,9 +2255,8 @@ export async function openEbWindow(opts: {
           win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
             width:             _mobileProfile.width,
             height:            _mobileProfile.height,
-            deviceScaleFactor: _mobileProfile.dpr,
+            deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
             mobile:            true,
-            screenOrientation: { type: "portraitPrimary", angle: 0 },
           }),
           new Promise<void>(r => setTimeout(r, 3000)),
         ]);
