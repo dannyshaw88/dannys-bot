@@ -45,6 +45,7 @@ function titleSlug(title: string) {
 }
 function storageTargetsKey(title: string) { return `copyDialog:${titleSlug(title)}:targets`; }
 function storageSettingsKey(title: string) { return `copyDialog:${titleSlug(title)}:settings`; }
+function storageSortKey(title: string)     { return `copyDialog:${titleSlug(title)}:sort`; }
 
 function statusBadgeClass(status: string) {
   const s = (status ?? "").toLowerCase().replace(/_/g, " ");
@@ -107,8 +108,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   // without needing to re-register the save effect on every state change.
   const targetsRef  = useRef<Set<number>>(targets);
   const selectedRef = useRef<Set<string>>(selected);
+  const sortByRef   = useRef<SortBy>(sortBy);
+  const sortDirRef  = useRef<SortDir>(sortDir);
   useEffect(() => { targetsRef.current  = targets;  }, [targets]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => { sortByRef.current   = sortBy;   }, [sortBy]);
+  useEffect(() => { sortDirRef.current  = sortDir;  }, [sortDir]);
 
   // Stop drag on mouseup anywhere (including outside the list)
   useEffect(() => {
@@ -171,14 +176,28 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       setSearch("");
       setSettingsSearch("");
       setStatusFilter("");
-      setSortBy("name");
-      setSortDir("asc");
+      // Restore sort preference — defaults to "name" asc only if nothing stored yet
+      try {
+        const rawSort = localStorage.getItem(storageSortKey(title));
+        if (rawSort) {
+          const { by, dir } = JSON.parse(rawSort) as { by: SortBy; dir: SortDir };
+          setSortBy(by ?? "name");
+          setSortDir(dir ?? "asc");
+        } else {
+          setSortBy("name");
+          setSortDir("asc");
+        }
+      } catch {
+        setSortBy("name");
+        setSortDir("asc");
+      }
       setStatus("idle");
     } else {
       // Save to localStorage when dialog closes — refs hold the final state
       try {
         localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targetsRef.current]));
         localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));
+        localStorage.setItem(storageSortKey(title), JSON.stringify({ by: sortByRef.current, dir: sortDirRef.current }));
       } catch {}
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps

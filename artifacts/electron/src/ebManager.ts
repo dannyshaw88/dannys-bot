@@ -3598,7 +3598,19 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(50);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(500 + Math.floor(Math.random() * 400));
+            await _ms(200);
+            // Second Tab — moves focus past any interstitial element (e.g. password
+            // strength or "Save info?" nudge) so the next focusable is the Log In button.
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(50);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(300 + Math.floor(Math.random() * 200));
+            // Enter — submit the form directly via keyboard. Keeps the gesture-based
+            // poll below as a fallback in case the form is not yet in a submittable state.
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await _ms(400 + Math.floor(Math.random() * 300));
 
             // Poll for submit button, tap via touch gesture.
             // NOTE: the "form button:not([type='button'])" fallback is intentionally

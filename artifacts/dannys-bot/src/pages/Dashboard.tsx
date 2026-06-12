@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.916",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Login button flow in the embedded browser now presses Tab, Tab, Enter after typing the password — matching the expected keyboard sequence and submitting the form directly without waiting for the button to become clickable." },
+      { category: "Fix", text: "Copy Settings dialog now remembers which accounts were ticked, which settings were ticked, and the sort order you chose — all restored next time you open it. Only resets when the app restarts." },
+      { category: "New", text: "Evasion Stats: new 'Top Surviving Accounts' section lists your valid accounts ranked by how long they've been running, sourced from the date stamp in Account Settings → Notes. Re-added accounts show a badge and the latest re-add date." },
+    ],
+  },
+  {
     version: "1.0.915",
     date: "12 Jun 2026",
     items: [

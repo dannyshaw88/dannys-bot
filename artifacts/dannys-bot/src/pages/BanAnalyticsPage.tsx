@@ -4,9 +4,18 @@ import { useEffect, useState } from "react";
 import {
   Loader2, BarChart2, Calendar, Globe, AlertTriangle, Shield,
   Clock, TrendingUp, ChevronDown, ChevronUp, UserPlus, UserMinus,
-  MessageSquare, Zap,
+  MessageSquare, Zap, Award, RefreshCw,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
+
+interface ProfileRow {
+  id: number;
+  username: string;
+  accountLabel?: string | null;
+  accountStatus?: string | null;
+  tags?: string | null;
+  notes?: string | null;
+}
 
 interface AnalyticsEntry {
   id: number;
@@ -222,6 +231,38 @@ function buildConcurrencyAlerts(bans: AnalyticsEntry[], automated: AnalyticsEntr
     }
   }
   return alerts.slice(0, 20);
+}
+
+// ── Surviving accounts helpers ────────────────────────────────────────────────
+// Parses every "Added: YYYY-MM-DD HH:MM:SS UTC" stamp from the notes field.
+// Returns the EARLIEST one (original add date). Falls back to null if unparseable.
+function parseFirstAddedDate(notes: string | null | undefined): Date | null {
+  if (!notes) return null;
+  const matches = [...notes.matchAll(/Added:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)];
+  if (!matches.length) return null;
+  const dates = matches
+    .map(m => new Date(m[1].replace(" UTC", "Z").replace(" ", "T")))
+    .filter(d => !isNaN(d.getTime()));
+  if (!dates.length) return null;
+  return dates.reduce((earliest, d) => d < earliest ? d : earliest);
+}
+
+function parseAllAddedDates(notes: string | null | undefined): Date[] {
+  if (!notes) return [];
+  const matches = [...notes.matchAll(/Added:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)];
+  return matches
+    .map(m => new Date(m[1].replace(" UTC", "Z").replace(" ", "T")))
+    .filter(d => !isNaN(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+function formatDuration(ms: number): string {
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  if (d >= 1) return `${d}d ${h}h`;
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h >= 1) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 type Tab = "ban" | "automated" | "captcha" | "locked";
@@ -453,8 +494,35 @@ export function BanAnalyticsPage() {
     queryFn: async () => (await fetch("/api/analytics/locked-patterns", { credentials: "include" })).json(),
     refetchInterval: 30000,
   });
+  const { data: allProfiles = [] } = useQuery<ProfileRow[]>({
+    queryKey: ["/api/profiles"],
+    queryFn: async () => (await fetch("/api/profiles", { credentials: "include" })).json(),
+    refetchInterval: 60000,
+  });
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
+
+  // Surviving accounts: valid accounts only, sorted by original Added date (oldest first)
+  const flaggedUsernames = new Set([
+    ...banEntries.map(e => e.username),
+    ...automatedEntries.map(e => e.username),
+    ...captchaEntries.map(e => e.username),
+    ...lockedEntries.map(e => e.username),
+  ]);
+  const now = Date.now();
+  const survivingAccounts = allProfiles
+    .filter(p => {
+      const st = (p.accountStatus ?? "").toLowerCase().replace(/_/g, " ");
+      return st === "valid" && !flaggedUsernames.has(p.username);
+    })
+    .map(p => {
+      const firstDate = parseFirstAddedDate(p.notes);
+      const allDates  = parseAllAddedDates(p.notes);
+      return { ...p, firstDate, allDates, runMs: firstDate ? now - firstDate.getTime() : null };
+    })
+    .filter(p => p.firstDate !== null)
+    .sort((a, b) => (a.runMs ?? 0) > (b.runMs ?? 0) ? -1 : 1)  // oldest first
+    .slice(0, 20);
   const proxyRisks = buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries);
   const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries);
   const cfg = TAB_CONFIG[activeTab];
@@ -502,6 +570,54 @@ export function BanAnalyticsPage() {
                   <p className={`text-3xl font-bold mt-1 ${cls}`}>{val}</p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {survivingAccounts.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <Award className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-semibold">Top Surviving Accounts</span>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  Valid accounts — date sourced from Account Settings → Notes
+                </span>
+              </div>
+              <div className="divide-y divide-border">
+                {survivingAccounts.map((p, i) => {
+                  const reAdded = p.allDates.length > 1;
+                  return (
+                    <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold">#{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">@{p.username}</span>
+                          {p.accountLabel && p.accountLabel !== p.username && (
+                            <span className="text-[11px] text-muted-foreground truncate">{p.accountLabel}</span>
+                          )}
+                          {reAdded && (
+                            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 font-semibold shrink-0">
+                              <RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×
+                            </span>
+                          )}
+                          {p.tags && p.tags !== "No Group Assigned" && (
+                            <span className="text-[10px] text-muted-foreground shrink-0">{p.tags}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+                          <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                          {reAdded && (
+                            <span>Latest re-add: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-base font-bold text-green-600 dark:text-green-400">{formatDuration(p.runMs!)}</p>
+                        <p className="text-[10px] text-muted-foreground">running</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
