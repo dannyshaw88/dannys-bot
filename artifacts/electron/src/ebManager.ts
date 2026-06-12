@@ -2283,12 +2283,15 @@ export async function openEbWindow(opts: {
     if (_mobileProfile) {
       _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
       try {
+        // mobile:true removed — it triggers a Chromium renderer SIGSEGV in Electron 33
+        // on Windows when called shortly after Emulation.setUserAgentOverride.
+        // The small viewport + setTouchEmulationEnabled below still gets Instagram's
+        // mobile layout via UA-based detection without crashing the process.
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
             width:             _mobileProfile.width,
             height:            _mobileProfile.height,
             deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
-            mobile:            true,
           }),
           new Promise<void>(r => setTimeout(r, 3000)),
         ]);
@@ -2403,7 +2406,6 @@ export async function openEbWindow(opts: {
       try {
         win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
           width: 393, height: 851, deviceScaleFactor: 2.75, mobile: true,
-          screenOrientation: { type: "portraitPrimary", angle: 0 },
         }).catch(() => {});
         win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
           enabled: true, maxTouchPoints: 10,

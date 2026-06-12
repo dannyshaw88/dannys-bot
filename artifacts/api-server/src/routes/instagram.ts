@@ -637,6 +637,76 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Flag as Automated Behaviour: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-automated", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      await storage.insertAutomatedBehaviourAnalytics({
+        username: profile.username,
+        proxyHost: profile.proxyHost ?? "",
+        flaggedAt: new Date().toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected" });
+      req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-automated] error");
+      res.status(500).json({ error: "Failed to flag account as automated behaviour" });
+    }
+  });
+
+  // ── Flag as Captcha Error: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-captcha", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      await storage.insertCaptchaAnalytics({
+        username: profile.username,
+        proxyHost: profile.proxyHost ?? "",
+        flaggedAt: new Date().toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "captcha" });
+      req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-captcha] error");
+      res.status(500).json({ error: "Failed to flag account as captcha error" });
+    }
+  });
+
+  // ── Automated Behaviour Analytics: return all records ───────────────────────
+  app.get("/api/analytics/automated-patterns", async (req, res) => {
+    try {
+      const records = await storage.getAutomatedBehaviourAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[automated-analytics] error");
+      res.status(500).json({ error: "Failed to fetch automated behaviour analytics" });
+    }
+  });
+
+  // ── Captcha Analytics: return all records ───────────────────────────────────
+  app.get("/api/analytics/captcha-patterns", async (req, res) => {
+    try {
+      const records = await storage.getCaptchaAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[captcha-analytics] error");
+      res.status(500).json({ error: "Failed to fetch captcha analytics" });
+    }
+  });
+
   // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
   // Called by both the bulk import and EQX import routes immediately after a
   // profile is created/updated with igApiCookies.  Without this file Chrome

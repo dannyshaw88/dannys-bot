@@ -377,6 +377,28 @@ export const insertBannedAccountAnalyticsSchema = createInsertSchema(bannedAccou
 export type BannedAccountAnalytics = typeof bannedAccountsAnalytics.$inferSelect;
 export type InsertBannedAccountAnalytics = z.infer<typeof insertBannedAccountAnalyticsSchema>;
 
+export const automatedBehaviourAnalytics = sqliteTable("automated_behaviour_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+});
+
+export type AutomatedBehaviourAnalytics = typeof automatedBehaviourAnalytics.$inferSelect;
+
+export const captchaAnalytics = sqliteTable("captcha_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+});
+
+export type CaptchaAnalytics = typeof captchaAnalytics.$inferSelect;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
   proxyType: z.enum(["http", "socks5"]).optional().default("http"),

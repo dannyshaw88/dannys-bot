@@ -2049,6 +2049,60 @@ export function ProfilesPage() {
                 <Ban className="w-4 h-4 shrink-0" />
                 Flag as Banned{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
+              <button
+                onClick={async () => {
+                  if (selectedProfileIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to flag.", variant: "destructive" });
+                    return;
+                  }
+                  setActionsOpen(false);
+                  const confirmed = window.confirm(
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Automated Behaviour Detected?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Automated Behaviour Detected\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                  );
+                  if (!confirmed) return;
+                  let successCount = 0;
+                  for (const id of selectedProfileIds) {
+                    try {
+                      const r = await fetch(`/api/profiles/${id}/flag-automated`, { method: "POST", credentials: "include" });
+                      if (r.ok) successCount++;
+                    } catch {}
+                  }
+                  toast({ title: "Flagged as Automated Behaviour", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in Evasion Stats.` });
+                  queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-orange-600"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Flag as Automated Behaviour{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <button
+                onClick={async () => {
+                  if (selectedProfileIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to flag.", variant: "destructive" });
+                    return;
+                  }
+                  setActionsOpen(false);
+                  const confirmed = window.confirm(
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Captcha Error?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Captcha\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                  );
+                  if (!confirmed) return;
+                  let successCount = 0;
+                  for (const id of selectedProfileIds) {
+                    try {
+                      const r = await fetch(`/api/profiles/${id}/flag-captcha`, { method: "POST", credentials: "include" });
+                      if (r.ok) successCount++;
+                    } catch {}
+                  }
+                  toast({ title: "Flagged as Captcha Error", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in Evasion Stats.` });
+                  queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-yellow-50 dark:hover:bg-yellow-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-yellow-600"
+              >
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                Flag as Captcha Error{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Trash2 className="w-4 h-4 shrink-0" /><span className="flex-1">Delete Selected</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+D</span>

@@ -11,6 +11,8 @@ import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
   hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, bannedAccountsAnalytics,
+  automatedBehaviourAnalytics, captchaAnalytics,
+  type AutomatedBehaviourAnalytics, type CaptchaAnalytics,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -142,6 +144,14 @@ export interface IStorage {
   // Ban Analytics
   insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
   getBanAnalytics(): Promise<BannedAccountAnalytics[]>;
+
+  // Automated Behaviour Analytics
+  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]>;
+
+  // Captcha Analytics
+  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  getCaptchaAnalytics(): Promise<CaptchaAnalytics[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -881,6 +891,22 @@ export class DatabaseStorage implements IStorage {
 
   async getBanAnalytics(): Promise<BannedAccountAnalytics[]> {
     return await db.select().from(bannedAccountsAnalytics).orderBy(desc(bannedAccountsAnalytics.id));
+  }
+
+  async insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+    await db.insert(automatedBehaviourAnalytics).values(entry);
+  }
+
+  async getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]> {
+    return await db.select().from(automatedBehaviourAnalytics).orderBy(desc(automatedBehaviourAnalytics.id));
+  }
+
+  async insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+    await db.insert(captchaAnalytics).values(entry);
+  }
+
+  async getCaptchaAnalytics(): Promise<CaptchaAnalytics[]> {
+    return await db.select().from(captchaAnalytics).orderBy(desc(captchaAnalytics.id));
   }
 }
 

@@ -62,6 +62,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.910",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed the embedded browser window crashing (SIGSEGV) every time it opened — the crash was caused by the mobile layout flag in the device setup step. The browser now uses a compact mobile viewport and touch emulation without the flag that was causing Chromium to crash." },
+      { category: "Fix", text: "Removed the screen orientation field from the ghost browser device setup that was supposed to have been removed in a previous version but was still present." },
+      { category: "Feature", text: "Ban Analytics renamed to Evasion Stats with a new spy icon in the sidebar." },
+      { category: "Feature", text: "Evasion Stats now has three tabs: Ban Events, Automated Behaviour, and Captcha Errors — each showing which API endpoints were called before the event, and the average call rate." },
+      { category: "Feature", text: "Evasion Stats now shows a Proxy Risk Ranking table listing which proxy IPs appear most often across all three event types, so you can see which proxies are causing the most problems." },
+      { category: "Feature", text: "Evasion Stats now shows Concurrent Usage Alerts when multiple accounts on the same proxy were flagged within 30 minutes of each other — a strong signal of suspicious pattern detection by Instagram." },
+      { category: "Feature", text: "Accounts page now has two new flag options: Flag as Automated Behaviour and Flag as Captcha Error. Both snapshot the account's API call history into Evasion Stats but keep the account in Equinox so you can still verify and recover it." },
+    ],
+  },
+  {
     version: "1.0.909",
     date: "12 Jun 2026",
     items: [

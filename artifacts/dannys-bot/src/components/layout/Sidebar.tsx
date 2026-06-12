@@ -77,12 +77,16 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
   );
 }
 
-function FilledBanAnalyticsIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+function FilledSpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" stroke="none" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      <line x1="8" y1="8" x2="16" y2="16" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
-      <line x1="16" y1="8" x2="8" y2="16" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
+      <ellipse fill="currentColor" cx="12" cy="7.5" rx="8.5" ry="2"/>
+      <path fill="currentColor" d="M7 7.5V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5H7z"/>
+      <circle fill="currentColor" cx="12" cy="13.5" r="4"/>
+      <rect fill="white" x="8" y="12.5" width="3.3" height="2.2" rx="0.8"/>
+      <rect fill="white" x="12.7" y="12.5" width="3.3" height="2.2" rx="0.8"/>
+      <rect fill="white" x="11.3" y="13" width="1.4" height="1" rx="0.3"/>
+      <path fill="currentColor" d="M5.5 22c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5H5.5z"/>
     </svg>
   );
 }
@@ -102,7 +106,7 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon          },
-    { name: "Ban Analytics",   shortLabel: "BAN ANALYTICS",  path: "/ban-analytics",  icon: FilledBanAnalyticsIcon   },
+    { name: "Evasion Stats",   shortLabel: "EVASION STATS",  path: "/ban-analytics",  icon: FilledSpyIcon            },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
   ];
 
