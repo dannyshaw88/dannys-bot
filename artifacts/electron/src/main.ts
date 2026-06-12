@@ -7,8 +7,32 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { startEbIpcServer, openEbWindow, focusEbWindow, ebMap, cookieFilePath } from "./ebManager";
+import { startEbIpcServer, openEbWindow, focusEbWindow, ebMap, cookieFilePath, setEbLogPath } from "./ebManager";
 import { session as electronSession } from "electron";
+
+// ── Main-process crash capture ────────────────────────────────────────────────
+// The Electron main process discards console.log in production (no DevTools).
+// These handlers write directly to the log file so crashes in openEbWindow and
+// other main-process code appear in logs.log alongside the server output.
+let _mainLogPath = "";
+
+function appendToMainLog(msg: string): void {
+  const line = `[${new Date().toISOString()}] [MAIN] ${msg}\n`;
+  try { process.stderr.write(line); } catch {}
+  if (_mainLogPath) {
+    try { fs.appendFileSync(_mainLogPath, line); } catch {}
+  }
+}
+
+process.on("uncaughtException", (err: Error) => {
+  const msg = `UNCAUGHT EXCEPTION: ${err?.stack || err?.message || String(err)}`;
+  appendToMainLog(msg);
+});
+
+process.on("unhandledRejection", (reason: unknown) => {
+  const msg = `UNHANDLED REJECTION: ${(reason as any)?.stack || (reason as any)?.message || String(reason)}`;
+  appendToMainLog(msg);
+});
 
 const execAsync = promisify(exec);
 
@@ -909,6 +933,18 @@ async function createWindow() {
   // path.dirname(app.getPath("exe")) always resolves to the correct install
   // folder regardless of whether the user customised the install location.
   const logPath = path.join(path.dirname(app.getPath("exe")), "logs.log");
+
+  // Wire crash capture to the log file so main-process errors appear in logs.log
+  _mainLogPath = logPath;
+  setEbLogPath(logPath);
+  appendToMainLog(`app ready — v${app.getVersion()} pid=${process.pid}`);
+
+  app.on("render-process-gone", (_e, contents, details) => {
+    appendToMainLog(`RENDER PROCESS GONE: url=${contents.getURL()} reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+  app.on("child-process-gone", (_e, details) => {
+    appendToMainLog(`CHILD PROCESS GONE: type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`);
+  });
 
   serverPort = await getServerPort();
 

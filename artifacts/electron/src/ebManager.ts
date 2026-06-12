@@ -17,6 +17,20 @@ import path from "path";
 import net from "net";
 import { createHmac } from "crypto";
 
+// ── EB crash-step logger ──────────────────────────────────────────────────────
+// Writes step-by-step progress and error lines directly to logs.log so the exact
+// crash point in openEbWindow is visible in the log file (main process console.log
+// is discarded in production — these file writes are the only way to capture it).
+let _ebLogPath = "";
+export function setEbLogPath(p: string): void { _ebLogPath = p; }
+function _ebCrashLog(profileId: number | string, msg: string): void {
+  const line = `[${new Date().toISOString()}] [EB:${profileId}] ${msg}\n`;
+  try { process.stderr.write(line); } catch {}
+  if (_ebLogPath) {
+    try { fs.appendFileSync(_ebLogPath, line); } catch {}
+  }
+}
+
 // ── Native toolbar (BrowserView) ───────────────────────────────────────────────
 // The toolbar now lives in a native Electron BrowserView that floats on top of
 // the Instagram window at the OS compositor level.  It is completely independent
@@ -1705,6 +1719,7 @@ export async function openEbWindow(opts: {
 }): Promise<void> {
   const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl } = opts;
   const isGhostBrowser = profileId === -1;
+  _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -1810,18 +1825,22 @@ export async function openEbWindow(opts: {
   const partition = profileId === -1
     ? `eb-ghost-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     : `persist:eb-${profileId}`;
+  _ebCrashLog(profileId, `STEP-2: creating session partition="${partition}"`);
   const ses = electronSession.fromPartition(partition);
+  _ebCrashLog(profileId, "STEP-3: session created");
 
   // Configure proxy.
   // HTTP proxies use fixed_servers + proxyRules with embedded credentials.
   // SOCKS5 proxies also use fixed_servers with socks5:// proxyRules.
   if (proxy) {
     const cfg = buildProxyConfig(proxy);
-    console.log(`[EB:open:${profileId}] Setting proxy — type=${proxy.type||"http"} host=${proxy.host}:${proxy.port} hasCredentials=${!!(proxy.user)} proxyRules=${(cfg as any).proxyRules}`);
+    _ebCrashLog(profileId, `STEP-4: setting proxy type=${proxy.type||"http"} host=${proxy.host}:${proxy.port}`);
     await ses.setProxy(cfg);
+    _ebCrashLog(profileId, "STEP-5: proxy set (first pass)");
   } else {
-    console.log(`[EB:open:${profileId}] No proxy configured — using direct:// (real machine IP will be exposed)`);
+    _ebCrashLog(profileId, "STEP-4: no proxy — using direct://");
     await ses.setProxy({ proxyRules: "direct://" });
+    _ebCrashLog(profileId, "STEP-5: direct proxy set");
   }
 
   // ── WebRTC IP-leak prevention (session level) ────────────────────────────
@@ -1852,6 +1871,7 @@ export async function openEbWindow(opts: {
 
   // Flush any stale DNS cache that could route requests around the proxy
   try { await ses.clearHostResolverCache(); } catch {}
+  _ebCrashLog(profileId, "STEP-6: DNS cache cleared, registering webRequest hooks");
 
   // ── ig_nrcb pre-seed ───────────────────────────────────────────────────────
   // ig_nrcb (non-removable cookie backup) tells Instagram this device has
@@ -1961,16 +1981,21 @@ export async function openEbWindow(opts: {
   // A short yield lets any disk-load race from the persistent session
   // profile complete, then we override again so the final value is ours.
   if (proxy) {
+    _ebCrashLog(profileId, "STEP-7: proxy double-set start");
     await ses.setProxy(buildProxyConfig(proxy));
     await new Promise(r => setTimeout(r, 150));
     await ses.setProxy(buildProxyConfig(proxy));
+    _ebCrashLog(profileId, "STEP-8: proxy double-set done");
   }
 
   // Seed existing cookies into the Electron session
+  _ebCrashLog(profileId, "STEP-9: loading cookies from file");
   await loadCookiesFromFile(profileId, ses);
+  _ebCrashLog(profileId, "STEP-10: cookies loaded");
 
   // Ghost browser (profileId -1) opens at phone portrait dimensions, not maximized.
   // Regular account EB windows open full-screen maximized.
+  _ebCrashLog(profileId, "STEP-11: creating BrowserWindow");
   const win = new BrowserWindow({
     width:           isGhostBrowser ? 430 : 1280,
     height:          isGhostBrowser ? 932 : 820,
@@ -2004,6 +2029,7 @@ export async function openEbWindow(opts: {
     }
   });
 
+  _ebCrashLog(profileId, "STEP-12: BrowserWindow created, registering in ebMap");
   // Register in ebMap IMMEDIATELY — before any async CDP/proxy/cookie work.
   // ready-to-show (above) fires and makes the window visible while the async
   // setup below is still running.  If ebMap.set were placed after that async
@@ -2013,6 +2039,7 @@ export async function openEbWindow(opts: {
   // conclude the browser isn't open.  Registering here ensures the VERY NEXT
   // poll (within 5 s) sees { open:true } and the UI reflects reality.
   ebMap.set(profileId, { win, username, proxy, partition });
+  _ebCrashLog(profileId, "STEP-13: ebMap early-registration done");
 
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its
@@ -2046,7 +2073,8 @@ export async function openEbWindow(opts: {
   // win.destroy() — subsequent win.addBrowserView / CDP calls on a destroyed
   // window crash the main process.  Check here (after all the awaits for proxy,
   // cookies, timezone, UA, device metrics) before any further window operations.
-  if (win.isDestroyed()) return;
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1: window destroyed — returning early"); return; }
+  _ebCrashLog(profileId, "STEP-14: guard-1 passed, attaching debugger");
 
   // ── WebRTC TCP-candidate leak prevention (CDP page-script injection) ──────
   // Chromium's `disable_non_proxied_udp` WebRTC policy blocks UDP ICE candidates
@@ -2076,6 +2104,7 @@ export async function openEbWindow(opts: {
   if (proxy) {
     // Resolve proxy timezone — awaited here (max 5 s) so it's ready before loadURL.
     let _resolvedTz: string | null = null;
+    _ebCrashLog(profileId, `STEP-15: starting timezone fetch for ${proxy.host}`);
     try {
       const _tzAc = new AbortController();
       const _tzTimer = setTimeout(() => _tzAc.abort(), 5000);
@@ -2087,6 +2116,7 @@ export async function openEbWindow(opts: {
       const tzJson = await tzRes.json() as { timezone?: string };
       if (tzJson.timezone) _resolvedTz = tzJson.timezone;
     } catch { /* ip-api unreachable — skip override, use machine timezone */ }
+    _ebCrashLog(profileId, `STEP-16: timezone fetch done tz=${_resolvedTz ?? "none"}`);
 
     if (_resolvedTz) {
       // Apply timezone before first navigation. Race against a 2 s safety timer so
@@ -2099,6 +2129,7 @@ export async function openEbWindow(opts: {
         ]);
       } catch {}
     }
+    _ebCrashLog(profileId, "STEP-17: CDP timezone done");
   }
   // No proxy → skip setTimezoneOverride → Chrome uses the real system timezone.
   // No UTC default — a timezone mismatch between Intl and Date.now() is an
@@ -2150,6 +2181,7 @@ export async function openEbWindow(opts: {
   // desktop UA → serves <html><head></head><body></body></html> (blank screen).
   // Each command is wrapped in Promise.race with a 1500 ms timeout so a slow CDP
   // response never blocks openEbWindow indefinitely.
+  _ebCrashLog(profileId, `STEP-18: UA override — browserUA=${_browserUA ? _browserUA.slice(0,60) : "none"} mobile=${_fpIsMobile}`);
   if (_browserUA) {
     try {
       await Promise.race([
@@ -2181,9 +2213,9 @@ export async function openEbWindow(opts: {
         }),
         new Promise<void>(r => setTimeout(r, 1500)),
       ]);
-      console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride applied before loadURL: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile}`);
+      _ebCrashLog(profileId, "STEP-19: UA CDP override applied");
     } catch (uaErr) {
-      console.warn(`[ebManager:${profileId}] Emulation.setUserAgentOverride failed:`, uaErr);
+      _ebCrashLog(profileId, `STEP-19: UA CDP override FAILED: ${(uaErr as any)?.message}`);
     }
   }
 
@@ -2229,9 +2261,9 @@ export async function openEbWindow(opts: {
           }),
           new Promise<void>(r => setTimeout(r, 1500)),
         ]);
-        console.log(`[ebManager:${profileId}] setTouchEmulationEnabled: touch input stack active`);
+        _ebCrashLog(profileId, "STEP-21: touch emulation enabled");
       } catch (teErr) {
-        console.warn(`[ebManager:${profileId}] setTouchEmulationEnabled failed:`, teErr);
+        _ebCrashLog(profileId, `STEP-21: touch emulation FAILED: ${(teErr as any)?.message}`);
       }
     }
   }
@@ -2239,12 +2271,14 @@ export async function openEbWindow(opts: {
   // ── Locale override — match navigator.languages ────────────────────────────
   // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
   // locale unless overridden at the CDP level.
+  _ebCrashLog(profileId, "STEP-22: setting locale override");
   try {
     await Promise.race([
       win.webContents.debugger.sendCommand("Emulation.setLocaleOverride", { locale: "en-US" }),
       new Promise<void>(r => setTimeout(r, 1500)),
     ]);
   } catch {}
+  _ebCrashLog(profileId, "STEP-23: locale done");
 
   // ── Guard: bail if window was destroyed during CDP setup ─────────────────
   // The CDP awaits above (timezone up to 7 s + UA 1.5 s + device 1.5 s +
@@ -2252,7 +2286,8 @@ export async function openEbWindow(opts: {
   // If the user closes the BrowserPanel or the IPC handler calls win.destroy()
   // during that window, calling win.webContents.setWindowOpenHandler / on / etc.
   // on a destroyed window crashes the main process.
-  if (win.isDestroyed()) return;
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-2: window destroyed after CDP — returning early"); return; }
+  _ebCrashLog(profileId, "STEP-24: guard-2 passed, registering window handlers");
 
   // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
   // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
@@ -2455,7 +2490,8 @@ export async function openEbWindow(opts: {
   // Guard: if the window was destroyed during the async CDP/UA/loadURL work above,
   // do not try to addBrowserView — calling it on a destroyed window crashes the
   // main process (Electron bug: addBrowserView with destroyed parent → SIGSEGV).
-  if (win.isDestroyed()) return;
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-3: window destroyed before BrowserView — returning early"); return; }
+  _ebCrashLog(profileId, "STEP-25: creating BrowserView toolbar");
 
   const toolbarView = new BrowserView({
     webPreferences: {
@@ -2465,7 +2501,9 @@ export async function openEbWindow(opts: {
       nodeIntegration: false,
     },
   });
+  _ebCrashLog(profileId, "STEP-26: BrowserView created, calling addBrowserView");
   win.addBrowserView(toolbarView);
+  _ebCrashLog(profileId, "STEP-27: addBrowserView done");
   toolbarViewMap.set(profileId, toolbarView);
 
   // Initialise tab state for this profile.
@@ -3098,17 +3136,20 @@ export async function openEbWindow(opts: {
   // Ghost browsers (profileId < 0, any slot): load the provided initialUrl directly —
   // never auto-navigate to Instagram, the warmup handles all navigation.
   // Regular account EBs: go to homepage if sessionid exists, otherwise login page.
-  if (win.isDestroyed()) return;
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-4: window destroyed before loadURL — returning early"); return; }
+  _ebCrashLog(profileId, "STEP-28: guard-4 passed, calling loadURL");
   if (profileId < 0) {
     win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
+    _ebCrashLog(profileId, `STEP-29: ghost loadURL called — ${initialUrl || "about:blank"}`);
   } else {
     const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
     if (!win.isDestroyed()) {
-      win.webContents.loadURL(
-        sessionCksForNav.length > 0
-          ? "https://www.instagram.com/"
-          : "https://www.instagram.com/accounts/login/",
-      ).catch(() => {});
+      const navTarget = sessionCksForNav.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+      _ebCrashLog(profileId, `STEP-29: loadURL → ${navTarget} (sessionid=${sessionCksForNav.length > 0})`);
+      win.webContents.loadURL(navTarget).catch(() => {});
+      _ebCrashLog(profileId, "STEP-30: loadURL called OK — openEbWindow complete");
+    } else {
+      _ebCrashLog(profileId, "GUARD-5: window destroyed before final loadURL after cookies.get");
     }
   }
 

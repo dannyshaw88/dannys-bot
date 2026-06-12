@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.905",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Crash capture is now active: any error in the browser manager that previously caused a silent app crash will now appear in logs.log alongside the server output." },
+      { category: "Fix", text: "Added 30 step-by-step progress markers inside the browser open sequence — the last marker visible in logs.log before a crash will show the exact failing step." },
+    ],
+  },
+  {
     version: "1.0.904",
     date: "12 Jun 2026",
     items: [
