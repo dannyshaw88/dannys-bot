@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.909",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify now uses a fire-and-forget architecture — the browser manager responds immediately and runs the login in the background, then the app polls for the result every 3 seconds. This eliminates the 5-minute connection timeout that was killing verify." },
+      { category: "Debug", text: "Added step-by-step timestamped logs throughout the login process (page load, form fill, submit, navigation, 2FA, session cookie check) so failures are now visible in the app logs with exact timing." },
+    ],
+  },
+  {
+    version: "1.0.908",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify no longer fails with 'fetch failed' after 5 minutes — Node.js was cutting the connection to the browser manager at exactly 300 seconds, which is why verify always failed the same way. The timeout is now disabled so verify can run for as long as it needs." },
+    ],
+  },
+  {
     version: "1.0.907",
     date: "12 Jun 2026",
     items: [

@@ -5187,13 +5187,47 @@ export async function electronSilentVerify(opts: {
   if (!IS_ELECTRON_EB) {
     return { ok: false, message: "electronSilentVerify called outside Electron mode", cookies: [] };
   }
+
+  // ARCHITECTURE: /eb/silent-verify now returns 202 immediately and runs
+  // doAutoLogin in the background. We poll /eb/silent-verify-status until the
+  // result is ready. This means NO single HTTP connection is ever held open for
+  // more than a few milliseconds — the previous design held it open for the full
+  // doAutoLogin duration (up to several minutes), and Node.js HTTP server
+  // timeouts killed the connection mid-verify causing "fetch failed".
   try {
-    const res = await ebIpc("POST", "/eb/silent-verify", opts);
-    return {
-      ok:      res.ok      ?? false,
-      message: res.message ?? "",
-      cookies: Array.isArray(res.cookies) ? res.cookies : [],
-    };
+    const startRes = await ebIpc("POST", "/eb/silent-verify", opts);
+
+    // Fast path: existing session was found — server returned 200 with result directly.
+    if (!startRes.pending) {
+      return {
+        ok:      startRes.ok      ?? false,
+        message: startRes.message ?? "",
+        cookies: Array.isArray(startRes.cookies) ? startRes.cookies : [],
+      };
+    }
+
+    // Slow path: doAutoLogin is running in the background — poll for result.
+    const deadline = Date.now() + 10 * 60_000; // 10-minute overall cap
+    const pollStart = Date.now();
+    let pollCount = 0;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 3000));
+      pollCount++;
+      const elapsed = ((Date.now() - pollStart) / 1000).toFixed(0);
+      log(`[electronSilentVerify:${opts.profileId}] poll #${pollCount} at +${elapsed}s`, "browser");
+      const status = await ebIpc("GET", `/eb/silent-verify-status?profileId=${opts.profileId}`);
+      log(`[electronSilentVerify:${opts.profileId}] poll #${pollCount} response: done=${status.done}${status.done ? ` ok=${status.ok}` : ""}${status.error ? ` error=${status.error}` : ""}`, "browser");
+      if (status.done) {
+        log(`[electronSilentVerify:${opts.profileId}] completed after ${pollCount} polls (+${elapsed}s) ok=${status.ok} msg="${status.message}"`, "browser");
+        return {
+          ok:      status.ok      ?? false,
+          message: status.message ?? "",
+          cookies: Array.isArray(status.cookies) ? status.cookies : [],
+        };
+      }
+    }
+    log(`[electronSilentVerify:${opts.profileId}] timed out after 10 minutes (${pollCount} polls)`, "browser");
+    return { ok: false, message: "Silent verify timed out (10 minutes)", cookies: [] };
   } catch (err: any) {
     log(`[electronSilentVerify:${opts.profileId}] IPC error: ${err?.message}`, "browser");
     return { ok: false, message: err?.message ?? "Silent verify IPC failed", cookies: [] };

@@ -200,6 +200,18 @@ let _iconPath    = "";
 // before every long-running step — ensures a stale run cannot bleed into the next.
 const _ghostSignupAbortTokens = new Map<number, number>();
 
+// ── Silent-verify async result store ─────────────────────────────────────────
+// /eb/silent-verify returns 202 immediately so the HTTP connection is never
+// held open for minutes. doAutoLogin runs in the background and stores its
+// result here. The API server polls /eb/silent-verify-status until done.
+interface SilentVerifyResult {
+  done: boolean;
+  ok?: boolean;
+  message?: string;
+  cookies?: Array<{ name: string; value: string }>;
+}
+const _silentVerifyResults = new Map<number, SilentVerifyResult>();
+
 interface EbEntry {
   win: BrowserWindow;
   username: string;
@@ -1356,6 +1368,8 @@ async function doAutoLogin(
   twoFAKey: string,
   userAgent?: string,
 ): Promise<{ ok: boolean; message: string }> {
+  const _t0 = Date.now();
+  const _ts = () => `+${((Date.now() - _t0) / 1000).toFixed(1)}s`;
   console.log(`[doAutoLogin:${profileId}] @${username} — starting`);
   const wc  = win.webContents;
   const ses = electronSession.fromPartition(ebPartition(profileId));
@@ -1404,6 +1418,7 @@ async function doAutoLogin(
   }
 
   // Navigate to login page
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} navigating to login page`);
   try {
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("Login page load timeout")), 30000);
@@ -1411,8 +1426,10 @@ async function doAutoLogin(
       wc.loadURL("https://www.instagram.com/accounts/login/").catch(reject);
     });
   } catch (e: any) {
+    console.error(`[doAutoLogin:${profileId}] ${_ts()} login page load FAILED: ${(e as any)?.message}`);
     return { ok: false, message: `Failed to load login page: ${e?.message}` };
   }
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} login page loaded`);
   await delay(2000);
 
   // ── Dismiss cookie banner before filling credentials (poll up to 6 s) ─────
@@ -1448,12 +1465,14 @@ async function doAutoLogin(
       await delay(500);
     }
     if (ckPos) {
-      console.log(`[doAutoLogin:${profileId}] @${username} — cookie banner at (${ckPos.x},${ckPos.y}), dismissing via touch tap`);
+      console.log(`[doAutoLogin:${profileId}] ${_ts()} cookie banner at (${ckPos.x},${ckPos.y}), dismissing`);
       try {
         try { wc.debugger.attach("1.3"); } catch {}
         await cdpTapGesture(wc.debugger, ckPos.x, ckPos.y);
         await delay(2000);
       } catch {}
+    } else {
+      console.log(`[doAutoLogin:${profileId}] ${_ts()} no cookie banner found`);
     }
   }
 
@@ -1491,8 +1510,10 @@ async function doAutoLogin(
   `).catch(() => null) as { u: { x: number; y: number }; p: { x: number; y: number } } | null;
 
   if (!fields) {
+    console.error(`[doAutoLogin:${profileId}] ${_ts()} login form fields NOT FOUND — bailing`);
     return { ok: false, message: "Could not find login form on Instagram login page" };
   }
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} login form found, filling credentials`);
 
   // Step 2: tap username field (touch event) + type via CDP
   // WHY cdpTapGesture instead of dispatchMouseEvent:
@@ -1538,9 +1559,10 @@ async function doAutoLogin(
     await delay(100);
     await typeTextCDP(wc.debugger, password);
   } catch (cdpErr: any) {
-    console.warn(`[doAutoLogin:${profileId}] CDP form fill failed: ${cdpErr?.message}`);
+    console.error(`[doAutoLogin:${profileId}] ${_ts()} CDP form fill FAILED: ${cdpErr?.message}`);
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
   }
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} credentials filled, looking for submit button`);
 
   // Step 4: poll for submit button position, tap via touch gesture
   {
@@ -1564,10 +1586,11 @@ async function doAutoLogin(
       await delay(250);
     }
     if (btnPos) {
+      console.log(`[doAutoLogin:${profileId}] ${_ts()} tapping submit button at (${btnPos.x},${btnPos.y})`);
       await cdpTapGesture(wc.debugger, btnPos.x, btnPos.y);
     } else {
       // Fallback: Enter via CDP (still isTrusted = true)
-      console.warn(`[doAutoLogin:${profileId}] submit button not found — sending Enter via CDP`);
+      console.warn(`[doAutoLogin:${profileId}] ${_ts()} submit button not found — sending Enter via CDP`);
       await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
       await delay(60);
       await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
@@ -1578,6 +1601,7 @@ async function doAutoLogin(
   // The 2FA page URL is "accounts/login/two_factor?..." — it still contains
   // "accounts/login", so the predicate must explicitly accept it, otherwise
   // the code waits the full 30 s before detecting 2FA (looks like it does nothing).
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} waiting for post-submit navigation (30s timeout)`);
   const postLoginUrl = await waitForNav(
     wc,
     url =>
@@ -1585,6 +1609,7 @@ async function doAutoLogin(
       (!url.includes("accounts/login/") || url.includes("two_factor") || /#/.test(url)),
     30000,
   );
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} post-submit URL: ${postLoginUrl ?? "(timeout/unchanged)"}`);
   await delay(1000);
 
   // ── Handle 2FA if required ─────────────────────────────────────────────────
@@ -1610,10 +1635,11 @@ async function doAutoLogin(
 
   if (needs2FA) {
     if (!twoFAKey) {
+      console.warn(`[doAutoLogin:${profileId}] ${_ts()} 2FA required but no 2FA key — bailing`);
       return { ok: false, message: "2FA required but no 2FA key configured for this account" };
     }
     const code = generateTotp(twoFAKey);
-    console.log(`[doAutoLogin:${profileId}] @${username} — 2FA page detected, filling TOTP code via CDP`);
+    console.log(`[doAutoLogin:${profileId}] ${_ts()} 2FA page detected, filling TOTP code via CDP`);
 
     // Find the TOTP input centre-point via JS, then fill + submit via CDP
     const tfPos = await wc.executeJavaScript(`
@@ -1669,12 +1695,15 @@ async function doAutoLogin(
   }
 
   const finalUrl = wc.getURL();
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} final URL: ${finalUrl.slice(0, 120)}`);
 
   // Check for challenge redirect
   if (finalUrl.includes("update_risky_contactpoint") || finalUrl.includes("/challenge/")) {
+    console.warn(`[doAutoLogin:${profileId}] ${_ts()} CHALLENGE detected — ${finalUrl.slice(0, 120)}`);
     return { ok: false, message: `Instagram challenge detected: ${finalUrl}` };
   }
   if (finalUrl.includes("accounts/suspended")) {
+    console.warn(`[doAutoLogin:${profileId}] ${_ts()} SUSPENDED page detected`);
     return { ok: false, message: `Instagram is asking this account to confirm it is human (URL: ${finalUrl.slice(0, 80)})` };
   }
   // accounts/disabled after an automated login is most often a bot-detection
@@ -1683,6 +1712,7 @@ async function doAutoLogin(
   // so the route classifies it as "captcha" and prompts the user to open the EB,
   // rather than permanently marking the account as account_disabled.
   if (finalUrl.includes("accounts/disabled")) {
+    console.warn(`[doAutoLogin:${profileId}] ${_ts()} DISABLED/security-verification page detected`);
     return { ok: false, message: `Instagram showed a security verification page during automated login. Open the embedded browser for this account, log in manually, then click Verify again.` };
   }
 
@@ -1696,10 +1726,12 @@ async function doAutoLogin(
         return el ? el.textContent.trim().slice(0, 200) : "";
       })()
     `).catch(() => "");
+    console.error(`[doAutoLogin:${profileId}] ${_ts()} NO SESSION COOKIE after login — errText="${errText}"`);
     return { ok: false, message: errText || "Login failed — no session cookie after submission" };
   }
 
   await syncCookies(profileId, ses);
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} LOGIN SUCCESS — session cookie confirmed`);
   return { ok: true, message: "Login successful" };
 }
 
@@ -4173,11 +4205,18 @@ export function startEbIpcServer(
         return send(res, 200, result);
       }
 
-      // ── POST /eb/silent-verify ─────────────────────────────────────────────────
-      // Full EB login in a hidden (never-shown) BrowserWindow.
-      // Used by the Verify button so no EB window pops up during verification.
-      // Opens hidden window → loads existing cookies → auto-login → extract cookies
-      // → destroy window → return { ok, message, cookies }.
+      // ── GET /eb/silent-verify-status ───────────────────────────────────────────
+      // Polls the result of a previously-started silent verify.
+      // Returns { done: false } while still running, or the full result when done.
+      // The result is deleted from the map once retrieved so memory doesn't leak.
+      if (req.method === "GET" && u.pathname === "/eb/silent-verify-status") {
+        const statusPid = Number(u.searchParams.get("profileId") ?? "0");
+        const result = _silentVerifyResults.get(statusPid);
+        if (!result) return send(res, 200, { done: false, error: "unknown" });
+        if (result.done) _silentVerifyResults.delete(statusPid);
+        return send(res, 200, result);
+      }
+
       if (req.method === "POST" && u.pathname === "/eb/silent-verify") {
         console.log(`[silent-verify:${pid}] @${body.username} — handler entered`);
         const partition = ebPartition(pid);
@@ -4209,10 +4248,7 @@ export function startEbIpcServer(
         await loadCookiesFromFile(pid, ses);
         console.log(`[silent-verify:${pid}] @${body.username} — cookies loaded`);
 
-        // ── Skip auto-login if already logged in (same check as Puppeteer path) ──
-        // The Electron session already has cookies loaded from the file. If there is
-        // already a sessionid, the account is logged in — run doAutoLogin would just
-        // try to log in again (finding no login form) and fail with a misleading error.
+        // ── Skip auto-login if already logged in ─────────────────────────────
         const existingSession = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
         if (existingSession.length > 0) {
           console.log(`[silent-verify:${pid}] @${body.username} — sessionid found in Electron session, skipping auto-login`);
@@ -4224,6 +4260,7 @@ export function startEbIpcServer(
             seen.add(c.name);
             return true;
           }).map(c => ({ name: c.name, value: c.value }));
+          // Return synchronously — no login needed, no long wait.
           return send(res, 200, { ok: true, message: "Using existing EB session", cookies });
         }
 
@@ -4239,7 +4276,6 @@ export function startEbIpcServer(
           },
         });
 
-        // Apply the same WebRTC block as the regular EB window (CDP + dom-ready fallback).
         void (async () => {
           try {
             try { hiddenWin.webContents.debugger.attach("1.3"); } catch {}
@@ -4261,23 +4297,41 @@ export function startEbIpcServer(
           hiddenWin.webContents.setUserAgent(body.userAgent);
         }
 
-        console.log(`[silent-verify:${pid}] @${body.username} — hidden window created, calling doAutoLogin`);
-        try {
-          const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
-          const c1 = await ses.cookies.get({ domain: ".instagram.com" });
-          const c2 = await ses.cookies.get({ domain: "instagram.com" });
-          const seen = new Set<string>();
-          const cookies = [...c1, ...c2].filter(c => {
-            if (seen.has(c.name)) return false;
-            seen.add(c.name);
-            return true;
-          }).map(c => ({ name: c.name, value: c.value }));
-          hiddenWin.destroy();
-          return send(res, 200, { ...loginResult, cookies });
-        } catch (err: any) {
-          try { hiddenWin.destroy(); } catch {}
-          return send(res, 200, { ok: false, message: err?.message ?? "Silent verify error", cookies: [] });
-        }
+        // ── FIRE AND FORGET — return 202 immediately ──────────────────────────
+        // The critical fix: previously this handler awaited doAutoLogin (which can
+        // take several minutes), holding the HTTP connection open the entire time.
+        // Node.js HTTP servers close connections that are held open too long,
+        // causing "fetch failed" in the API server regardless of timeout settings.
+        //
+        // Solution: mark the job as pending, reply 202 immediately so the HTTP
+        // connection closes, then run doAutoLogin in the background. The API server
+        // polls /eb/silent-verify-status until done.
+        _silentVerifyResults.set(pid, { done: false });
+        send(res, 202, { pending: true, profileId: pid });
+
+        console.log(`[silent-verify:${pid}] @${body.username} — 202 sent, starting doAutoLogin in background`);
+        ;(async () => {
+          try {
+            const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
+            const c1 = await ses.cookies.get({ domain: ".instagram.com" });
+            const c2 = await ses.cookies.get({ domain: "instagram.com" });
+            const seen = new Set<string>();
+            const cookies = [...c1, ...c2].filter(c => {
+              if (seen.has(c.name)) return false;
+              seen.add(c.name);
+              return true;
+            }).map(c => ({ name: c.name, value: c.value }));
+            console.log(`[silent-verify:${pid}] @${body.username} — doAutoLogin complete ok=${loginResult.ok}`);
+            _silentVerifyResults.set(pid, { done: true, ...loginResult, cookies });
+          } catch (err: any) {
+            console.error(`[silent-verify:${pid}] @${body.username} — doAutoLogin threw: ${err?.message}`);
+            _silentVerifyResults.set(pid, { done: true, ok: false, message: err?.message ?? "Silent verify error", cookies: [] });
+          } finally {
+            try { hiddenWin.destroy(); } catch {}
+          }
+        })();
+
+        return; // response already sent above
       }
 
       // ── POST /eb/input ────────────────────────────────────────────────────────
@@ -6297,6 +6351,14 @@ export function startEbIpcServer(
       send(res, 500, { error: e?.message ?? String(e) });
     }
   });
+
+  // Node.js 18+ defaults requestTimeout to 300 000 ms (5 minutes).
+  // The silent-verify doAutoLogin can legitimately run longer than that —
+  // Node kills the TCP connection at exactly 300 s, which lands as a
+  // "fetch failed" error in electronSilentVerify(). Disable both timeouts
+  // so the IPC connection stays open for as long as the handler needs.
+  server.requestTimeout = 0;
+  server.headersTimeout = 0;
 
   return new Promise((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => {
