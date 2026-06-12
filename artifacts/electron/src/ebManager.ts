@@ -4836,8 +4836,12 @@ export function startEbIpcServer(
             try {
               await typeTextCDP(wc.debugger, text, { androidIme: true });
             } catch {}
-            await sleep(150);
-            // Verify the text actually landed in the field (helps diagnose future issues)
+            await sleep(300);
+            // Instagram's React JS can fire a post-type domain suggestion
+            // (e.g. types "nosov-pavel@gmx.com", IG appends " @gmx.com" →
+            // "nosov-pavel@gmx.com @gmx.com"). Force-set the value back to
+            // exactly `text` via the native setter, then fire React events so
+            // the controlled input accepts the corrected value.
             try {
               const fieldVal = await js(`(function(){
                 var el = document.activeElement;
@@ -4847,6 +4851,24 @@ export function startEbIpcServer(
                 return el ? el.value : null;
               })()`);
               relay(`[clearAndType] Field value after type: "${fieldVal}" (expected ${text.length} chars)`);
+              if (typeof fieldVal === 'string' && fieldVal !== text) {
+                relay(`[clearAndType] Mismatch detected — force-setting to expected value`);
+                try {
+                  await js(`(function(){
+                    var el = document.activeElement;
+                    if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                      el = document.elementFromPoint(${x}, ${y});
+                    }
+                    if (!el) return;
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                    var val = ${JSON.stringify(text)};
+                    if (setter && setter.set) { setter.set.call(el, val); }
+                    else { el.value = val; }
+                    el.dispatchEvent(new Event('input',  { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                  })()`);
+                } catch {}
+              }
             } catch {}
           };
 

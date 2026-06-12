@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.897",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: email domain is no longer typed twice — after typing, the value is now force-corrected to exactly the expected email if Instagram's JS injected a domain suggestion after the keystrokes." },
+      { category: "Fix", text: "Human Session: execute order settings for Follow, Unfollow, and Contact tools now save and apply correctly — these fields were missing from the settings defaults so their values were never stored in the database." },
+      { category: "Improve", text: "Human Session: session log now shows why each action was skipped (disabled or chance roll) to help diagnose unexpected session order." },
+    ],
+  },
+  {
     version: "1.0.896",
     date: "11 Jun 2026",
     items: [

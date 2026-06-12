@@ -2246,8 +2246,14 @@ class AutomationEngine {
       orderMinKey: string,   orderMaxKey: string,
       fn: () => Promise<void>,
     ) => {
-      if (!enabled) return;
-      if (this.shouldSkipDueToChance(s, notUsedMinKey, notUsedMaxKey)) return;
+      if (!enabled) {
+        console.log(`[engine] @${profile.username}: HS queue — ${label} skipped (disabled)`);
+        return;
+      }
+      if (this.shouldSkipDueToChance(s, notUsedMinKey, notUsedMaxKey)) {
+        console.log(`[engine] @${profile.username}: HS queue — ${label} skipped (chance roll)`);
+        return;
+      }
       const order = randInt(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
       queue.push({ order, label, run: fn });
     };
