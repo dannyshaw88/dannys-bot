@@ -437,7 +437,7 @@ function EntryCard({
                     {icon} {label}
                   </div>
                   <p className={`text-lg font-bold mt-0.5 ${colour}`}>{val}</p>
-                  <p className="text-[10px] text-muted-foreground">warn >{threshold.warn} / stop >{threshold.danger}</p>
+                  <p className="text-[10px] text-muted-foreground">warn &gt;{threshold.warn} / stop &gt;{threshold.danger}</p>
                 </div>
               );
             })}
