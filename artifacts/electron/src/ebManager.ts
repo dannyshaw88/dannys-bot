@@ -1986,6 +1986,7 @@ export async function openEbWindow(opts: {
     },
   });
   win.once("ready-to-show", () => {
+    if (win.isDestroyed()) return;
     win.show();
     if (isGhostBrowser) {
       // Position ghost browser at the absolute right edge of the primary display
@@ -2038,6 +2039,14 @@ export async function openEbWindow(opts: {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
     });
   }
+
+  // ── Guard: bail if window was destroyed during async setup ───────────────
+  // Early ebMap.set (above) lets the frontend see the EB as open immediately.
+  // If the user closes the BrowserPanel during setup, the IPC handler calls
+  // win.destroy() — subsequent win.addBrowserView / CDP calls on a destroyed
+  // window crash the main process.  Check here (after all the awaits for proxy,
+  // cookies, timezone, UA, device metrics) before any further window operations.
+  if (win.isDestroyed()) return;
 
   // ── WebRTC TCP-candidate leak prevention (CDP page-script injection) ──────
   // Chromium's `disable_non_proxied_udp` WebRTC policy blocks UDP ICE candidates
@@ -2290,6 +2299,7 @@ export async function openEbWindow(opts: {
   // dom-ready fires after HTML parsing but before window.onload / setTimeout
   // callbacks — earlier than any real-world leak-test gather loop.
   win.webContents.on("dom-ready", () => {
+    if (win.isDestroyed()) return;
     win.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
     win.webContents.executeJavaScript(_fpScript).catch(() => {});
     // Ghost browser: keep mobile viewport active on every navigation so
@@ -2434,6 +2444,11 @@ export async function openEbWindow(opts: {
   // Floats above the Instagram window at the OS compositor level.  The toolbar
   // is completely independent of the page DOM — challenge pages, iframes, CSS
   // transforms, overflow:hidden, and z-index stacking can NEVER hide it.
+  // Guard: if the window was destroyed during the async CDP/UA/loadURL work above,
+  // do not try to addBrowserView — calling it on a destroyed window crashes the
+  // main process (Electron bug: addBrowserView with destroyed parent → SIGSEGV).
+  if (win.isDestroyed()) return;
+
   const toolbarView = new BrowserView({
     webPreferences: {
       partition,                   // same session so cookies are visible if needed

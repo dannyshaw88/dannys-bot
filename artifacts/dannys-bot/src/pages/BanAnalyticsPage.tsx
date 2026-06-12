@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { useEffect } from "react";
 import { Loader2, ShieldOff, BarChart2, Calendar, Globe } from "lucide-react";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 interface BanEntry {
   id: number;
@@ -49,7 +50,8 @@ export function BanAnalyticsPage() {
     .slice(0, 30);
 
   return (
-    <div className="ml-[133px] min-h-screen bg-background p-6">
+    <AppLayout>
+    <div className="min-h-screen bg-background p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <ShieldOff className="w-6 h-6 text-red-500" />
@@ -161,5 +163,6 @@ export function BanAnalyticsPage() {
         )}
       </div>
     </div>
+    </AppLayout>
   );
 }
