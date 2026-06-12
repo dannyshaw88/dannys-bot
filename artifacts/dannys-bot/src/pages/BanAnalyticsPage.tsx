@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import {
   Loader2, BarChart2, Calendar, Globe, AlertTriangle, Shield,
   Clock, TrendingUp, ChevronDown, ChevronUp, UserPlus, UserMinus,
-  MessageSquare, Zap, Award, RefreshCw,
+  MessageSquare, Zap, Award, RefreshCw, X,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 
@@ -234,8 +235,7 @@ function buildConcurrencyAlerts(bans: AnalyticsEntry[], automated: AnalyticsEntr
 }
 
 // ── Surviving accounts helpers ────────────────────────────────────────────────
-// Parses every "Added: YYYY-MM-DD HH:MM:SS UTC" stamp from the notes field.
-// Returns the EARLIEST one (original add date). Falls back to null if unparseable.
+// Parses the original "Added: YYYY-MM-DD HH:MM:SS UTC" stamp (first-ever add).
 function parseFirstAddedDate(notes: string | null | undefined): Date | null {
   if (!notes) return null;
   const matches = [...notes.matchAll(/Added:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)];
@@ -247,9 +247,11 @@ function parseFirstAddedDate(notes: string | null | undefined): Date | null {
   return dates.reduce((earliest, d) => d < earliest ? d : earliest);
 }
 
+// Returns ALL add/re-add/re-import timestamps in chronological order.
+// Matches: "Added:", "Re-added:", "Re-imported:"
 function parseAllAddedDates(notes: string | null | undefined): Date[] {
   if (!notes) return [];
-  const matches = [...notes.matchAll(/Added:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)];
+  const matches = [...notes.matchAll(/(?:Added|Re-added|Re-imported):\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)];
   return matches
     .map(m => new Date(m[1].replace(" UTC", "Z").replace(" ", "T")))
     .filter(d => !isNaN(d.getTime()))
@@ -265,22 +267,51 @@ function formatDuration(ms: number): string {
   return `${m}m`;
 }
 
-type Tab = "ban" | "automated" | "captcha" | "locked";
+// ── Clickable @username link ──────────────────────────────────────────────────
+function UsernameLink({ username, profileMap }: { username: string; profileMap: Map<string, number> }) {
+  const [, navigate] = useLocation();
+  const id = profileMap.get(username);
+  if (!id) return <span className="font-semibold">@{username}</span>;
+  return (
+    <button
+      onClick={() => navigate(`/profiles/${id}`)}
+      className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer"
+    >
+      @{username}
+    </button>
+  );
+}
 
-const TAB_CONFIG: Record<Tab, { label: string; accentBg: string; barColor: string; emptyMsg: string; flagMsg: string }> = {
-  ban:       { label: "Ban Events",          accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",       barColor: "bg-red-400",    emptyMsg: "No ban analytics yet",              flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned." },
-  automated: { label: "Automated Behaviour", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800", barColor: "bg-orange-400", emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour." },
-  captcha:   { label: "Captcha Errors",      accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800", barColor: "bg-yellow-400", emptyMsg: "No captcha events yet",             flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error." },
-  locked:    { label: "Locked Accounts",     accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",   barColor: "bg-rose-400",   emptyMsg: "No locked account events yet",     flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account." },
+type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
+
+const TAB_CONFIG: Record<Exclude<Tab, "survivors">, { label: string; accentBg: string; barColor: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string }> = {
+  ban:       { label: "Banned Accounts",     accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",       barColor: "bg-red-400",    emptyMsg: "No ban analytics yet",              flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned.",             deleteEndpoint: "/api/analytics/ban-patterns",       queryKey: "/api/analytics/ban-patterns" },
+  automated: { label: "Automated Behaviour", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800", barColor: "bg-orange-400", emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour.", deleteEndpoint: "/api/analytics/automated-patterns", queryKey: "/api/analytics/automated-patterns" },
+  captcha:   { label: "Captcha Errors",      accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800", barColor: "bg-yellow-400", emptyMsg: "No captcha events yet",             flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error.",             deleteEndpoint: "/api/analytics/captcha-patterns",   queryKey: "/api/analytics/captcha-patterns" },
+  locked:    { label: "Locked Accounts",     accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",   barColor: "bg-rose-400",   emptyMsg: "No locked account events yet",     flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.",           deleteEndpoint: "/api/analytics/locked-patterns",    queryKey: "/api/analytics/locked-patterns" },
 };
 
 // ── Per-entry card ────────────────────────────────────────────────────────────
-function EntryCard({ entry, cfg, allSameType }: { entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Tab]; allSameType: AnalyticsEntry[] }) {
+function EntryCard({ entry, cfg, allSameType, profileMap }: { entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; allSameType: AnalyticsEntry[]; profileMap: Map<string, number> }) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`Remove this log entry for @${entry.username}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await fetch(`${cfg.deleteEndpoint}/${entry.id}`, { method: "DELETE", credentials: "include" });
+      queryClient.invalidateQueries({ queryKey: [cfg.queryKey] });
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const allEps   = parseEps(entry.endpointSnapshot);
-  const eps      = filterHiker(allEps);          // exclude HikerAPI calls
-  const hikerN   = allEps.length - eps.length;   // count of filtered-out calls
+  const eps      = filterHiker(allEps);
+  const hikerN   = allEps.length - eps.length;
   const cats     = categorise(eps);
   const rate     = getCallRateNum(eps);
   const findings = buildFindings(eps, allSameType);
@@ -291,11 +322,19 @@ function EntryCard({ entry, cfg, allSameType }: { entry: AnalyticsEntry; cfg: ty
   const proxyOverlap = allSameType.filter(e => e.id !== entry.id && e.proxyHost && e.proxyHost === entry.proxyHost);
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <button className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-muted/30 transition-colors" onClick={() => setOpen(o => !o)}>
+    <div className="border border-border rounded-lg overflow-hidden relative">
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        title="Remove this log entry"
+        className="absolute top-2 right-2 z-10 flex items-center justify-center w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 hover:bg-red-200 dark:hover:bg-red-800/60 transition-colors disabled:opacity-40"
+      >
+        {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+      </button>
+      <button className="w-full px-4 py-3 pr-9 flex items-start gap-3 text-left hover:bg-muted/30 transition-colors" onClick={() => setOpen(o => !o)}>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold">@{entry.username}</span>
+            <UsernameLink username={entry.username} profileMap={profileMap} />
             {entry.proxyHost
               ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}</span>
               : <span className="text-[11px] text-muted-foreground italic">no proxy</span>
@@ -348,7 +387,12 @@ function EntryCard({ entry, cfg, allSameType }: { entry: AnalyticsEntry; cfg: ty
               {proxyOverlap.length > 0 && (
                 <li className="text-xs text-foreground flex gap-2">
                   <span className="text-yellow-600 shrink-0 mt-0.5">→</span>
-                  <span>{proxyOverlap.length} other account{proxyOverlap.length !== 1 ? "s" : ""} on the same proxy ({entry.proxyHost}) also {cfg.label.toLowerCase()}: {proxyOverlap.map(e => `@${e.username}`).join(", ")}.</span>
+                  <span>
+                    {proxyOverlap.length} other account{proxyOverlap.length !== 1 ? "s" : ""} on the same proxy ({entry.proxyHost}) also {cfg.label.toLowerCase()}:{" "}
+                    {proxyOverlap.map((e, i) => (
+                      <span key={e.id}>{i > 0 ? ", " : ""}<UsernameLink username={e.username} profileMap={profileMap} /></span>
+                    ))}.
+                  </span>
                 </li>
               )}
             </ul>
@@ -411,7 +455,7 @@ function EntryCard({ entry, cfg, allSameType }: { entry: AnalyticsEntry; cfg: ty
 }
 
 // ── Tab content panel ─────────────────────────────────────────────────────────
-function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Tab] }) {
+function EntryList({ entries, cfg, profileMap }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; profileMap: Map<string, number> }) {
   if (entries.length === 0) return (
     <div className="border border-border rounded-lg p-10 text-center">
       <p className="text-sm font-medium">{cfg.emptyMsg}</p>
@@ -459,7 +503,7 @@ function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TA
         </div>
         <div className="p-3 space-y-2">
           {[...entries].reverse().map(entry => (
-            <EntryCard key={entry.id} entry={entry} cfg={cfg} allSameType={entries} />
+            <EntryCard key={entry.id} entry={entry} cfg={cfg} allSameType={entries} profileMap={profileMap} />
           ))}
         </div>
       </div>
@@ -471,6 +515,7 @@ function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TA
 export function BanAnalyticsPage() {
   const setSidebarSlot = useSidebarSetSlot();
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
+  const [, navigate] = useLocation();
 
   const [activeTab, setActiveTab] = useState<Tab>("ban");
 
@@ -502,7 +547,12 @@ export function BanAnalyticsPage() {
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
 
-  // Surviving accounts: valid accounts only, sorted by original Added date (oldest first)
+  // username → profile id map for clickable @mentions
+  const profileMap = new Map<string, number>(allProfiles.map(p => [p.username, p.id]));
+
+  // Surviving accounts: valid, not flagged, sorted by most-recent add date (oldest session first).
+  // Using the most-recent add/re-add/re-import stamp means re-imported accounts reset their
+  // timer — only genuinely long-running sessions surface to the top.
   const flaggedUsernames = new Set([
     ...banEntries.map(e => e.username),
     ...automatedEntries.map(e => e.username),
@@ -518,16 +568,29 @@ export function BanAnalyticsPage() {
     .map(p => {
       const firstDate = parseFirstAddedDate(p.notes);
       const allDates  = parseAllAddedDates(p.notes);
-      return { ...p, firstDate, allDates, runMs: firstDate ? now - firstDate.getTime() : null };
+      // runMs is measured from the MOST RECENT add event so re-imported accounts
+      // don't appear to have artificially long survival times.
+      const mostRecentDate = allDates.length > 0 ? allDates[allDates.length - 1] : firstDate;
+      return { ...p, firstDate, allDates, runMs: mostRecentDate ? now - mostRecentDate.getTime() : null };
     })
     .filter(p => p.firstDate !== null)
-    .sort((a, b) => (a.runMs ?? 0) > (b.runMs ?? 0) ? -1 : 1)  // oldest first
+    .sort((a, b) => (a.runMs ?? 0) > (b.runMs ?? 0) ? -1 : 1)
     .slice(0, 20);
+
   const proxyRisks = buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries);
   const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries);
-  const cfg = TAB_CONFIG[activeTab];
+
+  const cfg = activeTab !== "survivors" ? TAB_CONFIG[activeTab] : TAB_CONFIG["ban"];
   const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : lockedEntries;
-  const TABS: Tab[] = ["ban", "automated", "captcha", "locked"];
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
+
+  const TAB_LABELS: Record<Tab, string> = {
+    ban: "Banned Accounts",
+    automated: "Automated Behaviour",
+    captcha: "Captcha Errors",
+    locked: "Locked Accounts",
+    survivors: "Top Survivors",
+  };
 
   return (
     <AppLayout>
@@ -560,7 +623,7 @@ export function BanAnalyticsPage() {
           {!isLoading && (
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: "Ban Events",          val: banEntries.length,       cls: "text-red-500" },
+                { label: "Banned Accounts",     val: banEntries.length,       cls: "text-red-500" },
                 { label: "Automated Detected",  val: automatedEntries.length, cls: "text-orange-500" },
                 { label: "Captcha Errors",      val: captchaEntries.length,   cls: "text-yellow-500" },
                 { label: "Locked Accounts",     val: lockedEntries.length,    cls: "text-rose-500" },
@@ -570,85 +633,6 @@ export function BanAnalyticsPage() {
                   <p className={`text-3xl font-bold mt-1 ${cls}`}>{val}</p>
                 </div>
               ))}
-            </div>
-          )}
-
-          {survivingAccounts.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <Award className="w-4 h-4 text-green-500" />
-                <span className="text-sm font-semibold">Top Surviving Accounts</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  Valid accounts — date sourced from Account Settings → Notes
-                </span>
-              </div>
-              <div className="divide-y divide-border">
-                {survivingAccounts.map((p, i) => {
-                  const reAdded = p.allDates.length > 1;
-                  return (
-                    <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold">#{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">@{p.username}</span>
-                          {p.accountLabel && p.accountLabel !== p.username && (
-                            <span className="text-[11px] text-muted-foreground truncate">{p.accountLabel}</span>
-                          )}
-                          {reAdded && (
-                            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 font-semibold shrink-0">
-                              <RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×
-                            </span>
-                          )}
-                          {p.tags && p.tags !== "No Group Assigned" && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">{p.tags}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
-                          <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
-                          {reAdded && (
-                            <span>Latest re-add: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-base font-bold text-green-600 dark:text-green-400">{formatDuration(p.runMs!)}</p>
-                        <p className="text-[10px] text-muted-foreground">running</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {proxyRisks.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <Shield className="w-4 h-4 text-cyan-500" />
-                <span className="text-sm font-semibold">Proxy Risk Ranking</span>
-                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked per IP</span>
-              </div>
-              <div className="divide-y divide-border">
-                {proxyRisks.map((pr, i) => (
-                  <div key={pr.host} className="px-4 py-2.5 flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-6 text-right shrink-0">#{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-mono truncate">{pr.host}</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{pr.accounts.slice(0, 5).map(a => `@${a}`).join(", ")}{pr.accounts.length > 5 ? ` +${pr.accounts.length - 5} more` : ""}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 text-xs">
-                      <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
-                      <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
-                      <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
-                      <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
-                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -668,8 +652,11 @@ export function BanAnalyticsPage() {
                         <span className="text-sm font-mono">{alert.proxyHost}</span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{alert.category}</span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        @{alert.accounts[0]} and @{alert.accounts[1]} — {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} &amp; {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}
+                      <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
+                        <UsernameLink username={alert.accounts[0]} profileMap={profileMap} />
+                        <span>and</span>
+                        <UsernameLink username={alert.accounts[1]} profileMap={profileMap} />
+                        <span>— {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} &amp; {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}</span>
                       </p>
                     </div>
                   </div>
@@ -678,23 +665,124 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
+          {/* Main tabbed panel */}
           <div className="border border-border rounded-lg overflow-hidden">
-            <div className="flex border-b border-border">
-              {TABS.map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  {TAB_CONFIG[tab].label}
-                  <span className="ml-1.5 opacity-60">({tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : lockedEntries.length})</span>
-                </button>
-              ))}
+            <div className="flex border-b border-border overflow-x-auto">
+              {TABS.map(tab => {
+                const count = tab === "ban" ? banEntries.length
+                  : tab === "automated" ? automatedEntries.length
+                  : tab === "captcha" ? captchaEntries.length
+                  : tab === "locked" ? lockedEntries.length
+                  : survivingAccounts.length;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {tab === "survivors" && <Award className="w-3 h-3 text-green-500 shrink-0" />}
+                    {TAB_LABELS[tab]}
+                    <span className="opacity-60">({count})</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="p-4">
-              <EntryList entries={activeEntries} cfg={cfg} />
+              {activeTab === "survivors" ? (
+                survivingAccounts.length === 0 ? (
+                  <div className="border border-border rounded-lg p-10 text-center">
+                    <Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm font-medium">No surviving accounts tracked yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Valid accounts with an "Added:" timestamp in their Notes will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                      <Award className="w-4 h-4 text-green-500" />
+                      <span className="text-sm font-semibold">Top Surviving Accounts</span>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        Timer resets on each re-import — only genuine long runners surface
+                      </span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {survivingAccounts.map((p, i) => {
+                        const reAdded = p.allDates.length > 1;
+                        return (
+                          <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold">#{i + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <UsernameLink username={p.username} profileMap={profileMap} />
+                                {p.accountLabel && p.accountLabel !== p.username && (
+                                  <span className="text-[11px] text-muted-foreground truncate">{p.accountLabel}</span>
+                                )}
+                                {reAdded && (
+                                  <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 font-semibold shrink-0">
+                                    <RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×
+                                  </span>
+                                )}
+                                {p.tags && p.tags !== "No Group Assigned" && (
+                                  <span className="text-[10px] text-muted-foreground shrink-0">{p.tags}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+                                <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                                {reAdded && (
+                                  <span>Latest re-add: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-base font-bold text-green-600 dark:text-green-400">{formatDuration(p.runMs!)}</p>
+                              <p className="text-[10px] text-muted-foreground">since last add</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
+              ) : (
+                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} profileMap={profileMap} />
+              )}
             </div>
           </div>
+
+          {proxyRisks.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <Shield className="w-4 h-4 text-cyan-500" />
+                <span className="text-sm font-semibold">Proxy Risk Ranking</span>
+                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked per IP</span>
+              </div>
+              <div className="divide-y divide-border">
+                {proxyRisks.map((pr, i) => (
+                  <div key={pr.host} className="px-4 py-2.5 flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-6 text-right shrink-0">#{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-mono truncate">{pr.host}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1">
+                        {pr.accounts.slice(0, 5).map((a, idx) => (
+                          <span key={a}>{idx > 0 ? "," : ""} <UsernameLink username={a} profileMap={profileMap} /></span>
+                        ))}
+                        {pr.accounts.length > 5 && <span>+{pr.accounts.length - 5} more</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 text-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
+                      <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
+                      <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
       </div>

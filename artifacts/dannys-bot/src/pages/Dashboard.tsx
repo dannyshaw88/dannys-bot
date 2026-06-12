@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.917",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "EQX and bulk imports now stamp a 'Re-imported' date and time in Account Settings → Notes every time an existing account is re-imported, so you have a full history of when each account was added." },
+      { category: "New", text: "Evasion Stats: each log entry across all tabs now has a small red × button to delete it individually — useful for removing entries with missing data such as no proxy recorded." },
+      { category: "Improved", text: "Evasion Stats: 'Top Surviving Accounts' moved to its own tab inside the main panel so it no longer crowds the page. Survival timer now resets on each re-import, showing only genuine long-running sessions." },
+      { category: "Improved", text: "Evasion Stats: 'Ban Events' tab renamed to 'Banned Accounts'. Proxy Risk Ranking moved to the bottom of the page. All @usernames across the page are now clickable links to that account's settings." },
+      { category: "Improved", text: "Account Settings: the Followers, Following, Posts stat cards and Last Synced timestamp are now on the same row as the Auto Sync controls instead of on a separate block below." },
+    ],
+  },
+  {
     version: "1.0.916",
     date: "12 Jun 2026",
     items: [

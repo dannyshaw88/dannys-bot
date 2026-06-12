@@ -897,12 +897,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bannedAccountsAnalytics).orderBy(desc(bannedAccountsAnalytics.id));
   }
 
+  async deleteBanAnalytics(id: number): Promise<void> {
+    await db.delete(bannedAccountsAnalytics).where(eq(bannedAccountsAnalytics.id, id));
+  }
+
   async insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
     await db.insert(automatedBehaviourAnalytics).values(entry);
   }
 
   async getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]> {
     return await db.select().from(automatedBehaviourAnalytics).orderBy(desc(automatedBehaviourAnalytics.id));
+  }
+
+  async deleteAutomatedBehaviourAnalytics(id: number): Promise<void> {
+    await db.delete(automatedBehaviourAnalytics).where(eq(automatedBehaviourAnalytics.id, id));
   }
 
   async insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
@@ -913,12 +921,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(captchaAnalytics).orderBy(desc(captchaAnalytics.id));
   }
 
+  async deleteCaptchaAnalytics(id: number): Promise<void> {
+    await db.delete(captchaAnalytics).where(eq(captchaAnalytics.id, id));
+  }
+
   async insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
     await db.insert(lockedAccountsAnalytics).values(entry);
   }
 
   async getLockedAnalytics(): Promise<LockedAccountAnalytics[]> {
     return await db.select().from(lockedAccountsAnalytics).orderBy(desc(lockedAccountsAnalytics.id));
+  }
+
+  async deleteLockedAnalytics(id: number): Promise<void> {
+    await db.delete(lockedAccountsAnalytics).where(eq(lockedAccountsAnalytics.id, id));
   }
 }
 

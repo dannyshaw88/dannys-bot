@@ -1711,8 +1711,8 @@ export function ProfileDetailsPage() {
           </div>
           {showProfileSync && (
           <div className="mt-4">
-            {/* All sync controls on one row */}
-            <div className="flex items-center gap-3 flex-wrap pb-3">
+            {/* Single row: sync controls left, stat cards right */}
+            <div className="flex items-center gap-3 flex-wrap">
               <Switch
                 checked={!!formData?.syncEnabled}
                 onCheckedChange={v => updateField({ syncEnabled: v })}
@@ -1756,37 +1756,28 @@ export function ProfileDetailsPage() {
                 {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
                 {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
               </Button>
-            </div>
-            <div className="flex items-start gap-4">
-              {/* Stat icons */}
-              <div className="flex flex-col gap-2 shrink-0">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                    <Users className="w-4 h-4 text-blue-500 mb-1" />
-                    <span className="text-base font-bold">
-                      {profile?.followersCount != null ? profile.followersCount.toLocaleString() : " "}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
-                  </div>
-                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                    <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
-                    <span className="text-base font-bold">
-                      {profile?.followingCount != null ? profile.followingCount.toLocaleString() : " "}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
-                  </div>
-                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
-                    <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
-                    <span className="text-base font-bold">
-                      {profile?.postsCount != null ? profile.postsCount.toLocaleString() : " "}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Posts</span>
-                  </div>
+              <div className="w-px h-4 bg-border mx-1" />
+              {/* Stat cards inline */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-muted/40 rounded-lg py-1 px-2.5 border border-border">
+                  <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="text-xs font-bold">{profile?.followersCount != null ? profile.followersCount.toLocaleString() : "—"}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Followers</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted/40 rounded-lg py-1 px-2.5 border border-border">
+                  <UserPlus className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                  <span className="text-xs font-bold">{profile?.followingCount != null ? profile.followingCount.toLocaleString() : "—"}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Following</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted/40 rounded-lg py-1 px-2.5 border border-border">
+                  <BarChart2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  <span className="text-xs font-bold">{profile?.postsCount != null ? profile.postsCount.toLocaleString() : "—"}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts</span>
                 </div>
                 {profile?.lastSyncedAt && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Last synced: {new Date(profile.lastSyncedAt).toLocaleString()}
-                  </p>
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    · Last synced: {new Date(profile.lastSyncedAt).toLocaleString()}
+                  </span>
                 )}
               </div>
             </div>

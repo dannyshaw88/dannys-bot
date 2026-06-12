@@ -756,6 +756,47 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Analytics entry deletion ──────────────────────────────────────────────
+  app.delete("/api/analytics/ban-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteBanAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[ban-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete ban entry" });
+    }
+  });
+
+  app.delete("/api/analytics/automated-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteAutomatedBehaviourAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[automated-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete automated entry" });
+    }
+  });
+
+  app.delete("/api/analytics/captcha-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteCaptchaAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[captcha-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete captcha entry" });
+    }
+  });
+
+  app.delete("/api/analytics/locked-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteLockedAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[locked-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete locked entry" });
+    }
+  });
+
   // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
   // Called by both the bulk import and EQX import routes immediately after a
   // profile is created/updated with igApiCookies.  Without this file Chrome
@@ -1633,9 +1674,14 @@ export async function registerInstagramRoutes(
             if (!resolvedProxyId && existing.proxyId) {
               delete updates.proxyId;
             }
-            // Never overwrite the original "first added" timestamp in Notes
-            if (existing.notes && String(existing.notes).trim()) {
-              delete updates.notes;
+            // Preserve the original "first added" stamp and append a re-import timestamp.
+            // Never overwrite — only append so the full history is preserved.
+            {
+              const now = new Date();
+              const pad = (n: number) => String(n).padStart(2, "0");
+              const stamp = `Re-imported: ${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
+              const base = existing.notes && String(existing.notes).trim() ? String(existing.notes).trim() : null;
+              updates.notes = base ? `${base}\n${stamp}` : stamp;
             }
             await storage.updateProfile(existing.id, updates);
             // Seed/refresh the browser cookie file if the import provided cookies
