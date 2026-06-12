@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.901",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser blank screen: User-Agent and mobile device headers are now applied before the first page load instead of in the background — Instagram was seeing the raw Electron browser identity on the first request and returning an empty page." },
+      { category: "Fix", text: "Embedded browser blank screen: the automatic blank-page recovery now waits 1.5 seconds before retrying and stops after 3 attempts — previously it could loop indefinitely and keep the screen blank." },
+    ],
+  },
+  {
     version: "1.0.900",
     date: "12 Jun 2026",
     items: [

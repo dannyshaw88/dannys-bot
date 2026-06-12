@@ -2095,9 +2095,6 @@ export async function openEbWindow(opts: {
   // No UTC default — a timezone mismatch between Intl and Date.now() is an
   // instant bot signal.
 
-  // ── Fire-and-forget: script injection + locale override ─────────────────────
-  // Page.enable and addScriptToEvaluateOnNewDocument CAN hang in the packaged
-  // app, so they remain fire-and-forget. Timezone is already set above.
   // ── Resolve browser UA and API UA ─────────────────────────────────────────
   // The Ghost Browser may receive an API-format UA ("34/14; 420dpi; ...")
   // instead of a proper mobile Chrome UA ("Mozilla/5.0 (Linux; Android ...").
@@ -2120,110 +2117,125 @@ export async function openEbWindow(opts: {
   const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
   const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
   const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
+
+  // ── Fire-and-forget: script injection (Page commands CAN hang in packaged build) ─
+  // Page.enable and addScriptToEvaluateOnNewDocument are kept fire-and-forget
+  // because they can hang in the packaged app on some Windows builds.
+  // UA/device/locale overrides are NOT here — they are awaited below before loadURL.
   void (async () => {
     try {
-      // debugger already attached before this block
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
-
-      // ── UA + Client Hints via CDP ──────────────────────────────────────────
-      // win.webContents.setUserAgent() alone does NOT update the Sec-CH-UA-*
-      // headers — Chromium generates those from the Electron binary's compiled-in
-      // platform info (Windows / Mobile: false).  CDP Emulation.setUserAgentOverride
-      // overrides BOTH navigator.userAgent AND all Client Hints headers in one call,
-      // fixing the "Platform: Windows / Mobile: No" leak that Instagram detects.
-      if (_browserUA) {
-        try {
-          // Use the real full build version and correct GREASE brand from the lookup table.
-          // _fpBuildInfo is already resolved above from the UA's Chrome major version.
-          await win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
-            userAgent: _browserUA,
-            acceptLanguage: "en-US,en;q=0.9",
-            platform: _fpIsMobile ? "Linux armv8l" : "Win32",
-            ...(_fpIsMobile ? {
-              userAgentMetadata: {
-                brands: [
-                  { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
-                  { brand: "Chromium",            version: _fpChromeMajor },
-                  { brand: "Google Chrome",       version: _fpChromeMajor },
-                ],
-                fullVersionList: [
-                  { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },
-                  { brand: "Chromium",            version: _fpBuildInfo.full },
-                  { brand: "Google Chrome",       version: _fpBuildInfo.full },
-                ],
-                platform:        "Android",
-                platformVersion: _androidVer,
-                architecture:    "arm",
-                model:           _deviceModel,
-                mobile:          true,
-                bitness:         "64",
-                wow64:           false,
-              },
-            } : {}),
-          });
-          console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile} grease="${_fpBuildInfo.grease}" full="${_fpBuildInfo.full}"`);
-        } catch (uaErr) {
-          console.warn(`[ebManager:${profileId}] Emulation.setUserAgentOverride failed:`, uaErr);
-        }
-      }
-
-      // ── Mobile device metrics override ────────────────────────────────────────
-      // CRITICAL for anti-detect: without this, Chromium's C++ layout engine uses
-      // the real BrowserWindow size (1280×820) even though the JS fingerprint
-      // overrides screen.width/innerWidth.  JS overrides only affect JS reads —
-      // they cannot change how Chromium evaluates CSS @media queries, computes
-      // layout, or classifies input events (PointerEvent.pointerType stays "mouse").
-      //
-      // setDeviceMetricsOverride with mobile:true makes Chromium:
-      //   • evaluate @media (pointer:coarse) and (max-width:Xpx) against mobile dims
-      //   • render the Instagram mobile SPA layout (not desktop)
-      //   • report PointerEvent.pointerType="touch" for native touch input
-      //   • apply the correct devicePixelRatio at the compositor level
-      //
-      // setTouchEmulationEnabled enables Chromium's native touch input stack so that
-      // Input.synthesizeTapGesture produces real touchstart/touchend events (not
-      // mouse events with a wrong pointer type).
-      if (_fpIsMobile) {
-        const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
-        if (_mobileProfile) {
-          try {
-            await win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-              width:             _mobileProfile.width,
-              height:            _mobileProfile.height,
-              deviceScaleFactor: _mobileProfile.dpr,
-              mobile:            true,
-              screenOrientation: { type: "portraitPrimary", angle: 0 },
-            });
-            console.log(`[ebManager:${profileId}] setDeviceMetricsOverride: ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
-          } catch (dmErr) {
-            console.warn(`[ebManager:${profileId}] setDeviceMetricsOverride failed:`, dmErr);
-          }
-          try {
-            await win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-              enabled:        true,
-              maxTouchPoints: 10,
-            });
-            console.log(`[ebManager:${profileId}] setTouchEmulationEnabled: touch input stack active`);
-          } catch (teErr) {
-            console.warn(`[ebManager:${profileId}] setTouchEmulationEnabled failed:`, teErr);
-          }
-        }
-      }
-
-      // ── Locale override — match navigator.languages ─────────────────────────
-      // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
-      // locale unless overridden at the CDP level.
-      try {
-        await win.webContents.debugger.sendCommand("Emulation.setLocaleOverride",
-          { locale: "en-US" });
-      } catch {}
-
     } catch (err) {
-      console.warn(`[ebManager:${profileId}] WebRTC/fingerprint CDP injection failed:`, err);
+      console.warn(`[ebManager:${profileId}] Page/script injection (fire-and-forget) failed:`, err);
     }
   })();
+
+  // ── UA + device metrics + locale — AWAITED before loadURL ─────────────────
+  // MUST complete before the first navigation.  Instagram reads the User-Agent
+  // and Sec-CH-UA-* client-hint headers on the very first request to decide
+  // whether to serve the mobile login page or return a blank/blocked response.
+  // If these CDP commands are fire-and-forget, there is a race window where the
+  // first loadURL fires before they take effect → Instagram sees the raw Electron
+  // desktop UA → serves <html><head></head><body></body></html> (blank screen).
+  // Each command is wrapped in Promise.race with a 1500 ms timeout so a slow CDP
+  // response never blocks openEbWindow indefinitely.
+  if (_browserUA) {
+    try {
+      await Promise.race([
+        win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
+          userAgent: _browserUA,
+          acceptLanguage: "en-US,en;q=0.9",
+          platform: _fpIsMobile ? "Linux armv8l" : "Win32",
+          ...(_fpIsMobile ? {
+            userAgentMetadata: {
+              brands: [
+                { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
+                { brand: "Chromium",            version: _fpChromeMajor },
+                { brand: "Google Chrome",       version: _fpChromeMajor },
+              ],
+              fullVersionList: [
+                { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },
+                { brand: "Chromium",            version: _fpBuildInfo.full },
+                { brand: "Google Chrome",       version: _fpBuildInfo.full },
+              ],
+              platform:        "Android",
+              platformVersion: _androidVer,
+              architecture:    "arm",
+              model:           _deviceModel,
+              mobile:          true,
+              bitness:         "64",
+              wow64:           false,
+            },
+          } : {}),
+        }),
+        new Promise<void>(r => setTimeout(r, 1500)),
+      ]);
+      console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride applied before loadURL: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile}`);
+    } catch (uaErr) {
+      console.warn(`[ebManager:${profileId}] Emulation.setUserAgentOverride failed:`, uaErr);
+    }
+  }
+
+  if (_fpIsMobile) {
+    // ── Mobile device metrics override ──────────────────────────────────────
+    // CRITICAL for anti-detect: without this, Chromium's C++ layout engine uses
+    // the real BrowserWindow size (1280×820) even though the JS fingerprint
+    // overrides screen.width/innerWidth.  JS overrides only affect JS reads —
+    // they cannot change how Chromium evaluates CSS @media queries, computes
+    // layout, or classifies input events (PointerEvent.pointerType stays "mouse").
+    //
+    // setDeviceMetricsOverride with mobile:true makes Chromium:
+    //   • evaluate @media (pointer:coarse) and (max-width:Xpx) against mobile dims
+    //   • render the Instagram mobile SPA layout (not desktop)
+    //   • report PointerEvent.pointerType="touch" for native touch input
+    //   • apply the correct devicePixelRatio at the compositor level
+    //
+    // setTouchEmulationEnabled enables Chromium's native touch input stack so that
+    // Input.synthesizeTapGesture produces real touchstart/touchend events (not
+    // mouse events with a wrong pointer type).
+    const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
+    if (_mobileProfile) {
+      try {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+            width:             _mobileProfile.width,
+            height:            _mobileProfile.height,
+            deviceScaleFactor: _mobileProfile.dpr,
+            mobile:            true,
+            screenOrientation: { type: "portraitPrimary", angle: 0 },
+          }),
+          new Promise<void>(r => setTimeout(r, 1500)),
+        ]);
+        console.log(`[ebManager:${profileId}] setDeviceMetricsOverride: ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
+      } catch (dmErr) {
+        console.warn(`[ebManager:${profileId}] setDeviceMetricsOverride failed:`, dmErr);
+      }
+      try {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+            enabled:        true,
+            maxTouchPoints: 10,
+          }),
+          new Promise<void>(r => setTimeout(r, 1500)),
+        ]);
+        console.log(`[ebManager:${profileId}] setTouchEmulationEnabled: touch input stack active`);
+      } catch (teErr) {
+        console.warn(`[ebManager:${profileId}] setTouchEmulationEnabled failed:`, teErr);
+      }
+    }
+  }
+
+  // ── Locale override — match navigator.languages ────────────────────────────
+  // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
+  // locale unless overridden at the CDP level.
+  try {
+    await Promise.race([
+      win.webContents.debugger.sendCommand("Emulation.setLocaleOverride", { locale: "en-US" }),
+      new Promise<void>(r => setTimeout(r, 1500)),
+    ]);
+  } catch {}
 
   // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
   // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
@@ -2954,6 +2966,12 @@ export async function openEbWindow(opts: {
   // which URL causes the blank screen even when it's not accounts/login/#.
   // Also performs general blank-screen recovery: if any Instagram page finishes
   // loading with an empty body and no 2FA form, navigates to feed or login.
+  //
+  // RATE-LIMITED: the recovery reloads with a 1500 ms delay and stops after 3
+  // consecutive blank-page attempts.  Without the limit the handler fires on the
+  // blank result of its own recovery loadURL → infinite reload loop.  The counter
+  // resets whenever a page with actual content loads successfully.
+  let _blankRecoveryCount = 0;
   win.webContents.on("did-finish-load", async () => {
     if (win.isDestroyed()) return;
     const url = win.webContents.getURL();
@@ -2976,10 +2994,16 @@ export async function openEbWindow(opts: {
     console.log(`[ebDiag:${profileId}] did-finish-load url="${url}" session=${diagCks.length > 0 ? "present" : "absent"} body=${snapshot}`);
 
     // ── General blank-screen recovery ─────────────────────────────────────
-    if (!url.includes("instagram.com")) return;
+    if (!url.includes("instagram.com")) {
+      _blankRecoveryCount = 0; // reset on non-Instagram pages
+      return;
+    }
     let snap: { childCount?: number; bodyLen?: number } = {};
     try { snap = JSON.parse(snapshot); } catch {}
-    if ((snap.bodyLen ?? 9999) > 200) return; // page rendered content — nothing to do
+    if ((snap.bodyLen ?? 9999) > 200) {
+      _blankRecoveryCount = 0; // page rendered content — nothing to do, reset counter
+      return;
+    }
 
     // Don't interrupt 2FA entry
     const has2FA: boolean = await win.webContents.executeJavaScript(`
@@ -2995,7 +3019,20 @@ export async function openEbWindow(opts: {
       return;
     }
 
-    console.warn(`[ebDiag:${profileId}] BLANK BODY on "${url}" (bodyLen=${snap.bodyLen ?? "?"},children=${snap.childCount ?? "?"}) — recovering to ${diagCks.length > 0 ? "feed" : "login"}`);
+    _blankRecoveryCount++;
+    if (_blankRecoveryCount > 3) {
+      console.warn(`[ebDiag:${profileId}] blank-screen recovery reached retry limit (${_blankRecoveryCount}) — stopping to avoid reload loop. User can manually reload.`);
+      return;
+    }
+
+    // Wait 1500 ms before reloading so the proxy has time to settle.
+    // Without this delay the recovery reload fires into the same race condition
+    // that caused the blank page, gets another blank, and loops.
+    console.warn(`[ebDiag:${profileId}] BLANK BODY on "${url}" (bodyLen=${snap.bodyLen ?? "?"},children=${snap.childCount ?? "?"}) — attempt ${_blankRecoveryCount}/3, recovering in 1500 ms to ${diagCks.length > 0 ? "feed" : "login"}`);
+    await new Promise(r => setTimeout(r, 1500));
+    if (win.isDestroyed()) return;
+    // Abort recovery if the user navigated away during the delay
+    if (win.webContents.getURL() !== url) return;
     win.webContents.loadURL(
       diagCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
     ).catch(() => {});
