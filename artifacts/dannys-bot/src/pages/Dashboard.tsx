@@ -62,6 +62,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.911",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats sidebar icon updated to a spy figure with magnifying glass crosshairs for a more distinct malware-scanner look." },
+      { category: "Fix", text: "Accounts page Select All / Select None / Actions toolbar is now pinned to the bottom of the window at all times, regardless of how many accounts are loaded." },
+      { category: "Fix", text: "Metrics page: HS Cycles moved into the Action Totals group alongside Follow, Unfollow, DMs etc. Human Session 'current status / Enabled' card removed from Account Health." },
+      { category: "Fix", text: "Browser auto-login no longer types the password into the username field — it now uses the Tab key to move focus from username to password, which is immune to Instagram's form re-render shifting coordinates." },
+      { category: "Fix", text: "Embedded browser window now sets its size before showing, so it appears maximised to the work area immediately without a flash at the smaller starting size." },
+      { category: "Fix", text: "Account settings Device Fingerprint timezone now shows your machine's actual local timezone instead of a randomly picked city that may contradict the account's proxy country." },
+      { category: "Fix", text: "Account settings Profile Sync section now shows all controls (Auto Sync toggle, interval range, HikerAPI, Sync Now) on a single row instead of two stacked rows." },
+    ],
+  },
+  {
     version: "1.0.910",
     date: "12 Jun 2026",
     items: [

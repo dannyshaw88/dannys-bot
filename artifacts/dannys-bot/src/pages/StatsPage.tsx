@@ -947,6 +947,14 @@ export function StatsPage() {
                           <span className="text-[10px] text-muted-foreground">today · {getStat(st.key, "lifetime").toLocaleString()} lifetime</span>
                         </div>
                       ))}
+                      {/* HS Cycles — human session activity count */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-500 flex items-center gap-1">
+                          <Bot className="w-3 h-3" />HS Cycles
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{getStat("human_session", today).toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {getStat("human_session", "lifetime").toLocaleString()} lifetime</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1070,25 +1078,6 @@ export function StatsPage() {
                         <span className="text-[10px] text-muted-foreground">today · {bannedLifetime.toLocaleString()} lifetime</span>
                       </div>
 
-                      {/* Human Session status */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-500 flex items-center gap-1">
-                          <Bot className="w-3 h-3" />Human Session
-                        </span>
-                        <span className={`text-sm font-bold ${humanSessionEnabled ? "text-emerald-500" : "text-muted-foreground"}`}>
-                          {humanSessionEnabled ? "Enabled" : "Disabled"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">current status</span>
-                      </div>
-
-                      {/* HS cycles today */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-500 flex items-center gap-1">
-                          <Bot className="w-3 h-3" />HS Cycles
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{getStat("human_session", today).toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">today · {getStat("human_session", "lifetime").toLocaleString()} lifetime</span>
-                      </div>
                     </div>
                   </CardContent>
                 </Card>

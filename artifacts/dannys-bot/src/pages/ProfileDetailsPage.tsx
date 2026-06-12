@@ -136,11 +136,13 @@ function computeFingerprint(ua: string, apiUA?: string | null): FingerprintValue
   const downlink = Math.round(2 + r() * 98);                    // call 6
   const rtt      = rI(10, 150);                                  // call 7
 
-  const TZ_POOL = [
-    "New York", "New York", "Los Angeles", "Los Angeles",
-    "Chicago", "Denver", "Phoenix", "London", "Berlin",
-  ] as const;
-  const timezone = rp(TZ_POOL);                                  // call 8
+  // Derive timezone from the machine's actual locale rather than picking
+  // randomly from a pool — a random pool can show a timezone that directly
+  // contradicts the account's proxy country, which Instagram cross-checks.
+  // Intl gives the real local timezone (e.g. "Europe/London" → "London").
+  const _tzRaw = Intl.DateTimeFormat().resolvedOptions().timeZone;  // call 8 (advance PRNG slot)
+  void rp(["x"] as const);
+  const timezone = _tzRaw.split("/").pop()?.replace(/_/g, " ") ?? "Unknown"; // "America/New_York" → "New York"
 
   return { device, sw, sh, dpr, mem, cores, batteryPct, charging, connType, downlink, timezone, rtt, chargeOrDischargeTime };
 }
@@ -1709,57 +1711,54 @@ export function ProfileDetailsPage() {
           </div>
           {showProfileSync && (
           <div className="mt-4">
-            <div className="flex items-start gap-4">
-              {/* Sync controls — left of stats */}
-              <div className="flex flex-col gap-1.5 shrink-0 border-r border-border pr-4">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!!formData?.syncEnabled}
-                    onCheckedChange={v => updateField({ syncEnabled: v })}
-                  />
-                  <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formData?.syncIntervalMin ?? 60}
-                      onChange={e => updateField({ syncIntervalMin: Math.min(Number(e.target.value), formData?.syncIntervalMax ?? Infinity) })}
-                      className="h-6 text-xs w-11 px-1"
-                    />
-                    <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formData?.syncIntervalMax ?? 120}
-                      onChange={e => updateField({ syncIntervalMax: Math.max(Number(e.target.value), formData?.syncIntervalMin ?? 0) })}
-                      className="h-6 text-xs w-11 px-1"
-                    />
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="syncUseHikerCard"
-                    checked={!!formData?.syncUseHiker}
-                    onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                  />
-                  <Label htmlFor="syncUseHikerCard" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-xs px-2 gap-1"
-                    disabled={syncNowStatus === "syncing"}
-                    onClick={handleSyncNow}
-                  >
-                    {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                    {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
-                    {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
-                    {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
-                  </Button>
-                </div>
+            {/* All sync controls on one row */}
+            <div className="flex items-center gap-3 flex-wrap pb-3">
+              <Switch
+                checked={!!formData?.syncEnabled}
+                onCheckedChange={v => updateField({ syncEnabled: v })}
+              />
+              <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={1}
+                  value={formData?.syncIntervalMin ?? 60}
+                  onChange={e => updateField({ syncIntervalMin: Math.min(Number(e.target.value), formData?.syncIntervalMax ?? Infinity) })}
+                  className="h-6 text-xs w-11 px-1"
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={formData?.syncIntervalMax ?? 120}
+                  onChange={e => updateField({ syncIntervalMax: Math.max(Number(e.target.value), formData?.syncIntervalMin ?? 0) })}
+                  className="h-6 text-xs w-11 px-1"
+                />
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
               </div>
-              {/* Right: stat icons */}
+              <div className="w-px h-4 bg-border mx-1" />
+              <Checkbox
+                id="syncUseHikerCard"
+                checked={!!formData?.syncUseHiker}
+                onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+              />
+              <Label htmlFor="syncUseHikerCard" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs px-2 gap-1"
+                disabled={syncNowStatus === "syncing"}
+                onClick={handleSyncNow}
+              >
+                {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
+                {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
+                {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
+              </Button>
+            </div>
+            <div className="flex items-start gap-4">
+              {/* Stat icons */}
               <div className="flex flex-col gap-2 shrink-0">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">

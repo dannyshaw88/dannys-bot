@@ -2044,7 +2044,6 @@ export async function openEbWindow(opts: {
   });
   win.once("ready-to-show", () => {
     if (win.isDestroyed()) return;
-    win.show();
     if (isGhostBrowser) {
       // Position ghost browser at the absolute right edge of the primary display
       const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
@@ -2052,12 +2051,14 @@ export async function openEbWindow(opts: {
       const gx = Math.max(0, sw - ww - 8);
       const gy = Math.max(0, Math.floor((sh - wh) / 2));
       win.setPosition(gx, gy);
+      win.show();
     } else {
-      // Use explicit workArea bounds instead of maximize() so the window never
-      // covers the Windows taskbar or hides the close/min/max buttons.
-      // win.maximize() can exceed workArea on some Windows DPI/taskbar configs.
+      // Set window to workArea bounds BEFORE showing so it appears maximized
+      // without the taskbar-overlap flash. workArea excludes the Windows taskbar
+      // so the window fills the screen but never covers it.
       const _wa = eScreen.getPrimaryDisplay().workArea;
       win.setBounds({ x: _wa.x, y: _wa.y, width: _wa.width, height: _wa.height });
+      win.show();
     }
   });
 
@@ -3568,28 +3569,17 @@ function setupToolbarIpc(): void {
             await _ms(100);
             await typeTextCDP(_d, _lgUsr);
 
-            // Wait for Instagram's async username validation to settle before
-            // tapping the password field. Instagram re-renders the form after
-            // username input (shows a clear × button, spinner, or suggestions)
-            // which shifts the password field position downward. Using stale
-            // pre-typing coordinates causes the tap to land on the × clear
-            // button at the end of the username field instead. Re-query after
-            // 700 ms to get the fresh post-render position.
+            // Use Tab key to move focus from username to password field.
+            // Tapping by coordinates is unreliable — Instagram re-renders the
+            // form after username input (shows a × clear button, spinner, etc.)
+            // which can shift or obscure the password field position. Tab is
+            // the native keyboard way to advance focus and always lands on the
+            // correct next field regardless of layout shifts.
             await _ms(700);
-            const _freshPwd = await targetWc.executeJavaScript(`
-              (() => {
-                const p = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
-                if (!p) return null;
-                const r = p.getBoundingClientRect();
-                if (r.width <= 0 || r.height <= 0) return null;
-                return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-              })()
-            `).catch(() => null) as { x: number; y: number } | null;
-            const _pwdCoords = _freshPwd ?? _flds.p;
-
-            // Tap the password field using fresh post-render coordinates
-            await cdpTapGesture(_d, _pwdCoords.x, _pwdCoords.y);
-            await _ms(150);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(200);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });

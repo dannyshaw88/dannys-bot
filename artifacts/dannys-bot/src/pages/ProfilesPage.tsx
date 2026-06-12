@@ -1242,7 +1242,7 @@ export function ProfilesPage() {
           </div>
 
           {/* ── Scrollable body conditional content ────────────────────── */}
-          <div ref={scrollBodyRef} className="overflow-y-auto flex-1 min-h-0">
+          <div ref={scrollBodyRef} className="overflow-y-auto flex-1 min-h-0 pb-[42px]">
           {isLoading ? (
             <div className="divide-y divide-border/40">
               {[1,2,3,4,5].map(i => <div key={i} className="h-8 animate-pulse bg-muted/30" />)}
@@ -1529,8 +1529,8 @@ export function ProfilesPage() {
           )}
           </div>{/* end scrollable body */}
 
-          {/* ── Bottom toolbar inside card, width matches card ─────────── */}
-          <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
+          {/* ── Bottom toolbar — fixed to the bottom of the window ──────── */}
+          <div className="fixed bottom-0 left-[133px] right-0 z-30 flex items-center gap-4 px-3 py-2 border-t border-border bg-card/95 backdrop-blur-sm select-none">
             <button
               onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
               className="text-[12px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap"
