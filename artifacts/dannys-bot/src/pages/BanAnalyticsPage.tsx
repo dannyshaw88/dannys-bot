@@ -25,6 +25,7 @@ interface ProxyRisk {
   banCount: number;
   automatedCount: number;
   captchaCount: number;
+  lockedCount: number;
   total: number;
   accounts: string[];
 }
@@ -65,12 +66,13 @@ function topEndpoints(entries: AnalyticsEntry[], accent: string): EndpointFreq[]
     .slice(0, 20);
 }
 
-type Tab = "ban" | "automated" | "captcha";
+type Tab = "ban" | "automated" | "captcha" | "locked";
 
 const TAB_CONFIG: Record<Tab, { label: string; accentClass: string; accentBg: string; barColor: string; emptyMsg: string; flagMsg: string }> = {
   ban:       { label: "Ban Events",             accentClass: "text-red-500",    accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",       barColor: "bg-red-400",    emptyMsg: "No ban analytics yet",              flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned." },
   automated: { label: "Automated Behaviour",    accentClass: "text-orange-500", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800", barColor: "bg-orange-400", emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour." },
   captcha:   { label: "Captcha Errors",         accentClass: "text-yellow-500", accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800", barColor: "bg-yellow-400", emptyMsg: "No captcha events yet",             flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error." },
+  locked:    { label: "Locked Account",         accentClass: "text-rose-500",   accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",   barColor: "bg-rose-400",   emptyMsg: "No locked account events yet",     flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account." },
 };
 
 function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Tab] }) {
@@ -181,12 +183,13 @@ function buildProxyRiskMap(
   bans: AnalyticsEntry[],
   automated: AnalyticsEntry[],
   captcha: AnalyticsEntry[],
+  locked: AnalyticsEntry[],
 ): ProxyRisk[] {
   const map = new Map<string, ProxyRisk>();
-  const add = (entries: AnalyticsEntry[], key: keyof Pick<ProxyRisk, "banCount" | "automatedCount" | "captchaCount">) => {
+  const add = (entries: AnalyticsEntry[], key: keyof Pick<ProxyRisk, "banCount" | "automatedCount" | "captchaCount" | "lockedCount">) => {
     for (const e of entries) {
       const host = e.proxyHost || "(no proxy)";
-      if (!map.has(host)) map.set(host, { host, banCount: 0, automatedCount: 0, captchaCount: 0, total: 0, accounts: [] });
+      if (!map.has(host)) map.set(host, { host, banCount: 0, automatedCount: 0, captchaCount: 0, lockedCount: 0, total: 0, accounts: [] });
       const r = map.get(host)!;
       r[key]++;
       r.total++;
@@ -196,6 +199,7 @@ function buildProxyRiskMap(
   add(bans, "banCount");
   add(automated, "automatedCount");
   add(captcha, "captchaCount");
+  add(locked, "lockedCount");
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
@@ -203,12 +207,14 @@ function buildConcurrencyAlerts(
   bans: AnalyticsEntry[],
   automated: AnalyticsEntry[],
   captcha: AnalyticsEntry[],
+  locked: AnalyticsEntry[],
 ): ConcurrencyAlert[] {
   const alerts: ConcurrencyAlert[] = [];
   const groups: { entries: AnalyticsEntry[]; label: string }[] = [
     { entries: bans, label: "Ban" },
     { entries: automated, label: "Automated" },
     { entries: captcha, label: "Captcha" },
+    { entries: locked, label: "Locked" },
   ];
   for (const { entries, label } of groups) {
     const byProxy = new Map<string, AnalyticsEntry[]>();
@@ -265,13 +271,19 @@ export function BanAnalyticsPage() {
     refetchInterval: 30000,
   });
 
-  const isLoading = banLoading || autoLoading || captchaLoading;
-  const proxyRisks = buildProxyRiskMap(banEntries, automatedEntries, captchaEntries);
-  const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries);
-  const cfg = TAB_CONFIG[activeTab];
-  const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : captchaEntries;
+  const { data: lockedEntries = [], isLoading: lockedLoading } = useQuery<AnalyticsEntry[]>({
+    queryKey: ["/api/analytics/locked-patterns"],
+    queryFn: async () => (await fetch("/api/analytics/locked-patterns", { credentials: "include" })).json(),
+    refetchInterval: 30000,
+  });
 
-  const TABS: Tab[] = ["ban", "automated", "captcha"];
+  const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
+  const proxyRisks = buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries);
+  const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries);
+  const cfg = TAB_CONFIG[activeTab];
+  const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : lockedEntries;
+
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked"];
 
   return (
     <AppLayout>
@@ -303,7 +315,7 @@ export function BanAnalyticsPage() {
 
           {/* ── Summary row ── */}
           {!isLoading && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div className="border border-border rounded-lg p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Ban Events</p>
                 <p className="text-3xl font-bold mt-1 text-red-500">{banEntries.length}</p>
@@ -316,6 +328,10 @@ export function BanAnalyticsPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Captcha Errors</p>
                 <p className="text-3xl font-bold mt-1 text-yellow-500">{captchaEntries.length}</p>
               </div>
+              <div className="border border-border rounded-lg p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Locked Accounts</p>
+                <p className="text-3xl font-bold mt-1 text-rose-500">{lockedEntries.length}</p>
+              </div>
             </div>
           )}
 
@@ -325,7 +341,7 @@ export function BanAnalyticsPage() {
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
                 <span className="text-sm font-semibold">Proxy Risk Ranking</span>
-                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha events per IP</span>
+                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked events per IP</span>
               </div>
               <div className="divide-y divide-border">
                 {proxyRisks.map((pr, i) => (
@@ -342,6 +358,7 @@ export function BanAnalyticsPage() {
                       <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
                       <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
                       <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
                       <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total} total</span>
                     </div>
                   </div>
@@ -388,7 +405,7 @@ export function BanAnalyticsPage() {
                 >
                   {TAB_CONFIG[tab].label}
                   <span className="ml-1.5 opacity-60">
-                    ({tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : captchaEntries.length})
+                    ({tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : lockedEntries.length})
                   </span>
                 </button>
               ))}

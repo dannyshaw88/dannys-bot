@@ -1765,12 +1765,40 @@ export function ProfilesPage() {
               <p className="text-sm font-semibold">Actions</p>
             </div>
             <div className="py-1 grid grid-cols-3">
-              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                Import Profiles
-                <ChevronDown className="w-4 h-4 shrink-0 text-cyan-500" />
+              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <Upload className="w-4 h-4 shrink-0 text-muted-foreground" /> Import Profiles
               </button>
               <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
+              </button>
+              <button
+                onClick={async () => {
+                  setActionsOpen(false);
+                  try {
+                    const tz = new Date().getTimezoneOffset();
+                    const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
+                    const url = `/api/logs/export?${ids ? `profileIds=${ids}&` : ""}tz=${tz}`;
+                    const res = await fetch(url, { credentials: "include" });
+                    if (!res.ok) { toast({ title: "Export failed", description: "Could not fetch API call history.", variant: "destructive" }); return; }
+                    const text = await res.text();
+                    const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    const eApi2 = (window as any).electronAPI;
+                    if (eApi2?.openCsvTemp) {
+                      await eApi2.openCsvTemp({ content: text, filename });
+                    } else {
+                      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = filename;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                    }
+                  } catch { toast({ title: "Export failed", variant: "destructive" }); }
+                }}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+              >
+                <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
                 onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
@@ -1854,7 +1882,7 @@ export function ProfilesPage() {
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <FileDown className="w-4 h-4 shrink-0 text-primary" />
-                Export EQX{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+                Export EQX File{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
                 onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
@@ -1863,35 +1891,6 @@ export function ProfilesPage() {
               >
                 {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 Import Binary File
-              </button>
-              <button
-                onClick={async () => {
-                  setActionsOpen(false);
-                  try {
-                    const tz = new Date().getTimezoneOffset();
-                    const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
-                    const url = `/api/logs/export?${ids ? `profileIds=${ids}&` : ""}tz=${tz}`;
-                    const res = await fetch(url, { credentials: "include" });
-                    if (!res.ok) { toast({ title: "Export failed", description: "Could not fetch API call history.", variant: "destructive" }); return; }
-                    const text = await res.text();
-                    const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                    const eApi2 = (window as any).electronAPI;
-                    if (eApi2?.openCsvTemp) {
-                      await eApi2.openCsvTemp({ content: text, filename });
-                    } else {
-                      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob);
-                      a.download = filename;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-                    }
-                  } catch { toast({ title: "Export failed", variant: "destructive" }); }
-                }}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
-              >
-                <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />
-                Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
@@ -1945,12 +1944,11 @@ export function ProfilesPage() {
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+C</span>
               </button>
-              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               {/* Assign TrustScore */}
               <button
                 onClick={() => setTsSubOpen(o => !o)}
                 disabled={selectedProfileIds.length === 0}
-                className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="flex h-4 w-4 items-center justify-center rounded-full shrink-0" style={{ background: "#1AD2F2", border: "1px solid #0eb8d4" }}>
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" /></svg>
@@ -2001,16 +1999,6 @@ export function ProfilesPage() {
               >
                 <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" /> Unlock Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="col-span-3 mx-4 my-1 border-t border-border" />
-              <button
-                onClick={() => { setActionsOpen(false); setChangeDetailsOpen(true); }}
-                disabled={selectedProfileIds.length === 0}
-                className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <UserCog className="w-4 h-4 shrink-0 text-muted-foreground" />
-                Change Details{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
-              </button>
-              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button
                 onClick={() => { selectedProfileIds.length > 0 && selectedProfileIds.every(id => flaggedIds.includes(id)) ? handleBulkUnflag() : handleBulkFlag(); }}
                 disabled={selectedProfileIds.length === 0}
@@ -2022,6 +2010,16 @@ export function ProfilesPage() {
                   : `Flag Accounts${selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}`
                 }
               </button>
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
+              <button
+                onClick={() => { setActionsOpen(false); setChangeDetailsOpen(true); }}
+                disabled={selectedProfileIds.length === 0}
+                className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <UserCog className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Change Details{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button
                 onClick={async () => {
                   if (selectedProfileIds.length === 0) {
@@ -2102,6 +2100,33 @@ export function ProfilesPage() {
               >
                 <ShieldAlert className="w-4 h-4 shrink-0" />
                 Flag as Captcha Error{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <button
+                onClick={async () => {
+                  if (selectedProfileIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to flag.", variant: "destructive" });
+                    return;
+                  }
+                  setActionsOpen(false);
+                  const confirmed = window.confirm(
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Locked Account?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Locked\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                  );
+                  if (!confirmed) return;
+                  let successCount = 0;
+                  for (const id of selectedProfileIds) {
+                    try {
+                      const r = await fetch(`/api/profiles/${id}/flag-locked`, { method: "POST", credentials: "include" });
+                      if (r.ok) successCount++;
+                    } catch {}
+                  }
+                  toast({ title: "Flagged as Locked Account", description: `${successCount} account${successCount !== 1 ? "s" : ""} recorded in Evasion Stats.` });
+                  queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-rose-600"
+              >
+                <Lock className="w-4 h-4 shrink-0" />
+                Flag as Locked Account{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">

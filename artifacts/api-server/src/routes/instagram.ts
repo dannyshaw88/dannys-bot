@@ -707,6 +707,41 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Flag as Locked Account: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-locked", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      await storage.insertLockedAnalytics({
+        username: profile.username,
+        proxyHost: profile.proxyHost ?? "",
+        flaggedAt: new Date().toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "locked" });
+      req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-locked] error");
+      res.status(500).json({ error: "Failed to flag account as locked" });
+    }
+  });
+
+  // ── Locked Account Analytics: return all records ─────────────────────────────
+  app.get("/api/analytics/locked-patterns", async (req, res) => {
+    try {
+      const records = await storage.getLockedAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[locked-analytics] error");
+      res.status(500).json({ error: "Failed to fetch locked account analytics" });
+    }
+  });
+
   // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
   // Called by both the bulk import and EQX import routes immediately after a
   // profile is created/updated with igApiCookies.  Without this file Chrome

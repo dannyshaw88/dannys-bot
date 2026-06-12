@@ -3388,8 +3388,10 @@ export async function openEbWindow(opts: {
           console.warn(`[ebManager] @${username} — 2FA page detected but no 2FA key stored`);
         }
       } finally {
-        // Hold the lock for 3 s so a rapid re-navigation doesn't re-trigger immediately
-        await new Promise(r => setTimeout(r, 3000));
+        // Hold the lock for 90 s — prevents the auto-fill from firing again if Instagram
+        // redirects back to the login page after a wrong password, which would otherwise
+        // create a loop. The toolbar Login button still works for manual retries.
+        await new Promise(r => setTimeout(r, 90000));
         _autoFillBusy = false;
       }
     });
@@ -3567,13 +3569,17 @@ function setupToolbarIpc(): void {
             await _ms(100);
             await typeTextCDP(_d, _lgUsr);
 
-            // Use Tab key to move focus from username to password field.
-            // Tapping by coordinates is unreliable — Instagram re-renders the
-            // form after username input (shows a × clear button, spinner, etc.)
-            // which can shift or obscure the password field position. Tab is
-            // the native keyboard way to advance focus and always lands on the
-            // correct next field regardless of layout shifts.
+            // Press Tab TWICE to move focus from username to password field.
+            // The first Tab moves from the username field to the "Save info?" checkbox
+            // that Instagram renders after username entry. The second Tab lands on the
+            // password field. Using coordinates is unreliable because Instagram
+            // re-renders the form (shows a × clear button, spinner, etc.) and shifts
+            // the password field position after username input.
             await _ms(700);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(60);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });

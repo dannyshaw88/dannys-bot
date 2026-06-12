@@ -399,6 +399,17 @@ export const captchaAnalytics = sqliteTable("captcha_analytics", {
 
 export type CaptchaAnalytics = typeof captchaAnalytics.$inferSelect;
 
+export const lockedAccountsAnalytics = sqliteTable("locked_accounts_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+});
+
+export type LockedAccountAnalytics = typeof lockedAccountsAnalytics.$inferSelect;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
   proxyType: z.enum(["http", "socks5"]).optional().default("http"),

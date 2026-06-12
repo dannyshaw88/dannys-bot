@@ -11,8 +11,8 @@ import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
   hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, bannedAccountsAnalytics,
-  automatedBehaviourAnalytics, captchaAnalytics,
-  type AutomatedBehaviourAnalytics, type CaptchaAnalytics,
+  automatedBehaviourAnalytics, captchaAnalytics, lockedAccountsAnalytics,
+  type AutomatedBehaviourAnalytics, type CaptchaAnalytics, type LockedAccountAnalytics,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -152,6 +152,10 @@ export interface IStorage {
   // Captcha Analytics
   insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
   getCaptchaAnalytics(): Promise<CaptchaAnalytics[]>;
+
+  // Locked Account Analytics
+  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  getLockedAnalytics(): Promise<LockedAccountAnalytics[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -907,6 +911,14 @@ export class DatabaseStorage implements IStorage {
 
   async getCaptchaAnalytics(): Promise<CaptchaAnalytics[]> {
     return await db.select().from(captchaAnalytics).orderBy(desc(captchaAnalytics.id));
+  }
+
+  async insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+    await db.insert(lockedAccountsAnalytics).values(entry);
+  }
+
+  async getLockedAnalytics(): Promise<LockedAccountAnalytics[]> {
+    return await db.select().from(lockedAccountsAnalytics).orderBy(desc(lockedAccountsAnalytics.id));
   }
 }
 

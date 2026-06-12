@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.913",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Feature", text: "Evasion Stats: new Locked Account tab tracks accounts flagged as locked, with proxy risk ranking and concurrency alerts." },
+      { category: "Feature", text: "Account Actions: new 'Flag as Locked Account' option snapshots API calls and marks the account status as Locked." },
+      { category: "Fix", text: "Login auto-fill now sends two Tab presses (username → checkbox → password) instead of one, matching Instagram's updated form layout." },
+      { category: "Fix", text: "Wrong password no longer triggers a page-refresh loop — auto-fill is suppressed for 90 seconds after the first login attempt." },
+      { category: "UI", text: "Actions menu reorganised: Export API Calls moved to the top row; EQX/Binary buttons grouped on their own row; Assign TrustScore on the same row as Group/Ungroup; Flag Accounts on the same row as Lock/Unlock." },
+    ],
+  },
+  {
     version: "1.0.912",
     date: "12 Jun 2026",
     items: [
