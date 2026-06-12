@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.906",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed the browser crash — the step logs revealed it was crashing at device metrics setup because floating CDP commands from the timezone and user-agent steps were still in-flight. Added drain delays and window-alive checks between every CDP block so commands are properly sequenced." },
+    ],
+  },
+  {
     version: "1.0.905",
     date: "12 Jun 2026",
     items: [

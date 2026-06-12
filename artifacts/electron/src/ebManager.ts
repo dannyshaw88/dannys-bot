@@ -2219,6 +2219,17 @@ export async function openEbWindow(opts: {
     }
   }
 
+  // ── Guard between UA and device metrics ──────────────────────────────────
+  // The UA and timezone CDP commands above each use Promise.race with a timeout.
+  // If the timeout fires, the command is still floating in the CDP queue.
+  // Calling sendCommand("Emulation.setDeviceMetricsOverride") while floating
+  // Emulation.* commands are pending crashes Chromium (SIGSEGV in main process).
+  // Also: if the window was destroyed during those 1.5–2 s async waits, accessing
+  // win.webContents.debugger on a destroyed window is an immediate SIGSEGV.
+  // 100 ms drain delay + isDestroyed check before every CDP block fixes both.
+  await new Promise(r => setTimeout(r, 100));
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1b: window destroyed after UA CDP — returning early"); return; }
+
   if (_fpIsMobile) {
     // ── Mobile device metrics override ──────────────────────────────────────
     // CRITICAL for anti-detect: without this, Chromium's C++ layout engine uses
@@ -2238,6 +2249,7 @@ export async function openEbWindow(opts: {
     // mouse events with a wrong pointer type).
     const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
     if (_mobileProfile) {
+      _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
       try {
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
@@ -2247,23 +2259,29 @@ export async function openEbWindow(opts: {
             mobile:            true,
             screenOrientation: { type: "portraitPrimary", angle: 0 },
           }),
-          new Promise<void>(r => setTimeout(r, 1500)),
+          new Promise<void>(r => setTimeout(r, 3000)),
         ]);
-        console.log(`[ebManager:${profileId}] setDeviceMetricsOverride: ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
+        _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride done");
       } catch (dmErr) {
-        console.warn(`[ebManager:${profileId}] setDeviceMetricsOverride failed:`, dmErr);
+        _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dmErr as any)?.message}`);
       }
+
+      // Drain delay + guard before touch emulation
+      await new Promise(r => setTimeout(r, 100));
+      if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1c: window destroyed before touch — returning early"); return; }
+
+      _ebCrashLog(profileId, "STEP-21: setTouchEmulationEnabled");
       try {
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
             enabled:        true,
             maxTouchPoints: 10,
           }),
-          new Promise<void>(r => setTimeout(r, 1500)),
+          new Promise<void>(r => setTimeout(r, 3000)),
         ]);
-        _ebCrashLog(profileId, "STEP-21: touch emulation enabled");
+        _ebCrashLog(profileId, "STEP-21b: touch emulation enabled");
       } catch (teErr) {
-        _ebCrashLog(profileId, `STEP-21: touch emulation FAILED: ${(teErr as any)?.message}`);
+        _ebCrashLog(profileId, `STEP-21b: touch emulation FAILED: ${(teErr as any)?.message}`);
       }
     }
   }
@@ -2271,11 +2289,14 @@ export async function openEbWindow(opts: {
   // ── Locale override — match navigator.languages ────────────────────────────
   // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
   // locale unless overridden at the CDP level.
-  _ebCrashLog(profileId, "STEP-22: setting locale override");
+  // Drain delay + guard before locale (same floating-command protection)
+  await new Promise(r => setTimeout(r, 100));
+  if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1d: window destroyed before locale — returning early"); return; }
+  _ebCrashLog(profileId, "STEP-22: setLocaleOverride");
   try {
     await Promise.race([
       win.webContents.debugger.sendCommand("Emulation.setLocaleOverride", { locale: "en-US" }),
-      new Promise<void>(r => setTimeout(r, 1500)),
+      new Promise<void>(r => setTimeout(r, 3000)),
     ]);
   } catch {}
   _ebCrashLog(profileId, "STEP-23: locale done");
