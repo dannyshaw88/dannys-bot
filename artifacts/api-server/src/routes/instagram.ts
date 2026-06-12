@@ -619,7 +619,7 @@ export async function registerInstagramRoutes(
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
-      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       await storage.insertBanAnalytics({
         username: profile.username,
@@ -655,7 +655,7 @@ export async function registerInstagramRoutes(
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
-      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       await storage.insertAutomatedBehaviourAnalytics({
         username: profile.username,
@@ -680,7 +680,7 @@ export async function registerInstagramRoutes(
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
-      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       await storage.insertCaptchaAnalytics({
         username: profile.username,
@@ -727,7 +727,7 @@ export async function registerInstagramRoutes(
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
-      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date })));
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       await storage.insertLockedAnalytics({
         username: profile.username,

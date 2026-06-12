@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { useEffect, useState } from "react";
 import {
-  Loader2, BarChart2, Calendar, Globe, AlertTriangle, Shield, Clock,
-  TrendingUp, Info, Zap, MessageSquare, UserMinus, UserPlus, ChevronDown, ChevronUp,
+  Loader2, BarChart2, Calendar, Globe, AlertTriangle, Shield,
+  Clock, TrendingUp, ChevronDown, ChevronUp, UserPlus, UserMinus,
+  MessageSquare, Zap,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 
@@ -17,10 +18,10 @@ interface AnalyticsEntry {
   flaggedAt?: string;
 }
 
-interface EndpointFreq {
+interface EpItem {
   operationName: string;
-  count: number;
-  pct: number;
+  date: string;
+  source?: string | null;
 }
 
 interface ProxyRisk {
@@ -40,55 +41,50 @@ interface ConcurrencyAlert {
   category: string;
 }
 
-interface Diagnosis {
-  summary: string;
-  findings: string[];
-  severity: "high" | "medium" | "low";
-  dominantCause: string;
+// ── Known Instagram mobile-API endpoint labels ───────────────────────────────
+const EP_LABELS: Record<string, { label: string; category: "follow" | "unfollow" | "dm" | "like" | "session" | "auth" | "other" }> = {
+  "friendships/create":    { label: "Follow",           category: "follow" },
+  "friendships/destroy":   { label: "Unfollow",         category: "unfollow" },
+  "direct_v2/threads":     { label: "DM Thread",        category: "dm" },
+  "direct_v2/broadcast":   { label: "DM Send",          category: "dm" },
+  "FollowedUser":          { label: "Follow",           category: "follow" },
+  "UnfollowUser":          { label: "Unfollow",         category: "unfollow" },
+  "media/like":            { label: "Like",             category: "like" },
+  "media/unlike":          { label: "Unlike",           category: "like" },
+  "LikeMedia":             { label: "Like",             category: "like" },
+  "GetDirectMessages":     { label: "DM Thread",        category: "dm" },
+  "feed/timeline":         { label: "Timeline Feed",    category: "session" },
+  "ViewTimelineFeedSeen":  { label: "Timeline Seen",    category: "session" },
+  "feed/reels_tray":       { label: "Reels Tray",       category: "session" },
+  "news/inbox":            { label: "Notifications",    category: "session" },
+  "accounts/login":        { label: "Login",            category: "auth" },
+  "qe/sync":               { label: "Session Sync",     category: "auth" },
+  "launcher/sync":         { label: "Launcher Sync",    category: "auth" },
+  "users/info":            { label: "User Info",        category: "session" },
+  "discover/people":       { label: "People Discovery", category: "follow" },
+  "bloks":                 { label: "Bloks (UI)",        category: "session" },
+  "banyan":                { label: "Banyan Check",      category: "auth" },
+  "topical_explore":       { label: "Explore",           category: "session" },
+  "ProfileSync":           { label: "Profile Sync",      category: "session" },
+};
+
+function matchLabel(name: string) {
+  for (const [key, val] of Object.entries(EP_LABELS)) {
+    if (name === key || name.includes(key)) return val;
+  }
+  return null;
 }
 
-// ── Endpoint knowledge base ──────────────────────────────────────────────────
-// Maps Instagram API path fragments / operation names to human-readable labels
-// and risk classifications.
-const ENDPOINT_KB: Record<string, { label: string; category: "follow" | "unfollow" | "dm" | "like" | "session" | "auth" | "other"; weight: number }> = {
-  "friendships/create":    { label: "Follow",          category: "follow",   weight: 3 },
-  "friendships/destroy":   { label: "Unfollow",        category: "unfollow", weight: 3 },
-  "direct_v2/threads":     { label: "DM Thread",       category: "dm",       weight: 3 },
-  "direct_v2/broadcast":   { label: "DM Send",         category: "dm",       weight: 4 },
-  "media/like":            { label: "Like",             category: "like",     weight: 2 },
-  "media/unlike":          { label: "Unlike",           category: "like",     weight: 2 },
-  "feed/timeline":         { label: "Timeline Feed",    category: "session",  weight: 1 },
-  "feed/reels_tray":       { label: "Reels Tray",       category: "session",  weight: 1 },
-  "news/inbox":            { label: "Notifications",    category: "session",  weight: 1 },
-  "accounts/login":        { label: "Login",            category: "auth",     weight: 2 },
-  "qe/sync":               { label: "Session Sync",     category: "auth",     weight: 1 },
-  "launcher/sync":         { label: "Launcher Sync",    category: "auth",     weight: 1 },
-  "users/info":            { label: "User Info Lookup", category: "session",  weight: 1 },
-  "discover/people":       { label: "People Discovery", category: "follow",   weight: 2 },
-  "igtv/series":           { label: "IGTV",             category: "session",  weight: 1 },
-  "bloks":                 { label: "Bloks (UI)",        category: "session",  weight: 1 },
-  "contact_point_prefill": { label: "Contact Prefill",  category: "auth",     weight: 2 },
-  "banyan":                { label: "Banyan Check",      category: "auth",     weight: 2 },
-  "topical_explore":       { label: "Explore Page",      category: "session",  weight: 1 },
-  "push/register":         { label: "Push Register",    category: "auth",     weight: 1 },
-};
-
-// THRESHOLDS for detecting high-activity tools
-const THRESHOLDS = {
-  follow:   { warn: 30,  danger: 80  },
-  unfollow: { warn: 30,  danger: 80  },
-  dm:       { warn: 10,  danger: 30  },
-  like:     { warn: 50,  danger: 150 },
-  callRate: { warn: 3.0, danger: 8.0 },
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
-function parseEndpoints(snapshot: string): { operationName: string; date: string }[] {
+function parseEps(snapshot: string): EpItem[] {
   try { return JSON.parse(snapshot) ?? []; } catch { return []; }
 }
 
-function getCallRateNum(snapshot: string): number {
-  const eps = parseEndpoints(snapshot);
+function filterHiker(eps: EpItem[]): EpItem[] {
+  return eps.filter(e => e.source !== "HikerAPI");
+}
+
+function getCallRateNum(eps: EpItem[]): number {
   if (eps.length < 2) return 0;
   const dates = eps.map(e => new Date(e.date).getTime()).filter(t => !isNaN(t)).sort((a, b) => a - b);
   if (dates.length < 2) return 0;
@@ -97,143 +93,92 @@ function getCallRateNum(snapshot: string): number {
   return eps.length / (spanMs / 60000);
 }
 
-function getCallRateStr(snapshot: string): string {
-  const r = getCallRateNum(snapshot);
-  return r > 0 ? `${r.toFixed(1)}/min` : "—";
+function getSpanMinutes(eps: EpItem[]): number {
+  if (eps.length < 2) return 0;
+  const dates = eps.map(e => new Date(e.date).getTime()).filter(t => !isNaN(t)).sort((a, b) => a - b);
+  if (dates.length < 2) return 0;
+  return (dates[dates.length - 1] - dates[0]) / 60000;
 }
 
-function topEndpoints(entries: AnalyticsEntry[]): EndpointFreq[] {
-  const map = new Map<string, number>();
-  for (const entry of entries) {
-    for (const ep of parseEndpoints(entry.endpointSnapshot)) {
-      map.set(ep.operationName, (map.get(ep.operationName) ?? 0) + 1);
-    }
-  }
-  const total = Array.from(map.values()).reduce((a, b) => a + b, 0);
-  return Array.from(map.entries())
-    .map(([operationName, count]) => ({ operationName, count, pct: total ? Math.round(count / total * 100) : 0 }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 20);
-}
-
-function matchKb(name: string) {
-  for (const [key, val] of Object.entries(ENDPOINT_KB)) {
-    if (name.includes(key)) return val;
-  }
-  return null;
-}
-
-function categoryCounts(eps: { operationName: string; date: string }[]) {
+function categorise(eps: EpItem[]) {
   const counts: Record<string, number> = { follow: 0, unfollow: 0, dm: 0, like: 0, session: 0, auth: 0, other: 0 };
   for (const ep of eps) {
-    const kb = matchKb(ep.operationName);
-    const cat = kb?.category ?? "other";
-    counts[cat] = (counts[cat] ?? 0) + 1;
+    const m = matchLabel(ep.operationName);
+    counts[m?.category ?? "other"]++;
   }
   return counts;
 }
 
-// ── Per-entry diagnosis engine ───────────────────────────────────────────────
-function diagnoseEntry(entry: AnalyticsEntry, allSameType: AnalyticsEntry[]): Diagnosis {
-  const eps = parseEndpoints(entry.endpointSnapshot);
-  const cats = categoryCounts(eps);
-  const callRate = getCallRateNum(entry.endpointSnapshot);
-  const findings: string[] = [];
-  let severity: "high" | "medium" | "low" = "low";
-  let dominantCause = "Unknown activity pattern";
-
-  // ── Call rate check ──
-  if (callRate >= THRESHOLDS.callRate.danger) {
-    findings.push(`Extremely high API call rate: ${callRate.toFixed(1)} calls/min — Instagram's anti-bot systems flag sustained rates above ${THRESHOLDS.callRate.danger}/min as non-human.`);
-    severity = "high";
-  } else if (callRate >= THRESHOLDS.callRate.warn) {
-    findings.push(`Elevated API call rate: ${callRate.toFixed(1)} calls/min — this is above typical human browsing patterns.`);
-    if (severity === "low") severity = "medium";
-  }
-
-  // ── Follow tool check ──
-  if (cats.follow >= THRESHOLDS.follow.danger) {
-    findings.push(`Mass follow activity detected: ${cats.follow} follow calls. Instagram typically enforces hard blocks at 60–100 follows/hour. This is almost certainly the primary trigger.`);
-    dominantCause = "Mass follow tool — too many follow API calls in a short window";
-    severity = "high";
-  } else if (cats.follow >= THRESHOLDS.follow.warn) {
-    findings.push(`High follow count: ${cats.follow} follow calls. This is in the range where Instagram starts applying friction (action blocks, CAPTCHAs).`);
-    if (dominantCause === "Unknown activity pattern") dominantCause = "Follow tool — close to Instagram's daily follow limits";
-    if (severity === "low") severity = "medium";
-  }
-
-  // ── Unfollow tool check ──
-  if (cats.unfollow >= THRESHOLDS.unfollow.danger) {
-    findings.push(`Mass unfollow activity detected: ${cats.unfollow} unfollow calls. Instagram treats bulk unfollowing the same as bulk following — both can trigger automated-behaviour flags.`);
-    if (dominantCause === "Unknown activity pattern") dominantCause = "Mass unfollow tool";
-    severity = "high";
-  } else if (cats.unfollow >= THRESHOLDS.unfollow.warn) {
-    findings.push(`Elevated unfollow count: ${cats.unfollow} unfollow calls.`);
-    if (severity === "low") severity = "medium";
-  }
-
-  // ── DM tool check ──
-  if (cats.dm >= THRESHOLDS.dm.danger) {
-    findings.push(`Mass DM activity detected: ${cats.dm} DM-related calls. Sending bulk direct messages is one of the fastest ways to trigger spam detection on Instagram.`);
-    if (dominantCause === "Unknown activity pattern") dominantCause = "DM / Contact tool — bulk messaging flagged as spam";
-    severity = "high";
-  } else if (cats.dm >= THRESHOLDS.dm.warn) {
-    findings.push(`Elevated DM count: ${cats.dm} DM-related calls. This is approaching Instagram's soft limit for new-ish accounts.`);
-    if (severity === "low") severity = "medium";
-  }
-
-  // ── Like tool check ──
-  if (cats.like >= THRESHOLDS.like.danger) {
-    findings.push(`Mass like activity: ${cats.like} like/unlike calls. High-volume liking is a known trigger for "Automated Behaviour Detected" on Instagram.`);
-    if (dominantCause === "Unknown activity pattern") dominantCause = "Like tool — bulk liking flagged";
-    severity = "high";
-  } else if (cats.like >= THRESHOLDS.like.warn) {
-    findings.push(`Notable like volume: ${cats.like} like calls.`);
-  }
-
-  // ── Cross-account pattern check ──
-  const others = allSameType.filter(e => e.id !== entry.id && e.proxyHost && e.proxyHost === entry.proxyHost);
-  if (others.length > 0) {
-    findings.push(`${others.length} other account${others.length !== 1 ? "s" : ""} on the same proxy (${entry.proxyHost}) also flagged — possible shared proxy risk or coordinated over-use.`);
-    if (severity === "low") severity = "medium";
-  }
-
-  // ── Auth/session anomaly ──
-  if (cats.auth > 5) {
-    findings.push(`High auth-related endpoint activity (${cats.auth} calls): repeated session syncs or login attempts can indicate session instability, which Instagram treats as suspicious.`);
-  }
-
-  // ── Low data notice ──
-  if (eps.length < 10) {
-    findings.push(`Only ${eps.length} API calls captured — the flag may have been triggered before significant activity was recorded, or the account session was very short.`);
-    if (dominantCause === "Unknown activity pattern") dominantCause = "Insufficient data — session too short to identify cause";
-  }
-
-  if (findings.length === 0) {
-    findings.push("No specific high-risk pattern identified. The flag may be due to account age, prior history, or IP reputation rather than recent in-session activity.");
-    dominantCause = "No clear activity trigger — possible IP/account reputation issue";
-  }
-
-  // ── Summary sentence ──
-  const totalActions = cats.follow + cats.unfollow + cats.dm + cats.like;
-  const summary = totalActions > 0
-    ? `${entry.endpointCount} API calls captured. Primary actions: ${[
-        cats.follow > 0 ? `${cats.follow} follows` : "",
-        cats.unfollow > 0 ? `${cats.unfollow} unfollows` : "",
-        cats.dm > 0 ? `${cats.dm} DMs` : "",
-        cats.like > 0 ? `${cats.like} likes` : "",
-      ].filter(Boolean).join(", ")}. Rate: ${callRate > 0 ? `${callRate.toFixed(1)}/min` : "—"}.`
-    : `${entry.endpointCount} API calls captured — mostly session/auth activity. Rate: ${callRate > 0 ? `${callRate.toFixed(1)}/min` : "—"}.`;
-
-  return { summary, findings, severity, dominantCause };
+function topEps(eps: EpItem[], n = 10): Array<{ name: string; count: number; label: string | null }> {
+  const map = new Map<string, number>();
+  for (const e of eps) map.set(e.operationName, (map.get(e.operationName) ?? 0) + 1);
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([name, count]) => ({ name, count, label: matchLabel(name)?.label ?? null }));
 }
 
-function buildProxyRiskMap(
-  bans: AnalyticsEntry[],
-  automated: AnalyticsEntry[],
-  captcha: AnalyticsEntry[],
-  locked: AnalyticsEntry[],
-): ProxyRisk[] {
+function buildFindings(eps: EpItem[], allSameType: AnalyticsEntry[]): string[] {
+  const findings: string[] = [];
+  const cats = categorise(eps);
+  const rate = getCallRateNum(eps);
+  const span = getSpanMinutes(eps);
+
+  if (eps.length < 5) {
+    findings.push(`Only ${eps.length} Instagram API call${eps.length !== 1 ? "s" : ""} captured — not enough activity to identify a pattern. The account may have been flagged very early or after a short session.`);
+    return findings;
+  }
+
+  const spanStr = span < 1 ? `${Math.round(span * 60)}s` : span < 60 ? `${span.toFixed(1)} min` : `${(span / 60).toFixed(1)} hr`;
+
+  if (cats.follow > 0) {
+    const perHour = span > 0 ? Math.round(cats.follow / (span / 60)) : 0;
+    findings.push(`Follow: ${cats.follow} calls over ${spanStr}${perHour > 0 ? ` — ${perHour}/hr` : ""}.`);
+  }
+  if (cats.unfollow > 0) {
+    const perHour = span > 0 ? Math.round(cats.unfollow / (span / 60)) : 0;
+    findings.push(`Unfollow: ${cats.unfollow} calls over ${spanStr}${perHour > 0 ? ` — ${perHour}/hr` : ""}.`);
+  }
+  if (cats.dm > 0) {
+    findings.push(`DM: ${cats.dm} calls captured.`);
+  }
+  if (cats.like > 0) {
+    const perHour = span > 0 ? Math.round(cats.like / (span / 60)) : 0;
+    findings.push(`Likes: ${cats.like} calls over ${spanStr}${perHour > 0 ? ` — ${perHour}/hr` : ""}.`);
+  }
+  if (rate > 0) {
+    findings.push(`API call rate: ${rate.toFixed(2)}/min (${eps.length} calls across ${spanStr}).`);
+  }
+  if (cats.follow === 0 && cats.unfollow === 0 && cats.dm === 0 && cats.like === 0) {
+    findings.push(`No follow, unfollow, DM or like calls recorded — activity was session/auth only (${eps.length} calls).`);
+  }
+
+  return findings;
+}
+
+function buildCrossTrend(entries: AnalyticsEntry[]): Array<{ endpoint: string; label: string | null; accountCount: number; pct: number }> {
+  if (entries.length < 2) return [];
+  const epToAccounts = new Map<string, Set<string>>();
+  for (const entry of entries) {
+    const eps = filterHiker(parseEps(entry.endpointSnapshot));
+    for (const ep of eps) {
+      if (!epToAccounts.has(ep.operationName)) epToAccounts.set(ep.operationName, new Set());
+      epToAccounts.get(ep.operationName)!.add(entry.username);
+    }
+  }
+  return Array.from(epToAccounts.entries())
+    .map(([endpoint, accs]) => ({
+      endpoint,
+      label: matchLabel(endpoint)?.label ?? null,
+      accountCount: accs.size,
+      pct: Math.round(accs.size / entries.length * 100),
+    }))
+    .filter(t => t.pct >= 50)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 12);
+}
+
+function buildProxyRiskMap(bans: AnalyticsEntry[], automated: AnalyticsEntry[], captcha: AnalyticsEntry[], locked: AnalyticsEntry[]): ProxyRisk[] {
   const map = new Map<string, ProxyRisk>();
   const add = (entries: AnalyticsEntry[], key: keyof Pick<ProxyRisk, "banCount" | "automatedCount" | "captchaCount" | "lockedCount">) => {
     for (const e of entries) {
@@ -252,20 +197,12 @@ function buildProxyRiskMap(
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
-function buildConcurrencyAlerts(
-  bans: AnalyticsEntry[],
-  automated: AnalyticsEntry[],
-  captcha: AnalyticsEntry[],
-  locked: AnalyticsEntry[],
-): ConcurrencyAlert[] {
+function buildConcurrencyAlerts(bans: AnalyticsEntry[], automated: AnalyticsEntry[], captcha: AnalyticsEntry[], locked: AnalyticsEntry[]): ConcurrencyAlert[] {
   const alerts: ConcurrencyAlert[] = [];
-  const groups: { entries: AnalyticsEntry[]; label: string }[] = [
-    { entries: bans, label: "Ban" },
-    { entries: automated, label: "Automated" },
-    { entries: captcha, label: "Captcha" },
-    { entries: locked, label: "Locked" },
-  ];
-  for (const { entries, label } of groups) {
+  for (const { entries, label } of [
+    { entries: bans, label: "Ban" }, { entries: automated, label: "Automated" },
+    { entries: captcha, label: "Captcha" }, { entries: locked, label: "Locked" },
+  ]) {
     const byProxy = new Map<string, AnalyticsEntry[]>();
     for (const e of entries) {
       const host = e.proxyHost || "(no proxy)";
@@ -274,21 +211,12 @@ function buildConcurrencyAlerts(
     }
     for (const [host, es] of byProxy) {
       if (es.length < 2) continue;
-      const sorted = [...es].sort((a, b) => {
-        const ta = new Date(a.flaggedAt ?? a.bannedAt ?? 0).getTime();
-        const tb = new Date(b.flaggedAt ?? b.bannedAt ?? 0).getTime();
-        return ta - tb;
-      });
+      const sorted = [...es].sort((a, b) => new Date(a.flaggedAt ?? a.bannedAt ?? 0).getTime() - new Date(b.flaggedAt ?? b.bannedAt ?? 0).getTime());
       for (let i = 0; i < sorted.length - 1; i++) {
         const ta = new Date(sorted[i].flaggedAt ?? sorted[i].bannedAt ?? 0).getTime();
         const tb = new Date(sorted[i + 1].flaggedAt ?? sorted[i + 1].bannedAt ?? 0).getTime();
         if (Math.abs(tb - ta) <= 30 * 60 * 1000) {
-          alerts.push({
-            proxyHost: host,
-            accounts: [sorted[i].username, sorted[i + 1].username],
-            times: [sorted[i].flaggedAt ?? sorted[i].bannedAt ?? "", sorted[i + 1].flaggedAt ?? sorted[i + 1].bannedAt ?? ""],
-            category: label,
-          });
+          alerts.push({ proxyHost: host, accounts: [sorted[i].username, sorted[i + 1].username], times: [sorted[i].flaggedAt ?? sorted[i].bannedAt ?? "", sorted[i + 1].flaggedAt ?? sorted[i + 1].bannedAt ?? ""], category: label });
         }
       }
     }
@@ -296,107 +224,63 @@ function buildConcurrencyAlerts(
   return alerts.slice(0, 20);
 }
 
-// ── Global trend: find endpoints that appear in >X% of events ───────────────
-function buildCrossTrend(entries: AnalyticsEntry[]): Array<{ endpoint: string; label: string; accountCount: number; pct: number }> {
-  if (entries.length < 2) return [];
-  const epToAccounts = new Map<string, Set<string>>();
-  for (const entry of entries) {
-    for (const ep of parseEndpoints(entry.endpointSnapshot)) {
-      if (!epToAccounts.has(ep.operationName)) epToAccounts.set(ep.operationName, new Set());
-      epToAccounts.get(ep.operationName)!.add(entry.username);
-    }
-  }
-  return Array.from(epToAccounts.entries())
-    .map(([endpoint, accs]) => ({
-      endpoint,
-      label: matchKb(endpoint)?.label ?? endpoint,
-      accountCount: accs.size,
-      pct: Math.round(accs.size / entries.length * 100),
-    }))
-    .filter(t => t.pct >= 50)
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 10);
-}
-
 type Tab = "ban" | "automated" | "captcha" | "locked";
 
-const TAB_CONFIG: Record<Tab, {
-  label: string; accentClass: string; accentBg: string; barColor: string;
-  severityBg: Record<string, string>; emptyMsg: string; flagMsg: string;
-}> = {
-  ban:       {
-    label: "Ban Events", accentClass: "text-red-500",
-    accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
-    barColor: "bg-red-400",
-    severityBg: { high: "border-red-300 bg-red-50 dark:bg-red-900/15", medium: "border-orange-200 bg-orange-50 dark:bg-orange-900/10", low: "border-border bg-muted/30" },
-    emptyMsg: "No ban analytics yet", flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned.",
-  },
-  automated: {
-    label: "Automated Behaviour", accentClass: "text-orange-500",
-    accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800",
-    barColor: "bg-orange-400",
-    severityBg: { high: "border-orange-300 bg-orange-50 dark:bg-orange-900/15", medium: "border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10", low: "border-border bg-muted/30" },
-    emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour.",
-  },
-  captcha:   {
-    label: "Captcha Errors", accentClass: "text-yellow-500",
-    accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
-    barColor: "bg-yellow-400",
-    severityBg: { high: "border-yellow-300 bg-yellow-50 dark:bg-yellow-900/15", medium: "border-orange-200 bg-orange-50 dark:bg-orange-900/10", low: "border-border bg-muted/30" },
-    emptyMsg: "No captcha events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error.",
-  },
-  locked:    {
-    label: "Locked Accounts", accentClass: "text-rose-500",
-    accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",
-    barColor: "bg-rose-400",
-    severityBg: { high: "border-rose-300 bg-rose-50 dark:bg-rose-900/15", medium: "border-orange-200 bg-orange-50 dark:bg-orange-900/10", low: "border-border bg-muted/30" },
-    emptyMsg: "No locked account events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.",
-  },
+const TAB_CONFIG: Record<Tab, { label: string; accentBg: string; barColor: string; emptyMsg: string; flagMsg: string }> = {
+  ban:       { label: "Ban Events",          accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",       barColor: "bg-red-400",    emptyMsg: "No ban analytics yet",              flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned." },
+  automated: { label: "Automated Behaviour", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800", barColor: "bg-orange-400", emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour." },
+  captcha:   { label: "Captcha Errors",      accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800", barColor: "bg-yellow-400", emptyMsg: "No captcha events yet",             flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error." },
+  locked:    { label: "Locked Accounts",     accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",   barColor: "bg-rose-400",   emptyMsg: "No locked account events yet",     flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account." },
 };
 
-// ── Single-entry card with expanded diagnosis ────────────────────────────────
-function EntryCard({
-  entry, cfg, allSameType,
-}: { entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Tab]; allSameType: AnalyticsEntry[] }) {
+// ── Per-entry card ────────────────────────────────────────────────────────────
+function EntryCard({ entry, cfg, allSameType }: { entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Tab]; allSameType: AnalyticsEntry[] }) {
   const [open, setOpen] = useState(false);
-  const diagnosis = diagnoseEntry(entry, allSameType);
-  const ts = entry.flaggedAt ?? entry.bannedAt ?? "";
-  const eps = parseEndpoints(entry.endpointSnapshot);
-  const cats = categoryCounts(eps);
-  const topEps = Array.from(
-    eps.reduce((m, e) => { m.set(e.operationName, (m.get(e.operationName) ?? 0) + 1); return m; }, new Map<string, number>())
-  ).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  const severityColour = diagnosis.severity === "high" ? "text-red-600 dark:text-red-400" : diagnosis.severity === "medium" ? "text-orange-500" : "text-muted-foreground";
-  const severityLabel = diagnosis.severity === "high" ? "HIGH RISK" : diagnosis.severity === "medium" ? "MED RISK" : "LOW RISK";
+  const allEps   = parseEps(entry.endpointSnapshot);
+  const eps      = filterHiker(allEps);          // exclude HikerAPI calls
+  const hikerN   = allEps.length - eps.length;   // count of filtered-out calls
+  const cats     = categorise(eps);
+  const rate     = getCallRateNum(eps);
+  const findings = buildFindings(eps, allSameType);
+  const top5     = topEps(eps, 5);
+  const topFull  = topEps(eps, 20);
+  const ts       = entry.flaggedAt ?? entry.bannedAt ?? "";
+
+  const proxyOverlap = allSameType.filter(e => e.id !== entry.id && e.proxyHost && e.proxyHost === entry.proxyHost);
 
   return (
-    <div className={`border rounded-lg overflow-hidden ${cfg.severityBg[diagnosis.severity]}`}>
-      <button className="w-full px-4 py-3 flex items-start gap-3 text-left" onClick={() => setOpen(o => !o)}>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-muted/30 transition-colors" onClick={() => setOpen(o => !o)}>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">@{entry.username}</span>
-            <span className={`text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded border ${cfg.accentBg}`}>{severityLabel}</span>
-            {entry.proxyHost && (
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Globe className="w-3 h-3" />{entry.proxyHost}
+            {entry.proxyHost
+              ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}</span>
+              : <span className="text-[11px] text-muted-foreground italic">no proxy</span>
+            }
+            {proxyOverlap.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-700 font-semibold">
+                +{proxyOverlap.length} other{proxyOverlap.length !== 1 ? "s" : ""} on same proxy
               </span>
             )}
-            {!entry.proxyHost && (
-              <span className="text-[11px] text-muted-foreground italic">no proxy</span>
-            )}
-            <span className="text-[11px] text-muted-foreground ml-auto">{ts ? new Date(ts).toLocaleString() : "—"}</span>
+            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
           </div>
 
-          <p className="text-xs text-muted-foreground mt-1 font-medium">{diagnosis.dominantCause}</p>
+          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+            <span>{eps.length} calls{hikerN > 0 ? ` (${hikerN} HikerAPI excluded)` : ""}</span>
+            {rate > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{rate.toFixed(2)}/min</span>}
+            {cats.follow > 0   && <span className="flex items-center gap-1"><UserPlus className="w-3 h-3" />{cats.follow} follows</span>}
+            {cats.unfollow > 0 && <span className="flex items-center gap-1"><UserMinus className="w-3 h-3" />{cats.unfollow} unfollows</span>}
+            {cats.dm > 0       && <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{cats.dm} DMs</span>}
+            {cats.like > 0     && <span className="flex items-center gap-1"><Zap className="w-3 h-3" />{cats.like} likes</span>}
+          </div>
 
-          <p className="text-[11px] text-muted-foreground mt-0.5">{diagnosis.summary}</p>
-
-          {topEps.length > 0 && (
+          {top5.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {topEps.map(([name, cnt]) => (
-                <span key={name} className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-mono ${cfg.accentBg}`}>
-                  {matchKb(name)?.label ?? name} <span className="opacity-60">×{cnt}</span>
+              {top5.map(ep => (
+                <span key={ep.name} className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-mono ${cfg.accentBg}`}>
+                  {ep.label ?? ep.name} <span className="opacity-60">×{ep.count}</span>
                 </span>
               ))}
             </div>
@@ -408,131 +292,117 @@ function EntryCard({
       </button>
 
       {open && (
-        <div className="border-t border-border px-4 py-3 space-y-3 bg-background/60">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5" /> Diagnosis
-            </p>
-            <ul className="space-y-1.5">
-              {diagnosis.findings.map((f, i) => (
+        <div className="border-t border-border bg-muted/20 divide-y divide-border">
+
+          {/* Findings */}
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">What happened</p>
+            <ul className="space-y-1">
+              {findings.map((f, i) => (
                 <li key={i} className="text-xs text-foreground flex gap-2">
-                  <span className={`shrink-0 mt-0.5 font-bold ${severityColour}`}>→</span>
+                  <span className="text-muted-foreground shrink-0 mt-0.5">→</span>
                   <span>{f}</span>
                 </li>
               ))}
+              {proxyOverlap.length > 0 && (
+                <li className="text-xs text-foreground flex gap-2">
+                  <span className="text-yellow-600 shrink-0 mt-0.5">→</span>
+                  <span>{proxyOverlap.length} other account{proxyOverlap.length !== 1 ? "s" : ""} on the same proxy ({entry.proxyHost}) also {cfg.label.toLowerCase()}: {proxyOverlap.map(e => `@${e.username}`).join(", ")}.</span>
+                </li>
+              )}
             </ul>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { icon: <UserPlus className="w-3 h-3" />, label: "Follows",   val: cats.follow,   threshold: THRESHOLDS.follow },
-              { icon: <UserMinus className="w-3 h-3" />, label: "Unfollows", val: cats.unfollow, threshold: THRESHOLDS.unfollow },
-              { icon: <MessageSquare className="w-3 h-3" />, label: "DMs",  val: cats.dm,       threshold: THRESHOLDS.dm },
-              { icon: <Zap className="w-3 h-3" />, label: "Likes",          val: cats.like,     threshold: THRESHOLDS.like },
-            ].map(({ icon, label, val, threshold }) => {
-              const colour = val >= threshold.danger ? "text-red-600 dark:text-red-400" : val >= threshold.warn ? "text-orange-500" : "text-foreground";
-              return (
-                <div key={label} className="border border-border rounded p-2 bg-background/80">
-                  <div className="flex items-center gap-1 text-muted-foreground text-[10px] uppercase tracking-wide">
-                    {icon} {label}
+          {/* Action counts grid */}
+          {eps.length >= 5 && (
+            <div className="px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Action counts (Instagram session only)</p>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { icon: <UserPlus className="w-3 h-3" />,    label: "Follows",   val: cats.follow },
+                  { icon: <UserMinus className="w-3 h-3" />,   label: "Unfollows", val: cats.unfollow },
+                  { icon: <MessageSquare className="w-3 h-3" />, label: "DMs",     val: cats.dm },
+                  { icon: <Zap className="w-3 h-3" />,         label: "Likes",     val: cats.like },
+                ].map(({ icon, label, val }) => (
+                  <div key={label} className="border border-border rounded p-2 bg-background">
+                    <div className="flex items-center gap-1 text-muted-foreground text-[10px] uppercase tracking-wide">{icon} {label}</div>
+                    <p className="text-xl font-bold mt-0.5">{val}</p>
                   </div>
-                  <p className={`text-lg font-bold mt-0.5 ${colour}`}>{val}</p>
-                  <p className="text-[10px] text-muted-foreground">warn &gt;{threshold.warn} / stop &gt;{threshold.danger}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          {topEps.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <BarChart2 className="w-3.5 h-3.5" /> Top endpoints hit
-              </p>
-              <div className="space-y-0.5">
-                {topEps.map(([name, cnt]) => {
-                  const kb = matchKb(name);
-                  return (
-                    <div key={name} className="flex items-center gap-2 text-[11px]">
-                      <span className="font-mono text-muted-foreground truncate flex-1">{name}</span>
-                      <span className={`shrink-0 px-1 rounded font-semibold ${cfg.accentBg}`}>{cnt}×</span>
-                      {kb && <span className="shrink-0 text-muted-foreground">({kb.label})</span>}
-                    </div>
-                  );
-                })}
+                ))}
               </div>
             </div>
           )}
 
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground border-t border-border pt-2">
-            <span><Clock className="w-3 h-3 inline mr-0.5" />Rate: <strong>{getCallRateStr(entry.endpointSnapshot)}</strong></span>
-            <span>Total calls: <strong>{entry.endpointCount}</strong></span>
-            <span>Session: <strong>{cats.session} reads</strong></span>
-            <span>Auth: <strong>{cats.auth} syncs</strong></span>
+          {/* Full endpoint list */}
+          {topFull.length > 0 && (
+            <div className="px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5" /> Top endpoints (Instagram session)
+              </p>
+              <div className="space-y-0.5">
+                {topFull.map(ep => (
+                  <div key={ep.name} className="flex items-center gap-2 text-[11px]">
+                    <span className="font-mono text-muted-foreground truncate flex-1">{ep.name}</span>
+                    {ep.label && <span className="text-muted-foreground shrink-0">({ep.label})</span>}
+                    <span className={`shrink-0 px-1 rounded font-semibold ${cfg.accentBg}`}>{ep.count}×</span>
+                  </div>
+                ))}
+              </div>
+              {hikerN > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-2 italic">{hikerN} HikerAPI call{hikerN !== 1 ? "s" : ""} excluded from this list.</p>
+              )}
+            </div>
+          )}
+
+          {/* Footer stats */}
+          <div className="px-4 py-2 flex items-center gap-4 text-[11px] text-muted-foreground">
+            <span>Rate: <strong>{rate > 0 ? `${rate.toFixed(2)}/min` : "—"}</strong></span>
+            <span>Session reads: <strong>{cats.session}</strong></span>
+            <span>Auth syncs: <strong>{cats.auth}</strong></span>
+            <span>Total (session): <strong>{eps.length}</strong></span>
+            {hikerN > 0 && <span>HikerAPI excluded: <strong>{hikerN}</strong></span>}
           </div>
+
         </div>
       )}
     </div>
   );
 }
 
-// ── Tab content panel ────────────────────────────────────────────────────────
+// ── Tab content panel ─────────────────────────────────────────────────────────
 function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Tab] }) {
   if (entries.length === 0) return (
-    <div className="border border-border rounded-lg p-10 text-center mt-4">
+    <div className="border border-border rounded-lg p-10 text-center">
       <p className="text-sm font-medium">{cfg.emptyMsg}</p>
       <p className="text-xs text-muted-foreground mt-1">{cfg.flagMsg}</p>
     </div>
   );
 
-  const tops = topEndpoints(entries);
-  const totalHits = tops.reduce((a, b) => a + b.count, 0);
   const crossTrend = buildCrossTrend(entries);
 
-  const highCount  = entries.filter(e => diagnoseEntry(e, entries).severity === "high").length;
-  const medCount   = entries.filter(e => diagnoseEntry(e, entries).severity === "medium").length;
-  const lowCount   = entries.length - highCount - medCount;
-
   return (
-    <div className="space-y-4 mt-4">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Events</p>
-          <p className="text-3xl font-bold mt-1">{entries.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            <span className="text-red-500 font-semibold">{highCount} high</span> · <span className="text-orange-500 font-semibold">{medCount} med</span> · <span className="font-semibold">{lowCount} low</span>
-          </p>
-        </div>
-        <div className="border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">API Calls Logged</p>
-          <p className="text-3xl font-bold mt-1">{totalHits.toLocaleString()}</p>
-        </div>
-        <div className="border border-border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Unique Endpoints</p>
-          <p className="text-3xl font-bold mt-1">{new Set(tops.map(t => t.operationName)).size}</p>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {crossTrend.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-cyan-500" />
-            <span className="text-sm font-semibold">Common Pattern Across All Events</span>
-            <span className="text-xs text-muted-foreground ml-auto">endpoints present in ≥50% of accounts flagged</span>
+            <span className="text-sm font-semibold">Common Endpoints Across All Events</span>
+            <span className="text-xs text-muted-foreground ml-auto">present in ≥50% of flagged accounts</span>
           </div>
           <div className="divide-y divide-border">
             {crossTrend.map(t => (
-              <div key={t.endpoint} className="px-4 py-2.5 flex items-center gap-3">
+              <div key={t.endpoint} className="px-4 py-2 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-muted-foreground truncate">{t.endpoint}</span>
-                    {t.label !== t.endpoint && <span className="text-xs text-foreground shrink-0">({t.label})</span>}
+                    {t.label && <span className="text-xs text-foreground shrink-0">({t.label})</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
                     <div className={`h-full ${cfg.barColor} rounded-full`} style={{ width: `${t.pct}%` }} />
                   </div>
-                  <span className="text-xs text-muted-foreground w-28 text-right">{t.accountCount}/{entries.length} accounts ({t.pct}%)</span>
+                  <span className="text-xs text-muted-foreground w-32 text-right">{t.accountCount}/{entries.length} accounts ({t.pct}%)</span>
                 </div>
               </div>
             ))}
@@ -543,7 +413,7 @@ function EntryList({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TA
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <Calendar className="w-4 h-4 text-cyan-500" />
-          <span className="text-sm font-semibold">Event History — with Diagnosis</span>
+          <span className="text-sm font-semibold">Event History</span>
           <span className="text-xs text-muted-foreground ml-auto">click any row to expand</span>
         </div>
         <div className="p-3 space-y-2">
@@ -589,7 +459,6 @@ export function BanAnalyticsPage() {
   const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries);
   const cfg = TAB_CONFIG[activeTab];
   const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : lockedEntries;
-
   const TABS: Tab[] = ["ban", "automated", "captcha", "locked"];
 
   return (
@@ -609,7 +478,7 @@ export function BanAnalyticsPage() {
             </svg>
             <div>
               <h1 className="text-xl font-bold">Evasion Stats</h1>
-              <p className="text-sm text-muted-foreground">Smart diagnosis — why each account was flagged, with cross-account pattern analysis</p>
+              <p className="text-sm text-muted-foreground">Raw data per flagged account — actions, timing, endpoint patterns, cross-account trends</p>
             </div>
           </div>
 
@@ -622,22 +491,17 @@ export function BanAnalyticsPage() {
 
           {!isLoading && (
             <div className="grid grid-cols-4 gap-3">
-              <div className="border border-border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Ban Events</p>
-                <p className="text-3xl font-bold mt-1 text-red-500">{banEntries.length}</p>
-              </div>
-              <div className="border border-border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Automated Detected</p>
-                <p className="text-3xl font-bold mt-1 text-orange-500">{automatedEntries.length}</p>
-              </div>
-              <div className="border border-border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Captcha Errors</p>
-                <p className="text-3xl font-bold mt-1 text-yellow-500">{captchaEntries.length}</p>
-              </div>
-              <div className="border border-border rounded-lg p-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Locked Accounts</p>
-                <p className="text-3xl font-bold mt-1 text-rose-500">{lockedEntries.length}</p>
-              </div>
+              {[
+                { label: "Ban Events",          val: banEntries.length,       cls: "text-red-500" },
+                { label: "Automated Detected",  val: automatedEntries.length, cls: "text-orange-500" },
+                { label: "Captcha Errors",      val: captchaEntries.length,   cls: "text-yellow-500" },
+                { label: "Locked Accounts",     val: lockedEntries.length,    cls: "text-rose-500" },
+              ].map(({ label, val, cls }) => (
+                <div key={label} className="border border-border rounded-lg p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
+                  <p className={`text-3xl font-bold mt-1 ${cls}`}>{val}</p>
+                </div>
+              ))}
             </div>
           )}
 
@@ -646,7 +510,7 @@ export function BanAnalyticsPage() {
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
                 <span className="text-sm font-semibold">Proxy Risk Ranking</span>
-                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked events per IP</span>
+                <span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked per IP</span>
               </div>
               <div className="divide-y divide-border">
                 {proxyRisks.map((pr, i) => (
@@ -664,7 +528,7 @@ export function BanAnalyticsPage() {
                       <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
                       <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
                       <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
-                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total} total</span>
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total}</span>
                     </div>
                   </div>
                 ))}
@@ -677,7 +541,7 @@ export function BanAnalyticsPage() {
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
                 <span className="text-sm font-semibold">Concurrent Usage Alerts</span>
-                <span className="text-xs text-muted-foreground ml-auto">Multiple accounts on same IP flagged within 30 min</span>
+                <span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy flagged within 30 min</span>
               </div>
               <div className="divide-y divide-border">
                 {concurrencyAlerts.map((alert, i) => (
@@ -689,7 +553,7 @@ export function BanAnalyticsPage() {
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{alert.category}</span>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        @{alert.accounts[0]} and @{alert.accounts[1]} — {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} & {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}
+                        @{alert.accounts[0]} and @{alert.accounts[1]} — {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} &amp; {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}
                       </p>
                     </div>
                   </div>
@@ -707,9 +571,7 @@ export function BanAnalyticsPage() {
                   className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {TAB_CONFIG[tab].label}
-                  <span className="ml-1.5 opacity-60">
-                    ({tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : lockedEntries.length})
-                  </span>
+                  <span className="ml-1.5 opacity-60">({tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : lockedEntries.length})</span>
                 </button>
               ))}
             </div>

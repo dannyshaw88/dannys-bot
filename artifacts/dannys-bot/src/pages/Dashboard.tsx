@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.915",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Improved", text: "Evasion Stats: removed severity labels (High/Medium/Low) — they were misleading and irrelevant. All flagged accounts show data only: call counts, rate, action totals, and endpoint breakdown." },
+      { category: "Improved", text: "Evasion Stats: removed speculative findings. If there is not enough data to identify what happened, it now says that plainly instead of guessing." },
+      { category: "Improved", text: "Evasion Stats: HikerAPI calls are now excluded from endpoint counts and top-endpoints lists — only Instagram session calls count toward the analysis." },
+      { category: "Improved", text: "Evasion Stats: removed the three summary stat boxes (Events / API Calls / Unique Endpoints) — not useful at a glance. The expandable per-account cards now show all detail including follows, unfollows, DMs, likes, call rate, and full endpoint list." },
+    ],
+  },
+  {
     version: "1.0.914",
     date: "12 Jun 2026",
     items: [
