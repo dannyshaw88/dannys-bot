@@ -2246,6 +2246,14 @@ export async function openEbWindow(opts: {
     ]);
   } catch {}
 
+  // ── Guard: bail if window was destroyed during CDP setup ─────────────────
+  // The CDP awaits above (timezone up to 7 s + UA 1.5 s + device 1.5 s +
+  // touch 1.5 s + locale 1.5 s = up to ~14 s) run without holding any lock.
+  // If the user closes the BrowserPanel or the IPC handler calls win.destroy()
+  // during that window, calling win.webContents.setWindowOpenHandler / on / etc.
+  // on a destroyed window crashes the main process.
+  if (win.isDestroyed()) return;
+
   // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
   // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
   // new-window request and load the URL inside this same window so only 1 EB exists
@@ -3090,15 +3098,18 @@ export async function openEbWindow(opts: {
   // Ghost browsers (profileId < 0, any slot): load the provided initialUrl directly —
   // never auto-navigate to Instagram, the warmup handles all navigation.
   // Regular account EBs: go to homepage if sessionid exists, otherwise login page.
+  if (win.isDestroyed()) return;
   if (profileId < 0) {
     win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
   } else {
     const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-    win.webContents.loadURL(
-      sessionCksForNav.length > 0
-        ? "https://www.instagram.com/"
-        : "https://www.instagram.com/accounts/login/",
-    ).catch(() => {});
+    if (!win.isDestroyed()) {
+      win.webContents.loadURL(
+        sessionCksForNav.length > 0
+          ? "https://www.instagram.com/"
+          : "https://www.instagram.com/accounts/login/",
+      ).catch(() => {});
+    }
   }
 
   // ── Page-detection auto-fill ──────────────────────────────────────────────

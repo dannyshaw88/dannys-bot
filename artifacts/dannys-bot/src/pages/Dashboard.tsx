@@ -62,11 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.904",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Pressing the browser icon no longer crashes the app — fixed two additional crash points: the app was calling into the browser window up to 14 seconds into setup (after proxy timezone, user-agent, and device metric configuration) and again at the final navigation step, both without checking if the window was still alive." },
+      { category: "Fix", text: "Ban Analytics now opens inside the app with the sidebar visible, instead of taking over the full screen." },
+    ],
+  },
+  {
     version: "1.0.903",
     date: "12 Jun 2026",
     items: [
-      { category: "Fix", text: "Pressing the browser icon on Accounts no longer crashes the app — added safety guards so opening the browser panel while the window is still setting up never tries to attach toolbars or run scripts on a destroyed window." },
-      { category: "Fix", text: "Ban Analytics now opens inside the app with the sidebar visible, instead of taking over the full screen." },
+      { category: "Fix", text: "Pressing the browser icon on Accounts: added first round of safety guards so opening the browser panel while the window is still setting up never tries to attach toolbars or run scripts on a destroyed window." },
     ],
   },
   {
