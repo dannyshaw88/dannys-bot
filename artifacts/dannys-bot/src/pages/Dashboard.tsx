@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.918",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: page header icon now matches the magnifying glass shown in the sidebar nav — they were showing different icons before." },
+      { category: "Improved", text: "Evasion Stats: proxy address in each log entry now appears on its own line below the @username instead of next to it on the same row." },
+      { category: "New", text: "Evasion Stats: Proxy Risk Ranking rows now have a red × delete button (appears on hover) that removes all log entries for that proxy across all tabs at once." },
+      { category: "Improved", text: "Proxy Manager: status ping result and accounts count are now centred in their columns instead of left-aligned. The status badge no longer stretches across the full column width." },
+      { category: "Improved", text: "Proxy Manager: USERNAME and PASSWORD column headers are now centred within their column width." },
+    ],
+  },
+  {
     version: "1.0.917",
     date: "12 Jun 2026",
     items: [

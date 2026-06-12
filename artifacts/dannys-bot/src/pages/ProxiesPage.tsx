@@ -182,7 +182,7 @@ function ProxyRow({
         {colOrder.map(col => {
           if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
           if (col === "accounts") return (
-            <div key={col} className="shrink-0 flex items-center" style={{ width: colWidths.accounts }}>
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.accounts }}>
               {assigned.length > 0 ? (() => {
                 const validCount = assigned.filter(p => p.accountStatus === "valid").length;
                 return (
@@ -226,9 +226,9 @@ function ProxyRow({
             </div>
           );
           if (col === "status") return (
-            <div key={col} className="shrink-0" style={{ width: colWidths.status }}>
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.status }}>
               {pingResult ? (
-                <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
                   {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />Dead</>}
                 </span>
               ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
@@ -808,12 +808,12 @@ export function ProxiesPage() {
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
             const sortable = col === "proxy" || col === "username" || col === "status" || col === "accounts";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${col === "username" ? "justify-center" : ""} ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${col === "password" ? "flex items-center justify-center" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );

@@ -42,6 +42,7 @@ interface ProxyRisk {
   lockedCount: number;
   total: number;
   accounts: string[];
+  entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] };
 }
 
 interface ConcurrencyAlert {
@@ -190,20 +191,22 @@ function buildCrossTrend(entries: AnalyticsEntry[]): Array<{ endpoint: string; l
 
 function buildProxyRiskMap(bans: AnalyticsEntry[], automated: AnalyticsEntry[], captcha: AnalyticsEntry[], locked: AnalyticsEntry[]): ProxyRisk[] {
   const map = new Map<string, ProxyRisk>();
-  const add = (entries: AnalyticsEntry[], key: keyof Pick<ProxyRisk, "banCount" | "automatedCount" | "captchaCount" | "lockedCount">) => {
+  const empty = (): ProxyRisk => ({ host: "", banCount: 0, automatedCount: 0, captchaCount: 0, lockedCount: 0, total: 0, accounts: [], entryIds: { ban: [], automated: [], captcha: [], locked: [] } });
+  const add = (entries: AnalyticsEntry[], countKey: keyof Pick<ProxyRisk, "banCount" | "automatedCount" | "captchaCount" | "lockedCount">, idKey: keyof ProxyRisk["entryIds"]) => {
     for (const e of entries) {
       const host = e.proxyHost || "(no proxy)";
-      if (!map.has(host)) map.set(host, { host, banCount: 0, automatedCount: 0, captchaCount: 0, lockedCount: 0, total: 0, accounts: [] });
+      if (!map.has(host)) { const r = empty(); r.host = host; map.set(host, r); }
       const r = map.get(host)!;
-      r[key]++;
+      r[countKey]++;
       r.total++;
+      r.entryIds[idKey].push(e.id);
       if (!r.accounts.includes(e.username)) r.accounts.push(e.username);
     }
   };
-  add(bans, "banCount");
-  add(automated, "automatedCount");
-  add(captcha, "captchaCount");
-  add(locked, "lockedCount");
+  add(bans, "banCount", "ban");
+  add(automated, "automatedCount", "automated");
+  add(captcha, "captchaCount", "captcha");
+  add(locked, "lockedCount", "locked");
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
@@ -335,6 +338,9 @@ function EntryCard({ entry, cfg, allSameType, profileMap }: { entry: AnalyticsEn
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <UsernameLink username={entry.username} profileMap={profileMap} />
+            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
             {entry.proxyHost
               ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}</span>
               : <span className="text-[11px] text-muted-foreground italic">no proxy</span>
@@ -344,7 +350,6 @@ function EntryCard({ entry, cfg, allSameType, profileMap }: { entry: AnalyticsEn
                 +{proxyOverlap.length} other{proxyOverlap.length !== 1 ? "s" : ""} on same proxy
               </span>
             )}
-            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
           </div>
 
           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
@@ -511,6 +516,65 @@ function EntryList({ entries, cfg, profileMap }: { entries: AnalyticsEntry[]; cf
   );
 }
 
+function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profileMap: Map<string, number> }) {
+  const queryClient = useQueryClient();
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`Delete all ${pr.total} log ${pr.total === 1 ? "entry" : "entries"} for ${pr.host}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const calls: Promise<unknown>[] = [
+        ...pr.entryIds.ban.map(id => fetch(`/api/analytics/ban-patterns/${id}`, { method: "DELETE", credentials: "include" })),
+        ...pr.entryIds.automated.map(id => fetch(`/api/analytics/automated-patterns/${id}`, { method: "DELETE", credentials: "include" })),
+        ...pr.entryIds.captcha.map(id => fetch(`/api/analytics/captcha-patterns/${id}`, { method: "DELETE", credentials: "include" })),
+        ...pr.entryIds.locked.map(id => fetch(`/api/analytics/locked-patterns/${id}`, { method: "DELETE", credentials: "include" })),
+      ];
+      await Promise.all(calls);
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ban-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/automated-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/captcha-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/locked-patterns"] });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="px-4 py-2.5 flex items-center gap-3 relative group">
+      <span className="text-xs text-muted-foreground w-6 text-right shrink-0">#{i + 1}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="text-sm font-mono truncate">{pr.host}</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1">
+          {pr.accounts.slice(0, 5).map((a, idx) => (
+            <span key={a}>{idx > 0 ? "," : ""} <UsernameLink username={a} profileMap={profileMap} /></span>
+          ))}
+          {pr.accounts.length > 5 && <span>+{pr.accounts.length - 5} more</span>}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 text-xs">
+        <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
+        <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
+        <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
+        <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
+        <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total}</span>
+      </div>
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        title="Delete all entries for this proxy"
+        className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 hover:bg-red-200 dark:hover:bg-red-800/60 transition-all disabled:opacity-40 shrink-0"
+      >
+        {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+      </button>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 export function BanAnalyticsPage() {
   const setSidebarSlot = useSidebarSetSlot();
@@ -599,13 +663,8 @@ export function BanAnalyticsPage() {
 
           <div className="flex items-center gap-3">
             <svg className="w-6 h-6" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ color: "#1AD2F2" }}>
-              <ellipse fill="currentColor" cx="12" cy="7.5" rx="8.5" ry="2"/>
-              <path fill="currentColor" d="M7 7.5V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5H7z"/>
-              <circle fill="currentColor" cx="12" cy="13.5" r="4"/>
-              <rect fill="white" x="8" y="12.5" width="3.3" height="2.2" rx="0.8"/>
-              <rect fill="white" x="12.7" y="12.5" width="3.3" height="2.2" rx="0.8"/>
-              <rect fill="white" x="11.3" y="13" width="1.4" height="1" rx="0.3"/>
-              <path fill="currentColor" d="M5.5 22c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5H5.5z"/>
+              <path fill="currentColor" fillRule="evenodd" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
+              <rect fill="currentColor" x="14.8" y="14.2" width="8.5" height="3.8" rx="1.9" transform="rotate(45 14.8 14.2)"/>
             </svg>
             <div>
               <h1 className="text-xl font-bold">Evasion Stats</h1>
@@ -757,28 +816,7 @@ export function BanAnalyticsPage() {
               </div>
               <div className="divide-y divide-border">
                 {proxyRisks.map((pr, i) => (
-                  <div key={pr.host} className="px-4 py-2.5 flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-6 text-right shrink-0">#{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-mono truncate">{pr.host}</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1">
-                        {pr.accounts.slice(0, 5).map((a, idx) => (
-                          <span key={a}>{idx > 0 ? "," : ""} <UsernameLink username={a} profileMap={profileMap} /></span>
-                        ))}
-                        {pr.accounts.length > 5 && <span>+{pr.accounts.length - 5} more</span>}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 text-xs">
-                      <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
-                      <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 font-semibold">{pr.automatedCount}A</span>
-                      <span className="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 font-semibold">{pr.captchaCount}C</span>
-                      <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 font-semibold">{pr.lockedCount}L</span>
-                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{pr.total}</span>
-                    </div>
-                  </div>
+                  <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />
                 ))}
               </div>
             </div>
