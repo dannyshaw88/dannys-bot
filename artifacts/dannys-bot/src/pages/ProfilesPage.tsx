@@ -45,7 +45,7 @@ const STATUS_META: Record<AccountStatus, {
   phone_verification:   { label: "Phone Verify",         icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   "2fa_verification":   { label: "2FA Verify",           icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200" },
   stopped:              { label: "Stopped",              icon: PowerOff,    pill: "bg-slate-100 text-slate-600  border-slate-200"  },
-  logged_out:           { label: "Logged Out",           icon: LogOut,      pill: "bg-orange-50 text-orange-700 border-orange-200" },
+  logged_out:           { label: "Logged Out",           icon: LogOut,      pill: "bg-red-600 text-white border-red-600" },
   bad_password:         { label: "Incorrect Password",    icon: KeyRound,    pill: "bg-red-50    text-red-700    border-red-200"    },
   action_blocked:       { label: "Action Blocked",       icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200"    },
   action_required:      { label: "Action Required",      icon: AlertTriangle, pill: "bg-amber-50  text-amber-700  border-amber-200"  },
@@ -1310,8 +1310,8 @@ export function ProfilesPage() {
                       data-testid={`checkbox-profile-${profile.id}`}
                     />
                   </div>
-                  <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
-                    <Link href={`/profiles/${profile.id}`} onClick={(e: React.MouseEvent) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }}>
+                  <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0 flex items-center gap-1">
+                    <Link href={`/profiles/${profile.id}`} onClick={(e: React.MouseEvent) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }} className="min-w-0">
                       <span
                         className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
@@ -1323,6 +1323,11 @@ export function ProfilesPage() {
                         {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" /></span>}
                       </span>
                     </Link>
+                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
+                      <button onClick={(e) => { e.stopPropagation(); handleVerify(profile.id); }} disabled={verifyingIds.has(profile.id) || acctStatus === "verifying"} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors shrink-0">
+                        {verifyingIds.has(profile.id) ? "…" : "Verify"}
+                      </button>
+                    )}
                   </div>
                   {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
                     if (key === "status") return (
@@ -1333,11 +1338,6 @@ export function ProfilesPage() {
                               <Globe className="w-2.5 h-2.5" />No Proxy
                             </span>
                         }
-                        {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
-                          <button onClick={() => handleVerify(profile.id)} disabled={verifyingIds.has(profile.id) || acctStatus === "verifying"} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">
-                            {verifyingIds.has(profile.id) ? "…" : "Verify"}
-                          </button>
-                        )}
                       </div>
                     );
                     if (key === "trustscore") return (

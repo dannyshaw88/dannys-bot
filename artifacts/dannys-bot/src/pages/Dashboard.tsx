@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.912",
+    date: "12 Jun 2026",
+    items: [
+      { category: "Fix", text: "Clicking Verify now responds instantly regardless of how many other accounts are already being verified — the 3-account concurrent limit has been removed and the route no longer hangs waiting for a queue slot." },
+      { category: "Fix", text: "Verify button moved to appear immediately after the account name instead of next to the status pill." },
+      { category: "Fix", text: "Logged Out status pill is now red with white text so it stands out clearly from other statuses." },
+      { category: "Fix", text: "Evasion Stats sidebar icon changed to a thick filled magnifying glass in cyan." },
+      { category: "Fix", text: "Embedded browser window now uses maximize() on open so it reliably fills the full work area on all DPI and taskbar configurations." },
+    ],
+  },
+  {
     version: "1.0.911",
     date: "12 Jun 2026",
     items: [

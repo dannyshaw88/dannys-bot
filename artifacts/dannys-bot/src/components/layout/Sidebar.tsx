@@ -80,24 +80,10 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
 function FilledSpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {/* Hat brim */}
-      <rect fill="currentColor" x="3" y="7.5" width="11" height="1.8" rx="0.5"/>
-      {/* Hat crown */}
-      <rect fill="currentColor" x="5" y="3.5" width="7" height="4.2" rx="0.8"/>
-      {/* Head */}
-      <circle fill="currentColor" cx="8.5" cy="13" r="3.2"/>
-      {/* Eye slits */}
-      <rect fill="black" x="6.1" y="12" width="1.9" height="1.3" rx="0.35"/>
-      <rect fill="black" x="8.8" y="12" width="1.9" height="1.3" rx="0.35"/>
-      {/* Body silhouette */}
-      <path fill="currentColor" d="M2.5 22c0-3.31 2.69-6 6-6s6 2.69 6 6H2.5z"/>
-      {/* Magnifying glass ring */}
-      <circle fill="none" stroke="currentColor" strokeWidth="2" cx="18.5" cy="9" r="3.8"/>
-      {/* Magnifying glass cross-hair lines (malware/scan look) */}
-      <line stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" x1="18.5" y1="6" x2="18.5" y2="12"/>
-      <line stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" x1="15.5" y1="9" x2="21.5" y2="9"/>
-      {/* Handle */}
-      <line stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" x1="15.8" y1="11.8" x2="13" y2="14.5"/>
+      {/* Thick lens ring — evenodd punches the inner hole without needing white fill */}
+      <path fill="currentColor" fillRule="evenodd" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
+      {/* Thick handle */}
+      <rect fill="currentColor" x="14.8" y="14.2" width="8.5" height="3.8" rx="1.9" transform="rotate(45 14.8 14.2)"/>
     </svg>
   );
 }

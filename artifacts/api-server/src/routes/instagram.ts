@@ -1113,13 +1113,6 @@ export async function registerInstagramRoutes(
     if (verifyInFlight.has(profileId)) {
       return res.status(429).json({ ok: false, message: "Verification already in progress for this account. Please wait." });
     }
-    // Hard cap: never queue more than 3 simultaneous verifications (1 running + 2
-    // queued) — Electron's main process can crash under memory pressure when many
-    // hidden BrowserWindow instances are queued at once.  Reject any request beyond
-    // the limit so the user gets a clear message instead of a silent hang or crash.
-    if (verifyInFlight.size >= 3) {
-      return res.status(429).json({ ok: false, message: "Too many verifications in progress. Wait for the current ones to finish, then try again." });
-    }
     verifyInFlight.add(profileId);
 
     // Helper: release lock + send error (avoids repeating delete on every early return)
@@ -1202,6 +1195,11 @@ export async function registerInstagramRoutes(
     }
     const ebUA = effectiveProfile.userAgentEmbedded as string;
 
+    // Return immediately — the browser login + mobile API confirm runs in the background.
+    // The accounts list is polled every 5 s so the UI picks up the real result automatically.
+    res.json({ ok: true, message: "Verification started" });
+
+    setImmediate(async () => {
     // Steps 1-2: Launch EB + auto-login via the visible embedded browser.
     // The visible EB handles the cookie consent banner, credential entry, 2FA,
     // and any challenges — exactly as the user would see it.
@@ -1234,9 +1232,9 @@ export async function registerInstagramRoutes(
       try {
         await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
       } catch (ebErr: any) {
-        verifyInFlight.delete(profileId);
         await storage.updateProfile(profile.id, { accountStatus: "pending" });
-        return fail(500, `Browser failed to launch: ${ebErr?.message ?? "Unknown error"}`);
+        verifyInFlight.delete(profileId);
+        return;
       }
       // If the user already logged in manually via the embedded browser, skip the
       // re-login entirely — browserAutoLogin clears session cookies first, which
@@ -1319,7 +1317,7 @@ export async function registerInstagramRoutes(
           sendLoginDone(profileId, false, result.message ?? "");
           await storage.updateProfile(profile.id, { accountStatus: "pending" });
           verifyInFlight.delete(profileId);
-          return res.status(200).json(result);
+          return;
         }
         result = {
           ...apiResult,
@@ -1401,8 +1399,8 @@ export async function registerInstagramRoutes(
     }
 
     verifyInFlight.delete(profileId);
-    res.json(result);
-  });
+    }); // end setImmediate
+  }); // end app.post
 
   function resolveImportStatus(raw: string | undefined): string {
     const s = (raw ?? "").trim().toLowerCase().replace(/[\s-]/g, "_");

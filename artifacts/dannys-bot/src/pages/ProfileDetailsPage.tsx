@@ -50,7 +50,7 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   phone_verification: { label: "Phone Verify",      icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   "2fa_verification": { label: "2FA Verify",        icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
   stopped:              { label: "Stopped",            icon: PowerOff,      pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
-  logged_out:           { label: "Logged Out",         icon: LogOut,        pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  logged_out:           { label: "Logged Out",         icon: LogOut,        pill: "bg-red-600 text-white border-red-600",           dot: "bg-red-500"    },
   bad_password:         { label: "Incorrect Password", icon: KeyRound,      pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
   action_blocked:       { label: "Action Blocked",     icon: Ban,           pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
   action_required:      { label: "Action Required",    icon: AlertTriangle, pill: "bg-amber-50  text-amber-700  border-amber-200",  dot: "bg-amber-500"  },

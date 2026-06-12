@@ -2053,12 +2053,10 @@ export async function openEbWindow(opts: {
       win.setPosition(gx, gy);
       win.show();
     } else {
-      // Set window to workArea bounds BEFORE showing so it appears maximized
-      // without the taskbar-overlap flash. workArea excludes the Windows taskbar
-      // so the window fills the screen but never covers it.
-      const _wa = eScreen.getPrimaryDisplay().workArea;
-      win.setBounds({ x: _wa.x, y: _wa.y, width: _wa.width, height: _wa.height });
+      // Show then immediately maximize — win.maximize() is the only reliable way
+      // to fill the work area on all Windows DPI/taskbar configurations.
       win.show();
+      win.maximize();
     }
   });
 
