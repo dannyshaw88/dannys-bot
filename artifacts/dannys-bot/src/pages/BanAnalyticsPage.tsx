@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
+import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { useEffect } from "react";
 import { Loader2, ShieldOff, BarChart2, Calendar, Globe } from "lucide-react";
 
@@ -23,7 +23,7 @@ function parseEndpoints(snapshot: string): { operationName: string; date: string
 }
 
 export function BanAnalyticsPage() {
-  const setSidebarSlot = useSidebarSlot();
+  const setSidebarSlot = useSidebarSetSlot();
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
 
   const { data: entries = [], isLoading } = useQuery<BanEntry[]>({
