@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.926",
+    date: "13 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats: added an Export Evasion Stats button in the page header — downloads a full JSON snapshot of all flagged accounts, survivors, proxy risks, and trust score data." },
+      { category: "Fix", text: "Copy Settings dialogs (Account Settings, Human Sessions, and all tools) now remember the previously selected accounts and settings across opens — selections were being silently wiped on every close." },
+      { category: "New", text: "TrustScores page: added an info panel explaining that scores are sorted from 1 upwards and that higher numbers mean a better TrustScore." },
+    ],
+  },
+  {
     version: "1.0.925",
     date: "13 Jun 2026",
     items: [

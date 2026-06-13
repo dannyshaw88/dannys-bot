@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -167,6 +168,11 @@ export function TrustScoresPage() {
           <p className="text-sm text-muted-foreground mt-1">
             A section to assign and configure trustscores to accounts
           </p>
+        </div>
+
+        <div className="flex items-start gap-2 p-3 rounded-lg border border-border bg-muted/20 text-sm text-muted-foreground">
+          <Info className="w-4 h-4 shrink-0 mt-0.5 text-cyan-500" />
+          <span>TrustScores are sorted from 1 onwards. The higher the number, the better the TrustScore. Important for Evasion Stats and Account Health.</span>
         </div>
 
         <div className="space-y-1 w-full overflow-x-auto">

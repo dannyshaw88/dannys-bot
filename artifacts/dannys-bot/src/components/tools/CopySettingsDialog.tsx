@@ -110,6 +110,11 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const selectedRef = useRef<Set<string>>(selected);
   const sortByRef   = useRef<SortBy>(sortBy);
   const sortDirRef  = useRef<SortDir>(sortDir);
+  // Guard: only save when the dialog has been genuinely opened at least once
+  // during this component's lifetime. Without this, the key={open?"open":"closed"}
+  // trick in callers remounts us with open=false, which fires the save branch
+  // with empty initial state and wipes whatever was previously stored.
+  const hasEverBeenOpenRef = useRef(false);
   useEffect(() => { targetsRef.current  = targets;  }, [targets]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
   useEffect(() => { sortByRef.current   = sortBy;   }, [sortBy]);
@@ -141,6 +146,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   useEffect(() => {
     if (open) {
+      hasEverBeenOpenRef.current = true;
       // Restore target accounts
       try {
         const raw = localStorage.getItem(storageTargetsKey(title));
@@ -193,7 +199,10 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       }
       setStatus("idle");
     } else {
-      // Save to localStorage when dialog closes — refs hold the final state
+      // Save to localStorage when dialog closes — refs hold the final state.
+      // Guard: skip if the dialog has never been opened during this lifetime
+      // (avoids remount-on-close wipe from the key={open?"open":"closed"} trick).
+      if (!hasEverBeenOpenRef.current) return;
       try {
         localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targetsRef.current]));
         localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));

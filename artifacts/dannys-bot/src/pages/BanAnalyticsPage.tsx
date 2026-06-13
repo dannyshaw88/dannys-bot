@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert,
+  Star, Scale, FlaskConical, BadgeAlert, Download,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -1273,19 +1273,67 @@ export function BanAnalyticsPage() {
   const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
   const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
 
+  function handleExport() {
+    const levels = getTrustLevels();
+    function enrichEntry(e: AnalyticsEntry) {
+      const id = profileMap.get(e.username);
+      const ti = id !== undefined ? trustMap.get(id) : undefined;
+      return { ...e, trustScore: ti ? { rank: ti.rank, label: ti.label } : null };
+    }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      summary: {
+        banned: banEntries.length,
+        automated: automatedEntries.length,
+        captcha: captchaEntries.length,
+        locked: lockedEntries.length,
+        survivors: survivingAccounts.length,
+        totalFlagged: banEntries.length + automatedEntries.length + captchaEntries.length + lockedEntries.length,
+      },
+      trustScoreLevels: levels.map((l, i) => ({ rank: i + 1, id: l.id, label: l.label })),
+      banned:    banEntries.map(enrichEntry),
+      automated: automatedEntries.map(enrichEntry),
+      captcha:   captchaEntries.map(enrichEntry),
+      locked:    lockedEntries.map(enrichEntry),
+      survivors: survivingAccounts.map(p => ({
+        username: p.username,
+        runningMs: p.runMs,
+        trustScore: (() => { const id = profileMap.get(p.username); const ti = id !== undefined ? trustMap.get(id) : undefined; return ti ? { rank: ti.rank, label: ti.label } : null; })(),
+      })),
+      proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),
+      concurrencyAlerts: concurrencyAlerts,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    const ts   = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href     = url;
+    a.download = `evasion-stats-${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <AppLayout>
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-5xl mx-auto space-y-6">
           <div className="flex items-center gap-3">
-            <svg className="w-6 h-6" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ color: "#1AD2F2" }}>
+            <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ color: "#1AD2F2" }}>
               <path fill="currentColor" fillRule="evenodd" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
               <rect fill="currentColor" x="14.8" y="14.2" width="8.5" height="3.8" rx="1.9" transform="rotate(45 14.8 14.2)"/>
             </svg>
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold">Evasion Stats</h1>
               <p className="text-sm text-muted-foreground">Error-type causation · TrustScore correlation · Reliability weighting · Timing CoV · Session noise · Subnet concurrency</p>
             </div>
+            <button
+              onClick={handleExport}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border bg-background hover:bg-muted transition-colors"
+              title="Export all evasion stats as a JSON file"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export Evasion Stats
+            </button>
           </div>
 
           {isLoading && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading analytics…</span></div>}
