@@ -1805,6 +1805,7 @@ export function ProfileDetailsPage() {
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
           {getTool('human_sessions')
             ? <HumanSessionPanel
+                key={getTool('human_sessions')!.id}
                 tool={getTool('human_sessions')!}
                 profile={profile}
                 copyOpen={humanCopyOpen}

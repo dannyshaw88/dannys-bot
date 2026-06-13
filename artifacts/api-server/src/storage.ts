@@ -258,7 +258,7 @@ export class DatabaseStorage implements IStorage {
 
   async getToolsByProfile(profileId: number): Promise<Tool[]> {
     const existing = await db.select().from(tools).where(eq(tools.profileId, profileId));
-    const allTypes = ['follow', 'unfollow', 'like', 'dm', 'contact', 'human_session'];
+    const allTypes = ['follow', 'unfollow', 'like', 'dm', 'contact', 'human_sessions'];
     const existingTypes = new Set(existing.map(t => t.type));
     const missing = allTypes.filter(t => !existingTypes.has(t));
     if (missing.length > 0) {

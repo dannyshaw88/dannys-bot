@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.928",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Fix", text: "Human Sessions Tool: section checkboxes now default to enabled so all fields are visible and editable out of the box — previously new accounts showed everything greyed out until each section was manually toggled on." },
+      { category: "Fix", text: "Human Sessions Tool: fixed a tool-type mismatch that could cause the panel to show 'tool not found' for profiles created after a server update." },
+      { category: "Fix", text: "Human Sessions Tool: added a stability fix so the panel correctly resets its settings when switching between accounts, preventing stale values from a previously viewed profile from appearing." },
+    ],
+  },
+  {
     version: "1.0.927",
     date: "13 Jun 2026",
     items: [
