@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.920",
+    date: "13 Jun 2026",
+    items: [
+      { category: "New", text: "When an account is flagged as banned, all other accounts on the same proxy are automatically paused for 90 minutes to protect them from the tainted IP — they show a live countdown in the status badge and restart their tools automatically when the cooldown expires." },
+      { category: "Improved", text: "Account status pill now shows a live countdown timer when an account is in Resuming state, ticking down second-by-second until tools restart." },
+      { category: "Improved", text: "Account Details header reordered: Trust Score badge now appears immediately after the status pill, before the account navigation arrows." },
+    ],
+  },
+  {
     version: "1.0.919",
     date: "13 Jun 2026",
     items: [

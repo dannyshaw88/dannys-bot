@@ -243,9 +243,35 @@ class AutomationEngine {
     console.log("[engine] Automation engine started");
     this.reconcile();
     setInterval(() => this.reconcile(), 10_000);
+    setInterval(() => this.restoreResumingAccounts(), 30_000);
   }
 
   triggerReconcile() { this.reconcile().catch(() => {}); }
+
+  private async restoreResumingAccounts(): Promise<void> {
+    try {
+      const resuming = await storage.getResumingProfiles();
+      const now = new Date().toISOString();
+      for (const p of resuming) {
+        if (!p.resumingUntil || p.resumingUntil > now) continue;
+        const prevStatus = (p.resumingPrevStatus ?? "valid") as any;
+        await storage.updateProfile(p.id, { accountStatus: prevStatus, resumingUntil: null, resumingPrevStatus: null });
+        const profileTools = await storage.getToolsByProfile(p.id);
+        const enabledTools = profileTools.filter(t => t.enabled);
+        for (const tool of enabledTools) {
+          const s = (tool.settings ?? {}) as any;
+          const minMins = s.delayMin ?? 5;
+          const maxMins = s.delayMax ?? 15;
+          const stagger = Math.floor(Math.random() * (maxMins - minMins + 1)) + minMins;
+          await storage.updateTool(tool.id, { settings: { ...s, staggerOffsetMins: stagger } });
+          this.restartColdWithWait(p.id, tool.type);
+        }
+        console.log(`[engine] @${p.username}: proxy-taint cooldown expired — restored to "${prevStatus}", staggered ${enabledTools.length} tool(s)`);
+      }
+    } catch (e) {
+      console.warn("[engine] restoreResumingAccounts error:", e);
+    }
+  }
 
   private async reconcile() {
     try {

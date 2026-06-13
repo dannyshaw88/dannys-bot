@@ -379,12 +379,7 @@ export function ProxiesPage() {
     }
   };
 
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 opacity-30 inline ml-0.5" />;
-    return sortDir === "asc"
-      ? <ArrowUp className="w-3 h-3 text-primary inline ml-0.5" />
-      : <ArrowDown className="w-3 h-3 text-primary inline ml-0.5" />;
-  }
+  function SortIcon(_: { col: SortKey }) { return null; }
 
   const [pingResults, setPingResults] = useState<Record<number, PingResult>>({});
   const [pingingIds, setPingingIds] = useState<Set<number>>(new Set());
@@ -686,38 +681,6 @@ export function ProxiesPage() {
         </div>
       </div>
 
-      {/* ── Phone 4G tip ──────────────────────────────────────────────────── */}
-      <div className="mb-3 shrink-0">
-        <button
-          onClick={() => setShowPhone4gTip(v => !v)}
-          className="flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-700 font-medium transition-colors"
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          Want to use your phone's 4G in the Ghost Browser?
-          {showPhone4gTip ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-        {showPhone4gTip && (
-          <div className="mt-2 p-3 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-900 space-y-2 max-w-2xl">
-            <p className="font-semibold text-sky-800">Why hotspot still shows your home broadband IP</p>
-            <p>When Windows is connected to both home broadband and your phone hotspot simultaneously, Windows uses <strong>network adapter priority (metric)</strong> to pick the default route. Home broadband almost always has the lower metric and wins — so all traffic still goes through it even though the hotspot shows as "Connected".</p>
-
-            <p className="font-semibold text-sky-800 pt-1">Option A — use your phone as a proxy (recommended)</p>
-            <ol className="list-decimal list-inside space-y-1 ml-1">
-              <li>Install <strong>Every Proxy</strong> (free) from the Google Play Store on your Android phone.</li>
-              <li>Open Every Proxy → tap <strong>HTTP</strong> → tap <strong>Start</strong>. Note the port shown (default: 8080).</li>
-              <li>Connect your laptop to your phone's Wi-Fi hotspot.</li>
-              <li>In Equinox, click <strong>Add Proxy</strong> and enter: host = <code className="bg-sky-100 px-1 rounded">192.168.43.1</code>, port = <code className="bg-sky-100 px-1 rounded">8080</code>, type = <strong>HTTP</strong>.</li>
-              <li>Assign that proxy to the account you want to run on 4G — done.</li>
-            </ol>
-
-            <p className="font-semibold text-sky-800 pt-1">Option B — disconnect home broadband first</p>
-            <p>Unplug your ethernet cable or disable your home Wi-Fi adapter in Windows before opening the Ghost Browser. With only the hotspot active, Windows automatically routes all traffic through 4G — no proxy app needed.</p>
-
-            <p className="text-sky-600 pt-1">Tip: Use the <strong>🌐 My IP</strong> button in the Ghost Browser toolbar to instantly see your current exit IP and confirm which network is active before you start a session.</p>
-          </div>
-        )}
-      </div>
-
       {/* ── Search + Add Proxy ──────────────────────────────────────────────── */}
       <div className="mb-3 flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-background flex-1 max-w-md">
@@ -808,12 +771,12 @@ export function ProxiesPage() {
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
             const sortable = col === "proxy" || col === "username" || col === "status" || col === "accounts";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${col === "username" ? "justify-center" : ""} ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${(col === "username" || col === "accounts") ? "justify-center" : ""} ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${col === "password" ? "flex items-center justify-center" : ""} ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${(col === "password" || col === "type") ? "flex items-center justify-center" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );
@@ -958,7 +921,7 @@ export function ProxiesPage() {
             disabled={deletingAll || !proxies.length}
             className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-destructive hover:text-destructive/80 transition-colors whitespace-nowrap disabled:opacity-50"
           >
-            {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}
+            {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5 fill-red-500 text-red-500" />}
             {deletingAll ? "Deleting…" : "Delete All"}
           </button>
           <span className="text-border">|</span>

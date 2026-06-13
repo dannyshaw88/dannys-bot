@@ -378,11 +378,6 @@ function EntryCard({ entry, cfg, allSameType, profileMap }: { entry: AnalyticsEn
               ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}</span>
               : <span className="text-[11px] text-muted-foreground italic">no proxy</span>
             }
-            {proxyOverlap.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-700 font-semibold">
-                +{proxyOverlap.length} other{proxyOverlap.length !== 1 ? "s" : ""} on same proxy
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">

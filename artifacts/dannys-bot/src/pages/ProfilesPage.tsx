@@ -69,9 +69,30 @@ const STATUS_META: Record<AccountStatus, {
   upload:               { label: "Upload",               icon: Upload,      pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   review:               { label: "Review",               icon: Eye,         pill: "bg-slate-100 text-slate-600  border-slate-200"  },
   automated_behaviour_detected: { label: "Auto Behav.", icon: ShieldAlert, pill: "bg-orange-50 text-orange-700 border-orange-200" },
+  resuming: { label: "Resuming", icon: RefreshCw, pill: "bg-yellow-50 text-yellow-700 border-yellow-200" },
 };
 
-function AccountStatusBadge({ status, statusMessage }: { status: string; statusMessage?: string | null }) {
+function ResumingCountdown({ until }: { until: string | null | undefined }) {
+  const [secs, setSecs] = useState(() => {
+    if (!until) return 0;
+    return Math.max(0, Math.floor((new Date(until).getTime() - Date.now()) / 1000));
+  });
+  useEffect(() => {
+    if (!until) return;
+    const id = setInterval(() => {
+      setSecs(Math.max(0, Math.floor((new Date(until).getTime() - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+  if (!until || secs <= 0) return null;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return <span className="text-[8px] font-mono tabular-nums">{h > 0 ? `${h}:` : ""}{pad(m)}:{pad(s)}</span>;
+}
+
+function AccountStatusBadge({ status, statusMessage, resumingUntil }: { status: string; statusMessage?: string | null; resumingUntil?: string | null }) {
   const meta = STATUS_META[status as AccountStatus] ?? STATUS_META.pending;
   const Icon = meta.icon;
   const tooltip = status === "valid" ? undefined : (statusMessage || undefined);
@@ -80,8 +101,9 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
       title={tooltip}
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${tooltip ? " cursor-help" : ""}`}
     >
-      <Icon className="w-2.5 h-2.5" />
+      <Icon className={`w-2.5 h-2.5${status === "resuming" ? " animate-spin" : ""}`} />
       <span className="uppercase">{meta.label}</span>
+      {status === "resuming" && <ResumingCountdown until={resumingUntil} />}
     </span>
   );
 }
@@ -1333,7 +1355,7 @@ export function ProfilesPage() {
                     if (key === "status") return (
                       <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-center gap-1.5 shrink-0">
                         {hasProxy
-                          ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} />
+                          ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} resumingUntil={profile.resumingUntil} />
                           : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
                               <Globe className="w-2.5 h-2.5" />No Proxy
                             </span>

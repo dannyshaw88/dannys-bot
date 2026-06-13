@@ -315,6 +315,12 @@ if (!colNames.has("is_template")) {
 if (!colNames.has("template_id")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
 }
+if (!colNames.has("resuming_until")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN resuming_until TEXT;`);
+}
+if (!colNames.has("resuming_prev_status")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN resuming_prev_status TEXT;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

@@ -395,6 +395,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getProfilesByProxyId(proxyId: number): Promise<Profile[]> {
+    return await db.select().from(profiles).where(eq(profiles.proxyId, proxyId));
+  }
+
+  async getResumingProfiles(): Promise<Profile[]> {
+    return await db.select().from(profiles).where(eq(profiles.accountStatus, "resuming"));
+  }
+
   async resetStuckVerifyingAccounts(): Promise<number> {
     const stuck = await db.select({ id: profiles.id })
       .from(profiles)

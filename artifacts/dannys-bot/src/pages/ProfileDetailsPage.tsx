@@ -73,6 +73,8 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   email_connection:     { label: "Email Connect",      icon: Mail,          pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
   upload:               { label: "Upload",             icon: AlertTriangle, pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   review:               { label: "Review",             icon: Eye,           pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
+  resuming:             { label: "Resuming",           icon: RefreshCw,     pill: "bg-yellow-50 text-yellow-700 border-yellow-200",  dot: "bg-yellow-500" },
+  automated_behaviour_detected: { label: "Auto Behav.", icon: ShieldAlert, pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
 };
 
 // ── Per-account stealth fingerprint decoder ───────────────────────────────────
@@ -748,6 +750,7 @@ export function ProfileDetailsPage() {
                     </DropdownMenu>
                   );
                 })()}
+                <TrustScoreBadge profileId={profileId} />
                 <button
                   onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}?tab=${activeTab}`)}
                   disabled={!prevProfile}
@@ -823,7 +826,6 @@ export function ProfileDetailsPage() {
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-                <TrustScoreBadge profileId={profileId} />
               </div>
             </div>
           </div>

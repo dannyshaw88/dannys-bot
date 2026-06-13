@@ -46,6 +46,7 @@ export const ACCOUNT_STATUSES = [
   'email_connection',
   'upload',
   'review',
+  'resuming',
 ] as const;
 
 export type AccountStatus = typeof ACCOUNT_STATUSES[number];
@@ -77,6 +78,8 @@ export const profiles = sqliteTable("profiles", {
   tags: text("tags"),
   dateOfBirth: text("date_of_birth"),
   notes: text("notes"),
+  resumingUntil: text("resuming_until"),
+  resumingPrevStatus: text("resuming_prev_status"),
   phoneNumber: text("phone_number"),
   twoFASecretKey: text("two_fa_secret_key"),
   backupCodes: text("backup_codes"),
