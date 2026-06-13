@@ -1,14 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   Loader2, BarChart2, Calendar, Globe, AlertTriangle, Shield,
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
+  Star, Scale, FlaskConical, BadgeAlert,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; }
@@ -16,75 +18,43 @@ interface AnalyticsEntry { id: number; username: string; proxyHost: string; endp
 interface EpItem { operationName: string; date: string; source?: string | null; }
 interface ProxyRisk { host: string; banCount: number; automatedCount: number; captchaCount: number; lockedCount: number; total: number; accounts: string[]; entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] }; }
 interface ConcurrencyAlert { proxyHost: string; accounts: string[]; times: string[]; category: string; }
-
 interface SubnetGroup { subnet: string; events: number; accounts: string[]; flaggedAt: string[]; hosts: string[]; }
+interface TrustInfo { levelId: string; label: string; rank: number; }
 
 interface EntryMetrics {
-  totalCalls: number;
-  callsPerMin: number;
-  avgInterCallSec: number;
-  minInterCallSec: number;
-  maxInterCallSec: number;
-  timingCoV: number;
-  shannonEntropy: number;
-  uniqueEndpoints: number;
-  endpointDiversity: number;
-  burstCount: number;
-  actionCount: number;
-  sessionCount: number;
-  authCount: number;
-  sessionPerAction: number;
-  sessionPerFollow: number;
-  authPerAction: number;
-  followCount: number;
-  preActionWarmup: number;
-  actionVelocityPerHour: number;
-  spanMin: number;
-  cats: Record<string, number>;
-  anomalyScore: number;
-  flagHour: number;
+  totalCalls: number; callsPerMin: number; avgInterCallSec: number; minInterCallSec: number; maxInterCallSec: number;
+  timingCoV: number; shannonEntropy: number; uniqueEndpoints: number; endpointDiversity: number;
+  burstCount: number; actionCount: number; sessionCount: number; authCount: number;
+  sessionPerAction: number; sessionPerFollow: number; authPerAction: number;
+  followCount: number; preActionWarmup: number; actionVelocityPerHour: number;
+  spanMin: number; cats: Record<string, number>; anomalyScore: number; flagHour: number;
 }
 
+interface Reliability { reAddCount: number; weight: number; label: string; }
+
 interface CrossStats {
-  n: number;
-  // Call rate
+  n: number; weightedN: number;
   callRateMean: number; callRateMedian: number; callRateStdDev: number; callRateP90: number;
-  // Session noise
   sessionPerActionMean: number; sessionPerActionMedian: number; sessionPerActionStdDev: number;
   sessionPerFollowMean: number; sessionPerFollowMedian: number;
-  // Timing
-  timingCoVMean: number; timingCoVMedian: number;
-  avgGapMean: number; minGapMean: number;
-  // Entropy / diversity
+  timingCoVMean: number; timingCoVMedian: number; avgGapMean: number; minGapMean: number;
   entropyMean: number; entropyMedian: number; entropyStdDev: number;
-  uniqueEpMean: number;
-  endpointDiversityMean: number;
-  // Warmup
+  uniqueEpMean: number; endpointDiversityMean: number;
   warmupMean: number; warmupMedian: number; zeroWarmupPct: number;
-  // Velocity
-  actionVelocityMean: number; actionVelocityMedian: number;
-  // Auth
-  authPerActionMean: number;
-  // Burst / fast-flag
+  actionVelocityMean: number; actionVelocityMedian: number; authPerActionMean: number;
   burstPct: number; fastFlagPct: number; avgSpanMin: number;
-  // Common endpoints
   commonEndpoints: Array<{ name: string; label: string | null; pct: number; category: string; freq: number }>;
-  // Proxy / subnet
   proxyConcentration: number; topProxy: string;
-  subnetGroups: SubnetGroup[];
-  topSubnet: string; subnetConcentration: number;
-  // Time of day
-  hourBuckets: number[];
-  peakHour: number;
-  // Session structure
-  avgAuthRatio: number;
-  avgSessionRatio: number;
-  avgActionRatio: number;
-  // Low-CoV accounts (robotic timing)
-  roboticTimingPct: number;
-  // First / last endpoint sequences
-  commonFirstEps: Array<{ name: string; label: string | null; pct: number }>;
+  subnetGroups: SubnetGroup[]; topSubnet: string; subnetConcentration: number;
+  hourBuckets: number[]; peakHour: number;
+  avgAuthRatio: number; avgSessionRatio: number; avgActionRatio: number;
+  roboticTimingPct: number; commonFirstEps: Array<{ name: string; label: string | null; pct: number }>;
   commonLastEps: Array<{ name: string; label: string | null; pct: number }>;
+  // Trust
+  trustRankMean: number; trustRankMedian: number; trustDistribution: Record<number, number>;
+  lowTrustPct: number; highTrustPct: number;
+  // Reliability
+  unreliablePct: number; lowReliabilityEntries: number;
 }
 
 // ── Known Instagram mobile-API endpoint labels ────────────────────────────────
@@ -114,10 +84,9 @@ const EP_LABELS: Record<string, { label: string; category: "follow" | "unfollow"
   "ProfileSync":          { label: "Profile Sync",       category: "session" },
   "friendships/following":{ label: "Following List",     category: "session" },
   "friendships/followers":{ label: "Followers List",     category: "session" },
-  "media/n_generate_uuid":{ label: "Media UUID",         category: "other" },
   "push/register":        { label: "Push Register",      category: "auth" },
-  "accounts/contact_point_prefill": { label: "Contact Prefill", category: "auth" },
-  "accounts/get_prefill_candidates": { label: "Prefill Cands",  category: "auth" },
+  "accounts/contact_point_prefill":  { label: "Contact Prefill",   category: "auth" },
+  "accounts/get_prefill_candidates": { label: "Prefill Candidates", category: "auth" },
   "scores/bootstrap":     { label: "Scores Bootstrap",   category: "auth" },
   "location_search":      { label: "Location Search",    category: "session" },
   "tags/search":          { label: "Hashtag Search",     category: "session" },
@@ -132,20 +101,13 @@ function matchLabel(name: string) {
   return null;
 }
 
-function parseEps(snapshot: string): EpItem[] {
-  try { return JSON.parse(snapshot) ?? []; } catch { return []; }
-}
-
-function filterHiker(eps: EpItem[]): EpItem[] {
-  return eps.filter(e => e.source !== "HikerAPI");
-}
-
+function parseEps(snapshot: string): EpItem[] { try { return JSON.parse(snapshot) ?? []; } catch { return []; } }
+function filterHiker(eps: EpItem[]): EpItem[] { return eps.filter(e => e.source !== "HikerAPI"); }
 function categorise(eps: EpItem[]): Record<string, number> {
-  const counts: Record<string, number> = { follow: 0, unfollow: 0, dm: 0, like: 0, session: 0, auth: 0, other: 0 };
-  for (const ep of eps) { const m = matchLabel(ep.operationName); counts[m?.category ?? "other"]++; }
-  return counts;
+  const c: Record<string, number> = { follow: 0, unfollow: 0, dm: 0, like: 0, session: 0, auth: 0, other: 0 };
+  for (const ep of eps) { const m = matchLabel(ep.operationName); c[m?.category ?? "other"]++; }
+  return c;
 }
-
 function topEps(eps: EpItem[], n = 20): Array<{ name: string; count: number; label: string | null; category: string }> {
   const map = new Map<string, number>();
   for (const e of eps) map.set(e.operationName, (map.get(e.operationName) ?? 0) + 1);
@@ -171,28 +133,21 @@ function pctile(arr: number[], p: number): number {
   return s[Math.min(Math.floor(p / 100 * s.length), s.length - 1)];
 }
 function zScore(val: number, m: number, sd: number): number { return sd > 0 ? (val - m) / sd : 0; }
-
-// Shannon entropy: H = -Σ p·log₂(p)
 function shannonEntropy(eps: EpItem[]): number {
-  if (eps.length === 0) return 0;
+  if (!eps.length) return 0;
   const counts = new Map<string, number>();
   for (const e of eps) counts.set(e.operationName, (counts.get(e.operationName) ?? 0) + 1);
   let h = 0;
   for (const c of counts.values()) { const p = c / eps.length; h -= p * Math.log2(p); }
   return h;
 }
-
-// Coefficient of variation of inter-call gaps (stddev/mean) — low = robotic
 function computeTimingCoV(timestamps: number[]): number {
   if (timestamps.length < 3) return -1;
   const gaps: number[] = [];
   for (let i = 1; i < timestamps.length; i++) gaps.push(timestamps[i] - timestamps[i - 1]);
   const m = mean(gaps);
-  if (m <= 0) return -1;
-  return stddev(gaps) / m;
+  return m > 0 ? stddev(gaps) / m : -1;
 }
-
-// Pre-action warmup: non-action calls before the first action call
 function preActionWarmup(eps: EpItem[]): number {
   let count = 0;
   for (const ep of eps) {
@@ -202,57 +157,68 @@ function preActionWarmup(eps: EpItem[]): number {
   }
   return count;
 }
-
-// Extract /24 subnet from dotted-decimal IP
 function extractSubnet24(host: string): string {
-  const ip = host.split(":")[0]; // strip port
-  const parts = ip.split(".");
-  if (parts.length !== 4 || parts.some(p => isNaN(Number(p)))) return host;
-  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-}
-
-function isIpAddr(host: string): boolean {
   const ip = host.split(":")[0];
   const parts = ip.split(".");
+  return parts.length === 4 && parts.every(p => !isNaN(Number(p))) ? `${parts[0]}.${parts[1]}.${parts[2]}.0/24` : host;
+}
+function isIpAddr(host: string): boolean {
+  const parts = host.split(":")[0].split(".");
   return parts.length === 4 && parts.every(p => !isNaN(Number(p)) && Number(p) >= 0 && Number(p) <= 255);
 }
 
-// ── Per-entry metrics computation ─────────────────────────────────────────────
+// ── Trust score helpers ───────────────────────────────────────────────────────
+function buildTrustMap(profiles: ProfileRow[]): Map<string, TrustInfo> {
+  const levels = getTrustLevels();
+  const map = new Map<string, TrustInfo>();
+  for (const p of profiles) {
+    const levelId = getTrustScore(p.id);
+    if (levelId) {
+      const rank = levels.findIndex(l => l.id === levelId);
+      const label = levels[rank]?.label ?? levelId.toUpperCase();
+      map.set(p.username, { levelId, label, rank: rank >= 0 ? rank + 1 : 1 });
+    }
+  }
+  return map;
+}
+
+// ── Reliability helpers ───────────────────────────────────────────────────────
+function computeReliability(notes: string | null | undefined): Reliability {
+  const allDates = parseAllAddedDates(notes);
+  const reAddCount = Math.max(0, allDates.length - 1);
+  const weight = reAddCount === 0 ? 1.0 : reAddCount === 1 ? 0.75 : reAddCount === 2 ? 0.5 : 0.3;
+  const label = reAddCount === 0 ? "RELIABLE" : reAddCount === 1 ? "RE-ADDED 1×" : reAddCount === 2 ? "RE-ADDED 2×" : `RE-ADDED ${reAddCount}×`;
+  return { reAddCount, weight, label };
+}
+
+// ── Per-entry metrics ─────────────────────────────────────────────────────────
 function computeMetrics(eps: EpItem[], flagTime?: string): EntryMetrics {
   const cats = categorise(eps);
   const timestamps = eps.map(e => new Date(e.date).getTime()).filter(t => !isNaN(t)).sort((a, b) => a - b);
-
   const spanMs = timestamps.length >= 2 ? timestamps[timestamps.length - 1] - timestamps[0] : 0;
   const spanMin = spanMs / 60000;
   const callsPerMin = spanMin > 0 ? eps.length / spanMin : 0;
-
   const gaps: number[] = [];
   for (let i = 1; i < timestamps.length; i++) gaps.push(timestamps[i] - timestamps[i - 1]);
-  const avgInterCallSec = gaps.length > 0 ? mean(gaps) / 1000 : 0;
-  const minInterCallSec = gaps.length > 0 ? Math.min(...gaps) / 1000 : 0;
-  const maxInterCallSec = gaps.length > 0 ? Math.max(...gaps) / 1000 : 0;
+  const avgInterCallSec = gaps.length ? mean(gaps) / 1000 : 0;
+  const minInterCallSec = gaps.length ? Math.min(...gaps) / 1000 : 0;
+  const maxInterCallSec = gaps.length ? Math.max(...gaps) / 1000 : 0;
   const coV = computeTimingCoV(timestamps);
-
   const entropy = shannonEntropy(eps);
   const uniqueEndpoints = new Set(eps.map(e => e.operationName)).size;
-  const endpointDiversity = eps.length > 0 ? uniqueEndpoints / eps.length : 0;
-
+  const endpointDiversity = eps.length ? uniqueEndpoints / eps.length : 0;
   let burstCount = 0;
   for (let i = 1; i < timestamps.length; i++) { if (timestamps[i] - timestamps[i - 1] <= 60000) burstCount++; }
-
   const actionCount = cats.follow + cats.unfollow + cats.dm + cats.like;
   const sessionCount = cats.session;
   const authCount = cats.auth;
   const sessionPerAction = actionCount > 0 ? sessionCount / actionCount : sessionCount;
   const sessionPerFollow = cats.follow > 0 ? sessionCount / cats.follow : -1;
   const authPerAction = actionCount > 0 ? authCount / actionCount : authCount;
-
   const warmup = preActionWarmup(eps);
   const actionVelocityPerHour = spanMin > 0 ? actionCount / (spanMin / 60) : 0;
-
   const ft = flagTime ? new Date(flagTime) : null;
   const flagHour = ft && !isNaN(ft.getTime()) ? ft.getUTCHours() : -1;
-
   return {
     totalCalls: eps.length, callsPerMin, avgInterCallSec, minInterCallSec, maxInterCallSec,
     timingCoV: coV, shannonEntropy: entropy, uniqueEndpoints, endpointDiversity,
@@ -263,96 +229,80 @@ function computeMetrics(eps: EpItem[], flagTime?: string): EntryMetrics {
   };
 }
 
-// ── Cross-account statistical analysis ───────────────────────────────────────
-function computeCrossStats(entries: AnalyticsEntry[]): CrossStats {
-  const empty: CrossStats = {
-    n: 0, callRateMean: 0, callRateMedian: 0, callRateStdDev: 0, callRateP90: 0,
+// ── Cross-account stats ───────────────────────────────────────────────────────
+function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<string, TrustInfo>, profileNotesMap: Map<string, string | null>): CrossStats {
+  const emptyStats: CrossStats = {
+    n: 0, weightedN: 0, callRateMean: 0, callRateMedian: 0, callRateStdDev: 0, callRateP90: 0,
     sessionPerActionMean: 0, sessionPerActionMedian: 0, sessionPerActionStdDev: 0,
     sessionPerFollowMean: 0, sessionPerFollowMedian: 0,
     timingCoVMean: 0, timingCoVMedian: 0, avgGapMean: 0, minGapMean: 0,
-    entropyMean: 0, entropyMedian: 0, entropyStdDev: 0,
-    uniqueEpMean: 0, endpointDiversityMean: 0,
+    entropyMean: 0, entropyMedian: 0, entropyStdDev: 0, uniqueEpMean: 0, endpointDiversityMean: 0,
     warmupMean: 0, warmupMedian: 0, zeroWarmupPct: 0,
     actionVelocityMean: 0, actionVelocityMedian: 0, authPerActionMean: 0,
     burstPct: 0, fastFlagPct: 0, avgSpanMin: 0,
     commonEndpoints: [], proxyConcentration: 0, topProxy: "",
     subnetGroups: [], topSubnet: "", subnetConcentration: 0,
     hourBuckets: Array(24).fill(0), peakHour: -1,
-    avgAuthRatio: 0, avgSessionRatio: 0, avgActionRatio: 0,
-    roboticTimingPct: 0,
+    avgAuthRatio: 0, avgSessionRatio: 0, avgActionRatio: 0, roboticTimingPct: 0,
     commonFirstEps: [], commonLastEps: [],
+    trustRankMean: 0, trustRankMedian: 0, trustDistribution: {}, lowTrustPct: 0, highTrustPct: 0,
+    unreliablePct: 0, lowReliabilityEntries: 0,
   };
-  if (entries.length === 0) return empty;
+  if (!entries.length) return emptyStats;
 
-  const metricsList = entries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt));
+  const reliabilities = entries.map(e => computeReliability(profileNotesMap.get(e.username)));
+  const metricsList   = entries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt));
+  const weightedN     = reliabilities.reduce((s, r) => s + r.weight, 0);
+  const lowReliabilityEntries = reliabilities.filter(r => r.weight < 0.6).length;
+  const unreliablePct = entries.length ? Math.round(lowReliabilityEntries / entries.length * 100) : 0;
 
-  const callRates   = metricsList.map(m => m.callsPerMin).filter(v => v > 0);
-  const spaList     = metricsList.map(m => m.sessionPerAction).filter(v => v >= 0);
-  const spfList     = metricsList.map(m => m.sessionPerFollow > 0 ? m.sessionPerFollow : -1).filter(v => v >= 0);
-  const spanList    = metricsList.map(m => m.spanMin).filter(v => v > 0);
-  const covList     = metricsList.map(m => m.timingCoV).filter(v => v >= 0);
-  const gapList     = metricsList.map(m => m.avgInterCallSec).filter(v => v > 0);
-  const minGapList  = metricsList.map(m => m.minInterCallSec).filter(v => v >= 0);
+  // Weighted arrays for key stats
+  const callRates  = metricsList.map(m => m.callsPerMin).filter(v => v > 0);
+  const spaList    = metricsList.map(m => m.sessionPerAction).filter(v => v >= 0);
+  const spfList    = metricsList.map(m => m.sessionPerFollow > 0 ? m.sessionPerFollow : -1).filter(v => v >= 0);
+  const spanList   = metricsList.map(m => m.spanMin).filter(v => v > 0);
+  const covList    = metricsList.map(m => m.timingCoV).filter(v => v >= 0);
+  const gapList    = metricsList.map(m => m.avgInterCallSec).filter(v => v > 0);
+  const minGapList = metricsList.map(m => m.minInterCallSec).filter(v => v >= 0);
   const entropyList = metricsList.map(m => m.shannonEntropy);
-  const warmupList  = metricsList.map(m => m.preActionWarmup);
-  const velList     = metricsList.map(m => m.actionVelocityPerHour).filter(v => v > 0);
+  const warmupList = metricsList.map(m => m.preActionWarmup);
+  const velList    = metricsList.map(m => m.actionVelocityPerHour).filter(v => v > 0);
   const uniqueEpList = metricsList.map(m => m.uniqueEndpoints);
   const diversityList = metricsList.map(m => m.endpointDiversity);
-  const authList    = metricsList.map(m => m.authPerAction);
-
-  // Total call composition ratios
+  const authList   = metricsList.map(m => m.authPerAction);
   const authRatios    = metricsList.map(m => m.totalCalls > 0 ? m.authCount / m.totalCalls : 0);
   const sessionRatios = metricsList.map(m => m.totalCalls > 0 ? m.sessionCount / m.totalCalls : 0);
   const actionRatios  = metricsList.map(m => m.totalCalls > 0 ? m.actionCount / m.totalCalls : 0);
 
-  // Burst / fast-flag
-  const burstCount   = metricsList.filter(m => m.burstCount > 0).length;
+  const burstCount    = metricsList.filter(m => m.burstCount > 0).length;
   const fastFlagCount = metricsList.filter(m => m.spanMin > 0 && m.spanMin < 60).length;
-  const roboticCount  = covList.filter(v => v < 0.5).length; // CoV < 0.5 = robotic timing
+  const roboticCount  = covList.filter(v => v < 0.5).length;
 
-  // ── Common endpoint denominators ──
+  // Common endpoints
   const epToAccounts = new Map<string, Set<string>>();
   const firstEpCounts = new Map<string, number>();
-  const lastEpCounts = new Map<string, number>();
-
+  const lastEpCounts  = new Map<string, number>();
   for (const entry of entries) {
     const eps = filterHiker(parseEps(entry.endpointSnapshot));
-    const seen = new Set<string>();
     for (const ep of eps) {
       if (!epToAccounts.has(ep.operationName)) epToAccounts.set(ep.operationName, new Set());
       epToAccounts.get(ep.operationName)!.add(entry.username);
-      seen.add(ep.operationName);
     }
-    // First action endpoint (first action in sequence)
-    const firstAction = eps.find(e => { const c = matchLabel(e.operationName)?.category ?? "other"; return c !== "auth" && c !== "other"; });
+    const firstAction = eps.find(e => { const c = matchLabel(e.operationName)?.category ?? "other"; return c !== "auth" && c !== "other" && c !== "session"; });
     if (firstAction) firstEpCounts.set(firstAction.operationName, (firstEpCounts.get(firstAction.operationName) ?? 0) + 1);
-    // Last endpoint before flag
     const last = eps[eps.length - 1];
     if (last) lastEpCounts.set(last.operationName, (lastEpCounts.get(last.operationName) ?? 0) + 1);
   }
-
   const commonEndpoints = Array.from(epToAccounts.entries())
     .map(([name, accs]) => ({ name, label: matchLabel(name)?.label ?? null, category: matchLabel(name)?.category ?? "other", pct: Math.round(accs.size / entries.length * 100), freq: accs.size }))
-    .filter(t => t.pct >= 40)
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 20);
+    .filter(t => t.pct >= 40).sort((a, b) => b.pct - a.pct).slice(0, 20);
+  const commonFirstEps = Array.from(firstEpCounts.entries()).map(([name, count]) => ({ name, label: matchLabel(name)?.label ?? null, pct: Math.round(count / entries.length * 100) })).sort((a, b) => b.pct - a.pct).slice(0, 8);
+  const commonLastEps  = Array.from(lastEpCounts.entries()).map(([name, count]) => ({ name, label: matchLabel(name)?.label ?? null, pct: Math.round(count / entries.length * 100) })).sort((a, b) => b.pct - a.pct).slice(0, 8);
 
-  const commonFirstEps = Array.from(firstEpCounts.entries())
-    .map(([name, count]) => ({ name, label: matchLabel(name)?.label ?? null, pct: Math.round(count / entries.length * 100) }))
-    .sort((a, b) => b.pct - a.pct).slice(0, 8);
-
-  const commonLastEps = Array.from(lastEpCounts.entries())
-    .map(([name, count]) => ({ name, label: matchLabel(name)?.label ?? null, pct: Math.round(count / entries.length * 100) }))
-    .sort((a, b) => b.pct - a.pct).slice(0, 8);
-
-  // ── Proxy concentration ──
+  // Proxy / subnet
   const proxyCounts = new Map<string, number>();
   for (const e of entries) { const h = e.proxyHost || "(no proxy)"; proxyCounts.set(h, (proxyCounts.get(h) ?? 0) + 1); }
   const topProxyEntry = Array.from(proxyCounts.entries()).sort((a, b) => b[1] - a[1])[0];
-  const topProxy = topProxyEntry?.[0] ?? "";
-  const proxyConcentration = entries.length > 0 ? Math.round((topProxyEntry?.[1] ?? 0) / entries.length * 100) : 0;
-
-  // ── Subnet grouping ──
   const subnetMap = new Map<string, { accounts: string[]; flaggedAt: string[]; hosts: string[] }>();
   for (const e of entries) {
     if (!e.proxyHost) continue;
@@ -363,71 +313,61 @@ function computeCrossStats(entries: AnalyticsEntry[]): CrossStats {
     sg.flaggedAt.push(e.flaggedAt ?? e.bannedAt ?? "");
     if (!sg.hosts.includes(e.proxyHost)) sg.hosts.push(e.proxyHost);
   }
-  const subnetGroups: SubnetGroup[] = Array.from(subnetMap.entries())
-    .map(([subnet, d]) => ({ subnet, events: d.accounts.length, accounts: d.accounts, flaggedAt: d.flaggedAt, hosts: d.hosts }))
-    .filter(sg => sg.events > 1)
-    .sort((a, b) => b.events - a.events);
+  const subnetGroups = Array.from(subnetMap.entries()).map(([subnet, d]) => ({ subnet, events: d.accounts.length, accounts: d.accounts, flaggedAt: d.flaggedAt, hosts: d.hosts })).filter(sg => sg.events > 1).sort((a, b) => b.events - a.events);
   const topSubnetEntry = subnetGroups[0];
-  const topSubnet = topSubnetEntry?.subnet ?? "";
-  const subnetConcentration = entries.length > 0 && topSubnetEntry ? Math.round(topSubnetEntry.events / entries.length * 100) : 0;
 
-  // ── Time of day ──
+  // Time of day
   const hourBuckets = Array(24).fill(0);
-  for (const e of entries) {
-    const m = computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt);
-    if (m.flagHour >= 0) hourBuckets[m.flagHour]++;
-  }
+  for (const m of metricsList) { if (m.flagHour >= 0) hourBuckets[m.flagHour]++; }
   const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
 
+  // Trust ranks
+  const trustRanks = entries.map(e => trustMap.get(e.username)?.rank ?? -1).filter(r => r >= 0);
+  const trustDistribution: Record<number, number> = {};
+  for (const r of trustRanks) trustDistribution[r] = (trustDistribution[r] ?? 0) + 1;
+  const lowTrustPct  = trustRanks.length ? Math.round(trustRanks.filter(r => r <= 4).length / trustRanks.length * 100) : 0;
+  const highTrustPct = trustRanks.length ? Math.round(trustRanks.filter(r => r >= 9).length / trustRanks.length * 100) : 0;
+
   return {
-    n: entries.length,
+    n: entries.length, weightedN,
     callRateMean: mean(callRates), callRateMedian: median(callRates), callRateStdDev: stddev(callRates), callRateP90: pctile(callRates, 90),
     sessionPerActionMean: mean(spaList), sessionPerActionMedian: median(spaList), sessionPerActionStdDev: stddev(spaList),
     sessionPerFollowMean: mean(spfList), sessionPerFollowMedian: median(spfList),
-    timingCoVMean: mean(covList), timingCoVMedian: median(covList),
-    avgGapMean: mean(gapList), minGapMean: mean(minGapList),
+    timingCoVMean: mean(covList), timingCoVMedian: median(covList), avgGapMean: mean(gapList), minGapMean: mean(minGapList),
     entropyMean: mean(entropyList), entropyMedian: median(entropyList), entropyStdDev: stddev(entropyList),
     uniqueEpMean: mean(uniqueEpList), endpointDiversityMean: mean(diversityList),
-    warmupMean: mean(warmupList), warmupMedian: median(warmupList), zeroWarmupPct: entries.length > 0 ? Math.round(warmupList.filter(v => v === 0).length / entries.length * 100) : 0,
-    actionVelocityMean: mean(velList), actionVelocityMedian: median(velList),
-    authPerActionMean: mean(authList),
-    burstPct: entries.length > 0 ? Math.round(burstCount / entries.length * 100) : 0,
-    fastFlagPct: entries.length > 0 ? Math.round(fastFlagCount / entries.length * 100) : 0,
-    avgSpanMin: mean(spanList),
-    commonEndpoints, proxyConcentration, topProxy,
-    subnetGroups, topSubnet, subnetConcentration,
+    warmupMean: mean(warmupList), warmupMedian: median(warmupList), zeroWarmupPct: entries.length ? Math.round(warmupList.filter(v => v === 0).length / entries.length * 100) : 0,
+    actionVelocityMean: mean(velList), actionVelocityMedian: median(velList), authPerActionMean: mean(authList),
+    burstPct: entries.length ? Math.round(burstCount / entries.length * 100) : 0,
+    fastFlagPct: entries.length ? Math.round(fastFlagCount / entries.length * 100) : 0, avgSpanMin: mean(spanList),
+    commonEndpoints, proxyConcentration: entries.length ? Math.round((topProxyEntry?.[1] ?? 0) / entries.length * 100) : 0, topProxy: topProxyEntry?.[0] ?? "",
+    subnetGroups, topSubnet: topSubnetEntry?.subnet ?? "", subnetConcentration: entries.length && topSubnetEntry ? Math.round(topSubnetEntry.events / entries.length * 100) : 0,
     hourBuckets, peakHour,
     avgAuthRatio: mean(authRatios), avgSessionRatio: mean(sessionRatios), avgActionRatio: mean(actionRatios),
-    roboticTimingPct: covList.length > 0 ? Math.round(roboticCount / covList.length * 100) : 0,
+    roboticTimingPct: covList.length ? Math.round(roboticCount / covList.length * 100) : 0,
     commonFirstEps, commonLastEps,
+    trustRankMean: mean(trustRanks), trustRankMedian: median(trustRanks), trustDistribution,
+    lowTrustPct, highTrustPct,
+    unreliablePct, lowReliabilityEntries,
   };
 }
 
 // ── Anomaly scoring (0–100) ─────────────────────────────────────────────────
 function computeAnomalyScore(m: EntryMetrics, cross: CrossStats): number {
   if (cross.n < 2) return 0;
-  let score = 0;
-  // High call rate
-  if (cross.callRateStdDev > 0) score += Math.min(25, Math.max(0, zScore(m.callsPerMin, cross.callRateMean, cross.callRateStdDev) * 10));
-  // Low session noise
-  if (cross.sessionPerActionStdDev > 0) score += Math.min(25, Math.max(0, zScore(cross.sessionPerActionMean, m.sessionPerAction, cross.sessionPerActionStdDev) * 10));
-  // Robotic timing (very low CoV)
-  if (m.timingCoV >= 0 && m.timingCoV < 0.3) score += 15;
-  else if (m.timingCoV >= 0 && m.timingCoV < 0.5) score += 8;
-  // Low entropy
-  if (cross.entropyStdDev > 0) score += Math.min(15, Math.max(0, zScore(cross.entropyMean, m.shannonEntropy, cross.entropyStdDev) * 8));
-  // Burst presence
-  if (m.burstCount > 5) score += 10;
-  else if (m.burstCount > 0) score += 5;
-  // No warmup
-  if (m.preActionWarmup === 0 && m.actionCount > 0) score += 10;
-  // Fast flag
-  if (m.spanMin > 0 && m.spanMin < 30) score += 10;
-  else if (m.spanMin > 0 && m.spanMin < 60) score += 5;
-  return Math.min(100, Math.round(score));
+  let s = 0;
+  if (cross.callRateStdDev > 0) s += Math.min(20, Math.max(0, zScore(m.callsPerMin, cross.callRateMean, cross.callRateStdDev) * 8));
+  if (cross.sessionPerActionStdDev > 0) s += Math.min(20, Math.max(0, zScore(cross.sessionPerActionMean, m.sessionPerAction, cross.sessionPerActionStdDev) * 8));
+  if (m.timingCoV >= 0 && m.timingCoV < 0.3) s += 15; else if (m.timingCoV >= 0 && m.timingCoV < 0.5) s += 8;
+  if (cross.entropyStdDev > 0) s += Math.min(12, Math.max(0, zScore(cross.entropyMean, m.shannonEntropy, cross.entropyStdDev) * 6));
+  if (m.burstCount > 5) s += 10; else if (m.burstCount > 0) s += 5;
+  if (m.preActionWarmup === 0 && m.actionCount > 0) s += 10;
+  if (m.spanMin > 0 && m.spanMin < 30) s += 10; else if (m.spanMin > 0 && m.spanMin < 60) s += 5;
+  if (m.avgInterCallSec > 0 && m.avgInterCallSec < 0.5) s += 8;
+  return Math.min(100, Math.round(s));
 }
 
-// ── Utility helpers ───────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────────
 function buildProxyRiskMap(bans: AnalyticsEntry[], automated: AnalyticsEntry[], captcha: AnalyticsEntry[], locked: AnalyticsEntry[]): ProxyRisk[] {
   const map = new Map<string, ProxyRisk>();
   const empty = (): ProxyRisk => ({ host: "", banCount: 0, automatedCount: 0, captchaCount: 0, lockedCount: 0, total: 0, accounts: [], entryIds: { ban: [], automated: [], captcha: [], locked: [] } });
@@ -449,7 +389,7 @@ function buildConcurrencyAlerts(bans: AnalyticsEntry[], automated: AnalyticsEntr
   const alerts: ConcurrencyAlert[] = [];
   for (const { entries, label } of [{ entries: bans, label: "Ban" }, { entries: automated, label: "Automated" }, { entries: captcha, label: "Captcha" }, { entries: locked, label: "Locked" }]) {
     const byProxy = new Map<string, AnalyticsEntry[]>();
-    for (const e of entries) { const host = e.proxyHost || "(no proxy)"; if (!byProxy.has(host)) byProxy.set(host, []); byProxy.get(host)!.push(e); }
+    for (const e of entries) { const h = e.proxyHost || "(no proxy)"; if (!byProxy.has(h)) byProxy.set(h, []); byProxy.get(h)!.push(e); }
     for (const [host, es] of byProxy) {
       if (es.length < 2) continue;
       const sorted = [...es].sort((a, b) => new Date(a.flaggedAt ?? a.bannedAt ?? 0).getTime() - new Date(b.flaggedAt ?? b.bannedAt ?? 0).getTime());
@@ -474,8 +414,7 @@ function parseAllAddedDates(notes: string | null | undefined): Date[] {
   if (!notes) return [];
   return [...notes.matchAll(/(?:Added|Re-added|Re-imported):\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi)]
     .map(m => new Date(m[1].replace(" UTC", "Z").replace(" ", "T")))
-    .filter(d => !isNaN(d.getTime()))
-    .sort((a, b) => a.getTime() - b.getTime());
+    .filter(d => !isNaN(d.getTime())).sort((a, b) => a.getTime() - b.getTime());
 }
 function formatDuration(ms: number): string {
   const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
@@ -493,11 +432,38 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
 
 type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
 
-const TAB_CONFIG: Record<Exclude<Tab, "survivors">, { label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string }> = {
-  ban:       { label: "Banned Accounts",     accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",       emptyMsg: "No ban analytics yet",              flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned.",             deleteEndpoint: "/api/analytics/ban-patterns",       queryKey: "/api/analytics/ban-patterns" },
-  automated: { label: "Automated Behaviour", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800", emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour.", deleteEndpoint: "/api/analytics/automated-patterns", queryKey: "/api/analytics/automated-patterns" },
-  captcha:   { label: "Captcha Errors",      accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800", emptyMsg: "No captcha events yet",             flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error.",             deleteEndpoint: "/api/analytics/captcha-patterns",   queryKey: "/api/analytics/captcha-patterns" },
-  locked:    { label: "Locked Accounts",     accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",   emptyMsg: "No locked account events yet",     flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.",           deleteEndpoint: "/api/analytics/locked-patterns",    queryKey: "/api/analytics/locked-patterns" },
+const TAB_CONFIG: Record<Exclude<Tab, "survivors">, {
+  label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string;
+  causeTitle: string; causeTheory: string; causeSignals: string[];
+}> = {
+  ban: {
+    label: "Banned Accounts", accentBg: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
+    emptyMsg: "No ban analytics yet", flagMsg: "Flag accounts as Banned from Accounts → Actions → Flag as Banned.", deleteEndpoint: "/api/analytics/ban-patterns", queryKey: "/api/analytics/ban-patterns",
+    causeTitle: "What mathematically separates a BAN from other errors",
+    causeTheory: "A permanent ban is Instagram's highest-confidence outcome — it is NOT issued on first suspicion. It indicates either (a) repeated automated-behaviour detections that crossed a threshold, (b) a pre-flagged account or IP with a damaged trust history, or (c) an extreme single-session behaviour violation (very high action ratio, very high velocity). High-TrustScore accounts being banned is significant — the trigger had to be severe to overcome their earned reputation.",
+    causeSignals: ["Action ratio > 40% of all API calls (session is task-only, no human reads)", "Action velocity > 50/hr sustained over > 60 minutes", "IP reputation pre-flagged (fast-ban in < 30 min = the IP, not the behaviour)", "Low TrustScore accounts: ban threshold is much lower under existing scrutiny", "Multiple consecutive flag events on same proxy (escalation chain)"],
+  },
+  automated: {
+    label: "Automated Behaviour", accentBg: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+    emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour.", deleteEndpoint: "/api/analytics/automated-patterns", queryKey: "/api/analytics/automated-patterns",
+    causeTitle: "What mathematically separates AUTOMATED BEHAVIOUR from other errors",
+    causeTheory: "Automated Behaviour is a soft block triggered by Instagram's session-level pattern classifier — it is about HOW actions are performed, not IP reputation or account history. This is the purest signal of timing/noise issues. Unlike bans (reputation-based), ABD is triggered by a single session's behavioural fingerprint. It is reversible: fix the pattern and the account continues. The key factors are timing regularity (CoV), session noise ratio, and burst patterns.",
+    causeSignals: ["Timing CoV < 0.5 — machine-uniform intervals, no human variance", "Session noise < 5 reads per action — not enough 'human reads' between actions", "Burst count high — rapid consecutive calls with no breathing room", "Zero warmup — session opens directly into actions with no feed scroll", "Endpoint diversity (entropy) very low — hammering 2–3 endpoints repeatedly"],
+  },
+  captcha: {
+    label: "Captcha Errors", accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+    emptyMsg: "No captcha events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error.", deleteEndpoint: "/api/analytics/captcha-patterns", queryKey: "/api/analytics/captcha-patterns",
+    causeTitle: "What mathematically separates CAPTCHA from other errors",
+    causeTheory: "A captcha challenge means Instagram is uncertain — it suspects automation but won't commit to blocking. This is usually IP-level or device-fingerprint uncertainty rather than session-behaviour analysis. Captchas frequently co-occur with proxy rotation (IP mismatch detected between sessions), new device fingerprint, or geographic inconsistency. Unlike ABD (pattern-based), captchas are triggered BEFORE the action pattern is established — often at session startup.",
+    causeSignals: ["Auth call ratio unusually high — device fingerprint negotiation at session start", "Fast session start-to-first-captcha — triggered before actions (IP reputation check)", "Proxy/IP change between sessions — location inconsistency", "Low pre-action warmup — session challenged before even reaching actions", "High auth per action — repeated login verification mid-session"],
+  },
+  locked: {
+    label: "Locked Accounts", accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",
+    emptyMsg: "No locked account events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.", deleteEndpoint: "/api/analytics/locked-patterns", queryKey: "/api/analytics/locked-patterns",
+    causeTitle: "What mathematically separates LOCKED ACCOUNTS from other errors",
+    causeTheory: "Account locking is Instagram's security protocol — it is not purely behaviour-based. It primarily triggers on device or session anomalies: a login from an unrecognized device fingerprint, a geographic location change, or a session that looks physically impossible (simultaneous logins from different locations). It can also be triggered by a rapid escalation from suspicious activity. Locked accounts require user action to unlock — they are identity challenges, not automation blocks.",
+    causeSignals: ["Device fingerprint mismatch — ig_did/mid changed between sessions (check Device IDs)", "Geographic anomaly — proxy location inconsistent with account history", "Concurrent session detection — two sessions open simultaneously on same account", "High action rate immediately after session start — no warmup before high-velocity actions", "Auth calls repeated mid-session — Instagram re-challenging device identity"],
+  },
 };
 
 const CAT_META: Record<string, { label: string; color: string }> = {
@@ -507,15 +473,266 @@ const CAT_META: Record<string, { label: string; color: string }> = {
   other: { label: "Other", color: "bg-muted-foreground" },
 };
 
+// ── MiniHistogram ─────────────────────────────────────────────────────────────
+function MiniHistogram({ buckets, note }: { buckets: { label: string; count: number; color?: string }[]; note?: string }) {
+  const max = Math.max(...buckets.map(b => b.count), 1);
+  return (
+    <div className="space-y-1">
+      {buckets.map(b => (
+        <div key={b.label} className="flex items-center gap-2 text-[10px]">
+          <span className="text-muted-foreground w-28 shrink-0 truncate">{b.label}</span>
+          <div className="flex-1 h-3 bg-muted rounded-sm overflow-hidden">
+            <div className={`h-full rounded-sm ${b.color ?? "bg-cyan-400"}`} style={{ width: `${Math.round(b.count / max * 100)}%` }} />
+          </div>
+          <span className="w-6 text-right font-mono font-semibold">{b.count}</span>
+        </div>
+      ))}
+      {note && <p className="text-[10px] text-muted-foreground italic mt-1">{note}</p>}
+    </div>
+  );
+}
+
+function StatRow({ label, val, warn }: { label: string; val: string; warn?: boolean }) {
+  return (
+    <div className="flex justify-between items-baseline gap-2 py-0.5">
+      <span className="text-muted-foreground text-[11px]">{label}</span>
+      <span className={`font-mono font-semibold text-[11px] ${warn ? "text-amber-600" : ""}`}>{val}</span>
+    </div>
+  );
+}
+
+// ── Causation Panel (per-tab theory + data validation) ─────────────────────
+function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Validate theory signals against actual data
+  const validations: Array<{ signal: string; status: "confirmed" | "partial" | "not_seen"; value: string }> = [];
+
+  if (tabKey === "ban") {
+    validations.push({ signal: "High action ratio (>40%)", status: cross.avgActionRatio > 0.4 ? "confirmed" : cross.avgActionRatio > 0.2 ? "partial" : "not_seen", value: `${(cross.avgActionRatio * 100).toFixed(1)}%` });
+    validations.push({ signal: "High action velocity", status: cross.actionVelocityMean > 50 ? "confirmed" : cross.actionVelocityMean > 20 ? "partial" : "not_seen", value: `${cross.actionVelocityMean.toFixed(1)}/hr avg` });
+    validations.push({ signal: "Fast-flagged (<30 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% of events` });
+    validations.push({ signal: "Low TrustScore accounts", status: cross.lowTrustPct >= 50 ? "confirmed" : cross.lowTrustPct >= 20 ? "partial" : "not_seen", value: cross.n > 0 && Object.keys(cross.trustDistribution).length > 0 ? `${cross.lowTrustPct}% at rank ≤4` : "no trust data" });
+    validations.push({ signal: "Proxy concentration", status: cross.proxyConcentration >= 60 ? "confirmed" : cross.proxyConcentration >= 30 ? "partial" : "not_seen", value: `${cross.proxyConcentration}% on top IP` });
+  } else if (tabKey === "automated") {
+    validations.push({ signal: "Robotic timing (CoV<0.5)", status: cross.roboticTimingPct >= 50 ? "confirmed" : cross.roboticTimingPct >= 20 ? "partial" : "not_seen", value: `${cross.roboticTimingPct}% of events` });
+    validations.push({ signal: "Low session noise (<5)", status: cross.sessionPerActionMedian < 5 ? "confirmed" : cross.sessionPerActionMedian < 10 ? "partial" : "not_seen", value: `median ${cross.sessionPerActionMedian.toFixed(2)}/action` });
+    validations.push({ signal: "High burst rate (>30%)", status: cross.burstPct >= 50 ? "confirmed" : cross.burstPct >= 20 ? "partial" : "not_seen", value: `${cross.burstPct}% of events` });
+    validations.push({ signal: "Zero warmup present", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% zero-warmup` });
+    validations.push({ signal: "Low entropy (<1.5 bits)", status: cross.entropyMedian < 1.5 ? "confirmed" : cross.entropyMedian < 2.5 ? "partial" : "not_seen", value: `median ${cross.entropyMedian.toFixed(3)} bits` });
+  } else if (tabKey === "captcha") {
+    validations.push({ signal: "High auth ratio", status: cross.avgAuthRatio > 0.2 ? "confirmed" : cross.avgAuthRatio > 0.08 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
+    validations.push({ signal: "Fast session challenge (<30m)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
+    validations.push({ signal: "Low warmup (pre-action)", status: cross.warmupMedian < 3 ? "confirmed" : cross.warmupMedian < 8 ? "partial" : "not_seen", value: `median ${cross.warmupMedian.toFixed(1)} warmup calls` });
+    validations.push({ signal: "High auth per action", status: cross.authPerActionMean > 2 ? "confirmed" : cross.authPerActionMean > 0.5 ? "partial" : "not_seen", value: `${cross.authPerActionMean.toFixed(3)} auth/action` });
+    validations.push({ signal: "Min gap issues", status: cross.minGapMean < 0.5 ? "confirmed" : cross.minGapMean < 2 ? "partial" : "not_seen", value: cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms avg min gap` : `${cross.minGapMean.toFixed(1)}s avg min gap` });
+  } else {
+    validations.push({ signal: "High auth ratio (fingerprint renegotiation)", status: cross.avgAuthRatio > 0.25 ? "confirmed" : cross.avgAuthRatio > 0.1 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
+    validations.push({ signal: "High action ratio at start", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% zero-warmup` });
+    validations.push({ signal: "Fast lock (<30 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
+    validations.push({ signal: "Concurrent sessions / subnet", status: cross.subnetGroups.length > 0 ? (cross.subnetConcentration >= 50 ? "confirmed" : "partial") : "not_seen", value: cross.subnetGroups.length > 0 ? `${cross.subnetGroups.length} shared subnet${cross.subnetGroups.length !== 1 ? "s" : ""}` : "none" });
+    validations.push({ signal: "Short avg session span", status: cross.avgSpanMin > 0 && cross.avgSpanMin < 15 ? "confirmed" : cross.avgSpanMin < 30 ? "partial" : "not_seen", value: cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(1)}m avg` : `${(cross.avgSpanMin/60).toFixed(2)}h avg`) : "—" });
+  }
+
+  const confirmedCount = validations.filter(v => v.status === "confirmed").length;
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button className="w-full px-4 py-3 flex items-center gap-2 hover:bg-muted/30 transition-colors text-left" onClick={() => setExpanded(o => !o)}>
+        <FlaskConical className="w-4 h-4 text-indigo-500 shrink-0" />
+        <div className="flex-1">
+          <span className="text-sm font-semibold">{cfg.causeTitle}</span>
+          <span className="text-xs text-muted-foreground ml-2">{confirmedCount}/{validations.length} signals confirmed by your data</span>
+        </div>
+        {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+      </button>
+      {expanded && (
+        <div className="border-t border-border divide-y divide-border">
+          <div className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/15">
+            <p className="text-[11px] text-foreground leading-relaxed">{cfg.causeTheory}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Theory signals vs your data</p>
+            <div className="space-y-1.5">
+              {validations.map(v => (
+                <div key={v.signal} className="flex items-center gap-2 text-[11px]">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${v.status === "confirmed" ? "bg-green-500" : v.status === "partial" ? "bg-amber-400" : "bg-muted"}`} />
+                  <span className="flex-1">{v.signal}</span>
+                  <span className={`font-mono font-semibold shrink-0 ${v.status === "confirmed" ? "text-green-600" : v.status === "partial" ? "text-amber-600" : "text-muted-foreground"}`}>{v.value}</span>
+                  <span className={`text-[9px] font-bold px-1 rounded ${v.status === "confirmed" ? "bg-green-100 text-green-700" : v.status === "partial" ? "bg-amber-100 text-amber-700" : "bg-muted text-muted-foreground"}`}>{v.status === "confirmed" ? "YES" : v.status === "partial" ? "PARTIAL" : "NO"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-4 py-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Known causal signals for this error type</p>
+            <div className="space-y-1">
+              {cfg.causeSignals.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <span className="text-muted-foreground shrink-0 mt-0.5">→</span>
+                  <span className="text-muted-foreground">{s}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TrustScore panel ──────────────────────────────────────────────────────────
+function TrustScorePanel({ entries, survivingAccounts, trustMap, tabKey }: {
+  entries: AnalyticsEntry[];
+  survivingAccounts: Array<{ username: string; runMs: number | null }>;
+  trustMap: Map<string, TrustInfo>;
+  tabKey: Exclude<Tab, "survivors">;
+}) {
+  const flaggedTrusts = entries.map(e => trustMap.get(e.username)).filter(Boolean) as TrustInfo[];
+  const survivorTrusts = survivingAccounts.map(a => trustMap.get(a.username)).filter(Boolean) as TrustInfo[];
+
+  if (flaggedTrusts.length === 0 && survivorTrusts.length === 0) return null;
+
+  const flaggedRanks    = flaggedTrusts.map(t => t.rank);
+  const survivorRanks   = survivorTrusts.map(t => t.rank);
+  const flaggedMedRank  = median(flaggedRanks);
+  const survivorMedRank = median(survivorRanks);
+
+  // Distribution: group into 4 tiers
+  const tiers = [
+    { label: "Rank 1–4 (highest scrutiny)", min: 1, max: 4, color: "bg-red-400" },
+    { label: "Rank 5–8 (moderate scrutiny)", min: 5, max: 8, color: "bg-orange-400" },
+    { label: "Rank 9–12 (trusted)", min: 9, max: 12, color: "bg-blue-400" },
+    { label: "Rank 13+ (high trust)", min: 13, max: 99, color: "bg-green-400" },
+  ];
+
+  // Insights
+  const insights: Array<{ severity: "critical" | "warning" | "info"; text: string }> = [];
+
+  if (flaggedTrusts.length > 0) {
+    const lowPct = flaggedRanks.length ? Math.round(flaggedRanks.filter(r => r <= 4).length / flaggedRanks.length * 100) : 0;
+    const highPct = flaggedRanks.length ? Math.round(flaggedRanks.filter(r => r >= 9).length / flaggedRanks.length * 100) : 0;
+
+    if (lowPct >= 70)
+      insights.push({ severity: "info", text: `${lowPct}% of flagged accounts are at TrustScore rank 1–4 (highest scrutiny). These accounts are under baseline Instagram scrutiny regardless of behaviour — the flag threshold is lower for them. Lower activity levels on these accounts before escalating to higher ranks.` });
+    else if (highPct >= 40)
+      insights.push({ severity: "critical", text: `${highPct}% of flagged accounts are at TrustScore rank 9+ (trusted tier). High-trust accounts require a more severe trigger to flag — the behaviour that caused this was significant. Look for extreme velocity or IP reputation issues.` });
+
+    if (survivorTrusts.length > 0 && flaggedMedRank < survivorMedRank - 2)
+      insights.push({ severity: "warning", text: `Flagged accounts average TrustScore rank ${flaggedMedRank.toFixed(1)} vs surviving accounts at ${survivorMedRank.toFixed(1)}. Lower-ranked accounts are being flagged more — consider running aggressive tools only on higher-ranked accounts.` });
+    else if (survivorTrusts.length > 0 && Math.abs(flaggedMedRank - survivorMedRank) <= 2)
+      insights.push({ severity: "info", text: `Flagged (rank ${flaggedMedRank.toFixed(1)}) and surviving (rank ${survivorMedRank.toFixed(1)}) accounts have similar TrustScore distributions — the flag trigger is not selective to low-trust accounts. The issue affects all accounts equally.` });
+
+    // Note: captcha/automated don't necessarily reduce TrustScore
+    if (tabKey === "captcha" || tabKey === "automated")
+      insights.push({ severity: "info", text: `Note: ${tabKey === "captcha" ? "Captcha challenges" : "Automated Behaviour blocks"} do not always reduce TrustScore permanently — they may reflect transient conditions. Account rank data shown here is current (may differ from rank at time of event).` });
+    if (tabKey === "locked")
+      insights.push({ severity: "info", text: `Locked accounts are security-locked, not trust-demoted. TrustScore at time of locking may have been higher — device fingerprint or session anomalies cause locks independent of rank.` });
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <Star className="w-4 h-4 text-yellow-500" />
+        <span className="text-sm font-semibold">TrustScore Correlation</span>
+        <span className="text-xs text-muted-foreground ml-auto">{flaggedTrusts.length} of {entries.length} flagged accounts have TrustScore data</span>
+      </div>
+
+      {flaggedTrusts.length > 0 && (
+        <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
+          {/* Flagged distribution */}
+          <div className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Flagged accounts TrustScore</p>
+            <MiniHistogram buckets={tiers.map(t => ({ label: t.label, count: flaggedRanks.filter(r => r >= t.min && r <= t.max).length, color: t.color }))} note={`Median rank: ${flaggedMedRank.toFixed(1)}`} />
+          </div>
+          {/* Survivor distribution */}
+          <div className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Surviving accounts TrustScore</p>
+            {survivorTrusts.length > 0
+              ? <MiniHistogram buckets={tiers.map(t => ({ label: t.label, count: survivorRanks.filter(r => r >= t.min && r <= t.max).length, color: t.color }))} note={`Median rank: ${survivorMedRank.toFixed(1)}`} />
+              : <p className="text-[11px] text-muted-foreground italic">No valid surviving accounts found</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Insights */}
+      {insights.length > 0 && (
+        <div className="divide-y divide-border">
+          {insights.map((f, i) => (
+            <div key={i} className="px-4 py-3 flex gap-3">
+              <span className={`shrink-0 mt-1 w-2 h-2 rounded-full ${f.severity === "critical" ? "bg-red-500" : f.severity === "warning" ? "bg-amber-500" : "bg-blue-400"}`} />
+              <p className="text-[11px] text-foreground leading-relaxed">{f.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Per-account trust list */}
+      {flaggedTrusts.length > 0 && (
+        <div className="border-t border-border">
+          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">Current TrustScore per flagged account — ranks shown reflect the current score, which may have changed since the flag event.</div>
+          <div className="flex flex-wrap gap-2 px-4 py-3">
+            {entries.map(e => {
+              const ti = trustMap.get(e.username);
+              if (!ti) return null;
+              return (
+                <div key={e.id} className="flex items-center gap-1.5 text-[10px] bg-muted rounded px-2 py-1">
+                  <span className="font-semibold">@{e.username}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`font-bold ${ti.rank <= 4 ? "text-red-500" : ti.rank <= 8 ? "text-orange-500" : ti.rank <= 12 ? "text-blue-500" : "text-green-500"}`}>{ti.label}</span>
+                  <span className="text-muted-foreground text-[9px]">#{ti.rank}</span>
+                </div>
+              );
+            }).filter(Boolean)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Reliability panel ─────────────────────────────────────────────────────────
+function ReliabilityPanel({ entries, profileNotesMap }: { entries: AnalyticsEntry[]; profileNotesMap: Map<string, string | null> }) {
+  const rels = entries.map(e => ({ username: e.username, ...computeReliability(profileNotesMap.get(e.username)) }));
+  const unreliable = rels.filter(r => r.reAddCount >= 2);
+  if (entries.length < 2 || unreliable.length === 0) return null;
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <BadgeAlert className="w-4 h-4 text-amber-500" />
+        <span className="text-sm font-semibold">Data Reliability Warning</span>
+        <span className="text-xs text-muted-foreground ml-auto">{unreliable.length} of {entries.length} events from accounts with repeated re-adds</span>
+      </div>
+      <div className="px-4 py-3 text-[11px] leading-relaxed">
+        <p className="text-foreground mb-2">
+          Accounts that have been re-added to the software multiple times are <strong>lower-confidence data points</strong>. Re-adds typically happen because an account keeps running into issues — meaning the account itself may be compromised, shadow-flagged, or operated by someone making repeated mistakes. Their endpoint patterns reflect an account already under stress, not a clean baseline.
+        </p>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {rels.sort((a, b) => b.reAddCount - a.reAddCount).map(r => (
+            <span key={r.username} className={`text-[10px] px-2 py-0.5 rounded font-mono ${r.reAddCount >= 3 ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : r.reAddCount >= 2 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground"}`}>
+              @{r.username} {r.reAddCount > 0 ? `[${r.label}]` : "[first add]"}
+            </span>
+          ))}
+        </div>
+        <p className="text-muted-foreground mt-2">Cross-account statistics above incorporate reliability weighting — accounts with more re-adds contribute less to the aggregate figures. Effective weighted n={rels.reduce((s, r) => s + r.weight, 0).toFixed(2)} vs raw n={entries.length}.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Per-entry card ────────────────────────────────────────────────────────────
-function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats; profileMap: Map<string, number> }) {
+function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
+  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats;
+  profileMap: Map<string, number>; trustMap: Map<string, TrustInfo>; reliability: Reliability;
+}) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`Remove this log entry for @${entry.username}? This cannot be undone.`)) return;
+    if (!confirm(`Remove this log entry for @${entry.username}?`)) return;
     setDeleting(true);
     try {
       await fetch(`${cfg.deleteEndpoint}/${entry.id}`, { method: "DELETE", credentials: "include" });
@@ -529,18 +746,17 @@ function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; c
   const ts     = entry.flaggedAt ?? entry.bannedAt ?? "";
   const m      = computeMetrics(eps, ts);
   const anomaly = computeAnomalyScore(m, cross);
-  const top5   = topEps(eps, 5);
+  const top5    = topEps(eps, 5);
   const topFull = topEps(eps, 30);
-
+  const ti      = trustMap.get(entry.username);
+  const subnet  = entry.proxyHost && isIpAddr(entry.proxyHost) ? extractSubnet24(entry.proxyHost) : null;
   const anomalyLabel = anomaly >= 70 ? "HIGH" : anomaly >= 40 ? "MED" : "LOW";
   const spanStr = m.spanMin < 1 ? `${Math.round(m.spanMin * 60)}s` : m.spanMin < 60 ? `${m.spanMin.toFixed(1)}m` : `${(m.spanMin / 60).toFixed(2)}h`;
-  const subnet = entry.proxyHost && isIpAddr(entry.proxyHost) ? extractSubnet24(entry.proxyHost) : null;
-
-  const covColor = m.timingCoV < 0 ? "" : m.timingCoV < 0.3 ? "text-red-500" : m.timingCoV < 0.5 ? "text-amber-600" : "text-green-600";
   const covLabel = m.timingCoV < 0 ? "—" : m.timingCoV < 0.3 ? "ROBOTIC" : m.timingCoV < 0.5 ? "LOW" : m.timingCoV < 1.0 ? "MODERATE" : "HUMAN";
+  const covColor = m.timingCoV < 0 ? "" : m.timingCoV < 0.3 ? "text-red-500" : m.timingCoV < 0.5 ? "text-amber-600" : "text-green-600";
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden relative">
+    <div className={`border border-border rounded-lg overflow-hidden relative ${reliability.weight < 0.6 ? "border-amber-300 dark:border-amber-700/50" : ""}`}>
       <button onClick={handleDelete} disabled={deleting} title="Remove this log entry"
         className="absolute top-2 right-2 z-10 flex items-center justify-center w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 hover:bg-red-200 dark:hover:bg-red-800/60 transition-colors disabled:opacity-40">
         {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
@@ -550,53 +766,35 @@ function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; c
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <UsernameLink username={entry.username} profileMap={profileMap} />
-            {cross.n >= 2 && (
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${anomaly >= 70 ? "bg-red-50 border-red-200 text-red-600" : anomaly >= 40 ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-green-50 border-green-200 text-green-600"}`}>
-                ANOMALY {anomalyLabel} {anomaly}
-              </span>
-            )}
-            {m.timingCoV >= 0 && m.timingCoV < 0.5 && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-50 border-red-200 text-red-600">ROBOTIC TIMING</span>
-            )}
-            {m.preActionWarmup === 0 && m.actionCount > 0 && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">NO WARMUP</span>
-            )}
+            {ti && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${ti.rank <= 4 ? "bg-red-50 border-red-200 text-red-600" : ti.rank <= 8 ? "bg-orange-50 border-orange-200 text-orange-600" : ti.rank <= 12 ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-green-50 border-green-200 text-green-600"}`}>{ti.label} #{ti.rank}</span>}
+            {reliability.reAddCount >= 2 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-600">{reliability.label}</span>}
+            {cross.n >= 2 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${anomaly >= 70 ? "bg-red-50 border-red-200 text-red-600" : anomaly >= 40 ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-green-50 border-green-200 text-green-600"}`}>ANOMALY {anomalyLabel} {anomaly}</span>}
+            {m.timingCoV >= 0 && m.timingCoV < 0.5 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-50 border-red-200 text-red-600">ROBOTIC TIMING</span>}
+            {m.preActionWarmup === 0 && m.actionCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">NO WARMUP</span>}
             <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
           </div>
-
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            {entry.proxyHost
-              ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}</span>
-              : <span className="text-[11px] text-muted-foreground italic">no proxy</span>}
-            {subnet && <span className="text-[10px] text-muted-foreground">/{subnet}</span>}
+            {entry.proxyHost ? <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Globe className="w-3 h-3" />{entry.proxyHost}{subnet ? ` [${subnet}]` : ""}</span> : <span className="text-[11px] text-muted-foreground italic">no proxy</span>}
           </div>
-
           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
-            <span>{eps.length} calls{hikerN > 0 ? ` (+${hikerN} HikerAPI)` : ""}</span>
-            {m.callsPerMin > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{m.callsPerMin.toFixed(3)}/min</span>}
-            {m.spanMin > 0 && <span>span: {spanStr}</span>}
-            {m.avgInterCallSec > 0 && <span>avg gap: {m.avgInterCallSec < 60 ? `${m.avgInterCallSec.toFixed(1)}s` : `${(m.avgInterCallSec / 60).toFixed(1)}m`}</span>}
-            {m.minInterCallSec >= 0 && eps.length > 1 && <span>min gap: {m.minInterCallSec < 1 ? `${Math.round(m.minInterCallSec * 1000)}ms` : `${m.minInterCallSec.toFixed(1)}s`}</span>}
+            <span>{eps.length} calls{hikerN > 0 ? ` +${hikerN} HikerAPI` : ""}</span>
+            {m.callsPerMin > 0 && <span><Clock className="w-3 h-3 inline mr-0.5" />{m.callsPerMin.toFixed(3)}/min</span>}
+            {m.spanMin > 0 && <span>{spanStr}</span>}
+            {m.avgInterCallSec > 0 && <span>avg gap: {m.avgInterCallSec < 60 ? `${m.avgInterCallSec.toFixed(1)}s` : `${(m.avgInterCallSec/60).toFixed(1)}m`}</span>}
+            {eps.length > 1 && <span>min gap: {m.minInterCallSec < 1 ? `${Math.round(m.minInterCallSec * 1000)}ms` : `${m.minInterCallSec.toFixed(1)}s`}</span>}
             {m.burstCount > 0 && <span className="text-amber-600 font-semibold">{m.burstCount} burst{m.burstCount !== 1 ? "s" : ""}</span>}
-            {m.cats.follow > 0 && <span className="flex items-center gap-1"><UserPlus className="w-3 h-3" />{m.cats.follow}</span>}
-            {m.cats.unfollow > 0 && <span className="flex items-center gap-1"><UserMinus className="w-3 h-3" />{m.cats.unfollow}</span>}
-            {m.cats.dm > 0 && <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{m.cats.dm}</span>}
-            {m.cats.like > 0 && <span className="flex items-center gap-1"><Zap className="w-3 h-3" />{m.cats.like}</span>}
+            {m.cats.follow > 0 && <span><UserPlus className="w-3 h-3 inline mr-0.5" />{m.cats.follow}</span>}
+            {m.cats.unfollow > 0 && <span><UserMinus className="w-3 h-3 inline mr-0.5" />{m.cats.unfollow}</span>}
+            {m.cats.dm > 0 && <span><MessageSquare className="w-3 h-3 inline mr-0.5" />{m.cats.dm}</span>}
+            {m.cats.like > 0 && <span><Zap className="w-3 h-3 inline mr-0.5" />{m.cats.like}</span>}
           </div>
-
           {top5.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {top5.map(ep => (
-                <span key={ep.name} className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-mono ${cfg.accentBg}`}>
-                  {ep.label ?? ep.name} <span className="opacity-60">×{ep.count}</span>
-                </span>
-              ))}
+              {top5.map(ep => <span key={ep.name} className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-mono ${cfg.accentBg}`}>{ep.label ?? ep.name} <span className="opacity-60">×{ep.count}</span></span>)}
             </div>
           )}
         </div>
-        <div className="shrink-0 mt-0.5 text-muted-foreground">
-          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </div>
+        <div className="shrink-0 mt-0.5 text-muted-foreground">{open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</div>
       </button>
 
       {open && (
@@ -604,58 +802,49 @@ function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; c
           {eps.length >= 3 && (
             <div className="px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5"><Sigma className="w-3.5 h-3.5" /> All Computed Metrics</p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
-                {[
-                  ["Call rate", m.callsPerMin > 0 ? `${m.callsPerMin.toFixed(4)}/min` : "—"],
+              <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[11px]">
+                {([
+                  ["Call rate", m.callsPerMin > 0 ? `${m.callsPerMin.toFixed(5)}/min` : "—"],
                   ["Session span", m.spanMin > 0 ? spanStr : "—"],
                   ["Avg inter-call gap", m.avgInterCallSec > 0 ? (m.avgInterCallSec < 60 ? `${m.avgInterCallSec.toFixed(2)}s` : `${(m.avgInterCallSec/60).toFixed(2)}m`) : "—"],
                   ["Min gap", eps.length > 1 ? (m.minInterCallSec < 1 ? `${Math.round(m.minInterCallSec * 1000)}ms` : `${m.minInterCallSec.toFixed(2)}s`) : "—"],
                   ["Max gap", m.maxInterCallSec > 0 ? (m.maxInterCallSec < 60 ? `${m.maxInterCallSec.toFixed(1)}s` : m.maxInterCallSec < 3600 ? `${(m.maxInterCallSec/60).toFixed(1)}m` : `${(m.maxInterCallSec/3600).toFixed(2)}h`) : "—"],
-                  ["Timing CoV (σ/μ)", m.timingCoV >= 0 ? `${m.timingCoV.toFixed(3)} [${covLabel}]` : "—"],
-                  ["Shannon entropy", `${m.shannonEntropy.toFixed(3)} bits`],
-                  ["Unique endpoints", `${m.uniqueEndpoints} / ${eps.length} (${(m.endpointDiversity * 100).toFixed(1)}% unique)`],
+                  ["Timing CoV (σ/μ)", m.timingCoV >= 0 ? `${m.timingCoV.toFixed(4)} [${covLabel}]` : "—"],
+                  ["Shannon entropy", `${m.shannonEntropy.toFixed(4)} bits`],
+                  ["Unique endpoints", `${m.uniqueEndpoints} (${(m.endpointDiversity * 100).toFixed(1)}% diverse)`],
                   ["Burst windows (≤60s)", `${m.burstCount}`],
-                  ["Pre-action warmup", `${m.preActionWarmup} call${m.preActionWarmup !== 1 ? "s" : ""}`],
+                  ["Pre-action warmup", `${m.preActionWarmup} calls`],
                   ["Action velocity", m.actionVelocityPerHour > 0 ? `${m.actionVelocityPerHour.toFixed(2)}/hr` : "—"],
-                  ["Session / action", m.actionCount > 0 ? m.sessionPerAction.toFixed(3) : "no actions"],
-                  ["Session / follow", m.sessionPerFollow > 0 ? m.sessionPerFollow.toFixed(3) : "—"],
-                  ["Auth / action", m.actionCount > 0 ? m.authPerAction.toFixed(3) : "—"],
-                  ["Flag hour (UTC)", m.flagHour >= 0 ? `${String(m.flagHour).padStart(2, "0")}:00` : "—"],
+                  ["Session / action", m.actionCount > 0 ? `${m.sessionPerAction.toFixed(3)}  (median: ${cross.sessionPerActionMedian.toFixed(3)})` : "no actions"],
+                  ["Session / follow", m.sessionPerFollow > 0 ? `${m.sessionPerFollow.toFixed(3)}` : "—"],
+                  ["Auth / action", m.actionCount > 0 ? `${m.authPerAction.toFixed(3)}` : "—"],
+                  ["Flag hour (UTC)", m.flagHour >= 0 ? `${String(m.flagHour).padStart(2,"0")}:00` : "—"],
+                  ["TrustScore rank", ti ? `${ti.label} (rank #${ti.rank})` : "—"],
+                  ["Re-add count", reliability.reAddCount > 0 ? `${reliability.reAddCount}× (weight: ${reliability.weight})` : "first add (full weight)"],
                   cross.n >= 2 ? ["Anomaly score", `${anomaly}/100 (${anomalyLabel})`] : null,
-                ].filter(Boolean).map(([label, val]) => (
-                  <div key={label as string} className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">{label as string}</span>
-                    <span className={`font-mono font-semibold ${(label as string) === "Timing CoV (σ/μ)" ? covColor : ""}`}>{val as string}</span>
+                ] as ([string, string] | null)[]).filter(Boolean).map(([label, val]) => (
+                  <div key={label} className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className={`font-mono font-semibold ${label === "Timing CoV (σ/μ)" ? covColor : ""}`}>{val}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Session composition bar */}
           {eps.length >= 5 && (
             <div className="px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Call composition</p>
               <div className="flex h-4 rounded overflow-hidden">
-                {Object.entries(CAT_META).map(([cat, meta]) => {
-                  const pct = eps.length > 0 ? (m.cats[cat] ?? 0) / eps.length * 100 : 0;
-                  return pct > 0 ? <div key={cat} className={`${meta.color} transition-all`} style={{ width: `${pct}%` }} title={`${meta.label}: ${m.cats[cat]} (${pct.toFixed(1)}%)`} /> : null;
-                })}
+                {Object.entries(CAT_META).map(([cat, meta]) => { const pct = eps.length ? (m.cats[cat] ?? 0) / eps.length * 100 : 0; return pct > 0 ? <div key={cat} className={`${meta.color}`} style={{ width: `${pct}%` }} title={`${meta.label}: ${m.cats[cat]} (${pct.toFixed(1)}%)`} /> : null; })}
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5">
-                {Object.entries(CAT_META).map(([cat, meta]) => {
-                  const count = m.cats[cat] ?? 0;
-                  const pct = eps.length > 0 ? count / eps.length * 100 : 0;
-                  return count > 0 ? <span key={cat} className="flex items-center gap-1 text-[10px] text-muted-foreground"><span className={`w-2 h-2 rounded-sm ${meta.color}`} />{meta.label}: {count} ({pct.toFixed(1)}%)</span> : null;
-                })}
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                {Object.entries(CAT_META).map(([cat, meta]) => { const count = m.cats[cat] ?? 0; const pct = eps.length ? count / eps.length * 100 : 0; return count > 0 ? <span key={cat} className="flex items-center gap-1 text-[10px] text-muted-foreground"><span className={`w-2 h-2 rounded-sm ${meta.color}`} />{meta.label}: {count} ({pct.toFixed(1)}%)</span> : null; })}
               </div>
             </div>
           )}
-
-          {/* Full endpoint list */}
           {topFull.length > 0 && (
             <div className="px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5"><BarChart2 className="w-3.5 h-3.5" /> All endpoints by call count</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5"><BarChart2 className="w-3.5 h-3.5" /> All endpoints by count</p>
               <div className="space-y-0.5">
                 {topFull.map(ep => (
                   <div key={ep.name} className="flex items-center gap-2 text-[11px]">
@@ -666,12 +855,10 @@ function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; c
                   </div>
                 ))}
               </div>
-              {hikerN > 0 && <p className="text-[10px] text-muted-foreground mt-2 italic">{hikerN} HikerAPI call{hikerN !== 1 ? "s" : ""} excluded from analysis.</p>}
+              {hikerN > 0 && <p className="text-[10px] text-muted-foreground mt-2 italic">{hikerN} HikerAPI call{hikerN !== 1 ? "s" : ""} excluded.</p>}
             </div>
           )}
-
           <div className="px-4 py-2 flex items-center gap-4 text-[11px] text-muted-foreground">
-            <span>Rate: <strong>{m.callsPerMin > 0 ? `${m.callsPerMin.toFixed(4)}/min` : "—"}</strong></span>
             <span>Session: <strong>{m.sessionCount}</strong></span>
             <span>Auth: <strong>{m.authCount}</strong></span>
             <span>Actions: <strong>{m.actionCount}</strong></span>
@@ -683,231 +870,152 @@ function EntryCard({ entry, cfg, cross, profileMap }: { entry: AnalyticsEntry; c
   );
 }
 
-// ── Stat row helper ───────────────────────────────────────────────────────────
-function StatRow({ label, val, note, warn }: { label: string; val: string | number; note?: string; warn?: boolean }) {
-  return (
-    <div className="flex justify-between items-baseline gap-2 py-0.5">
-      <span className="text-muted-foreground text-[11px]">{label}</span>
-      <span className={`font-mono font-semibold text-[11px] ${warn ? "text-amber-600" : ""}`}>{typeof val === "number" ? val.toFixed(4) : val}{note ? <span className="text-muted-foreground font-normal ml-1 text-[10px]">{note}</span> : null}</span>
-    </div>
-  );
-}
+// ── Pattern Intelligence ──────────────────────────────────────────────────────
+function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap, profileNotesMap, profileMap }: {
+  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
+  survivingAccounts: Array<{ username: string; runMs: number | null }>;
+  trustMap: Map<string, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
+}) {
+  if (!entries.length) return null;
+  const cross = computeCrossStats(entries, trustMap, profileNotesMap);
 
-// ── Mini histogram ────────────────────────────────────────────────────────────
-function MiniHistogram({ buckets, labels, colors, note }: { buckets: { label: string; count: number; color?: string }[]; labels?: string[]; colors?: string[]; note?: string }) {
-  const max = Math.max(...buckets.map(b => b.count), 1);
-  return (
-    <div className="space-y-1">
-      {buckets.map((b, i) => (
-        <div key={b.label} className="flex items-center gap-2 text-[10px]">
-          <span className="text-muted-foreground w-28 shrink-0 truncate">{b.label}</span>
-          <div className="flex-1 h-3 bg-muted rounded-sm overflow-hidden">
-            <div className={`h-full rounded-sm ${b.color ?? colors?.[i] ?? "bg-cyan-400"}`} style={{ width: `${Math.round(b.count / max * 100)}%` }} />
-          </div>
-          <span className="w-6 text-right font-mono font-semibold">{b.count}</span>
-        </div>
-      ))}
-      {note && <p className="text-[10px] text-muted-foreground italic mt-1">{note}</p>}
-    </div>
-  );
-}
-
-// ── Pattern Intelligence panel ────────────────────────────────────────────────
-function PatternIntelligence({ entries, cfg }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">] }) {
-  if (entries.length === 0) return null;
-  const cross = computeCrossStats(entries);
-
-  // Session noise buckets
   const allMetrics = entries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt));
-  const spaValues  = allMetrics.map(m => m.sessionPerAction);
-  const callRates  = allMetrics.map(m => m.callsPerMin).filter(v => v > 0);
-  const covValues  = allMetrics.map(m => m.timingCoV).filter(v => v >= 0);
+  const spaValues   = allMetrics.map(m => m.sessionPerAction);
+  const callRates   = allMetrics.map(m => m.callsPerMin).filter(v => v > 0);
+  const covValues   = allMetrics.map(m => m.timingCoV).filter(v => v >= 0);
   const entropyVals = allMetrics.map(m => m.shannonEntropy);
-  const warmupVals = allMetrics.map(m => m.preActionWarmup);
+  const warmupVals  = allMetrics.map(m => m.preActionWarmup);
 
   const spaBuckets = [
-    { label: "<3 (critical)", min: 0, max: 3, color: "bg-red-500" },
-    { label: "3–8 (low)",     min: 3, max: 8, color: "bg-orange-400" },
-    { label: "8–15 (warn)",   min: 8, max: 15, color: "bg-yellow-400" },
-    { label: "15–30 (ok)",    min: 15, max: 30, color: "bg-green-400" },
-    { label: ">30 (good)",    min: 30, max: Infinity, color: "bg-blue-400" },
+    { label: "<3 (critical)",  min: 0,  max: 3,        color: "bg-red-500" },
+    { label: "3–8 (low)",      min: 3,  max: 8,        color: "bg-orange-400" },
+    { label: "8–15 (warn)",    min: 8,  max: 15,       color: "bg-yellow-400" },
+    { label: "15–30 (ok)",     min: 15, max: 30,       color: "bg-green-400" },
+    { label: ">30 (good)",     min: 30, max: Infinity,  color: "bg-blue-400" },
   ].map(b => ({ ...b, count: spaValues.filter(v => v >= b.min && v < b.max).length }));
 
   const maxRate = Math.max(...callRates, 0.001);
   const rateBW  = maxRate / 5;
-  const rateBuckets = [0, 1, 2, 3, 4].map(i => ({
-    label: `${(i * rateBW).toFixed(3)}–${((i + 1) * rateBW).toFixed(3)}/min`,
-    count: callRates.filter(v => v >= i * rateBW && v < (i + 1) * rateBW).length,
-    color: "bg-cyan-400",
-  }));
-
+  const rateBuckets = [0,1,2,3,4].map(i => ({ label: `${(i*rateBW).toFixed(3)}–${((i+1)*rateBW).toFixed(3)}/min`, count: callRates.filter(v => v >= i*rateBW && v < (i+1)*rateBW).length, color: "bg-cyan-400" }));
   const covBuckets = [
-    { label: "<0.3 (robotic)",   min: 0,   max: 0.3,      color: "bg-red-500" },
-    { label: "0.3–0.5 (low)",    min: 0.3, max: 0.5,      color: "bg-orange-400" },
-    { label: "0.5–1.0 (normal)", min: 0.5, max: 1.0,      color: "bg-yellow-400" },
-    { label: ">1.0 (human)",     min: 1.0, max: Infinity,  color: "bg-green-400" },
+    { label: "<0.3 (robotic)",    min: 0,   max: 0.3,     color: "bg-red-500" },
+    { label: "0.3–0.5 (low)",     min: 0.3, max: 0.5,     color: "bg-orange-400" },
+    { label: "0.5–1.0 (normal)",  min: 0.5, max: 1.0,     color: "bg-yellow-400" },
+    { label: ">1.0 (human)",      min: 1.0, max: Infinity, color: "bg-green-400" },
   ].map(b => ({ ...b, count: covValues.filter(v => v >= b.min && v < b.max).length }));
-
   const maxEntropy = Math.max(...entropyVals, 1);
   const entropyBW  = maxEntropy / 5;
-  const entropyBuckets = [0, 1, 2, 3, 4].map(i => ({
-    label: `${(i * entropyBW).toFixed(2)}–${((i + 1) * entropyBW).toFixed(2)} bits`,
-    count: entropyVals.filter(v => v >= i * entropyBW && v < (i + 1) * entropyBW).length,
-    color: "bg-purple-400",
-  }));
-
+  const entropyBuckets = [0,1,2,3,4].map(i => ({ label: `${(i*entropyBW).toFixed(2)}–${((i+1)*entropyBW).toFixed(2)} bits`, count: entropyVals.filter(v => v >= i*entropyBW && v < (i+1)*entropyBW).length, color: "bg-purple-400" }));
   const warmupBuckets = [
-    { label: "0 (none)",    min: 0, max: 1,   color: "bg-red-500" },
-    { label: "1–5",         min: 1, max: 6,   color: "bg-orange-400" },
-    { label: "6–15",        min: 6, max: 16,  color: "bg-yellow-400" },
-    { label: "16–30",       min: 16, max: 31, color: "bg-green-400" },
-    { label: ">30",         min: 31, max: Infinity, color: "bg-blue-400" },
+    { label: "0 (none)",    min: 0,  max: 1,        color: "bg-red-500" },
+    { label: "1–5",         min: 1,  max: 6,        color: "bg-orange-400" },
+    { label: "6–15",        min: 6,  max: 16,       color: "bg-yellow-400" },
+    { label: "16–30",       min: 16, max: 31,       color: "bg-green-400" },
+    { label: ">30",         min: 31, max: Infinity,  color: "bg-blue-400" },
   ].map(b => ({ ...b, count: warmupVals.filter(v => v >= b.min && v < b.max).length }));
 
-  // Time-of-day — group into 6-hour blocks
   const hourBlocks = [
-    { label: "00–06 (night)",    hours: [0,1,2,3,4,5],      color: "bg-slate-400" },
-    { label: "06–12 (morning)",  hours: [6,7,8,9,10,11],    color: "bg-blue-400" },
-    { label: "12–18 (afternoon)",hours: [12,13,14,15,16,17],color: "bg-cyan-400" },
-    { label: "18–24 (evening)",  hours: [18,19,20,21,22,23],color: "bg-orange-400" },
+    { label: "00–06 (night)",      hours: [0,1,2,3,4,5],      color: "bg-slate-400" },
+    { label: "06–12 (morning)",    hours: [6,7,8,9,10,11],    color: "bg-blue-400" },
+    { label: "12–18 (afternoon)",  hours: [12,13,14,15,16,17], color: "bg-cyan-400" },
+    { label: "18–24 (evening)",    hours: [18,19,20,21,22,23], color: "bg-orange-400" },
   ].map(b => ({ ...b, count: b.hours.reduce((s, h) => s + cross.hourBuckets[h], 0) }));
 
   // Derived findings
   const findings: Array<{ severity: "critical" | "warning" | "info" | "neutral"; text: string }> = [];
-
   if (cross.n >= 2) {
-    // Session noise
-    if (cross.sessionPerActionMedian < 3)
-      findings.push({ severity: "critical", text: `Session noise: median ${cross.sessionPerActionMedian.toFixed(2)} session reads per action across all ${cross.n} events (σ=${cross.sessionPerActionStdDev.toFixed(2)}). Instagram's classifier expects ≥10–15. This is the highest-probability common cause.` });
-    else if (cross.sessionPerActionMedian < 8)
-      findings.push({ severity: "warning", text: `Session noise: median ${cross.sessionPerActionMedian.toFixed(2)} session reads per action (target: 10–15). Below threshold in ${spaBuckets.slice(0,2).reduce((s,b)=>s+b.count,0)} of ${cross.n} events.` });
-
-    // Timing CoV
-    if (cross.timingCoVMedian >= 0 && cross.timingCoVMedian < 0.3)
-      findings.push({ severity: "critical", text: `Robotic timing: median CoV=${cross.timingCoVMedian.toFixed(3)} across events. Values below 0.3 indicate machine-uniform intervals — an extremely strong bot signal. Human behaviour produces CoV >0.8.` });
-    else if (cross.roboticTimingPct >= 40)
-      findings.push({ severity: "warning", text: `${cross.roboticTimingPct}% of events show robotic timing (CoV<0.5). Regular call intervals are detectable by Instagram's ML timing classifier.` });
-
-    // Burst
-    if (cross.burstPct >= 70)
-      findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart. Burst firing is a tier-1 bot classifier signal.` });
-    else if (cross.burstPct >= 30)
-      findings.push({ severity: "warning", text: `Burst patterns present in ${cross.burstPct}% of events. Check tool loop delay settings.` });
-
-    // Zero warmup
-    if (cross.zeroWarmupPct >= 60)
-      findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions started with the FIRST call being an action (no session warmup). Real users scroll their feed before doing anything — zero warmup is a strong early-detection trigger.` });
-    else if (cross.zeroWarmupPct >= 30)
-      findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions had zero pre-action warmup calls. Consider adding feed reads before the first action.` });
-
-    // Entropy
-    if (cross.entropyMedian < 1.5)
-      findings.push({ severity: "warning", text: `Low endpoint diversity: median Shannon entropy ${cross.entropyMedian.toFixed(3)} bits (σ=${cross.entropyStdDev.toFixed(3)}). Low entropy means the session hammers the same endpoints repeatedly — humans mix feeds, profiles, explore, stories.` });
-
-    // Fast flag
-    if (cross.fastFlagPct >= 50)
-      findings.push({ severity: "critical", text: `${cross.fastFlagPct}% of accounts flagged within 60 minutes of session start. Short time-to-flag suggests the IP or device fingerprint is already on Instagram's watchlist — the session trigger is reputation-based, not behaviour-based.` });
-
-    // Subnet concurrency
-    if (cross.subnetGroups.length > 0 && cross.subnetConcentration >= 50)
-      findings.push({ severity: "warning", text: `Subnet concurrency: ${cross.subnetConcentration}% of events share the same /24 subnet (${cross.topSubnet}). Instagram's risk engine scores subnets, not just individual IPs — a flagged /24 raises the baseline risk for all accounts on it.` });
-
-    // Call rate
-    if (cross.callRateMedian > 3)
-      findings.push({ severity: "warning", text: `Median call rate ${cross.callRateMedian.toFixed(4)}/min (P90: ${cross.callRateP90.toFixed(4)}/min, σ=${cross.callRateStdDev.toFixed(4)}). Sustained rates above 1–2/min are outside normal human usage patterns.` });
-
-    // Min gap
-    if (cross.minGapMean < 0.5)
-      findings.push({ severity: "critical", text: `Average minimum inter-call gap is ${(cross.minGapMean * 1000).toFixed(0)}ms — sub-second gaps are physically impossible for a human and are a primary bot detection trigger.` });
-
-    // Session structure
-    if (cross.avgActionRatio > 0.5)
-      findings.push({ severity: "critical", text: `${Math.round(cross.avgActionRatio * 100)}% of all API calls are actions (follows/DMs/likes). Healthy human sessions should be <10% actions — the rest should be reads (feed, profiles, stories, inbox). This ratio exposes the session as task-only automation.` });
-
-    // Consistency (low σ)
-    if (cross.callRateStdDev < cross.callRateMean * 0.2 && cross.n >= 3)
-      findings.push({ severity: "info", text: `Very consistent call rates across accounts (σ=${cross.callRateStdDev.toFixed(4)}, ${Math.round(cross.callRateStdDev / cross.callRateMean * 100)}% of mean). All accounts behave nearly identically — the issue is systemic in the tool config, not account-specific.` });
-    else if (cross.n >= 3)
-      findings.push({ severity: "neutral", text: `Variable call rates across accounts (σ/μ=${cross.callRateStdDev > 0 && cross.callRateMean > 0 ? (cross.callRateStdDev / cross.callRateMean).toFixed(3) : "—"}). Behaviour is not uniform — check individual tool settings.` });
-
-    // Peak hour
-    if (cross.hourBuckets[cross.peakHour] >= 2 && cross.peakHour >= 0)
-      findings.push({ severity: "info", text: `Most flag events occur around ${String(cross.peakHour).padStart(2,"0")}:00 UTC (${cross.hourBuckets[cross.peakHour]} events). If tools are scheduled to run at the same time each day, Instagram's pattern analysis may flag the repetitive daily cycle.` });
-
-  } else if (cross.n === 1) {
-    findings.push({ severity: "info", text: `Only 1 event recorded — add more events to enable cross-account pattern analysis. Individual metrics are shown in the event card below.` });
+    if (cross.sessionPerActionMedian < 3) findings.push({ severity: "critical", text: `Session noise median ${cross.sessionPerActionMedian.toFixed(2)} reads/action (σ=${cross.sessionPerActionStdDev.toFixed(2)}) — Instagram classifier expects ≥10–15. ${spaBuckets[0].count + spaBuckets[1].count}/${cross.n} events are below 8.` });
+    else if (cross.sessionPerActionMedian < 8) findings.push({ severity: "warning", text: `Session noise median ${cross.sessionPerActionMedian.toFixed(2)} reads/action — below safe threshold of 10–15.` });
+    if (cross.timingCoVMedian >= 0 && cross.timingCoVMedian < 0.3) findings.push({ severity: "critical", text: `Robotic timing: median CoV=${cross.timingCoVMedian.toFixed(4)}. Human behaviour produces CoV >0.8. Machine-uniform intervals are a tier-1 bot classifier signal.` });
+    else if (cross.roboticTimingPct >= 40) findings.push({ severity: "warning", text: `${cross.roboticTimingPct}% of events show robotic timing (CoV<0.5).` });
+    if (cross.burstPct >= 70) findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart.` });
+    else if (cross.burstPct >= 30) findings.push({ severity: "warning", text: `Burst patterns in ${cross.burstPct}% of events.` });
+    if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions started with an action as the FIRST call — zero pre-action warmup. Real users scroll before doing anything.` });
+    else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions had zero pre-action warmup.` });
+    if (cross.entropyMedian < 1.5) findings.push({ severity: "warning", text: `Low endpoint diversity — median Shannon entropy ${cross.entropyMedian.toFixed(4)} bits. Humans mix feed reads, profile views, stories, explore.` });
+    if (cross.fastFlagPct >= 50) findings.push({ severity: "critical", text: `${cross.fastFlagPct}% flagged within 60 minutes of session start — IP/account reputation likely pre-damaged.` });
+    if (cross.minGapMean < 0.5) findings.push({ severity: "critical", text: `Average minimum inter-call gap ${(cross.minGapMean * 1000).toFixed(0)}ms — sub-second gaps are physically impossible for humans.` });
+    if (cross.avgActionRatio > 0.4) findings.push({ severity: "critical", text: `${Math.round(cross.avgActionRatio * 100)}% of all calls are actions. A human session should be <10% actions with the rest being reads.` });
+    if (cross.subnetGroups.length > 0 && cross.subnetConcentration >= 50) findings.push({ severity: "warning", text: `Subnet /24 concurrency: ${cross.subnetConcentration}% of events on the same /24 block (${cross.topSubnet}).` });
+    if (cross.callRateStdDev < cross.callRateMean * 0.2 && cross.n >= 3) findings.push({ severity: "info", text: `Consistent call rates across accounts (σ/μ=${cross.callRateMean > 0 ? (cross.callRateStdDev/cross.callRateMean).toFixed(4) : "—"}) — systemic tool config issue, not account-specific.` });
+    if (cross.unreliablePct >= 40) findings.push({ severity: "info", text: `${cross.unreliablePct}% of events from accounts with 2+ re-adds — lower confidence data. See Reliability section above.` });
+    if (cross.highTrustPct >= 30 && Object.keys(cross.trustDistribution).length > 0) findings.push({ severity: "info", text: `${cross.highTrustPct}% of flagged accounts are at TrustScore rank 9+ — high-trust accounts being flagged indicates a severe trigger, not baseline scrutiny.` });
+    if (cross.peakHour >= 0 && cross.hourBuckets[cross.peakHour] >= 2) findings.push({ severity: "info", text: `Peak flag hour: ${String(cross.peakHour).padStart(2,"0")}:00 UTC (${cross.hourBuckets[cross.peakHour]} events). Repeating daily at the same time is itself a detectable pattern.` });
   }
 
   return (
     <div className="space-y-4">
+      {/* Error-type causation */}
+      <CausationPanel tabKey={tabKey} cross={cross} cfg={cfg} />
 
-      {/* ── Statistical summary header ── */}
+      {/* TrustScore */}
+      <TrustScorePanel entries={entries} survivingAccounts={survivingAccounts} trustMap={trustMap} tabKey={tabKey} />
+
+      {/* Reliability */}
+      <ReliabilityPanel entries={entries} profileNotesMap={profileNotesMap} />
+
+      {/* Statistical summary */}
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <Sigma className="w-4 h-4 text-cyan-500" />
           <span className="text-sm font-semibold">Cross-Account Statistical Summary</span>
-          <span className="text-xs text-muted-foreground ml-auto">{cross.n} event{cross.n !== 1 ? "s" : ""} analysed</span>
+          <span className="text-xs text-muted-foreground ml-auto">{cross.n} events, weighted n={cross.weightedN.toFixed(2)}</span>
         </div>
         <div className="grid grid-cols-3 divide-x divide-border">
-          {/* Call rate */}
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Activity className="w-3 h-3" /> Call Rate</p>
             <StatRow label="Mean"   val={cross.callRateMean.toFixed(5) + "/min"} />
             <StatRow label="Median" val={cross.callRateMedian.toFixed(5) + "/min"} />
             <StatRow label="σ"      val={cross.callRateStdDev.toFixed(5)} />
             <StatRow label="P90"    val={cross.callRateP90.toFixed(5) + "/min"} />
-            <StatRow label="Avg session span" val={cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(2)}m` : `${(cross.avgSpanMin/60).toFixed(3)}h`) : "—"} />
+            <StatRow label="Avg span" val={cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(2)}m` : `${(cross.avgSpanMin/60).toFixed(3)}h`) : "—"} />
           </div>
-          {/* Session noise */}
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Target className="w-3 h-3" /> Session Noise</p>
-            <StatRow label="Session/action mean"   val={cross.sessionPerActionMean.toFixed(4)} />
-            <StatRow label="Session/action median" val={cross.sessionPerActionMedian.toFixed(4)} warn={cross.sessionPerActionMedian < 8} />
-            <StatRow label="σ"                     val={cross.sessionPerActionStdDev.toFixed(4)} />
-            <StatRow label="Session/follow median" val={cross.sessionPerFollowMedian > 0 ? cross.sessionPerFollowMedian.toFixed(4) : "—"} />
-            <StatRow label="Auth/action mean"      val={cross.authPerActionMean.toFixed(4)} />
+            <StatRow label="Session/action mean"    val={cross.sessionPerActionMean.toFixed(4)} />
+            <StatRow label="Session/action median"  val={cross.sessionPerActionMedian.toFixed(4)} warn={cross.sessionPerActionMedian < 8} />
+            <StatRow label="σ"                      val={cross.sessionPerActionStdDev.toFixed(4)} />
+            <StatRow label="Session/follow median"  val={cross.sessionPerFollowMedian > 0 ? cross.sessionPerFollowMedian.toFixed(4) : "—"} />
+            <StatRow label="Auth/action mean"       val={cross.authPerActionMean.toFixed(4)} />
           </div>
-          {/* Timing */}
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Clock className="w-3 h-3" /> Timing</p>
-            <StatRow label="CoV mean (σ/μ gaps)"   val={cross.timingCoVMean >= 0 ? cross.timingCoVMean.toFixed(4) : "—"} warn={cross.timingCoVMean >= 0 && cross.timingCoVMean < 0.5} />
-            <StatRow label="CoV median"             val={cross.timingCoVMedian >= 0 ? cross.timingCoVMedian.toFixed(4) : "—"} warn={cross.timingCoVMedian >= 0 && cross.timingCoVMedian < 0.5} />
-            <StatRow label="Avg gap mean"           val={cross.avgGapMean > 0 ? (cross.avgGapMean < 60 ? `${cross.avgGapMean.toFixed(2)}s` : `${(cross.avgGapMean/60).toFixed(2)}m`) : "—"} />
-            <StatRow label="Min gap mean"           val={cross.minGapMean >= 0 ? (cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms` : `${cross.minGapMean.toFixed(2)}s`) : "—"} warn={cross.minGapMean < 0.5} />
-            <StatRow label="Robotic timing" val={`${cross.roboticTimingPct}% of events`} warn={cross.roboticTimingPct >= 30} />
+            <StatRow label="CoV mean"     val={cross.timingCoVMean >= 0 ? cross.timingCoVMean.toFixed(4) : "—"}  warn={cross.timingCoVMean >= 0 && cross.timingCoVMean < 0.5} />
+            <StatRow label="CoV median"   val={cross.timingCoVMedian >= 0 ? cross.timingCoVMedian.toFixed(4) : "—"} warn={cross.timingCoVMedian >= 0 && cross.timingCoVMedian < 0.5} />
+            <StatRow label="Avg gap mean" val={cross.avgGapMean > 0 ? (cross.avgGapMean < 60 ? `${cross.avgGapMean.toFixed(2)}s` : `${(cross.avgGapMean/60).toFixed(2)}m`) : "—"} />
+            <StatRow label="Min gap mean" val={cross.minGapMean >= 0 ? (cross.minGapMean < 1 ? `${(cross.minGapMean*1000).toFixed(0)}ms` : `${cross.minGapMean.toFixed(2)}s`) : "—"} warn={cross.minGapMean < 0.5} />
+            <StatRow label="Robotic %"   val={`${cross.roboticTimingPct}%`} warn={cross.roboticTimingPct >= 30} />
           </div>
         </div>
-
-        {/* Second row: diversity + structure */}
         <div className="grid grid-cols-3 divide-x divide-border border-t border-border">
           <div className="p-3 space-y-0.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Layers className="w-3 h-3" /> Endpoint Diversity</p>
-            <StatRow label="Shannon entropy mean"   val={cross.entropyMean.toFixed(4) + " bits"} />
-            <StatRow label="Entropy median"         val={cross.entropyMedian.toFixed(4) + " bits"} warn={cross.entropyMedian < 1.5} />
-            <StatRow label="Entropy σ"              val={cross.entropyStdDev.toFixed(4)} />
-            <StatRow label="Unique endpoints mean"  val={cross.uniqueEpMean.toFixed(1)} />
-            <StatRow label="Diversity ratio mean"   val={(cross.endpointDiversityMean * 100).toFixed(2) + "%"} />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Layers className="w-3 h-3" /> Diversity</p>
+            <StatRow label="Entropy mean"   val={cross.entropyMean.toFixed(4) + " bits"} />
+            <StatRow label="Entropy median" val={cross.entropyMedian.toFixed(4) + " bits"} warn={cross.entropyMedian < 1.5} />
+            <StatRow label="Entropy σ"      val={cross.entropyStdDev.toFixed(4)} />
+            <StatRow label="Unique ep mean" val={cross.uniqueEpMean.toFixed(1)} />
+            <StatRow label="Diversity ratio" val={(cross.endpointDiversityMean * 100).toFixed(2) + "%"} />
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Session Structure</p>
-            <StatRow label="Auth calls (% of total)"    val={(cross.avgAuthRatio * 100).toFixed(2) + "%"} />
-            <StatRow label="Session calls (% of total)" val={(cross.avgSessionRatio * 100).toFixed(2) + "%"} />
-            <StatRow label="Action calls (% of total)"  val={(cross.avgActionRatio * 100).toFixed(2) + "%"} warn={cross.avgActionRatio > 0.4} />
-            <StatRow label="Warmup mean"   val={cross.warmupMean.toFixed(2) + " calls"} />
-            <StatRow label="Zero warmup"   val={`${cross.zeroWarmupPct}% of events`} warn={cross.zeroWarmupPct >= 30} />
+            <StatRow label="Auth (% of calls)"    val={(cross.avgAuthRatio * 100).toFixed(2) + "%"} />
+            <StatRow label="Session (% of calls)" val={(cross.avgSessionRatio * 100).toFixed(2) + "%"} />
+            <StatRow label="Action (% of calls)"  val={(cross.avgActionRatio * 100).toFixed(2) + "%"} warn={cross.avgActionRatio > 0.4} />
+            <StatRow label="Warmup mean"  val={cross.warmupMean.toFixed(2) + " calls"} />
+            <StatRow label="Zero warmup"  val={`${cross.zeroWarmupPct}%`} warn={cross.zeroWarmupPct >= 30} />
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Flame className="w-3 h-3" /> Risk Indicators</p>
-            <StatRow label="Burst events"        val={`${cross.burstPct}% of accounts`} warn={cross.burstPct >= 30} />
-            <StatRow label="Fast-flagged (<60m)" val={`${cross.fastFlagPct}% of accounts`} warn={cross.fastFlagPct >= 30} />
+            <StatRow label="Burst events"         val={`${cross.burstPct}%`} warn={cross.burstPct >= 30} />
+            <StatRow label="Fast-flagged (<60m)"  val={`${cross.fastFlagPct}%`} warn={cross.fastFlagPct >= 30} />
             <StatRow label="Action velocity mean" val={cross.actionVelocityMean > 0 ? `${cross.actionVelocityMean.toFixed(2)}/hr` : "—"} />
-            <StatRow label="Action velocity P50"  val={cross.actionVelocityMedian > 0 ? `${cross.actionVelocityMedian.toFixed(2)}/hr` : "—"} />
-            <StatRow label="Proxy concentration" val={`${cross.proxyConcentration}% on top IP`} warn={cross.proxyConcentration >= 50} />
+            <StatRow label="Low-trust flagged"    val={`${cross.lowTrustPct}%`} />
+            <StatRow label="High-trust flagged"   val={`${cross.highTrustPct}%`} warn={cross.highTrustPct >= 30} />
           </div>
         </div>
       </div>
 
-      {/* ── Distributions ── */}
+      {/* Distributions */}
       {cross.n >= 2 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
@@ -915,25 +1023,23 @@ function PatternIntelligence({ entries, cfg }: { entries: AnalyticsEntry[]; cfg:
             <span className="text-sm font-semibold">Metric Distributions</span>
           </div>
           <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-border">
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Session noise (reads/action)</p><MiniHistogram buckets={spaBuckets} note="Target range: 15–30 per action" /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Timing CoV (σ/μ of gaps)</p><MiniHistogram buckets={covBuckets} note="CoV &lt;0.3 = machine-uniform = detectable" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Session noise (reads/action)</p><MiniHistogram buckets={spaBuckets} note="Target: 15–30/action" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Timing CoV (σ/μ of gaps)</p><MiniHistogram buckets={covBuckets} note="CoV <0.3 = machine-uniform" /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">API call rate (calls/min)</p><MiniHistogram buckets={rateBuckets} /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shannon entropy (endpoint diversity)</p><MiniHistogram buckets={entropyBuckets} note="Higher entropy = more diverse = more human" /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Pre-action warmup (calls before 1st action)</p><MiniHistogram buckets={warmupBuckets} note="Zero warmup = session starts with an action = bot pattern" /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Flag time of day (UTC)</p>
-              <MiniHistogram buckets={hourBlocks} note={cross.peakHour >= 0 ? `Peak hour: ${String(cross.peakHour).padStart(2,"0")}:00 UTC` : ""} />
-            </div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shannon entropy (bits)</p><MiniHistogram buckets={entropyBuckets} note="Higher = more diverse = more human" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Pre-action warmup (calls)</p><MiniHistogram buckets={warmupBuckets} note="Zero = session opens with action = bot signal" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Flag time of day (UTC blocks)</p><MiniHistogram buckets={hourBlocks} note={cross.peakHour >= 0 ? `Peak: ${String(cross.peakHour).padStart(2,"0")}:00 UTC` : ""} /></div>
           </div>
         </div>
       )}
 
-      {/* ── Derived findings ── */}
+      {/* Findings */}
       {findings.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Flame className="w-4 h-4 text-orange-500" />
             <span className="text-sm font-semibold">Data-Derived Findings</span>
-            <span className="text-xs text-muted-foreground ml-auto">computed from your actual data — not theory</span>
+            <span className="text-xs text-muted-foreground ml-auto">computed from actual data</span>
           </div>
           <div className="divide-y divide-border">
             {findings.map((f, i) => (
@@ -946,33 +1052,30 @@ function PatternIntelligence({ entries, cfg }: { entries: AnalyticsEntry[]; cfg:
         </div>
       )}
 
-      {/* ── Common endpoint denominators ── */}
+      {/* Common endpoints */}
       {cross.commonEndpoints.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Hash className="w-4 h-4 text-purple-500" />
             <span className="text-sm font-semibold">Common Endpoint Denominators</span>
-            <span className="text-xs text-muted-foreground ml-auto">endpoints present in ≥40% of all flagged accounts</span>
+            <span className="text-xs text-muted-foreground ml-auto">≥40% of flagged accounts</span>
           </div>
           <div className="divide-y divide-border">
             {cross.commonEndpoints.map(ep => (
               <div key={ep.name} className="px-4 py-2 flex items-center gap-3">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${CAT_META[ep.category]?.color ?? "bg-muted-foreground"}`} />
-                <span className="font-mono text-[11px] text-foreground flex-1 truncate">{ep.name}</span>
+                <span className="font-mono text-[11px] flex-1 truncate">{ep.name}</span>
                 {ep.label && <span className="text-[11px] text-muted-foreground shrink-0">({ep.label})</span>}
-                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden shrink-0">
-                  <div className="h-full bg-purple-400 rounded-full" style={{ width: `${ep.pct}%` }} />
-                </div>
+                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden shrink-0"><div className="h-full bg-purple-400 rounded-full" style={{ width: `${ep.pct}%` }} /></div>
                 <span className="text-[11px] font-mono font-semibold w-10 text-right shrink-0">{ep.pct}%</span>
-                <span className="text-[10px] text-muted-foreground w-8 text-right shrink-0">{ep.freq}/{cross.n}</span>
+                <span className="text-[10px] text-muted-foreground w-10 text-right shrink-0">{ep.freq}/{cross.n}</span>
               </div>
             ))}
           </div>
-          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">These endpoints appear in the majority of your flag events — they form the common API fingerprint that Instagram's classifier is seeing.</div>
         </div>
       )}
 
-      {/* ── First / last endpoint sequences ── */}
+      {/* Sequence patterns */}
       {(cross.commonFirstEps.length > 0 || cross.commonLastEps.length > 0) && cross.n >= 3 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
@@ -981,89 +1084,62 @@ function PatternIntelligence({ entries, cfg }: { entries: AnalyticsEntry[]; cfg:
           </div>
           <div className="grid grid-cols-2 divide-x divide-border">
             <div className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">First action call seen</p>
-              {cross.commonFirstEps.length > 0 ? (
-                <div className="space-y-1">
-                  {cross.commonFirstEps.map(ep => (
-                    <div key={ep.name} className="flex items-center gap-2 text-[10px]">
-                      <span className="font-mono text-foreground flex-1 truncate">{ep.label ?? ep.name}</span>
-                      <div className="w-20 h-2 bg-muted rounded-sm overflow-hidden">
-                        <div className="h-full bg-cyan-400 rounded-sm" style={{ width: `${ep.pct}%` }} />
-                      </div>
-                      <span className="font-semibold w-8 text-right">{ep.pct}%</span>
-                    </div>
-                  ))}
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">First action endpoint</p>
+              {cross.commonFirstEps.map(ep => (
+                <div key={ep.name} className="flex items-center gap-2 text-[10px] mb-1">
+                  <span className="font-mono flex-1 truncate">{ep.label ?? ep.name}</span>
+                  <div className="w-20 h-2 bg-muted rounded-sm overflow-hidden"><div className="h-full bg-cyan-400 rounded-sm" style={{ width: `${ep.pct}%` }} /></div>
+                  <span className="font-semibold w-8 text-right">{ep.pct}%</span>
                 </div>
-              ) : <p className="text-[11px] text-muted-foreground italic">No action calls detected</p>}
+              ))}
             </div>
             <div className="p-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Last endpoint before flag</p>
-              {cross.commonLastEps.length > 0 ? (
-                <div className="space-y-1">
-                  {cross.commonLastEps.map(ep => (
-                    <div key={ep.name} className="flex items-center gap-2 text-[10px]">
-                      <span className="font-mono text-foreground flex-1 truncate">{ep.label ?? ep.name}</span>
-                      <div className="w-20 h-2 bg-muted rounded-sm overflow-hidden">
-                        <div className="h-full bg-orange-400 rounded-sm" style={{ width: `${ep.pct}%` }} />
-                      </div>
-                      <span className="font-semibold w-8 text-right">{ep.pct}%</span>
-                    </div>
-                  ))}
+              {cross.commonLastEps.map(ep => (
+                <div key={ep.name} className="flex items-center gap-2 text-[10px] mb-1">
+                  <span className="font-mono flex-1 truncate">{ep.label ?? ep.name}</span>
+                  <div className="w-20 h-2 bg-muted rounded-sm overflow-hidden"><div className="h-full bg-orange-400 rounded-sm" style={{ width: `${ep.pct}%` }} /></div>
+                  <span className="font-semibold w-8 text-right">{ep.pct}%</span>
                 </div>
-              ) : <p className="text-[11px] text-muted-foreground italic">—</p>}
+              ))}
             </div>
           </div>
-          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">First action call = the endpoint category that consistently starts the tool run. Last call before flag = the endpoint that most commonly appears at the point of detection — may indicate which specific action triggers the classifier.</div>
+          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">Last endpoint before flag may indicate which specific call triggers the classifier.</div>
         </div>
       )}
 
-      {/* ── Subnet concurrency ── */}
+      {/* Subnet concurrency */}
       {cross.subnetGroups.length > 0 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Network className="w-4 h-4 text-orange-500" />
-            <span className="text-sm font-semibold">Subnet Concurrency Analysis</span>
-            <span className="text-xs text-muted-foreground ml-auto">multiple accounts on the same /24 subnet</span>
+            <span className="text-sm font-semibold">Subnet /24 Concurrency</span>
+            <span className="text-xs text-muted-foreground ml-auto">multiple accounts on same /24 block</span>
           </div>
-          <div className="divide-y divide-border">
-            {cross.subnetGroups.map(sg => {
-              const times = sg.flaggedAt.filter(Boolean).map(t => new Date(t).getTime()).filter(t => !isNaN(t)).sort((a, b) => a - b);
-              const windowMs = times.length >= 2 ? times[times.length - 1] - times[0] : 0;
-              const windowStr = windowMs < 60000 ? `${Math.round(windowMs / 1000)}s` : windowMs < 3600000 ? `${Math.round(windowMs / 60000)}m` : `${(windowMs / 3600000).toFixed(1)}h`;
-              return (
-                <div key={sg.subnet} className="px-4 py-3">
-                  <div className="flex items-center gap-3 mb-1.5">
-                    <Network className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="font-mono text-sm font-semibold">{sg.subnet}</span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${sg.events >= 4 ? "bg-red-50 border-red-200 text-red-600" : "bg-amber-50 border-amber-200 text-amber-600"}`}>{sg.events} EVENTS</span>
-                    {windowMs > 0 && <span className="text-[10px] text-muted-foreground ml-auto">span: {windowStr}</span>}
-                  </div>
-                  <div className="flex flex-wrap gap-1 text-[11px]">
-                    {sg.hosts.length > 1 && sg.hosts.map(h => <span key={h} className="text-muted-foreground font-mono bg-muted px-1 rounded">{h}</span>)}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Accounts: {sg.accounts.join(", ")} — {sg.events} flag event{sg.events !== 1 ? "s" : ""} from this subnet
-                    {windowMs > 0 && ` within ${windowStr}`}.
-                  </p>
+          {cross.subnetGroups.map(sg => {
+            const times = sg.flaggedAt.filter(Boolean).map(t => new Date(t).getTime()).filter(t => !isNaN(t)).sort((a, b) => a - b);
+            const windowMs = times.length >= 2 ? times[times.length - 1] - times[0] : 0;
+            const windowStr = windowMs < 60000 ? `${Math.round(windowMs/1000)}s` : windowMs < 3600000 ? `${Math.round(windowMs/60000)}m` : `${(windowMs/3600000).toFixed(1)}h`;
+            return (
+              <div key={sg.subnet} className="px-4 py-3 border-b border-border last:border-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-mono text-sm font-semibold">{sg.subnet}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${sg.events >= 4 ? "bg-red-50 border-red-200 text-red-600" : "bg-amber-50 border-amber-200 text-amber-600"}`}>{sg.events} EVENTS</span>
+                  {windowMs > 0 && <span className="text-[10px] text-muted-foreground ml-auto">span: {windowStr}</span>}
                 </div>
-              );
-            })}
-          </div>
-          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">Subnets with multiple flag events suggest the /24 block is already in Instagram's risk registry. Rotating to a different /24 or datacenter may reduce baseline risk.</div>
+                <p className="text-[10px] text-muted-foreground">{sg.accounts.join(", ")} — {sg.hosts.length > 1 ? `${sg.hosts.length} IPs` : sg.hosts[0]}</p>
+              </div>
+            );
+          })}
+          <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">Instagram scores /24 subnets — a flagged /24 raises risk for all accounts on it, not just the specific IP.</div>
         </div>
       )}
 
-      {/* ── Anomaly ranking note ── */}
+      {/* Anomaly scoring note */}
       {cross.n >= 3 && (
         <div className="border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-semibold">Per-Event Anomaly Scoring</span>
-          </div>
-          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">
-            Each event card below shows an <strong>Anomaly Score (0–100)</strong> computed via z-score against the group median across: call rate, session noise, timing CoV, Shannon entropy, burst presence, warmup depth, and session span. A high score means that account deviates strongly from the others — it is either the outlier causing the issue or the account with the most extreme risk profile.
-            Anomaly scoring requires ≥2 events; cross-account median statistics improve with ≥5 events.
-          </div>
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Cpu className="w-4 h-4 text-red-500" /><span className="text-sm font-semibold">Per-Event Anomaly Scoring (0–100)</span></div>
+          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, warmup depth, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
         </div>
       )}
     </div>
@@ -1071,34 +1147,42 @@ function PatternIntelligence({ entries, cfg }: { entries: AnalyticsEntry[]; cfg:
 }
 
 // ── Tab content ───────────────────────────────────────────────────────────────
-function EntryList({ entries, cfg, profileMap }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; profileMap: Map<string, number> }) {
+function EntryList({ entries, cfg, tabKey, profileMap, trustMap, profileNotesMap, survivingAccounts }: {
+  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
+  tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number>;
+  trustMap: Map<string, TrustInfo>; profileNotesMap: Map<string, string | null>;
+  survivingAccounts: Array<{ username: string; runMs: number | null }>;
+}) {
   const [showAll, setShowAll] = useState(false);
-  const cross = computeCrossStats(entries);
-  if (entries.length === 0) return (
+  const cross = useMemo(() => computeCrossStats(entries, trustMap, profileNotesMap), [entries, trustMap, profileNotesMap]);
+
+  if (!entries.length) return (
     <div className="border border-border rounded-lg p-10 text-center">
       <p className="text-sm font-medium">{cfg.emptyMsg}</p>
       <p className="text-xs text-muted-foreground mt-1">{cfg.flagMsg}</p>
     </div>
   );
   const reversed = [...entries].reverse();
-  const visible = showAll ? reversed : reversed.slice(0, 3);
+  const visible  = showAll ? reversed : reversed.slice(0, 3);
+
   return (
     <div className="space-y-4">
-      <PatternIntelligence entries={entries} cfg={cfg} />
+      <PatternIntelligence entries={entries} tabKey={tabKey} cfg={cfg} survivingAccounts={survivingAccounts} trustMap={trustMap} profileNotesMap={profileNotesMap} profileMap={profileMap} />
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <Calendar className="w-4 h-4 text-cyan-500" />
           <span className="text-sm font-semibold">Event History</span>
-          <span className="text-xs text-muted-foreground ml-auto">{showAll ? `${entries.length} events` : `${Math.min(3, entries.length)} of ${entries.length}`} — click any row to expand</span>
+          <span className="text-xs text-muted-foreground ml-auto">{showAll ? `${entries.length} events` : `${Math.min(3, entries.length)} of ${entries.length}`} — click to expand</span>
         </div>
         <div className="p-3 space-y-2">
-          {visible.map(entry => <EntryCard key={entry.id} entry={entry} cfg={cfg} cross={cross} profileMap={profileMap} />)}
+          {visible.map(entry => (
+            <EntryCard key={entry.id} entry={entry} cfg={cfg} cross={cross} profileMap={profileMap} trustMap={trustMap} reliability={computeReliability(profileNotesMap.get(entry.username))} />
+          ))}
         </div>
         {entries.length > 3 && (
-          <div className="px-4 py-2 border-t border-border flex items-center justify-center">
-            <button onClick={() => setShowAll(o => !o)} className="text-xs text-cyan-500 hover:text-cyan-400 font-semibold transition-colors flex items-center gap-1">
-              {showAll ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {showAll ? "Show less" : `Show all ${entries.length} events`}
+          <div className="px-4 py-2 border-t border-border flex justify-center">
+            <button onClick={() => setShowAll(o => !o)} className="text-xs text-cyan-500 hover:text-cyan-400 font-semibold flex items-center gap-1">
+              {showAll ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show all {entries.length} events</>}
             </button>
           </div>
         )}
@@ -1112,7 +1196,7 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
   const [deleting, setDeleting] = useState(false);
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`Delete all ${pr.total} log ${pr.total === 1 ? "entry" : "entries"} for ${pr.host}? This cannot be undone.`)) return;
+    if (!confirm(`Delete all ${pr.total} log entries for ${pr.host}?`)) return;
     setDeleting(true);
     try {
       await Promise.all([
@@ -1121,10 +1205,7 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
         ...pr.entryIds.captcha.map(id => fetch(`/api/analytics/captcha-patterns/${id}`, { method: "DELETE", credentials: "include" })),
         ...pr.entryIds.locked.map(id => fetch(`/api/analytics/locked-patterns/${id}`, { method: "DELETE", credentials: "include" })),
       ]);
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ban-patterns"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/automated-patterns"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/captcha-patterns"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/locked-patterns"] });
+      ["ban-patterns","automated-patterns","captcha-patterns","locked-patterns"].forEach(k => queryClient.invalidateQueries({ queryKey: [`/api/analytics/${k}`] }));
     } finally { setDeleting(false); }
   }
   return (
@@ -1134,7 +1215,7 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
         <div className="flex items-center gap-1.5">
           <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
           <span className="text-sm font-mono truncate">{pr.host}</span>
-          {isIpAddr(pr.host) && <span className="text-[10px] text-muted-foreground">/{extractSubnet24(pr.host)}</span>}
+          {isIpAddr(pr.host) && <span className="text-[10px] text-muted-foreground">[{extractSubnet24(pr.host)}]</span>}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0 text-xs">
@@ -1166,11 +1247,13 @@ export function BanAnalyticsPage() {
   const { data: allProfiles = [] } = useQuery<ProfileRow[]>({ queryKey: ["/api/profiles"], queryFn: async () => (await fetch("/api/profiles", { credentials: "include" })).json(), refetchInterval: 60000 });
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
-  const profileMap = new Map<string, number>(allProfiles.map(p => [p.username, p.id]));
+  const profileMap   = useMemo(() => new Map<string, number>(allProfiles.map(p => [p.username, p.id])), [allProfiles]);
+  const trustMap     = useMemo(() => buildTrustMap(allProfiles), [allProfiles]);
+  const profileNotesMap = useMemo(() => new Map<string, string | null>(allProfiles.map(p => [p.username, p.notes ?? null])), [allProfiles]);
 
-  const flaggedUsernames = new Set([...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries].map(e => e.username));
+  const flaggedUsernames = useMemo(() => new Set([...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries].map(e => e.username)), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const now = Date.now();
-  const survivingAccounts = allProfiles
+  const survivingAccounts = useMemo(() => allProfiles
     .filter(p => (p.accountStatus ?? "").toLowerCase().replace(/_/g, " ") === "valid" && !flaggedUsernames.has(p.username))
     .map(p => {
       const firstDate = parseFirstAddedDate(p.notes);
@@ -1180,10 +1263,10 @@ export function BanAnalyticsPage() {
     })
     .filter(p => p.firstDate !== null)
     .sort((a, b) => (a.runMs ?? 0) > (b.runMs ?? 0) ? -1 : 1)
-    .slice(0, 20);
+    .slice(0, 20), [allProfiles, flaggedUsernames]);
 
-  const proxyRisks = buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries);
-  const concurrencyAlerts = buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries);
+  const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
+  const concurrencyAlerts = useMemo(() => buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : lockedEntries;
 
   const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
@@ -1193,7 +1276,6 @@ export function BanAnalyticsPage() {
     <AppLayout>
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-5xl mx-auto space-y-6">
-
           <div className="flex items-center gap-3">
             <svg className="w-6 h-6" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ color: "#1AD2F2" }}>
               <path fill="currentColor" fillRule="evenodd" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
@@ -1201,7 +1283,7 @@ export function BanAnalyticsPage() {
             </svg>
             <div>
               <h1 className="text-xl font-bold">Evasion Stats</h1>
-              <p className="text-sm text-muted-foreground">Every measurable dimension — timing CoV, session noise, entropy, subnet concurrency, warmup depth, velocity, sequence analysis</p>
+              <p className="text-sm text-muted-foreground">Error-type causation · TrustScore correlation · Reliability weighting · Timing CoV · Session noise · Subnet concurrency</p>
             </div>
           </div>
 
@@ -1226,18 +1308,24 @@ export function BanAnalyticsPage() {
                   <div className="border border-border rounded-lg p-10 text-center"><Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" /><p className="text-sm font-medium">No surviving accounts tracked yet</p><p className="text-xs text-muted-foreground mt-1">Valid accounts with an "Added:" timestamp in Notes will appear here.</p></div>
                 ) : (
                   <div className="border border-border rounded-lg overflow-hidden">
-                    <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Award className="w-4 h-4 text-green-500" /><span className="text-sm font-semibold">Top Surviving Accounts</span><span className="text-xs text-muted-foreground ml-auto">Timer resets on each re-import</span></div>
+                    <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                      <Award className="w-4 h-4 text-green-500" />
+                      <span className="text-sm font-semibold">Top Surviving Accounts</span>
+                      <span className="text-xs text-muted-foreground ml-auto">Re-added accounts show timer since most recent add</span>
+                    </div>
                     <div className="divide-y divide-border">
                       {survivingAccounts.map((p, i) => {
                         const reAdded = p.allDates.length > 1;
+                        const ti = trustMap.get(p.username);
+                        const rel = computeReliability(p.notes);
                         return (
                           <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
                             <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold">#{i + 1}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <UsernameLink username={p.username} profileMap={profileMap} />
-                                {p.accountLabel && p.accountLabel !== p.username && <span className="text-[11px] text-muted-foreground truncate">{p.accountLabel}</span>}
-                                {reAdded && <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 font-semibold shrink-0"><RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×</span>}
+                                {ti && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${ti.rank <= 4 ? "bg-red-50 border-red-200 text-red-600" : ti.rank <= 8 ? "bg-orange-50 border-orange-200 text-orange-600" : ti.rank <= 12 ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-green-50 border-green-200 text-green-600"}`}>{ti.label} #{ti.rank}</span>}
+                                {reAdded && <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 border border-blue-300 dark:border-blue-700 font-semibold shrink-0"><RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×{rel.reAddCount >= 2 ? " ⚠" : ""}</span>}
                               </div>
                               <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
                                 <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
@@ -1249,24 +1337,40 @@ export function BanAnalyticsPage() {
                         );
                       })}
                     </div>
+                    {/* TrustScore distribution for survivors */}
+                    {survivingAccounts.some(a => trustMap.has(a.username)) && (() => {
+                      const ranks = survivingAccounts.map(a => trustMap.get(a.username)?.rank ?? -1).filter(r => r >= 0);
+                      const tiers = [
+                        { label: "Rank 1–4", min: 1, max: 4, color: "bg-red-400" },
+                        { label: "Rank 5–8", min: 5, max: 8, color: "bg-orange-400" },
+                        { label: "Rank 9–12", min: 9, max: 12, color: "bg-blue-400" },
+                        { label: "Rank 13+", min: 13, max: 99, color: "bg-green-400" },
+                      ].map(t => ({ ...t, count: ranks.filter(r => r >= t.min && r <= t.max).length }));
+                      return (
+                        <div className="border-t border-border px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1"><Scale className="w-3 h-3" /> Survivor TrustScore Distribution — median rank {median(ranks).toFixed(1)}</p>
+                          <MiniHistogram buckets={tiers} note="Higher rank = more trust leeway from Instagram. These are your safe operating levels." />
+                        </div>
+                      );
+                    })()}
                   </div>
                 )
               ) : (
-                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} profileMap={profileMap} />
+                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} tabKey={activeTab as Exclude<Tab, "survivors">} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
               )}
             </div>
           </div>
 
           {proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Shield className="w-4 h-4 text-cyan-500" /><span className="text-sm font-semibold">Proxy Risk Ranking</span><span className="text-xs text-muted-foreground ml-auto">Ban / Automated / Captcha / Locked per IP — subnet shown</span></div>
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Shield className="w-4 h-4 text-cyan-500" /><span className="text-sm font-semibold">Proxy Risk Ranking</span><span className="text-xs text-muted-foreground ml-auto">B/A/C/L + /24 subnet shown</span></div>
               <div className="divide-y divide-border">{proxyRisks.map((pr, i) => <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />)}</div>
             </div>
           )}
 
           {concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-500" /><span className="text-sm font-semibold">Concurrent Usage Alerts</span><span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy flagged within 30 min</span></div>
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-500" /><span className="text-sm font-semibold">Concurrent Usage Alerts</span><span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy within 30 min</span></div>
               <div className="divide-y divide-border">
                 {concurrencyAlerts.map((alert, i) => (
                   <div key={i} className="px-4 py-3 flex items-start gap-3">
@@ -1283,7 +1387,6 @@ export function BanAnalyticsPage() {
               </div>
             </div>
           )}
-
         </div>
       </div>
     </AppLayout>

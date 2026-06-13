@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.923",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Improved", text: "Evasion Stats: each error tab (Ban, Automated, Captcha, Locked) now shows a mathematical causation panel explaining exactly what causes that specific error type, with each theoretical signal validated against your actual data and shown as confirmed, partial, or not seen." },
+      { category: "Improved", text: "Evasion Stats: TrustScore correlation panel added — shows the TrustScore distribution of flagged accounts vs surviving accounts, with automatic insight generation based on whether low-trust or high-trust accounts are being flagged." },
+      { category: "Improved", text: "Evasion Stats: data reliability weighting added — accounts with 2+ re-adds in their notes are flagged as lower-confidence data points and shown with reliability badges on each entry card." },
+      { category: "Improved", text: "Evasion Stats: each flagged event card now shows the account's current TrustScore rank badge and any re-add count warning inline." },
+      { category: "Improved", text: "Survivors tab now displays TrustScore distribution for all surviving accounts — showing the rank tier breakdown that characterises accounts Instagram rewards." },
+    ],
+  },
+  {
     version: "1.0.922",
     date: "13 Jun 2026",
     items: [
