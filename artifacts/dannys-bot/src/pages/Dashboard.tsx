@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.927",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: HikerAPI calls are now excluded from endpoint counts and snapshots when an account is flagged — only calls the account made itself are counted." },
+    ],
+  },
+  {
     version: "1.0.926",
     date: "13 Jun 2026",
     items: [

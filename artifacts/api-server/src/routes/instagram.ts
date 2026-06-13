@@ -655,7 +655,8 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
-      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const allCalls_b = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_b.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       const now_b = new Date();
@@ -670,7 +671,7 @@ export async function registerInstagramRoutes(
         endpointSnapshot: snapshot,
       });
       await storage.updateProfile(profileId, { accountStatus: "banned", notes: freshNotes_b ? `${freshNotes_b}\n${stamp_b}` : stamp_b });
-      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted, status set to banned`);
+      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded), status set to banned`);
 
       // Auto-pause all other accounts on the same proxy for 90 minutes (IP taint window)
       if (profile.proxyId) {
@@ -715,7 +716,8 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
-      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const allCalls_a = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_a.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       const now_a = new Date();
@@ -730,7 +732,7 @@ export async function registerInstagramRoutes(
         endpointSnapshot: snapshot,
       });
       await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected", notes: freshNotes_a ? `${freshNotes_a}\n${stamp_a}` : stamp_a });
-      req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
       req.log.error({ err }, "[flag-automated] error");
@@ -744,7 +746,8 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
-      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const allCalls_c = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_c.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       const now_c = new Date();
@@ -759,7 +762,7 @@ export async function registerInstagramRoutes(
         endpointSnapshot: snapshot,
       });
       await storage.updateProfile(profileId, { accountStatus: "captcha", notes: freshNotes_c ? `${freshNotes_c}\n${stamp_c}` : stamp_c });
-      req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
       req.log.error({ err }, "[flag-captcha] error");
@@ -795,7 +798,8 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
-      const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const allCalls_l = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_l.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
       const now_l = new Date();
@@ -810,7 +814,7 @@ export async function registerInstagramRoutes(
         endpointSnapshot: snapshot,
       });
       await storage.updateProfile(profileId, { accountStatus: "locked", notes: freshNotes_l ? `${freshNotes_l}\n${stamp_l}` : stamp_l });
-      req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
+      req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
       req.log.error({ err }, "[flag-locked] error");
