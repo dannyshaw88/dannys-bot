@@ -640,12 +640,12 @@ export async function registerInstagramRoutes(
         const now90 = new Date(now_b.getTime() + 90 * 60 * 1000).toISOString();
         const sameProxy = await storage.getProfilesByProxyId(profile.proxyId);
         for (const sibling of sameProxy) {
-          if (sibling.id === profileId || sibling.accountStatus === "banned" || sibling.accountStatus === "resuming") continue;
+          if (sibling.id === profileId || sibling.accountStatus === "banned" || !!sibling.resumingUntil) continue;
           const pad_s = (n: number) => String(n).padStart(2, "0");
           const stamp_s = `Proxy taint: paused 90 min — same IP as @${profile.username} which was banned at ${now_b.getUTCFullYear()}-${pad_s(now_b.getUTCMonth()+1)}-${pad_s(now_b.getUTCDate())} ${pad_s(now_b.getUTCHours())}:${pad_s(now_b.getUTCMinutes())} UTC`;
           const siblingNotes = sibling.notes ?? "";
           await storage.updateProfile(sibling.id, {
-            accountStatus: "resuming",
+            accountStatus: "stopped",
             resumingUntil: now90,
             resumingPrevStatus: sibling.accountStatus,
             notes: siblingNotes ? `${siblingNotes}\n${stamp_s}` : stamp_s,

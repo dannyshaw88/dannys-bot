@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.921",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts flagged as Banned, Automated Behaviour, Captcha Error, or Locked — the 'Flag as' buttons in Actions now have no colour coding, matching the style of all other action buttons." },
+      { category: "Fix", text: "Accounts in proxy-taint cooldown no longer show a Verify button next to their name — Verify implies logged out, which these accounts are not." },
+      { category: "Fix", text: "Proxy-taint cooldown now toggles the Active switch OFF for sibling accounts (rather than setting a custom status), and auto-toggles it back ON when the 90-minute timer expires — no verify step involved." },
+      { category: "Fix", text: "The Resuming countdown badge now shows correctly for accounts that are toggled off due to proxy taint — it appears inside the Stopped badge with a live timer." },
+      { category: "Improved", text: "Evasion Stats completely rebuilt: all static theory text removed. The page now computes real mathematics from your actual API call data — mean/median/std dev of call rates and session noise ratios, distribution histograms, burst detection, common endpoint denominators, and data-derived anomaly scoring per event." },
+    ],
+  },
+  {
     version: "1.0.920",
     date: "13 Jun 2026",
     items: [

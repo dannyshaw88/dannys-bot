@@ -93,17 +93,19 @@ function ResumingCountdown({ until }: { until: string | null | undefined }) {
 }
 
 function AccountStatusBadge({ status, statusMessage, resumingUntil }: { status: string; statusMessage?: string | null; resumingUntil?: string | null }) {
-  const meta = STATUS_META[status as AccountStatus] ?? STATUS_META.pending;
+  const isResuming = status === "stopped" && !!resumingUntil && new Date(resumingUntil).getTime() > Date.now();
+  const displayStatus = isResuming ? "resuming" : status;
+  const meta = STATUS_META[displayStatus as AccountStatus] ?? STATUS_META.pending;
   const Icon = meta.icon;
-  const tooltip = status === "valid" ? undefined : (statusMessage || undefined);
+  const tooltip = displayStatus === "valid" ? undefined : (statusMessage || undefined);
   return (
     <span
       title={tooltip}
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${tooltip ? " cursor-help" : ""}`}
     >
-      <Icon className={`w-2.5 h-2.5${status === "resuming" ? " animate-spin" : ""}`} />
+      <Icon className={`w-2.5 h-2.5${isResuming ? " animate-spin" : ""}`} />
       <span className="uppercase">{meta.label}</span>
-      {status === "resuming" && <ResumingCountdown until={resumingUntil} />}
+      {isResuming && <ResumingCountdown until={resumingUntil} />}
     </span>
   );
 }
@@ -1345,7 +1347,7 @@ export function ProfilesPage() {
                         {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" /></span>}
                       </span>
                     </Link>
-                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
+                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "resuming" && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
                       <button onClick={(e) => { e.stopPropagation(); handleVerify(profile.id); }} disabled={verifyingIds.has(profile.id) || acctStatus === "verifying"} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors shrink-0">
                         {verifyingIds.has(profile.id) ? "…" : "Verify"}
                       </button>
@@ -2064,9 +2066,9 @@ export function ProfilesPage() {
                   queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
                 }}
                 disabled={selectedProfileIds.length === 0}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-red-600"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Ban className="w-4 h-4 shrink-0" />
+                <Ban className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Flag as Banned{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
@@ -2091,9 +2093,9 @@ export function ProfilesPage() {
                   queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
                 }}
                 disabled={selectedProfileIds.length === 0}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-orange-600"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <AlertTriangle className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="whitespace-nowrap">Flag as Automated Behaviour{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span>
               </button>
               <button
@@ -2118,9 +2120,9 @@ export function ProfilesPage() {
                   queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
                 }}
                 disabled={selectedProfileIds.length === 0}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-yellow-50 dark:hover:bg-yellow-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-yellow-600"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <ShieldAlert className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Flag as Captcha Error{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
@@ -2145,9 +2147,9 @@ export function ProfilesPage() {
                   queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
                 }}
                 disabled={selectedProfileIds.length === 0}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-rose-600"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Lock className="w-4 h-4 shrink-0" />
+                <Lock className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Flag as Locked Account{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />

@@ -26,7 +26,7 @@ import {
   type ApiCreatedAccount, type InsertApiCreatedAccount,
   type BannedAccountAnalytics,
 } from "./shared/schema";
-import { eq, desc, and, sql, like, gt, ne, or, isNull, not } from "drizzle-orm";
+import { eq, desc, and, sql, like, gt, ne, or, isNull, isNotNull, not } from "drizzle-orm";
 
 export interface IStorage {
   // Proxies
@@ -400,7 +400,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getResumingProfiles(): Promise<Profile[]> {
-    return await db.select().from(profiles).where(eq(profiles.accountStatus, "resuming"));
+    return await db.select().from(profiles).where(
+      and(eq(profiles.accountStatus, "stopped"), isNotNull(profiles.resumingUntil))
+    );
   }
 
   async resetStuckVerifyingAccounts(): Promise<number> {
