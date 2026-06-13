@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.924",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Fix", text: "Adding multiple blank accounts at once now correctly creates a separate account for each slot — previously all slots were overwriting the same first blank account." },
+      { category: "Fix", text: "Account Settings: removed the explanatory label below the Notes field." },
+      { category: "Fix", text: "Account Settings: added a divider line below the Auto Sync section to visually separate it from the content beneath." },
+      { category: "Fix", text: "Account Settings: Account Details heading now uses a person icon instead of a tag icon." },
+      { category: "Fix", text: "Account Settings: Notes panel no longer stays pinned to the top while scrolling — it now scrolls naturally with the rest of the page." },
+    ],
+  },
+  {
     version: "1.0.923",
     date: "13 Jun 2026",
     items: [

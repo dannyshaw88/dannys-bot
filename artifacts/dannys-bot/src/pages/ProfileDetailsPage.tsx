@@ -14,7 +14,7 @@ import {
   Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
-  Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
+  Tag, Calendar, FileText, Server, X, Clock, Copy, Search, UserCircle,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
   AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle, Trash2,
   Battery, BatteryCharging, Wifi, Cpu, MapPin, Fingerprint
@@ -1535,7 +1535,7 @@ export function ProfileDetailsPage() {
             {/* Account Details */}
             <Card className="border-none shadow-none !bg-transparent">
               <CardHeader className="px-0 pt-0 pb-2">
-                <CardTitle className="flex items-center gap-2 text-base"><Tag className="w-4 h-4 text-primary" /> Account Details</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base"><UserCircle className="w-4 h-4 text-primary" /> Account Details</CardTitle>
               </CardHeader>
               <CardContent className="px-0 pb-0 space-y-4">
                 <div className="space-y-2">
@@ -1779,10 +1779,11 @@ export function ProfileDetailsPage() {
             </div>
           </div>
           )}
+          <div className="border-t border-border mt-3" />
           </div>{/* end flex-1 left column */}
 
           {/* ── Notes — far right, aligned from Group row ── */}
-          <div className="w-72 shrink-0 sticky top-6">
+          <div className="w-72 shrink-0">
             <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
               <FileText className="w-3.5 h-3.5" /> Notes
             </Label>
@@ -1795,7 +1796,7 @@ export function ProfileDetailsPage() {
               onChange={e => updateField({ notes: e.target.value })}
               data-testid="input-notes"
             />
-            <p className="text-[10px] text-muted-foreground mt-1">Status events (banned, locked, etc.) are automatically logged here.</p>
+
           </div>
 
           </div>{/* end outer flex row */}

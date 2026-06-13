@@ -403,7 +403,8 @@ export async function registerInstagramRoutes(
 
       // If username already exists, append a re-add timestamp to notes and return the
       // existing profile updated. This supports the "Add to Equinox" re-import flow.
-      const existing = await storage.getProfileByUsername(input.username);
+      // Skip this check for blank usernames — multiple blank accounts must each get their own row.
+      const existing = input.username ? await storage.getProfileByUsername(input.username) : null;
       if (existing) {
         const now = new Date();
         const pad = (n: number) => String(n).padStart(2, "0");
