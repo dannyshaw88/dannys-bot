@@ -159,6 +159,40 @@ async function resolveProxyConfig(profile: {
   return undefined;
 }
 
+// If the newly-created profile is assigned to a proxy that is already under an
+// active ban countdown, inherit the remaining countdown so it doesn't start
+// running actions while its siblings are still paused.
+async function applyProxyTaintIfActive(profileId: number, proxyId: number): Promise<void> {
+  try {
+    const siblings = await storage.getProfilesByProxyId(proxyId);
+    const now = Date.now();
+    let maxResumingUntil: string | null = null;
+    let maxResumingPrevStatus: string | null = null;
+    for (const s of siblings) {
+      if (s.id === profileId) continue;
+      if (s.resumingUntil) {
+        const t = new Date(s.resumingUntil).getTime();
+        if (t > now) {
+          if (!maxResumingUntil || t > new Date(maxResumingUntil).getTime()) {
+            maxResumingUntil = s.resumingUntil;
+            maxResumingPrevStatus = s.resumingPrevStatus ?? "pending";
+          }
+        }
+      }
+    }
+    if (maxResumingUntil) {
+      await storage.updateProfile(profileId, {
+        accountStatus: "stopped",
+        resumingUntil: maxResumingUntil,
+        resumingPrevStatus: maxResumingPrevStatus ?? "pending",
+      } as any);
+      console.log(`[proxy-taint] Inherited proxy ban countdown → profile ${profileId}: stopped until ${maxResumingUntil}`);
+    }
+  } catch (err) {
+    console.warn(`[proxy-taint] Failed to apply proxy taint to profile ${profileId}:`, err);
+  }
+}
+
 export async function registerInstagramRoutes(
   httpServer: Server,
   app: Express,
@@ -423,6 +457,8 @@ export async function registerInstagramRoutes(
       const created = await storage.createProfile(input);
       // Seed browser cookie file if cookies were provided — same as bulk/EQX import
       if (created.igApiCookies) seedBrowserCookieFile(created.id, created.igApiCookies);
+      // Inherit proxy ban countdown if the assigned proxy already has an active taint
+      if (created.proxyId) await applyProxyTaintIfActive(created.id, created.proxyId);
       res.status(201).json(created);
     } catch (err) {
       if (err instanceof z.ZodError) {

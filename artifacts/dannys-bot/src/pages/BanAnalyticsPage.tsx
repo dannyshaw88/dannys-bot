@@ -168,15 +168,15 @@ function isIpAddr(host: string): boolean {
 }
 
 // ── Trust score helpers ───────────────────────────────────────────────────────
-function buildTrustMap(profiles: ProfileRow[]): Map<string, TrustInfo> {
+function buildTrustMap(profiles: ProfileRow[]): Map<number, TrustInfo> {
   const levels = getTrustLevels();
-  const map = new Map<string, TrustInfo>();
+  const map = new Map<number, TrustInfo>();
   for (const p of profiles) {
     const levelId = getTrustScore(p.id);
     if (levelId) {
       const rank = levels.findIndex(l => l.id === levelId);
       const label = levels[rank]?.label ?? levelId.toUpperCase();
-      map.set(p.username, { levelId, label, rank: rank >= 0 ? rank + 1 : 1 });
+      map.set(p.id, { levelId, label, rank: rank >= 0 ? rank + 1 : 1 });
     }
   }
   return map;
@@ -230,7 +230,7 @@ function computeMetrics(eps: EpItem[], flagTime?: string): EntryMetrics {
 }
 
 // ── Cross-account stats ───────────────────────────────────────────────────────
-function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<string, TrustInfo>, profileNotesMap: Map<string, string | null>): CrossStats {
+function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, TrustInfo>, profileMap: Map<string, number>, profileNotesMap: Map<string, string | null>): CrossStats {
   const emptyStats: CrossStats = {
     n: 0, weightedN: 0, callRateMean: 0, callRateMedian: 0, callRateStdDev: 0, callRateP90: 0,
     sessionPerActionMean: 0, sessionPerActionMedian: 0, sessionPerActionStdDev: 0,
@@ -322,7 +322,7 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<string, Trus
   const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
 
   // Trust ranks
-  const trustRanks = entries.map(e => trustMap.get(e.username)?.rank ?? -1).filter(r => r >= 0);
+  const trustRanks = entries.map(e => trustMap.get(profileMap.get(e.username) ?? -1)?.rank ?? -1).filter(r => r >= 0);
   const trustDistribution: Record<number, number> = {};
   for (const r of trustRanks) trustDistribution[r] = (trustDistribution[r] ?? 0) + 1;
   const lowTrustPct  = trustRanks.length ? Math.round(trustRanks.filter(r => r <= 4).length / trustRanks.length * 100) : 0;
@@ -582,14 +582,15 @@ function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivor
 }
 
 // ── TrustScore panel ──────────────────────────────────────────────────────────
-function TrustScorePanel({ entries, survivingAccounts, trustMap, tabKey }: {
+function TrustScorePanel({ entries, survivingAccounts, trustMap, profileMap, tabKey }: {
   entries: AnalyticsEntry[];
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
-  trustMap: Map<string, TrustInfo>;
+  trustMap: Map<number, TrustInfo>;
+  profileMap: Map<string, number>;
   tabKey: Exclude<Tab, "survivors">;
 }) {
-  const flaggedTrusts = entries.map(e => trustMap.get(e.username)).filter(Boolean) as TrustInfo[];
-  const survivorTrusts = survivingAccounts.map(a => trustMap.get(a.username)).filter(Boolean) as TrustInfo[];
+  const flaggedTrusts = entries.map(e => trustMap.get(profileMap.get(e.username) ?? -1)).filter(Boolean) as TrustInfo[];
+  const survivorTrusts = survivingAccounts.map(a => trustMap.get(profileMap.get(a.username) ?? -1)).filter(Boolean) as TrustInfo[];
 
   if (flaggedTrusts.length === 0 && survivorTrusts.length === 0) return null;
 
@@ -673,7 +674,7 @@ function TrustScorePanel({ entries, survivingAccounts, trustMap, tabKey }: {
           <div className="px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">Current TrustScore per flagged account — ranks shown reflect the current score, which may have changed since the flag event.</div>
           <div className="flex flex-wrap gap-2 px-4 py-3">
             {entries.map(e => {
-              const ti = trustMap.get(e.username);
+              const ti = trustMap.get(profileMap.get(e.username) ?? -1);
               if (!ti) return null;
               return (
                 <div key={e.id} className="flex items-center gap-1.5 text-[10px] bg-muted rounded px-2 py-1">
@@ -724,7 +725,7 @@ function ReliabilityPanel({ entries, profileNotesMap }: { entries: AnalyticsEntr
 // ── Per-entry card ────────────────────────────────────────────────────────────
 function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
   entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats;
-  profileMap: Map<string, number>; trustMap: Map<string, TrustInfo>; reliability: Reliability;
+  profileMap: Map<string, number>; trustMap: Map<number, TrustInfo>; reliability: Reliability;
 }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -748,7 +749,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
   const anomaly = computeAnomalyScore(m, cross);
   const top5    = topEps(eps, 5);
   const topFull = topEps(eps, 30);
-  const ti      = trustMap.get(entry.username);
+  const ti      = trustMap.get(profileMap.get(entry.username) ?? -1);
   const subnet  = entry.proxyHost && isIpAddr(entry.proxyHost) ? extractSubnet24(entry.proxyHost) : null;
   const anomalyLabel = anomaly >= 70 ? "HIGH" : anomaly >= 40 ? "MED" : "LOW";
   const spanStr = m.spanMin < 1 ? `${Math.round(m.spanMin * 60)}s` : m.spanMin < 60 ? `${m.spanMin.toFixed(1)}m` : `${(m.spanMin / 60).toFixed(2)}h`;
@@ -874,10 +875,10 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
 function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap, profileNotesMap, profileMap }: {
   entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
-  trustMap: Map<string, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
+  trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
 }) {
   if (!entries.length) return null;
-  const cross = computeCrossStats(entries, trustMap, profileNotesMap);
+  const cross = computeCrossStats(entries, trustMap, profileMap, profileNotesMap);
 
   const allMetrics = entries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt));
   const spaValues   = allMetrics.map(m => m.sessionPerAction);
@@ -949,7 +950,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
       <CausationPanel tabKey={tabKey} cross={cross} cfg={cfg} />
 
       {/* TrustScore */}
-      <TrustScorePanel entries={entries} survivingAccounts={survivingAccounts} trustMap={trustMap} tabKey={tabKey} />
+      <TrustScorePanel entries={entries} survivingAccounts={survivingAccounts} trustMap={trustMap} profileMap={profileMap} tabKey={tabKey} />
 
       {/* Reliability */}
       <ReliabilityPanel entries={entries} profileNotesMap={profileNotesMap} />
@@ -1150,11 +1151,11 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
 function EntryList({ entries, cfg, tabKey, profileMap, trustMap, profileNotesMap, survivingAccounts }: {
   entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
   tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number>;
-  trustMap: Map<string, TrustInfo>; profileNotesMap: Map<string, string | null>;
+  trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>;
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const cross = useMemo(() => computeCrossStats(entries, trustMap, profileNotesMap), [entries, trustMap, profileNotesMap]);
+  const cross = useMemo(() => computeCrossStats(entries, trustMap, profileMap, profileNotesMap), [entries, trustMap, profileMap, profileNotesMap]);
 
   if (!entries.length) return (
     <div className="border border-border rounded-lg p-10 text-center">
@@ -1316,7 +1317,7 @@ export function BanAnalyticsPage() {
                     <div className="divide-y divide-border">
                       {survivingAccounts.map((p, i) => {
                         const reAdded = p.allDates.length > 1;
-                        const ti = trustMap.get(p.username);
+                        const ti = trustMap.get(p.id);
                         const rel = computeReliability(p.notes);
                         return (
                           <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
@@ -1338,8 +1339,8 @@ export function BanAnalyticsPage() {
                       })}
                     </div>
                     {/* TrustScore distribution for survivors */}
-                    {survivingAccounts.some(a => trustMap.has(a.username)) && (() => {
-                      const ranks = survivingAccounts.map(a => trustMap.get(a.username)?.rank ?? -1).filter(r => r >= 0);
+                    {survivingAccounts.some(a => trustMap.has((a as any).id)) && (() => {
+                      const ranks = survivingAccounts.map(a => trustMap.get((a as any).id)?.rank ?? -1).filter(r => r >= 0);
                       const tiers = [
                         { label: "Rank 1–4", min: 1, max: 4, color: "bg-red-400" },
                         { label: "Rank 5–8", min: 5, max: 8, color: "bg-orange-400" },

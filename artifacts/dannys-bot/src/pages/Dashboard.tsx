@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.925",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: TrustScore data now correctly appears for flagged accounts — the lookup was silently failing due to a username-matching issue; it now uses the profile's ID directly." },
+      { category: "Fix", text: "New accounts added to a proxy that is already in a ban countdown now automatically inherit the remaining pause time instead of starting active immediately." },
+    ],
+  },
+  {
     version: "1.0.924",
     date: "13 Jun 2026",
     items: [
