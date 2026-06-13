@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.922",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Improved", text: "Evasion Stats analysis expanded with every measurable dimension: timing Coefficient of Variation (robotic vs human pacing), Shannon entropy (endpoint diversity), pre-action warmup depth, action velocity per hour, minimum/maximum inter-call gap, subnet-level (/24) concurrency grouping, time-of-day flag patterns, first/last endpoint sequence analysis, and full session call composition breakdown." },
+      { category: "Improved", text: "Per-event anomaly scoring now factors in 7 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, warmup depth, and session span — each compared to the group median via z-score." },
+    ],
+  },
+  {
     version: "1.0.921",
     date: "13 Jun 2026",
     items: [
