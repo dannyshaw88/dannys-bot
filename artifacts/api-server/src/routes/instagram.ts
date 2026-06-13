@@ -621,14 +621,18 @@ export async function registerInstagramRoutes(
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      const now_b = new Date();
+      const pad_b = (n: number) => String(n).padStart(2, "0");
+      const stamp_b = `Flagged as Banned: ${now_b.getUTCFullYear()}-${pad_b(now_b.getUTCMonth()+1)}-${pad_b(now_b.getUTCDate())} ${pad_b(now_b.getUTCHours())}:${pad_b(now_b.getUTCMinutes())}:${pad_b(now_b.getUTCSeconds())} UTC`;
+      const freshNotes_b = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
       await storage.insertBanAnalytics({
         username: profile.username,
         proxyHost,
-        bannedAt: new Date().toISOString(),
+        bannedAt: now_b.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
       });
-      await storage.updateProfile(profileId, { accountStatus: "banned" });
+      await storage.updateProfile(profileId, { accountStatus: "banned", notes: freshNotes_b ? `${freshNotes_b}\n${stamp_b}` : stamp_b });
       req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted, status set to banned`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
@@ -657,14 +661,18 @@ export async function registerInstagramRoutes(
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      const now_a = new Date();
+      const pad_a = (n: number) => String(n).padStart(2, "0");
+      const stamp_a = `Flagged as Automated Behaviour: ${now_a.getUTCFullYear()}-${pad_a(now_a.getUTCMonth()+1)}-${pad_a(now_a.getUTCDate())} ${pad_a(now_a.getUTCHours())}:${pad_a(now_a.getUTCMinutes())}:${pad_a(now_a.getUTCSeconds())} UTC`;
+      const freshNotes_a = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
       await storage.insertAutomatedBehaviourAnalytics({
         username: profile.username,
         proxyHost,
-        flaggedAt: new Date().toISOString(),
+        flaggedAt: now_a.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
       });
-      await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected" });
+      await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected", notes: freshNotes_a ? `${freshNotes_a}\n${stamp_a}` : stamp_a });
       req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
@@ -682,14 +690,18 @@ export async function registerInstagramRoutes(
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      const now_c = new Date();
+      const pad_c = (n: number) => String(n).padStart(2, "0");
+      const stamp_c = `Flagged as Captcha Error: ${now_c.getUTCFullYear()}-${pad_c(now_c.getUTCMonth()+1)}-${pad_c(now_c.getUTCDate())} ${pad_c(now_c.getUTCHours())}:${pad_c(now_c.getUTCMinutes())}:${pad_c(now_c.getUTCSeconds())} UTC`;
+      const freshNotes_c = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
       await storage.insertCaptchaAnalytics({
         username: profile.username,
         proxyHost,
-        flaggedAt: new Date().toISOString(),
+        flaggedAt: now_c.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
       });
-      await storage.updateProfile(profileId, { accountStatus: "captcha" });
+      await storage.updateProfile(profileId, { accountStatus: "captcha", notes: freshNotes_c ? `${freshNotes_c}\n${stamp_c}` : stamp_c });
       req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {
@@ -729,14 +741,18 @@ export async function registerInstagramRoutes(
       const calls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      const now_l = new Date();
+      const pad_l = (n: number) => String(n).padStart(2, "0");
+      const stamp_l = `Flagged as Locked Account: ${now_l.getUTCFullYear()}-${pad_l(now_l.getUTCMonth()+1)}-${pad_l(now_l.getUTCDate())} ${pad_l(now_l.getUTCHours())}:${pad_l(now_l.getUTCMinutes())}:${pad_l(now_l.getUTCSeconds())} UTC`;
+      const freshNotes_l = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
       await storage.insertLockedAnalytics({
         username: profile.username,
         proxyHost,
-        flaggedAt: new Date().toISOString(),
+        flaggedAt: now_l.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
       });
-      await storage.updateProfile(profileId, { accountStatus: "locked" });
+      await storage.updateProfile(profileId, { accountStatus: "locked", notes: freshNotes_l ? `${freshNotes_l}\n${stamp_l}` : stamp_l });
       req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} API calls snapshotted`);
       res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
     } catch (err) {

@@ -52,6 +52,14 @@ interface ConcurrencyAlert {
   category: string;
 }
 
+// ── Per-tab reasoning statements ─────────────────────────────────────────────
+const TAB_REASONING: Record<Exclude<Tab, "survivors">, string> = {
+  ban: "REASONING: A permanent ban occurs when Instagram is certain the account is bot-operated. Key triggers: high follow/unfollow velocity with minimal session noise (timeline reads, inbox checks), device fingerprint inconsistencies, or being on a proxy that has flagged multiple accounts. Target ratio is ~15 timeline reads · ~15 DM inbox checks per 1 follow action. Accounts below this ratio look automated.",
+  automated: "REASONING: Automated Behaviour Detected is Instagram's soft warning — it does not ban the account but throttles it and monitors more closely. Primary signal: action calls (follows, likes) outweigh session calls (timeline, story views, inbox checks). A ratio of follow:timeline below 1:5 is a strong trigger. Timing also matters — actions fired in rapid bursts with no browsing gaps between them are a clear bot pattern.",
+  captcha: "REASONING: Captcha challenges fire when Instagram detects an unusual session — new device fingerprint, IP change, high velocity, or simultaneous sessions. The challenge is separate from automated behaviour detection; it means Instagram wants human proof before allowing further actions. Accounts that immediately retry actions after a captcha without solving it escalate to locked or banned status.",
+  locked: "REASONING: Account Locked is a security hold — Instagram detected something suspicious enough to suspend action entirely and force a recovery flow (email/phone confirmation). Common triggers: rapid credential change, proxy IP that differs from previous sessions, or being flagged on a shared proxy where another account was simultaneously acting. Recovery requires identity verification through Instagram's challenge flow.",
+};
+
 // ── Known Instagram mobile-API endpoint labels ───────────────────────────────
 const EP_LABELS: Record<string, { label: string; category: "follow" | "unfollow" | "dm" | "like" | "session" | "auth" | "other" }> = {
   "friendships/create":    { label: "Follow",           category: "follow" },
@@ -165,6 +173,31 @@ function buildFindings(eps: EpItem[], allSameType: AnalyticsEntry[]): string[] {
   }
 
   return findings;
+}
+
+// ── Aggregate endpoint ratio analysis across all flagged entries ──────────────
+function buildRatioAnalysis(entries: AnalyticsEntry[]): {
+  totals: Record<string, number>;
+  totalCalls: number;
+  dominantAction: string;
+} {
+  const totals: Record<string, number> = { follow: 0, unfollow: 0, dm: 0, like: 0, session: 0, auth: 0, other: 0 };
+  let totalCalls = 0;
+  for (const entry of entries) {
+    const eps = filterHiker(parseEps(entry.endpointSnapshot));
+    const cats = categorise(eps);
+    for (const [k, v] of Object.entries(cats)) {
+      if (k in totals) totals[k] = (totals[k] || 0) + (v as number);
+    }
+    totalCalls += eps.length;
+  }
+  const actionCats = ["follow", "unfollow", "dm", "like"];
+  let dominantAction = "follow";
+  let maxCount = 0;
+  for (const cat of actionCats) {
+    if (totals[cat] > maxCount) { maxCount = totals[cat]; dominantAction = cat; }
+  }
+  return { totals, totalCalls, dominantAction };
 }
 
 function buildCrossTrend(entries: AnalyticsEntry[]): Array<{ endpoint: string; label: string | null; accountCount: number; pct: number }> {
@@ -459,8 +492,19 @@ function EntryCard({ entry, cfg, allSameType, profileMap }: { entry: AnalyticsEn
   );
 }
 
+const RATIO_CAT_META: { key: string; label: string; color: string; target: number }[] = [
+  { key: "session", label: "Timeline / Session",  color: "bg-blue-400",   target: 15 },
+  { key: "dm",      label: "DM Inbox Checks",     color: "bg-purple-400", target: 15 },
+  { key: "like",    label: "Likes",               color: "bg-pink-400",   target: 5  },
+  { key: "follow",  label: "Follows",             color: "bg-cyan-400",   target: 1  },
+  { key: "unfollow",label: "Unfollows",           color: "bg-orange-400", target: 1  },
+  { key: "auth",    label: "Auth Syncs",          color: "bg-slate-400",  target: 3  },
+];
+
 // ── Tab content panel ─────────────────────────────────────────────────────────
-function EntryList({ entries, cfg, profileMap }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; profileMap: Map<string, number> }) {
+function EntryList({ entries, cfg, tabKey, profileMap }: { entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number> }) {
+  const [showAll, setShowAll] = useState(false);
+
   if (entries.length === 0) return (
     <div className="border border-border rounded-lg p-10 text-center">
       <p className="text-sm font-medium">{cfg.emptyMsg}</p>
@@ -468,49 +512,85 @@ function EntryList({ entries, cfg, profileMap }: { entries: AnalyticsEntry[]; cf
     </div>
   );
 
-  const crossTrend = buildCrossTrend(entries);
+  const ratio = buildRatioAnalysis(entries);
+  const dominantMeta = RATIO_CAT_META.find(m => m.key === ratio.dominantAction) ?? RATIO_CAT_META[3];
+  const dominantCount = ratio.totals[ratio.dominantAction] || 1;
+
+  const reversed = [...entries].reverse();
+  const visible = showAll ? reversed : reversed.slice(0, 3);
 
   return (
     <div className="space-y-4">
-      {crossTrend.length > 0 && (
+
+      {/* ── Reasoning ── */}
+      <div className="border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50 dark:bg-amber-900/10 px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">Logic &amp; Reasoning — {cfg.label}</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{TAB_REASONING[tabKey]}</p>
+      </div>
+
+      {/* ── Endpoint Ratio Analysis ── */}
+      {ratio.totalCalls >= 5 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-cyan-500" />
-            <span className="text-sm font-semibold">Common Endpoints Across All Events</span>
-            <span className="text-xs text-muted-foreground ml-auto">present in ≥50% of flagged accounts</span>
+            <span className="text-sm font-semibold">Endpoint Ratio Analysis</span>
+            <span className="text-xs text-muted-foreground ml-auto">{entries.length} event{entries.length !== 1 ? "s" : ""} · {ratio.totalCalls.toLocaleString()} total calls aggregated</span>
           </div>
           <div className="divide-y divide-border">
-            {crossTrend.map(t => (
-              <div key={t.endpoint} className="px-4 py-2 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-muted-foreground truncate">{t.endpoint}</span>
-                    {t.label && <span className="text-xs text-foreground shrink-0">({t.label})</span>}
+            {RATIO_CAT_META.map(({ key, label, color, target }) => {
+              const count = ratio.totals[key] || 0;
+              const actualRatio = dominantCount > 0 ? count / dominantCount : 0;
+              const barPct = Math.min(100, Math.round(count / (ratio.totalCalls || 1) * 300));
+              const isLow = count > 0 && actualRatio < target * 0.4;
+              const isHigh = count > 0 && actualRatio > target * 2 && key !== ratio.dominantAction;
+              return (
+                <div key={key} className="px-4 py-2 flex items-center gap-3">
+                  <span className="text-xs w-36 shrink-0 text-muted-foreground">{label}</span>
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${barPct}%` }} />
                   </div>
+                  <span className="text-xs w-12 text-right font-mono text-foreground">{count.toLocaleString()}</span>
+                  <span className="text-[11px] w-24 text-right">
+                    <strong className={isLow ? "text-amber-600" : isHigh ? "text-red-500" : "text-foreground"}>
+                      {actualRatio >= 10 ? actualRatio.toFixed(0) : actualRatio.toFixed(1)}x
+                    </strong>
+                    <span className="text-muted-foreground"> / ~{target}x</span>
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full ${cfg.barColor} rounded-full`} style={{ width: `${t.pct}%` }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground w-32 text-right">{t.accountCount}/{entries.length} accounts ({t.pct}%)</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+          <div className="px-4 py-2 bg-muted/30 text-[10px] text-muted-foreground">
+            Ratios expressed relative to dominant action ({dominantMeta.label}). Target column shows estimated healthy ratio per 1 {dominantMeta.label.toLowerCase()} call. <span className="text-amber-600 font-semibold">Amber</span> = below target (not enough session noise). <span className="text-red-500 font-semibold">Red</span> = far above target.
           </div>
         </div>
       )}
 
+      {/* ── Event History ── */}
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <Calendar className="w-4 h-4 text-cyan-500" />
           <span className="text-sm font-semibold">Event History</span>
-          <span className="text-xs text-muted-foreground ml-auto">click any row to expand</span>
+          <span className="text-xs text-muted-foreground ml-auto">
+            {showAll ? `${entries.length} events` : `${Math.min(3, entries.length)} of ${entries.length}`} — click any row to expand
+          </span>
         </div>
         <div className="p-3 space-y-2">
-          {[...entries].reverse().map(entry => (
+          {visible.map(entry => (
             <EntryCard key={entry.id} entry={entry} cfg={cfg} allSameType={entries} profileMap={profileMap} />
           ))}
         </div>
+        {entries.length > 3 && (
+          <div className="px-4 py-2 border-t border-border flex items-center justify-center">
+            <button
+              onClick={() => setShowAll(o => !o)}
+              className="text-xs text-cyan-500 hover:text-cyan-400 font-semibold transition-colors flex items-center gap-1"
+            >
+              {showAll ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {showAll ? "Show less" : `Show all ${entries.length} events`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -549,12 +629,6 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
           <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
           <span className="text-sm font-mono truncate">{pr.host}</span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1">
-          {pr.accounts.slice(0, 5).map((a, idx) => (
-            <span key={a}>{idx > 0 ? "," : ""} <UsernameLink username={a} profileMap={profileMap} /></span>
-          ))}
-          {pr.accounts.length > 5 && <span>+{pr.accounts.length - 5} more</span>}
-        </p>
       </div>
       <div className="flex items-center gap-2 shrink-0 text-xs">
         <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">{pr.banCount}B</span>
@@ -679,51 +753,6 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
-          {!isLoading && (
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { label: "Banned Accounts",     val: banEntries.length,       cls: "text-red-500" },
-                { label: "Automated Detected",  val: automatedEntries.length, cls: "text-orange-500" },
-                { label: "Captcha Errors",      val: captchaEntries.length,   cls: "text-yellow-500" },
-                { label: "Locked Accounts",     val: lockedEntries.length,    cls: "text-rose-500" },
-              ].map(({ label, val, cls }) => (
-                <div key={label} className="border border-border rounded-lg p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
-                  <p className={`text-3xl font-bold mt-1 ${cls}`}>{val}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {concurrencyAlerts.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                <span className="text-sm font-semibold">Concurrent Usage Alerts</span>
-                <span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy flagged within 30 min</span>
-              </div>
-              <div className="divide-y divide-border">
-                {concurrencyAlerts.map((alert, i) => (
-                  <div key={i} className="px-4 py-3 flex items-start gap-3">
-                    <Globe className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono">{alert.proxyHost}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{alert.category}</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
-                        <UsernameLink username={alert.accounts[0]} profileMap={profileMap} />
-                        <span>and</span>
-                        <UsernameLink username={alert.accounts[1]} profileMap={profileMap} />
-                        <span>— {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} &amp; {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}</span>
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Main tabbed panel */}
           <div className="border border-border rounded-lg overflow-hidden">
             <div className="flex border-b border-border overflow-x-auto">
@@ -802,7 +831,7 @@ export function BanAnalyticsPage() {
                   </div>
                 )
               ) : (
-                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} profileMap={profileMap} />
+                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} tabKey={activeTab as Exclude<Tab, "survivors">} profileMap={profileMap} />
               )}
             </div>
           </div>
@@ -817,6 +846,35 @@ export function BanAnalyticsPage() {
               <div className="divide-y divide-border">
                 {proxyRisks.map((pr, i) => (
                   <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {concurrencyAlerts.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-semibold">Concurrent Usage Alerts</span>
+                <span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy flagged within 30 min</span>
+              </div>
+              <div className="divide-y divide-border">
+                {concurrencyAlerts.map((alert, i) => (
+                  <div key={i} className="px-4 py-3 flex items-start gap-3">
+                    <Globe className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono">{alert.proxyHost}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">{alert.category}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
+                        <UsernameLink username={alert.accounts[0]} profileMap={profileMap} />
+                        <span>and</span>
+                        <UsernameLink username={alert.accounts[1]} profileMap={profileMap} />
+                        <span>— {alert.times[0] ? new Date(alert.times[0]).toLocaleTimeString() : "?"} &amp; {alert.times[1] ? new Date(alert.times[1]).toLocaleTimeString() : "?"}</span>
+                      </p>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

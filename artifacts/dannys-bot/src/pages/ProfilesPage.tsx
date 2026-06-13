@@ -2072,7 +2072,7 @@ export function ProfilesPage() {
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed text-orange-600"
               >
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Flag as Automated Behaviour{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+                <span className="whitespace-nowrap">Flag as Automated Behaviour{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span>
               </button>
               <button
                 onClick={async () => {

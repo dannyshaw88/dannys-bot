@@ -895,6 +895,9 @@ export function ProfileDetailsPage() {
             onCopy={handleAccountCopy}
           />
 
+          <div className="flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+
           {/* Group — top row */}
           <div className="pb-2">
             <div className="flex items-center gap-3">
@@ -1563,16 +1566,6 @@ export function ProfileDetailsPage() {
                     data-testid="input-date-of-birth"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><FileText className="w-3.5 h-3.5" /> Notes</Label>
-                  <textarea
-                    className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-                    placeholder="Any notes about this account…"
-                    value={formData.notes}
-                    onChange={e => updateField({ notes: e.target.value })}
-                    data-testid="input-notes"
-                  />
-                </div>
               </CardContent>
             </Card>
 
@@ -1713,6 +1706,7 @@ export function ProfileDetailsPage() {
           <div className="mt-4">
             {/* Single row: sync controls left, stat cards right */}
             <div className="flex items-center gap-3 flex-wrap">
+
               <Switch
                 checked={!!formData?.syncEnabled}
                 onCheckedChange={v => updateField({ syncEnabled: v })}
@@ -1783,6 +1777,26 @@ export function ProfileDetailsPage() {
             </div>
           </div>
           )}
+          </div>{/* end flex-1 left column */}
+
+          {/* ── Notes — far right, aligned from Group row ── */}
+          <div className="w-72 shrink-0 sticky top-6">
+            <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+              <FileText className="w-3.5 h-3.5" /> Notes
+            </Label>
+            <textarea
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              placeholder="Any notes about this account…"
+              rows={5}
+              style={{ maxHeight: "calc(5 * 1.5rem + 1rem)", overflowY: "auto" }}
+              value={formData.notes}
+              onChange={e => updateField({ notes: e.target.value })}
+              data-testid="input-notes"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">Status events (banned, locked, etc.) are automatically logged here.</p>
+          </div>
+
+          </div>{/* end outer flex row */}
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">

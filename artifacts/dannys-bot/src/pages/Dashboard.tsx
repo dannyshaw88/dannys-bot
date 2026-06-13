@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.919",
+    date: "13 Jun 2026",
+    items: [
+      { category: "Improved", text: "Evasion Stats: removed the 4 summary blocks at the top — counts are already shown in the tab headers so they were redundant." },
+      { category: "New", text: "Evasion Stats: replaced the Common Endpoints list with an Endpoint Ratio Analysis showing timeline, DM, like, follow, and auth call ratios vs healthy targets." },
+      { category: "New", text: "Evasion Stats: each tab now shows a Logic & Reasoning panel explaining what triggers that specific flag type and how Instagram detects it." },
+      { category: "Improved", text: "Evasion Stats: Event History now shows the 3 most recent entries by default with a 'Show all' button — prevents the page flooding when many events are recorded." },
+      { category: "Improved", text: "Evasion Stats: Concurrent Usage Alerts moved below Proxy Risk Ranking." },
+      { category: "Improved", text: "Evasion Stats: Proxy Risk Ranking no longer lists which accounts were on each proxy — that detail is available in each individual event entry." },
+      { category: "New", text: "Account Settings: Notes field moved to the far right of the settings panel, visible at all times starting from the Group row — no longer buried inside the collapsed Account Details section." },
+      { category: "New", text: "Account history is now auto-logged to Notes when an account is flagged as Banned, Automated Behaviour, Captcha Error, or Locked Account — each entry includes a date and UTC timestamp." },
+      { category: "Fix", text: "Accounts page Actions menu: 'Flag as Automated Behaviour' text now stays on a single line and never wraps to two lines." },
+    ],
+  },
+  {
     version: "1.0.918",
     date: "12 Jun 2026",
     items: [
