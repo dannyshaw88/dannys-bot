@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.958",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Auto-login: 2FA code field is now found reliably — added the placeholder-based selector that Instagram's current login page uses. TOTP code is auto-filled and Continue is clicked via JS. Post-2FA navigation now waits for the home page instead of resolving instantly." },
+    ],
+  },
+  {
     version: "1.0.957",
     date: "14 Jun 2026",
     items: [

@@ -1656,6 +1656,9 @@ async function doAutoLogin(
   // ── Handle 2FA if required ─────────────────────────────────────────────────
   // Instagram uses several different input attributes across app versions —
   // check all known selectors so TOTP detection is robust.
+  // NOTE: the current Instagram web login flow uses a plain input with
+  // placeholder="Code" and no name/type/autocomplete attributes — this MUST
+  // be in the list or the 2FA page is not detected at all.
   const _2FA_SELECTORS = [
     'input[name="verificationCode"]',
     'input[name="verification_code"]',
@@ -1668,6 +1671,7 @@ async function doAutoLogin(
     'input[aria-label*="code" i]',
     'input[aria-label*="digit" i]',
     'input[type="tel"][maxlength="6"]',
+    'input[placeholder*="code" i]',
   ].join(", ");
 
   const needs2FA: boolean = await wc.executeJavaScript(
@@ -1680,68 +1684,61 @@ async function doAutoLogin(
       return { ok: false, message: "2FA required but no 2FA key configured for this account" };
     }
     const code = generateTotp(twoFAKey);
-    console.log(`[doAutoLogin:${profileId}] ${_ts()} 2FA page detected, filling TOTP code via CDP`);
+    console.log(`[doAutoLogin:${profileId}] ${_ts()} 2FA page detected, TOTP code generated, filling via CDP`);
 
-    // Find the TOTP input centre-point via JS, then fill + submit via CDP
-    const tfPos = await wc.executeJavaScript(`
+    // Focus the code input via JS (reliable regardless of tap coordinates),
+    // clear any pre-filled content, then type the 6-digit TOTP code.
+    await wc.executeJavaScript(`
       (() => {
-        const SELS = ${JSON.stringify(_2FA_SELECTORS)};
-        const inp = document.querySelector(SELS);
-        if (!inp) return null;
-        const r = inp.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) return null;
-        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        const inp = document.querySelector(${JSON.stringify(_2FA_SELECTORS)});
+        if (inp) { inp.focus(); inp.select(); }
       })()
-    `).catch(() => null) as { x: number; y: number } | null;
+    `).catch(() => {});
+    await delay(150);
+    // Ctrl+A + Delete to clear pre-filled content
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+    await delay(80);
+    await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
+    console.log(`[doAutoLogin:${profileId}] ${_ts()} TOTP code typed, submitting 2FA form`);
 
-    if (tfPos) {
-      try {
-        await cdpTapGesture(wc.debugger, tfPos.x, tfPos.y);
-        await delay(150);
-        await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
-
-        // TAB TAB after code entry — advances focus out of the OTP field and
-        // ensures the submit button becomes active before we tap it.
-        await delay(150);
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-        await delay(150);
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-        await delay(300);
-      } catch {}
+    // Submit: JS click on the Continue / submit button — same approach as the
+    // main login button. The 2FA page uses "Continue" text, not type="submit".
+    await delay(300);
+    const tf2Submitted = await wc.executeJavaScript(`
+      (() => {
+        const b = document.querySelector('button[type="submit"]')
+          || Array.from(document.querySelectorAll('button')).find(b => {
+              const t = (b.innerText || b.textContent || '').trim();
+              const r = b.getBoundingClientRect();
+              return /continue|confirm|verify|submit/i.test(t) && r.width > 60 && !b.disabled;
+            });
+        if (!b || b.disabled) return false;
+        b.click();
+        return true;
+      })()
+    `).catch(() => false);
+    if (!tf2Submitted) {
+      // Fallback: Tab Tab Enter via CDP
+      console.warn(`[doAutoLogin:${profileId}] ${_ts()} 2FA submit button not found — falling back to Tab Tab Enter`);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await delay(80);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await delay(120);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await delay(60);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     }
-
-    // Poll for 2FA submit button, tap via touch gesture
-    {
-      let tf2BtnPos: { x: number; y: number } | null = null;
-      for (let i = 0; i < 16; i++) {
-        tf2BtnPos = await wc.executeJavaScript(`
-          (() => {
-            const b = document.querySelector('button[type="submit"]');
-            if (!b || b.disabled) return null;
-            const r = b.getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0) return null;
-            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-          })()
-        `).catch(() => null) as { x: number; y: number } | null;
-        if (tf2BtnPos) break;
-        await delay(250);
-      }
-      if (tf2BtnPos) {
-        await cdpTapGesture(wc.debugger, tf2BtnPos.x, tf2BtnPos.y);
-      } else {
-        // Fallback: Enter via CDP
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-        await delay(60);
-        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-      }
-    }
+    // Wait for navigation away from the 2FA/login URL to the home page.
+    // The 2FA page sits at accounts/login/# — we wait until the URL moves
+    // to something that is NOT a login/two_factor page at all.
     await waitForNav(
       wc,
-      url => url.includes("instagram.com") && !url.includes("two_factor"),
+      url => url.includes("instagram.com") && !url.includes("accounts/login"),
       20000,
     );
     await delay(1000);
