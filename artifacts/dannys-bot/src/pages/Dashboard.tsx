@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.959",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Auto-login: 2FA fallback keyboard sequence corrected to Tab Tab Tab Enter — the extra Tab skips past the 'Trust this device' checkbox to land on the Continue button." },
+    ],
+  },
+  {
     version: "1.0.958",
     date: "14 Jun 2026",
     items: [

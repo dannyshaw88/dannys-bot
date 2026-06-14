@@ -1721,8 +1721,13 @@ async function doAutoLogin(
       })()
     `).catch(() => false);
     if (!tf2Submitted) {
-      // Fallback: Tab Tab Enter via CDP
-      console.warn(`[doAutoLogin:${profileId}] ${_ts()} 2FA submit button not found — falling back to Tab Tab Enter`);
+      // Fallback: Tab Tab Tab Enter via CDP (3 tabs to skip past the
+      // "Trust this device" checkbox and any other focusable element
+      // before landing on the Continue button).
+      console.warn(`[doAutoLogin:${profileId}] ${_ts()} 2FA submit button not found — falling back to Tab Tab Tab Enter`);
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await delay(80);
       await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
       await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
       await delay(80);
