@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.937",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Studio: reference image upload now fully works — pick any image from your PC, it uploads automatically, and is used as a reference when you generate." },
+      { category: "Improvement", text: "AI Studio: Generate button shows 'Generate with Reference' when a reference image is active, and stays disabled while the upload is in progress." },
+    ],
+  },
+  {
     version: "1.0.936",
     date: "14 Jun 2026",
     items: [
