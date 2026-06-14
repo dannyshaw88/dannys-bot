@@ -4120,12 +4120,26 @@ export function startEbIpcServer(
       if (req.method === "POST" && u.pathname === "/eb/close") {
         const e = ebMap.get(pid);
         if (e && !e.win.isDestroyed()) {
-          // Save cookies before closing
-          const ses = electronSession.fromPartition(ebPartition(pid));
-          await saveCookiesToFile(pid, ses);
+          if (pid >= 0) {
+            // Regular account EB: save cookies so the session survives app restarts.
+            const ses = electronSession.fromPartition(ebPartition(pid));
+            await saveCookiesToFile(pid, ses);
+          } else {
+            // Ghost Browser (pid < 0): NEVER save cookies — it is a throwaway identity.
+            // Saving and reloading cookies is exactly what causes the "previous signup
+            // attempt still showing" bug: the stale Instagram session (suspended/flagged)
+            // gets written to cookies--1.json here and pumped back into the brand-new
+            // in-memory partition on the next /eb/open, making Instagram redirect to
+            // /accounts/suspended/ immediately.  Delete any leftover file from before
+            // this fix so the next open always starts with a completely clean slate.
+            try { fs.unlinkSync(cookieFilePath(pid)); } catch { /* no file — fine */ }
+          }
           // destroy() bypasses the "close" event handler that hides the window,
           // so this actually removes the window rather than hiding it to tray.
           e.win.destroy();
+        } else if (pid < 0) {
+          // Window already closed/destroyed — still clean up any stale cookies file.
+          try { fs.unlinkSync(cookieFilePath(pid)); } catch { /* no file — fine */ }
         }
         // Invalidate any running ghost-signup async block so it stops cleanly
         // rather than continuing to run against a destroyed WebContents.

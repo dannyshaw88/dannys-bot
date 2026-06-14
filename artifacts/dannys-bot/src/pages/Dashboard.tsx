@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.945",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: Nuke Environment now fully clears the previous session — stale Instagram cookies are no longer carried over into the next signup attempt." },
+    ],
+  },
+  {
     version: "1.0.944",
     date: "14 Jun 2026",
     items: [
