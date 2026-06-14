@@ -1603,20 +1603,40 @@ async function doAutoLogin(
   }
   console.log(`[doAutoLogin:${profileId}] ${_ts()} credentials filled, submitting via Tab Tab Enter`);
 
-  // Step 4: Tab Tab Enter — advances focus past any post-password UI elements
-  // and onto the Login button, then activates it. This is more reliable than
-  // hunting for the submit button by coordinates: the tap approach failed when
-  // Instagram's async validation spinner shifted the button position.
+  // Step 4: submit the login form.
+  // Primary path: JS .click() on the submit button — unaffected by focus position
+  // or Tab-order ambiguity (e.g. the eye/password-toggle icon sits between the
+  // password field and the Login button in the DOM tab order and can steal focus).
+  // Fallback: Tab Tab Enter via CDP for when the button isn't found in time.
   await delay(300);
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-  await delay(80);
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-  await delay(120);
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Return", code: "Enter", windowsVirtualKeyCode: 13 });
-  await delay(60);
-  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Return", code: "Enter", windowsVirtualKeyCode: 13 });
+  const submitted = await wc.executeJavaScript(`
+    (() => {
+      const b = document.querySelector('button[type="submit"]')
+        || Array.from(document.querySelectorAll('button')).find(b => {
+            const t = (b.innerText || b.textContent || '').trim();
+            const r = b.getBoundingClientRect();
+            return /log[\\s-]*in|sign[\\s-]*in/i.test(t) && r.width > 80 && !b.disabled;
+          });
+      if (!b || b.disabled) return false;
+      b.click();
+      return true;
+    })()
+  `).catch(() => false);
+  if (!submitted) {
+    // Fallback: Tab Tab Enter — skip past the password-visibility eye icon (Tab 1)
+    // and any intermediate focusable element (Tab 2) to land on the Login button.
+    console.warn(`[doAutoLogin:${profileId}] ${_ts()} submit button not found via JS — falling back to Tab Tab Enter`);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(80);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(120);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await delay(60);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  }
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} form submitted (via ${submitted ? 'JS click' : 'Tab Tab Enter'})`)
 
   // Wait up to 30s for navigation away from the bare login page.
   // The 2FA page URL is "accounts/login/two_factor?..." — it still contains
