@@ -1601,40 +1601,22 @@ async function doAutoLogin(
     console.error(`[doAutoLogin:${profileId}] ${_ts()} CDP form fill FAILED: ${cdpErr?.message}`);
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
   }
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} credentials filled, looking for submit button`);
+  console.log(`[doAutoLogin:${profileId}] ${_ts()} credentials filled, submitting via Tab Tab Enter`);
 
-  // Step 4: poll for submit button position, tap via touch gesture
-  {
-    let btnPos: { x: number; y: number } | null = null;
-    for (let i = 0; i < 20; i++) {
-      btnPos = await wc.executeJavaScript(`
-        (() => {
-          const b = document.querySelector('button[type="submit"]')
-            || Array.from(document.querySelectorAll('button')).find(b => {
-                const t = (b.innerText || b.textContent || '').trim();
-                const r = b.getBoundingClientRect();
-                return /log[\\s-]*in|sign[\\s-]*in/i.test(t) && r.width > 80;
-              });
-          if (!b || b.disabled) return null;
-          const r = b.getBoundingClientRect();
-          if (r.width <= 0 || r.height <= 0) return null;
-          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-        })()
-      `).catch(() => null) as { x: number; y: number } | null;
-      if (btnPos) break;
-      await delay(250);
-    }
-    if (btnPos) {
-      console.log(`[doAutoLogin:${profileId}] ${_ts()} tapping submit button at (${btnPos.x},${btnPos.y})`);
-      await cdpTapGesture(wc.debugger, btnPos.x, btnPos.y);
-    } else {
-      // Fallback: Enter via CDP (still isTrusted = true)
-      console.warn(`[doAutoLogin:${profileId}] ${_ts()} submit button not found — sending Enter via CDP`);
-      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-      await delay(60);
-      await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-    }
-  }
+  // Step 4: Tab Tab Enter — advances focus past any post-password UI elements
+  // and onto the Login button, then activates it. This is more reliable than
+  // hunting for the submit button by coordinates: the tap approach failed when
+  // Instagram's async validation spinner shifted the button position.
+  await delay(300);
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  await delay(80);
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  await delay(120);
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Return", code: "Enter", windowsVirtualKeyCode: 13 });
+  await delay(60);
+  await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Return", code: "Enter", windowsVirtualKeyCode: 13 });
 
   // Wait up to 30s for navigation away from the bare login page.
   // The 2FA page URL is "accounts/login/two_factor?..." — it still contains

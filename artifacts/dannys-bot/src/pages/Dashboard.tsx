@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.956",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Auto-login: after the password is typed, now presses Tab Tab Enter to move focus to the Login button and submit the form — previously nothing happened after the password was filled." },
+    ],
+  },
+  {
     version: "1.0.955",
     date: "14 Jun 2026",
     items: [
