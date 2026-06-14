@@ -2053,10 +2053,13 @@ export async function openEbWindow(opts: {
       win.setPosition(gx, gy);
       win.show();
     } else {
-      // Show then immediately maximize — win.maximize() is the only reliable way
-      // to fill the work area on all Windows DPI/taskbar configurations.
+      // Use workArea bounds — never covers the Windows taskbar.
+      // win.maximize() on frameless windows ignores the taskbar on some Windows
+      // DPI/taskbar configurations and extends behind it.  setBounds(workArea)
+      // explicitly fills only the usable desktop area.
+      const _disp = eScreen.getPrimaryDisplay();
       win.show();
-      win.maximize();
+      win.setBounds(_disp.workArea);
     }
   });
 
@@ -3644,6 +3647,12 @@ function setupToolbarIpc(): void {
             return 'ok';
           };
 
+          // Bring the EB window to front — clicking the toolbar button shifts OS focus
+          // to the toolbar BrowserView, which causes CDP tap events on the Instagram
+          // page to silently fail.  Focus the window first so the page's webContents
+          // receives the CDP input events correctly.
+          foundWin.focus();
+          await new Promise<void>(r => setTimeout(r, 120));
           const _inline = await _cdpFillLogin(wc).catch(() => 'navigate');
           if (_inline === 'navigate') {
             // Not on the login page — navigate there and fill after load
@@ -3802,6 +3811,9 @@ function setupToolbarIpc(): void {
               'input[data-testid*="verification" i]',
               'input[data-testid*="code" i]',
             ].join(",");
+            // Bring the EB window to front before CDP tap (same OS-focus fix as login).
+            foundWin.focus();
+            await new Promise<void>(r => setTimeout(r, 120));
             // Retry loop: Instagram's 2FA page may take a moment to render the input.
             let totpPos: { x: number; y: number } | null = null;
             for (let _ti = 0; _ti < 10 && !totpPos; _ti++) {

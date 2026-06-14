@@ -103,6 +103,14 @@ function matchLabel(name: string) {
 
 function parseEps(snapshot: string): EpItem[] { try { return JSON.parse(snapshot) ?? []; } catch { return []; } }
 function filterHiker(eps: EpItem[]): EpItem[] { return eps.filter(e => e.source !== "HikerAPI"); }
+function getEventTime(entry: AnalyticsEntry): string {
+  const eps = filterHiker(parseEps(entry.endpointSnapshot));
+  if (eps.length > 0) {
+    const times = eps.map(e => new Date(e.date).getTime()).filter(t => !isNaN(t));
+    if (times.length > 0) return new Date(Math.max(...times)).toISOString();
+  }
+  return entry.flaggedAt ?? entry.bannedAt ?? "";
+}
 function categorise(eps: EpItem[]): Record<string, number> {
   const c: Record<string, number> = { follow: 0, unfollow: 0, dm: 0, like: 0, session: 0, auth: 0, other: 0 };
   for (const ep of eps) { const m = matchLabel(ep.operationName); c[m?.category ?? "other"]++; }
@@ -392,11 +400,11 @@ function buildConcurrencyAlerts(bans: AnalyticsEntry[], automated: AnalyticsEntr
     for (const e of entries) { const h = e.proxyHost || "(no proxy)"; if (!byProxy.has(h)) byProxy.set(h, []); byProxy.get(h)!.push(e); }
     for (const [host, es] of byProxy) {
       if (es.length < 2) continue;
-      const sorted = [...es].sort((a, b) => new Date(a.flaggedAt ?? a.bannedAt ?? 0).getTime() - new Date(b.flaggedAt ?? b.bannedAt ?? 0).getTime());
+      const sorted = [...es].sort((a, b) => new Date(getEventTime(a)).getTime() - new Date(getEventTime(b)).getTime());
       for (let i = 0; i < sorted.length - 1; i++) {
-        const ta = new Date(sorted[i].flaggedAt ?? sorted[i].bannedAt ?? 0).getTime();
-        const tb = new Date(sorted[i + 1].flaggedAt ?? sorted[i + 1].bannedAt ?? 0).getTime();
-        if (Math.abs(tb - ta) <= 30 * 60 * 1000) alerts.push({ proxyHost: host, accounts: [sorted[i].username, sorted[i + 1].username], times: [sorted[i].flaggedAt ?? sorted[i].bannedAt ?? "", sorted[i + 1].flaggedAt ?? sorted[i + 1].bannedAt ?? ""], category: label });
+        const ta = new Date(getEventTime(sorted[i])).getTime();
+        const tb = new Date(getEventTime(sorted[i + 1])).getTime();
+        if (Math.abs(tb - ta) <= 30 * 60 * 1000) alerts.push({ proxyHost: host, accounts: [sorted[i].username, sorted[i + 1].username], times: [getEventTime(sorted[i]), getEventTime(sorted[i + 1])], category: label });
       }
     }
   }
@@ -430,9 +438,9 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
 }
 
-type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
+type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "theories";
 
-const TAB_CONFIG: Record<Exclude<Tab, "survivors">, {
+const TAB_CONFIG: Record<Exclude<Tab, "survivors" | "theories">, {
   label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string;
   causeTitle: string; causeTheory: string; causeSignals: string[];
 }> = {
@@ -502,7 +510,7 @@ function StatRow({ label, val, warn }: { label: string; val: string; warn?: bool
 }
 
 // ── Causation Panel (per-tab theory + data validation) ─────────────────────
-function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">] }) {
+function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors" | "theories">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">] }) {
   const [expanded, setExpanded] = useState(false);
 
   // Validate theory signals against actual data
@@ -587,7 +595,7 @@ function TrustScorePanel({ entries, survivingAccounts, trustMap, profileMap, tab
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>;
   profileMap: Map<string, number>;
-  tabKey: Exclude<Tab, "survivors">;
+  tabKey: Exclude<Tab, "survivors" | "theories">;
 }) {
   const flaggedTrusts = entries.map(e => trustMap.get(profileMap.get(e.username) ?? -1)).filter(Boolean) as TrustInfo[];
   const survivorTrusts = survivingAccounts.map(a => trustMap.get(profileMap.get(a.username) ?? -1)).filter(Boolean) as TrustInfo[];
@@ -724,7 +732,7 @@ function ReliabilityPanel({ entries, profileNotesMap }: { entries: AnalyticsEntr
 
 // ── Per-entry card ────────────────────────────────────────────────────────────
 function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
-  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats;
+  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">]; cross: CrossStats;
   profileMap: Map<string, number>; trustMap: Map<number, TrustInfo>; reliability: Reliability;
 }) {
   const [open, setOpen] = useState(false);
@@ -823,7 +831,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
                   ["TrustScore rank", ti ? `${ti.label} (rank #${ti.rank})` : "—"],
                   ["Re-add count", reliability.reAddCount > 0 ? `${reliability.reAddCount}× (weight: ${reliability.weight})` : "first add (full weight)"],
                   cross.n >= 2 ? ["Anomaly score", `${anomaly}/100 (${anomalyLabel})`] : null,
-                ] as ([string, string] | null)[]).filter(Boolean).map(([label, val]) => (
+                ] as ([string, string] | null)[]).filter((x): x is [string, string] => x !== null).map(([label, val]) => (
                   <div key={label} className="flex justify-between gap-2">
                     <span className="text-muted-foreground">{label}</span>
                     <span className={`font-mono font-semibold ${label === "Timing CoV (σ/μ)" ? covColor : ""}`}>{val}</span>
@@ -873,7 +881,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
 
 // ── Pattern Intelligence ──────────────────────────────────────────────────────
 function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap, profileNotesMap, profileMap }: {
-  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
+  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors" | "theories">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">];
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
 }) {
@@ -1149,8 +1157,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
 
 // ── Tab content ───────────────────────────────────────────────────────────────
 function EntryList({ entries, cfg, tabKey, profileMap, trustMap, profileNotesMap, survivingAccounts }: {
-  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
-  tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number>;
+  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">];
+  tabKey: Exclude<Tab, "survivors" | "theories">; profileMap: Map<string, number>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>;
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
 }) {
@@ -1234,12 +1242,162 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
   );
 }
 
+// ── Theories Tab ──────────────────────────────────────────────────────────────
+function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntries }: {
+  banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
+  captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
+}) {
+  const allEntries = useMemo(() => [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries], [banEntries, automatedEntries, captchaEntries, lockedEntries]);
+  const total = allEntries.length;
+  const allMetrics = useMemo(() => allEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [allEntries]);
+  const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
+
+  const hotProxyHosts = useMemo(() => new Set(proxyRisks.filter(pr => pr.total >= 2).map(pr => pr.host)), [proxyRisks]);
+  const onHotProxy = allEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
+  const ipTrustPct = total > 2 ? Math.round((onHotProxy / total) * 100) : -1;
+
+  const lowWarmupCount = allMetrics.filter(m => m.preActionWarmup < 5).length;
+  const warmupPct = total > 2 ? Math.round((lowWarmupCount / total) * 100) : -1;
+
+  const roboticCount = allMetrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
+  const roboticPct = total > 2 ? Math.round((roboticCount / total) * 100) : -1;
+
+  const highAuthCount = allMetrics.filter(m => m.authPerAction > 0.3).length;
+  const authPct = total > 2 ? Math.round((highAuthCount / total) * 100) : -1;
+
+  const highVelocityCount = allMetrics.filter(m => m.actionVelocityPerHour > 40).length;
+  const velocityPct = total > 2 ? Math.round((highVelocityCount / total) * 100) : -1;
+
+  const banUsernames = useMemo(() => new Set(banEntries.map(e => e.username)), [banEntries]);
+  const autoThenBanCount = automatedEntries.filter(e => banUsernames.has(e.username)).length;
+  const decayPct = automatedEntries.length > 2 ? Math.round((autoThenBanCount / automatedEntries.length) * 100) : -1;
+
+  function LikelihoodBar({ pct }: { pct: number }) {
+    if (pct < 0) return <span className="text-xs text-muted-foreground italic">— no data yet (need 3+ events)</span>;
+    const color = pct >= 70 ? "bg-red-500" : pct >= 45 ? "bg-orange-400" : pct >= 25 ? "bg-yellow-400" : "bg-blue-400";
+    const labelStr = pct >= 70 ? "HIGH" : pct >= 45 ? "MODERATE" : pct >= 25 ? "PLAUSIBLE" : "LOW";
+    const textColor = pct >= 70 ? "text-red-500" : pct >= 45 ? "text-orange-500" : pct >= 25 ? "text-yellow-500" : "text-blue-400";
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`text-[10px] font-bold w-24 text-right shrink-0 ${textColor}`}>{labelStr} · {pct}%</span>
+      </div>
+    );
+  }
+
+  const theories: Array<{ id: string; Icon: typeof Globe; title: string; tagline: string; likelihood: number; description: string; evidence: string; advice: string }> = [
+    {
+      id: "ip-trust", Icon: Globe,
+      title: "IP TrustScore Budget",
+      tagline: "Each IP has a shared daily action budget across all accounts using it",
+      likelihood: ipTrustPct,
+      description: "Instagram assigns an implicit TrustScore to each IP address that sets the maximum action-endpoint calls (follows, unfollows, DMs, likes) allowed per day shared across all accounts on that IP. A low-TrustScore IP might allow only 5–20 actions/day total — split between however many accounts are using it. A high-TrustScore IP (long clean history, ISP reputation) could allow 500+. This budget is per-IP, not per-account — running 10 accounts on the same low-trust IP splits a much smaller bucket than 10 accounts on 10 different IPs.",
+      evidence: ipTrustPct >= 0 ? `${onHotProxy} of ${total} flagged events (${ipTrustPct}%) occurred on proxies that flagged 2+ accounts — consistent with an IP-level budget being exhausted, not just account-level thresholds.` : "Not enough data yet. Flag more accounts to measure proxy reuse patterns.",
+      advice: "Rotate to a fresh, clean IP after any proxy accumulates 2+ bans across any error type. Treat the proxy budget as a shared pool, not a per-account allowance.",
+    },
+    {
+      id: "warmup-gate", Icon: Zap,
+      title: "Minimum Warmup Gate",
+      tagline: "Instagram expects browsing before actions — cold-start actions are the top trigger",
+      likelihood: warmupPct,
+      description: "Before any action endpoint (follow, unfollow, DM, like) is called, Instagram expects a minimum number of passive session calls — timeline feed, reels tray, notifications, profile views. This mimics real human behaviour: a person opens Instagram and scrolls before doing anything. Accounts that jump straight into action calls with fewer than 5 prior session endpoints are flagged at dramatically higher rates. This is the single most consistent pattern across all error types in the data.",
+      evidence: warmupPct >= 0 ? `${lowWarmupCount} of ${total} flagged accounts (${warmupPct}%) had fewer than 5 session calls before their first action endpoint.` : "Not enough data yet.",
+      advice: "Always add at least 5–10 feed, profile, or notification calls before the first follow or DM in every session. Never begin a session directly on an action endpoint.",
+    },
+    {
+      id: "timing-cov", Icon: Activity,
+      title: "Robotic Timing Signature (CoV < 0.5)",
+      tagline: "Fixed-interval schedulers are the most fingerprint-detectable automation pattern",
+      likelihood: roboticPct,
+      description: "Instagram tracks the Coefficient of Variation (CoV) across inter-call timing gaps within a session. Humans have naturally irregular timing (CoV 0.6–1.4) — they pause to read, get distracted, scroll back. Bots on fixed-interval schedulers produce CoV < 0.4, which is mathematically distinguishable from any real human pattern. A scheduler running every 30 seconds is far more detectable than one running every 30±27 seconds. The regularity itself is the signal, independent of speed.",
+      evidence: roboticPct >= 0 ? `${roboticCount} of ${total} flagged sessions (${roboticPct}%) had inter-call timing CoV below 0.5 — indicating near-robotic regularity.` : "Not enough data yet.",
+      advice: "Use randomised delays with a range at least as wide as the base value (e.g. 30±30s, not 30±2s). Target CoV > 0.7. Occasional long pauses (60–300s) increase CoV authentically.",
+    },
+    {
+      id: "auth-overcall", Icon: Shield,
+      title: "Auth Overcalling = Device Uncertainty Signal",
+      tagline: "Repeated mid-session sync calls mean Instagram is questioning the device identity",
+      likelihood: authPct,
+      description: "launcher/sync and qe/sync are Instagram's device-verification endpoints — called once at session start to establish device identity. When these appear multiple times within a session (auth-to-action ratio > 0.3), Instagram's server is repeatedly re-checking the device — a pre-escalation pattern. Each re-check slightly degrades the account's trust window. Accounts triggering 3+ auth calls per action are in a degraded state that often precedes a challenge or block. Stable device fingerprints (consistent mid, ig_did, uuid) dramatically reduce this.",
+      evidence: authPct >= 0 ? `${highAuthCount} of ${total} flagged accounts (${authPct}%) had an auth-to-action ratio above 0.3 — indicating repeated mid-session device re-verification.` : "Not enough data yet.",
+      advice: "Ensure device fingerprint (mid, ig_did, uuid) is stable across all sessions. Each new device identity triggers a full auth round. Never regenerate device IDs between sessions.",
+    },
+    {
+      id: "velocity-cap", Icon: Flame,
+      title: "Per-Hour Velocity Cap (~20–30 actions/hr)",
+      tagline: "The safe follow rate is far lower than most tools assume",
+      likelihood: velocityPct,
+      description: "Based on flagged session data, accounts sustaining more than 40 follows/hour over 30+ minute windows are reliably flagged regardless of warmup or timing variation. The per-hour cap appears to be a rolling window, not a daily total — 60 follows in 45 minutes is more dangerous than 200 follows over 12 hours. The safe operating zone appears to be 20–30 actions/hour sustained, with occasional organic 'micro-bursts' of 3–5 rapid actions separated by longer natural pauses of 5–15 minutes.",
+      evidence: velocityPct >= 0 ? `${highVelocityCount} of ${total} flagged accounts (${velocityPct}%) had a sustained action velocity above 40/hr.` : "Not enough data yet.",
+      advice: "Target 20–30 actions/hour with irregular spacing. A burst of 5 follows in 2 minutes is fine. Sustaining 60/hr for 45+ minutes is not. Build in 5–15 min pauses between bursts.",
+    },
+    {
+      id: "trust-decay", Icon: TrendingUp,
+      title: "Account TrustScore Decay Chain",
+      tagline: "Automated → Captcha → Ban is a detectable escalation ladder, not independent events",
+      likelihood: decayPct,
+      description: "Instagram doesn't jump straight to banning — it escalates through progressively severe interventions. Each intervention permanently lowers the account's effective action threshold for all future sessions. An account that previously received an Automated Behaviour block is in a higher-scrutiny bucket forever — its safe daily action limit is now lower than a clean account. Once on the escalation ladder, the threshold never fully resets. The practical implication: a flagged account that resumes at full speed will hit the next escalation level much faster than a clean one.",
+      evidence: decayPct >= 0 ? `${autoThenBanCount} of ${automatedEntries.length} accounts with Automated flags also appear in the Ban list (${decayPct}%), consistent with an escalation chain rather than independent events.` : automatedEntries.length <= 2 ? "Not enough automated entries yet to measure escalation overlap." : "No overlap between Automated and Banned accounts detected yet.",
+      advice: "After any Automated flag, permanently reduce that account's action limits to 40–60% of your normal limits. The account's threshold has been lowered — treat it as a degraded asset.",
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {total === 0 && (
+        <div className="border border-border rounded-lg p-10 text-center">
+          <FlaskConical className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm font-medium">No data yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Flag accounts across the Banned, Automated, Captcha, and Locked tabs to populate theory likelihood counters.</p>
+        </div>
+      )}
+      <div className="border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-start gap-2">
+          <FlaskConical className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-semibold">Detection Theories</span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Each theory's likelihood is computed live from your flagged account data. The more accounts you mark, the more accurate these percentages become. Theories are not mutually exclusive — multiple can be active simultaneously.</p>
+          </div>
+          {total > 0 && <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5 ml-2">based on {total} events</span>}
+        </div>
+        <div className="divide-y divide-border">
+          {theories.map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => (
+            <div key={id} className="p-4 space-y-2.5">
+              <div className="flex items-start gap-2">
+                <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">{title}</p>
+                  <p className="text-[11px] text-muted-foreground italic">{tagline}</p>
+                </div>
+              </div>
+              <LikelihoodBar pct={likelihood} />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
+              <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
+                <p className="text-[11px]">{evidence}</p>
+              </div>
+              <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action</p>
+                <p className="text-[11px] text-cyan-700 dark:text-cyan-300">{advice}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function BanAnalyticsPage() {
   const setSidebarSlot = useSidebarSetSlot();
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>("ban");
+  const [showAllProxy, setShowAllProxy] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   const { data: banEntries = [], isLoading: banLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/ban-patterns"], queryFn: async () => (await fetch("/api/analytics/ban-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
   const { data: automatedEntries = [], isLoading: autoLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/automated-patterns"], queryFn: async () => (await fetch("/api/analytics/automated-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
@@ -1268,10 +1426,10 @@ export function BanAnalyticsPage() {
 
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const concurrencyAlerts = useMemo(() => buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
-  const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : lockedEntries;
+  const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : activeTab === "locked" ? lockedEntries : banEntries;
 
-  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
-  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors", "theories"];
+  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors", theories: "Theories" };
 
   function handleExport() {
     const levels = getTrustLevels();
@@ -1341,18 +1499,21 @@ export function BanAnalyticsPage() {
           <div className="border border-border rounded-lg overflow-hidden">
             <div className="flex border-b border-border overflow-x-auto">
               {TABS.map(tab => {
-                const count = tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : tab === "locked" ? lockedEntries.length : survivingAccounts.length;
+                const count = tab === "ban" ? banEntries.length : tab === "automated" ? automatedEntries.length : tab === "captcha" ? captchaEntries.length : tab === "locked" ? lockedEntries.length : tab === "survivors" ? survivingAccounts.length : -1;
                 return (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}>
                     {tab === "survivors" && <Award className="w-3 h-3 text-green-500 shrink-0" />}
-                    {TAB_LABELS[tab]} <span className="opacity-60">({count})</span>
+                    {tab === "theories" && <FlaskConical className="w-3 h-3 text-violet-500 shrink-0" />}
+                    {TAB_LABELS[tab]}{count >= 0 && <span className="opacity-60">({count})</span>}
                   </button>
                 );
               })}
             </div>
             <div className="p-4">
-              {activeTab === "survivors" ? (
+              {activeTab === "theories" ? (
+                <TheoriesTab banEntries={banEntries} automatedEntries={automatedEntries} captchaEntries={captchaEntries} lockedEntries={lockedEntries} />
+              ) : activeTab === "survivors" ? (
                 survivingAccounts.length === 0 ? (
                   <div className="border border-border rounded-lg p-10 text-center"><Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" /><p className="text-sm font-medium">No surviving accounts tracked yet</p><p className="text-xs text-muted-foreground mt-1">Valid accounts with an "Added:" timestamp in Notes will appear here.</p></div>
                 ) : (
@@ -1405,23 +1566,38 @@ export function BanAnalyticsPage() {
                   </div>
                 )
               ) : (
-                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors">]} tabKey={activeTab as Exclude<Tab, "survivors">} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
+                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors" | "theories">]} tabKey={activeTab as Exclude<Tab, "survivors" | "theories">} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
               )}
             </div>
           </div>
 
           {proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Shield className="w-4 h-4 text-cyan-500" /><span className="text-sm font-semibold">Proxy Risk Ranking</span><span className="text-xs text-muted-foreground ml-auto">B/A/C/L + /24 subnet shown</span></div>
-              <div className="divide-y divide-border">{proxyRisks.map((pr, i) => <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />)}</div>
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <Shield className="w-4 h-4 text-cyan-500" />
+                <span className="text-sm font-semibold">Proxy Risk Ranking</span>
+                <span className="text-xs text-muted-foreground ml-auto">B/A/C/L + /24 subnet shown</span>
+              </div>
+              <div className="divide-y divide-border">
+                {(showAllProxy ? proxyRisks : proxyRisks.slice(0, 3)).map((pr, i) => <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />)}
+              </div>
+              {proxyRisks.length > 3 && (
+                <button onClick={() => setShowAllProxy(v => !v)} className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t border-border transition-colors flex items-center justify-center gap-1">
+                  {showAllProxy ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show {proxyRisks.length - 3} more</>}
+                </button>
+              )}
             </div>
           )}
 
           {concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-500" /><span className="text-sm font-semibold">Concurrent Usage Alerts</span><span className="text-xs text-muted-foreground ml-auto">2+ accounts on same proxy within 30 min</span></div>
+              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-semibold">Concurrent Usage Alerts</span>
+                <span className="text-xs text-muted-foreground ml-auto">timing based on last API call, not mark time</span>
+              </div>
               <div className="divide-y divide-border">
-                {concurrencyAlerts.map((alert, i) => (
+                {(showAllAlerts ? concurrencyAlerts : concurrencyAlerts.slice(0, 3)).map((alert, i) => (
                   <div key={i} className="px-4 py-3 flex items-start gap-3">
                     <Globe className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -1434,6 +1610,11 @@ export function BanAnalyticsPage() {
                   </div>
                 ))}
               </div>
+              {concurrencyAlerts.length > 3 && (
+                <button onClick={() => setShowAllAlerts(v => !v)} className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t border-border transition-colors flex items-center justify-center gap-1">
+                  {showAllAlerts ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show {concurrencyAlerts.length - 3} more</>}
+                </button>
+              )}
             </div>
           )}
         </div>

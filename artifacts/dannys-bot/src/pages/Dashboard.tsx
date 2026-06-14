@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.929",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats: added Theories tab — 6 detection theory cards (IP TrustScore Budget, Minimum Warmup Gate, Robotic Timing, Auth Overcalling, Velocity Cap, TrustScore Decay Chain) each with a live likelihood bar calculated from your flagged account data." },
+      { category: "Improvement", text: "Evasion Stats: Proxy Risk Ranking and Concurrent Usage Alerts now collapse to 3 rows by default with a Show more / Show less toggle, keeping the page tidy when lists are long." },
+      { category: "Fix", text: "Evasion Stats: Concurrent Usage Alerts now use the actual last API call timestamp from the session snapshot for timing comparisons, not the manual mark time — gives more accurate 30-minute proximity detection." },
+      { category: "Fix", text: "Embedded Browser: new windows now use the available work area instead of maximize(), so the browser never covers the Windows taskbar." },
+      { category: "Fix", text: "Embedded Browser: Login and 2FA autofill buttons now focus the correct field and add a short delay before filling, fixing a focus-steal issue caused by the toolbar stealing OS focus." },
+    ],
+  },
+  {
     version: "1.0.928",
     date: "13 Jun 2026",
     items: [
