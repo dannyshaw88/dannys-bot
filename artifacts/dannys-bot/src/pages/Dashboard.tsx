@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.934",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "AI Studio tab re-added — now powered by Pollinations AI, no setup required, works instantly. Type a prompt and generate images including NSFW with a toggle." },
+      { category: "New", text: "AI Studio: choose from 6 models (Flux, Flux Realism, Flux Anime, Flux 3D, Any Dark, Turbo), pick size, toggle NSFW and prompt enhancement, re-roll with a new seed, and save to PC." },
+    ],
+  },
+  {
     version: "1.0.933",
     date: "14 Jun 2026",
     items: [
