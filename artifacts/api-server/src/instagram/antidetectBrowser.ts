@@ -217,18 +217,38 @@ export async function antidetectInput(msg: {
       break;
 
     case "type": {
-      // Use CDP Input.insertText — identical to clipboard paste on Android.
-      // keyboard.type() with delay:0 is an instant-delivery bot tell that
-      // Instagram's input-timing classifier catches immediately.
-      // insertText delivers the full string as a single native text insertion
-      // event, matching how mobile autocomplete / paste works on a real phone.
-      const txt = String(msg.text);
+      // Android IME simulation — identical to typeTextCDP(androidIme:true) in ebManager.ts.
+      //
+      // For each character:
+      //   rawKeyDown  key="Unidentified"  windowsVirtualKeyCode=229  (VK_PROCESSKEY)
+      //   Input.insertText  { text: <char> }                         (one character)
+      //   keyUp       key="Unidentified"  windowsVirtualKeyCode=229
+      //   sleep 80–280 ms  (3 % chance of a 300–800 ms "thinking" pause)
+      //
+      // On a real Android phone every key from the on-screen keyboard fires
+      // keydown/keyup with key="Unidentified" and keyCode=229 — the actual
+      // character is delivered separately via the input event.  Sending real
+      // Windows virtual key codes (65 for 'A', etc.) is a hard desktop signal
+      // Instagram's input-event analyser reads immediately.
+      // Full-string insertText delivers all characters with 0 ms between them —
+      // indistinguishable from clipboard paste, which Instagram also flags.
       const { cdp } = _session;
-      try {
-        await cdp.send("Input.insertText", { text: txt });
-      } catch {
-        // cdp insertText not available (older Chromium) — fall back to keyboard
-        await page.keyboard.type(txt, { delay: 30 + Math.random() * 40 });
+      const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+      const IME_DOWN = { type: "rawKeyDown", key: "Unidentified", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 };
+      const IME_UP   = { type: "keyUp",      key: "Unidentified", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 };
+      for (const char of String(msg.text)) {
+        try {
+          await cdp.send("Input.dispatchKeyEvent", IME_DOWN);
+          await cdp.send("Input.insertText", { text: char });
+          await cdp.send("Input.dispatchKeyEvent", IME_UP);
+        } catch {
+          // CDP unavailable — fall back to keyboard.type for this char
+          await page.keyboard.type(char, { delay: 0 });
+        }
+        const pause = Math.random() < 0.03
+          ? 300 + Math.random() * 500   // 3 % thinking pause
+          : 80  + Math.random() * 200;  // normal inter-key gap
+        await sleep(pause);
       }
       break;
     }

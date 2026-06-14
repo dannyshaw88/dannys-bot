@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.946",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: text input now simulates Android on-screen keyboard exactly — each character fires keyCode 229 (VK_PROCESSKEY) with human inter-key delays, matching how a real Android IME fires events rather than sending desktop key codes or clipboard paste." },
+    ],
+  },
+  {
     version: "1.0.945",
     date: "14 Jun 2026",
     items: [
