@@ -1538,7 +1538,16 @@ async function doAutoLogin(
   //   real Android phone. Instagram reads event.pointerType to detect mouse input.
   try {
     await cdpTapGesture(wc.debugger, fields.u.x, fields.u.y);
-    await delay(150);
+    await delay(120);
+    // Belt-and-suspenders: JS .focus() guarantees keyboard focus is on the
+    // username input before CDP key events are dispatched. synthesizeTapGesture
+    // fires touchstart/touchend but focus transfer can be asynchronous on some
+    // Chromium builds — without this, Ctrl+A / Delete / typeText events go to
+    // whatever element previously held focus (e.g. the cookie-banner dismiss link).
+    await wc.executeJavaScript(
+      `(document.querySelector('input[name="username"]')||document.querySelector('input[autocomplete="username"]'))?.focus()`
+    ).catch(() => {});
+    await delay(80);
     // Select-all + delete any pre-filled content before typing
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
@@ -3590,22 +3599,19 @@ function setupToolbarIpc(): void {
 
             if (_flds === 'navigate') return 'navigate';
 
-            // Tab twice before clicking username — moves keyboard focus off any
-            // post-cookie-banner element (e.g. "Decline optional cookies" link) and
-            // lands it on the username input. This mirrors the user pressing Tab
-            // twice after dismissing the cookie banner before touching the form.
-            await _ms(300);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(150);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(300);
-
-            // Fill username via CDP touch tap
+            // Tap username field by coordinate (touch gesture, isTrusted=true).
+            // After the tap, explicitly focus the input via JS as belt-and-suspenders —
+            // synthesizeTapGesture fires touchstart/touchend but on some Chromium builds
+            // the resulting focus transfer is asynchronous and the subsequent Ctrl+A /
+            // Delete / typeText events can fire before focus has moved, sending them to
+            // whatever element previously held focus (e.g. the cookie-banner dismiss link).
+            // The JS .focus() call is synchronous and guarantees the username input owns
+            // keyboard focus before any key events are dispatched.
             await cdpTapGesture(_d, _flds.u.x, _flds.u.y);
+            await _ms(120);
+            await targetWc.executeJavaScript(
+              `(document.querySelector('input[name="username"]')||document.querySelector('input[autocomplete="username"]'))?.focus()`
+            ).catch(() => {});
             await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });

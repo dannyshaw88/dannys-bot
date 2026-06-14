@@ -183,20 +183,27 @@ export function ProfilesPage() {
     if (verifyingInProgress.current.has(id)) return;
     verifyingInProgress.current.add(id);
     setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
+    // Cancel any in-flight polling refetches BEFORE the optimistic patch so they
+    // cannot overwrite "verifying" with a stale "pending" value from the server
+    // (the 5 s poll can fire between the click and the POST completing).
+    await queryClient.cancelQueries({ queryKey: [api.profiles.list.path] });
     // Optimistically patch the local React Query cache so the status badge
     // changes to "Verifying" immediately — no PATCH request, just a cache write.
     // The finally block's invalidateQueries will overwrite this with the real
     // server value once the POST resolves.
     const patchVerifying = (old: any) =>
       Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus: "verifying" } : p) : old;
-    queryClient.setQueriesData({ queryKey: [api.profiles.list.path] }, patchVerifying);
+    // Target the exact sub-keys the useProfiles/useCreatorProfiles hooks use so
+    // the patch lands in the right cache entries (not a dead key).
+    queryClient.setQueryData([api.profiles.list.path, "automation"], patchVerifying);
+    queryClient.setQueryData([api.profiles.list.path, "creator"],    patchVerifying);
     queryClient.setQueryData([api.profiles.get.path, id], (old: any) =>
       old ? { ...old, accountStatus: "verifying" } : old);
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
       toast({
-        title: data.ok ? "Verified" : "Verification Failed",
+        title: data.ok ? "Verification started" : "Verification Failed",
         description: data.message,
         variant: data.ok ? "default" : "destructive",
       });

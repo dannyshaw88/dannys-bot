@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.952",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify button: no longer flashes and resets — the 'verifying' state now sticks immediately when clicked and stays until the background check completes." },
+      { category: "Fix", text: "Verify button: toast now correctly says 'Verification started' instead of the misleading 'Verified' that fired before the check had actually finished." },
+      { category: "Fix", text: "Login button macro: username field is now reliably focused before typing, fixing the bug where it typed nothing into the username field and instead went Tab Tab Tab Tab then only filled the password." },
+    ],
+  },
+  {
     version: "1.0.951",
     date: "14 Jun 2026",
     items: [
