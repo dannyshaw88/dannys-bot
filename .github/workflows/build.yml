@@ -1,4 +1,4 @@
-name: Build & Package Windows Installer
+name: Build & Package
 
   on:
     push:
@@ -7,44 +7,48 @@ name: Build & Package Windows Installer
 
   jobs:
     build-web:
-      name: Build web (API server + frontend)
+      name: Build Web (Ubuntu)
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v4
 
         - uses: pnpm/action-setup@v4
           with:
-            version: 10
+            version: 10.26.1
 
         - uses: actions/setup-node@v4
           with:
-            node-version: 22
+            node-version: 24
             cache: pnpm
 
         - name: Install workspace dependencies
           run: pnpm install --no-frozen-lockfile --ignore-scripts
 
+        - name: Build lib/db
+          run: pnpm --filter @workspace/db run build
+
         - name: Build API server
           run: pnpm --filter @workspace/api-server run build
 
-        - name: Build frontend
+        - name: Build React frontend
+          run: pnpm --filter @workspace/dannys-bot run build
           env:
             REPL_ID: ci
-          run: pnpm --filter @workspace/dannys-bot run build
+
+        - name: Archive build outputs
+          run: tar -czf web-builds.tar.gz artifacts/api-server/dist artifacts/dannys-bot/dist
 
         - name: Upload web builds
           uses: actions/upload-artifact@v4
           with:
             name: web-builds
-            path: |
-              artifacts/api-server/dist
-              artifacts/dannys-bot/dist/public
+            path: web-builds.tar.gz
             if-no-files-found: error
 
-    package-windows:
-      name: Package Windows installer
+    package-standalone:
+      name: Package Standalone Server (Windows-ready ZIP)
+      runs-on: ubuntu-latest
       needs: build-web
-      runs-on: windows-latest
       steps:
         - uses: actions/checkout@v4
 
@@ -53,25 +57,122 @@ name: Build & Package Windows Installer
           with:
             name: web-builds
 
+        - name: Extract build outputs
+          run: tar -xzf web-builds.tar.gz
+
+        - name: Assemble standalone package
+          run: |
+            mkdir -p equinox-standalone/server
+            mkdir -p equinox-standalone/public
+            cp artifacts/api-server/dist/index.mjs equinox-standalone/server/index.mjs
+            cp -r artifacts/dannys-bot/dist/public/. equinox-standalone/public/
+            cp artifacts/electron/standalone/start.bat equinox-standalone/start.bat
+
+        - name: Zip standalone package
+          run: zip -r Equinox-Standalone.zip equinox-standalone/
+
+        - name: Upload standalone package
+          uses: actions/upload-artifact@v4
+          with:
+            name: Equinox-Standalone
+            path: Equinox-Standalone.zip
+            if-no-files-found: error
+
+    package-windows:
+      name: Package Windows Installer
+      runs-on: windows-latest
+      needs: build-web
+      steps:
+        - uses: actions/checkout@v4
+
         - uses: actions/setup-node@v4
           with:
-            node-version: 22
+            node-version: 24
+
+        - name: Cache npm dependencies
+          uses: actions/cache@v4
+          with:
+            path: artifacts/electron/node_modules
+            key: ${{ runner.os }}-electron-npm-${{ hashFiles('artifacts/electron/package-lock.json') }}
+            restore-keys: |
+              ${{ runner.os }}-electron-npm-
+
+        - name: Download web builds
+          uses: actions/download-artifact@v4
+          with:
+            name: web-builds
+
+        - name: Extract build outputs
+          run: tar -xzf web-builds.tar.gz
 
         - name: Install Electron dependencies
           working-directory: artifacts/electron
           run: npm install
 
-        - name: Bundle Electron app
+        - name: Fetch WDA IPA (best-effort — creates placeholder if unavailable)
+          shell: pwsh
+          run: |
+            $dest = "artifacts/electron/resources/WebDriverAgent.ipa"
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+
+            # 1. Try GitHub Releases API to find the latest signed IPA from Appium
+            $apiUrls = @()
+            try {
+              $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/appium/WebDriverAgent/releases?per_page=10" -Headers @{Accept="application/vnd.github+json"} -TimeoutSec 15
+              foreach ($rel in $releases) {
+                foreach ($asset in $rel.assets) {
+                  if ($asset.name -match "\.ipa$") {
+                    Write-Host "Found IPA via API: $($asset.browser_download_url)"
+                    $apiUrls += $asset.browser_download_url
+                  }
+                }
+              }
+            } catch {
+              Write-Host "GitHub API lookup failed: $_"
+            }
+
+            # 2. Static fallback URLs for known Appium WDA releases
+            $staticUrls = @(
+              "https://github.com/appium/WebDriverAgent/releases/download/v9.4.0/WebDriverAgent.ipa",
+              "https://github.com/appium/WebDriverAgent/releases/download/v9.3.3/WebDriverAgent.ipa",
+              "https://github.com/appium/WebDriverAgent/releases/download/v9.2.0/WebDriverAgent.ipa"
+            )
+
+            $urls = $apiUrls + $staticUrls
+            $ok = $false
+            foreach ($url in $urls) {
+              try {
+                Write-Host "Trying $url"
+                Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 60 -ErrorAction Stop
+                $bytes = [System.IO.File]::ReadAllBytes($dest)
+                if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b) {
+                  Write-Host "Downloaded real IPA ($($bytes.Length) bytes)"
+                  $ok = $true
+                  break
+                } else {
+                  Write-Host "Not a valid ZIP/IPA — skipping"
+                  Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                }
+              } catch {
+                Write-Host "Failed: $_"
+              }
+            }
+            if (-not $ok) {
+              Write-Host "No WDA IPA found — creating placeholder so electron-builder does not fail"
+              Set-Content -Path $dest -Value "PLACEHOLDER_NO_IPA" -NoNewline
+            }
+
+        - name: Bundle Electron main process
           working-directory: artifacts/electron
+          run: node build.mjs
           env:
             DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-          run: node build.mjs
 
         - name: Package Windows installer
           working-directory: artifacts/electron
           env:
             GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-          run: npx electron-builder --win --publish always
+          run: ./node_modules/.bin/electron-builder --win --publish always
 
         - name: Upload installer to Actions artifacts
           uses: actions/upload-artifact@v4
