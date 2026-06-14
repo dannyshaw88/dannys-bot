@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.930",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "AI Studio tab added — connect to a locally running Stable Diffusion (Forge/A1111) instance and generate images directly inside Equinox with no content restrictions." },
+      { category: "New", text: "AI Studio: type a prompt, pick a size, adjust steps and CFG scale, then generate and save images to your PC in one click." },
+      { category: "New", text: "AI Studio: built-in 3-step setup guide for installing Stable Diffusion Forge on Windows with the right models for your hardware." },
+      { category: "Improvement", text: "Auto-ban detection now fires the full ban pipeline (API call snapshot, ban analytics, proxy taint pause) automatically when an account is detected as banned during Verify or a running automation — no manual flagging needed." },
+    ],
+  },
+  {
     version: "1.0.929",
     date: "14 Jun 2026",
     items: [

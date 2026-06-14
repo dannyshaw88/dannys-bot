@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
+import { triggerBanPipeline } from "../instagram/banPipeline";
 import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/instagramWebClient";
 import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { IgApiClient } from "instagram-private-api";
@@ -655,44 +656,11 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
     try {
-      const allCalls_b = await storage.getInstagramApiCallsByProfile(profileId, 2000);
-      const calls = allCalls_b.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
-      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
-      const proxyHost = await resolveProxyHost(profile);
-      const now_b = new Date();
-      const pad_b = (n: number) => String(n).padStart(2, "0");
-      const stamp_b = `Flagged as Banned: ${now_b.getUTCFullYear()}-${pad_b(now_b.getUTCMonth()+1)}-${pad_b(now_b.getUTCDate())} ${pad_b(now_b.getUTCHours())}:${pad_b(now_b.getUTCMinutes())}:${pad_b(now_b.getUTCSeconds())} UTC`;
-      const freshNotes_b = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
-      await storage.insertBanAnalytics({
-        username: profile.username,
-        proxyHost,
-        bannedAt: now_b.toISOString(),
-        endpointCount: calls.length,
-        endpointSnapshot: snapshot,
-      });
-      await storage.updateProfile(profileId, { accountStatus: "banned", notes: freshNotes_b ? `${freshNotes_b}\n${stamp_b}` : stamp_b });
-      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded), status set to banned`);
-
-      // Auto-pause all other accounts on the same proxy for 90 minutes (IP taint window)
-      if (profile.proxyId) {
-        const now90 = new Date(now_b.getTime() + 90 * 60 * 1000).toISOString();
-        const sameProxy = await storage.getProfilesByProxyId(profile.proxyId);
-        for (const sibling of sameProxy) {
-          if (sibling.id === profileId || sibling.accountStatus === "banned" || !!sibling.resumingUntil) continue;
-          const pad_s = (n: number) => String(n).padStart(2, "0");
-          const stamp_s = `Proxy taint: paused 90 min — same IP as @${profile.username} which was banned at ${now_b.getUTCFullYear()}-${pad_s(now_b.getUTCMonth()+1)}-${pad_s(now_b.getUTCDate())} ${pad_s(now_b.getUTCHours())}:${pad_s(now_b.getUTCMinutes())} UTC`;
-          const siblingNotes = sibling.notes ?? "";
-          await storage.updateProfile(sibling.id, {
-            accountStatus: "stopped",
-            resumingUntil: now90,
-            resumingPrevStatus: sibling.accountStatus,
-            notes: siblingNotes ? `${siblingNotes}\n${stamp_s}` : stamp_s,
-          });
-          req.log.info(`[flag-banned] Paused @${sibling.username} (proxy taint) — resumes at ${now90}`);
-        }
-      }
-
-      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+      await triggerBanPipeline(profileId, "manual");
+      const allCalls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const endpointCount = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI").length;
+      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — pipeline complete, ${endpointCount} calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount });
     } catch (err) {
       req.log.error({ err }, "[flag-banned] error");
       res.status(500).json({ error: "Failed to flag account as banned" });
@@ -1524,14 +1492,26 @@ export async function registerInstagramRoutes(
       }
     }
 
-    await storage.updateProfile(profile.id, {
-      accountStatus: finalStatus,
-      ...(finalStatus === "valid" ? { credentialsDirty: false } : {}),
-      ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
-      // Save session cookies captured from the fresh login so follow/DM tools
-      // can restore the session on Path 2 without re-logging in.
-      ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
-    });
+    if (finalStatus === "banned" || finalStatus === "suspended") {
+      // Full ban pipeline: snapshot API calls + analytics + proxy taint
+      await triggerBanPipeline(profile.id, "verify").catch((e: any) =>
+        console.error(`[verify] triggerBanPipeline failed for @${profile.username}: ${e?.message}`)
+      );
+      // Still persist any device state / cookies from the result
+      await storage.updateProfile(profile.id, {
+        ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
+        ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
+      });
+    } else {
+      await storage.updateProfile(profile.id, {
+        accountStatus: finalStatus,
+        ...(finalStatus === "valid" ? { credentialsDirty: false } : {}),
+        ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
+        // Save session cookies captured from the fresh login so follow/DM tools
+        // can restore the session on Path 2 without re-logging in.
+        ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
+      });
+    }
 
     // Log verify result as a session action so the LiveActivityTicker can surface it
     await storage.createSessionAction({
@@ -4935,6 +4915,78 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       storage.deleteLicense(Number(req.params.id));
       res.json({ ok: true });
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  // ── AI Studio: proxy to local Stable Diffusion (Automatic1111 / Forge) ───────
+  const SD_BASE = "http://127.0.0.1:7860";
+
+  app.get("/api/ai/status", async (_req, res) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const r = await fetch(`${SD_BASE}/sdapi/v1/options`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!r.ok) { res.json({ running: false }); return; }
+      const opts = await r.json() as any;
+      const model = (opts?.sd_model_checkpoint as string | undefined) ?? undefined;
+      res.json({ running: true, model });
+    } catch {
+      res.json({ running: false });
+    }
+  });
+
+  app.post("/api/ai/generate", async (req, res) => {
+    const { prompt, negativePrompt, width, height, steps, cfgScale, sampler } = req.body as {
+      prompt: string;
+      negativePrompt?: string;
+      width?: number;
+      height?: number;
+      steps?: number;
+      cfgScale?: number;
+      sampler?: string;
+    };
+
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      res.status(400).json({ error: "prompt is required" }); return;
+    }
+
+    const payload = {
+      prompt: prompt.trim(),
+      negative_prompt: (negativePrompt ?? "").trim(),
+      width:       Math.min(Math.max(Number(width  ?? 512), 64), 2048),
+      height:      Math.min(Math.max(Number(height ?? 768), 64), 2048),
+      steps:       Math.min(Math.max(Number(steps  ?? 25),  1),  150),
+      cfg_scale:   Math.min(Math.max(Number(cfgScale ?? 7), 1),  30),
+      sampler_name: sampler ?? "DPM++ 2M Karras",
+      batch_size:  1,
+      n_iter:      1,
+    };
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180_000);
+      const r = await fetch(`${SD_BASE}/sdapi/v1/txt2img`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        res.status(502).json({ error: `Stable Diffusion returned ${r.status}: ${body.slice(0, 200)}` }); return;
+      }
+      const data = await r.json() as any;
+      const image = (data?.images as string[] | undefined)?.[0];
+      if (!image) { res.status(502).json({ error: "No image returned from Stable Diffusion" }); return; }
+      res.json({ image });
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        res.status(504).json({ error: "Generation timed out (3 min). Try fewer steps or a smaller size." });
+      } else {
+        res.status(503).json({ error: "Could not reach Stable Diffusion. Make sure Forge/A1111 is running at localhost:7860." });
+      }
+    }
   });
 
 }

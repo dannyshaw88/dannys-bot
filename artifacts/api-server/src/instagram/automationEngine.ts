@@ -21,6 +21,7 @@
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import { storage } from "../storage";
+import { triggerBanPipeline } from "./banPipeline";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
@@ -2185,9 +2186,13 @@ class AutomationEngine {
     if (!status) return null;
     // Debug-log every account-level error so the exact triggering message is visible
     console.error(`[engine] applyAccountLevelError profileId=${profileId} status=${status} raw=${rawError.slice(0, 400)}`);
-    await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
     if (status === "banned" || status === "suspended") {
+      await triggerBanPipeline(profileId, "auto-detect").catch((e: any) =>
+        console.error(`[engine] triggerBanPipeline failed for profile ${profileId}: ${e?.message}`)
+      );
       await storage.incrementStat(profileId, "banned").catch(() => {});
+    } else {
+      await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
     }
     if (status === "captcha") {
       await storage.incrementStat(profileId, "captcha").catch(() => {});
