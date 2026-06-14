@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.948",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Settings: Both verify delay cards are now always editable — selecting a mode determines which values are used, not which inputs you can touch." },
+    ],
+  },
+  {
     version: "1.0.947",
     date: "14 Jun 2026",
     items: [

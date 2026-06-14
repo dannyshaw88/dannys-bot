@@ -1089,14 +1089,7 @@ export function SettingsPage() {
         </div>
 
         {/* Verify All Delay */}
-        <div
-          className="desktop-card p-6"
-          style={{
-            display: settingsTab !== "automation" ? "none" : undefined,
-            opacity: (settings?.verifyDelayMode ?? "general") !== "general" ? 0.4 : undefined,
-            pointerEvents: (settings?.verifyDelayMode ?? "general") !== "general" ? "none" : undefined,
-          }}
-        >
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-green-100 text-green-600">
               <Timer className="w-4 h-4" />
@@ -1181,14 +1174,7 @@ export function SettingsPage() {
         </div>
 
         {/* Same Proxy Delay */}
-        <div
-          className="desktop-card p-6"
-          style={{
-            display: settingsTab !== "automation" ? "none" : undefined,
-            opacity: settings?.verifyDelayMode !== "sameProxy" ? 0.4 : undefined,
-            pointerEvents: settings?.verifyDelayMode !== "sameProxy" ? "none" : undefined,
-          }}
-        >
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
               <Timer className="w-4 h-4" />
