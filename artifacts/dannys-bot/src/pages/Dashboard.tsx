@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.950",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "2FA button: TAB TAB now runs first (before finding the code field), so focus is in the right place before the automation fills and submits the code." },
+    ],
+  },
+  {
     version: "1.0.949",
     date: "14 Jun 2026",
     items: [

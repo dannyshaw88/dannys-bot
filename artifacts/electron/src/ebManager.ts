@@ -3825,12 +3825,23 @@ function setupToolbarIpc(): void {
         // The old approach used JS setter.call + dispatchEvent — all isTrusted=false,
         // identical to the bot signal the login form fix addressed.
         try {
+          // TAB TAB first — moves focus from wherever it was (nav bar, cookie button, etc.)
+          // into the 2FA code field area before the automation searches for and taps it.
+          try { wc.debugger.attach("1.3"); } catch {}
+          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          await new Promise<void>(r => setTimeout(r, 60));
+          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          await new Promise<void>(r => setTimeout(r, 150));
+          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          await new Promise<void>(r => setTimeout(r, 60));
+          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          await new Promise<void>(r => setTimeout(r, 300));
+
           const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
           const p = await r.json() as any;
           const key = (p.twoFASecretKey ?? "").trim();
           if (key) {
             const code = generateTotp(key);
-            try { wc.debugger.attach("1.3"); } catch {}
             const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
             const _d = wc.debugger;
 
