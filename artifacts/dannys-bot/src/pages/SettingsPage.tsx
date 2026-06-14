@@ -1099,7 +1099,7 @@ export function SettingsPage() {
           <p className="text-sm text-muted-foreground mb-5">
             Sequential delay applied between every account when this mode is active.
           </p>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
             <div>
               <Label className="text-sm font-medium mb-2 block">Min delay</Label>
               <div className="flex items-center gap-2">
@@ -1184,7 +1184,7 @@ export function SettingsPage() {
           <p className="text-sm text-muted-foreground mb-5">
             When verifying multiple accounts that share the same proxy IP, this delay is applied between each account on that proxy. Accounts on different proxies are verified simultaneously — so 10 accounts across 10 proxies all start at once, with this delay staggering the remaining 9 on each proxy.
           </p>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
             <div>
               <Label className="text-sm font-medium mb-2 block">Min delay</Label>
               <div className="flex items-center gap-2">

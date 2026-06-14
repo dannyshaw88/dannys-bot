@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.949",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Settings: Min and Max delay inputs now sit side-by-side on the same row in both delay cards." },
+      { category: "Fix", text: "Verify button: silent login now sends TAB TAB after dismissing the cookie banner, matching the manual Login button flow." },
+      { category: "Fix", text: "Verify button: 2FA auto-fill now sends TAB TAB after typing the code, ensuring the submit button activates before it is clicked." },
+      { category: "Fix", text: "2FA button: TAB TAB added after typing the TOTP code so the submit button is active before being clicked." },
+    ],
+  },
+  {
     version: "1.0.948",
     date: "14 Jun 2026",
     items: [

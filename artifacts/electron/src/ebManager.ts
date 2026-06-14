@@ -1476,6 +1476,22 @@ async function doAutoLogin(
     }
   }
 
+  // ── TAB TAB — move focus into the username field ──────────────────────────
+  // The cookie banner leaves focus on the "Accept" button or nowhere.  Two Tab
+  // presses advance focus through the page in DOM order, landing on the username
+  // input — same behaviour as clicking Login in the nav bar.
+  await delay(300);
+  try {
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(60);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(150);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(60);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await delay(300);
+  } catch {}
+
   // ── Ensure debugger is attached for all CDP calls below ──────────────────
   // The if (userAgent) block above may have already attached it; attach() is
   // a no-op if already connected, so this is always safe.
@@ -1658,6 +1674,18 @@ async function doAutoLogin(
         await cdpTapGesture(wc.debugger, tfPos.x, tfPos.y);
         await delay(150);
         await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
+
+        // TAB TAB after code entry — advances focus out of the OTP field and
+        // ensures the submit button becomes active before we tap it.
+        await delay(150);
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+        await delay(150);
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+        await delay(300);
       } catch {}
     }
 
@@ -3864,6 +3892,17 @@ function setupToolbarIpc(): void {
               // Wider 50–230ms range with occasional longer pauses — humans glance
               // back at the authenticator app between digits, so timing is uneven.
               await typeTextCDP(_d, code, { minDelay: 200, maxDelay: 600 });
+
+              // TAB TAB — advance focus out of the OTP field so the submit button
+              // becomes active before we go looking for it.
+              await _ms(150);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(150);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
 
               // Natural pause: a real person reads the code, checks it looks right,
               // then moves to click Submit. 700–1500ms is the realistic human range.
