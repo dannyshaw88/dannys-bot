@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.936",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Studio: model dropdown now shows 13 confirmed working models (Flux, Turbo, Flux Realism, Flux Dev, Flux Pro, Flux Anime, Flux 3D, Any Dark, GPT Image, DALL-E 3, Stable Diffusion, Playground v2.5, Sana) instead of only showing 'sana'." },
+      { category: "New", text: "AI Studio: added Reference Image section — paste a public image URL to use as a style/content reference for generation (img2img)." },
+      { category: "New", text: "AI Studio: added local reference image upload — pick any image from your PC to display as visual inspiration while you write your prompt." },
+    ],
+  },
+  {
     version: "1.0.935",
     date: "14 Jun 2026",
     items: [
