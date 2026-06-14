@@ -583,6 +583,9 @@ export async function registerInstagramRoutes(
       credentialsDirty: true,
       ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api)),
     });
+    // Clear any in-flight verify lock so the next Verify doesn't get a 429
+    // "already in progress" if the previous verify was still running when reset was clicked.
+    verifyInFlight.delete(id);
     res.json({ ok: true });
   });
 
@@ -1388,9 +1391,14 @@ export async function registerInstagramRoutes(
             // the same login form, causing both to silently fail (garbled input, missed
             // fields).  doAutoLogin (called from /eb/silent-verify) is the sole owner of
             // form interaction during the verify flow.
-            proxy:    proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
-            userAgent: ebUA,
-            apiUA:     effectiveProfile.userAgentApi ?? undefined,
+            proxy:      proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+            userAgent:  ebUA,
+            apiUA:      effectiveProfile.userAgentApi ?? undefined,
+            // Opens a small (430×700) corner window so the user can watch without
+            // blocking their screen.  The window is fully visible — NOT minimised —
+            // so Chromium does not throttle it (minimised windows throttle timers
+            // causing the form-fill to type the password into the username field).
+            verifyMode: true,
           }),
         });
         console.log(`[verify:${profileId}] @${profile.username} — /eb/open responded OK, waiting 3 s for window init`);
@@ -2306,7 +2314,11 @@ export async function registerInstagramRoutes(
   // Wipe EB session entirely (no reopen) — called by Reset Device IDs so the
   // browser starts fresh with no stored cookies on next open.
   app.post("/api/browser/:profileId/wipe", async (req, res) => {
-    await wipeEbSession(Number(req.params.profileId));
+    const _wipeId = Number(req.params.profileId);
+    await wipeEbSession(_wipeId);
+    // Clear any in-flight verify lock — wipe invalidates the session so a
+    // stuck verify from before the wipe must not block the next one.
+    verifyInFlight.delete(_wipeId);
     res.json({ ok: true });
   });
 

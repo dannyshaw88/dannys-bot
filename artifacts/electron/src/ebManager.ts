@@ -1803,8 +1803,16 @@ export async function openEbWindow(opts: {
   ebFingerprint?: EbFingerprintLite | null;
   /** Ghost Browser only — URL to load directly instead of the login page. */
   initialUrl?: string;
+  /**
+   * When true the window opens as a small (430×700) phone-sized window pinned
+   * to the bottom-right corner of the screen.  The window is fully visible so
+   * Chromium does NOT throttle it (minimised windows get throttled — timers
+   * fire out of sequence and form-fill breaks).  Using a corner window means
+   * the user can see the login happening without it blocking their screen.
+   */
+  verifyMode?: boolean;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode } = opts;
   const isGhostBrowser = profileId === -1;
   _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
@@ -2080,12 +2088,12 @@ export async function openEbWindow(opts: {
   await loadCookiesFromFile(profileId, ses);
   _ebCrashLog(profileId, "STEP-10: cookies loaded");
 
-  // Ghost browser (profileId -1) opens at phone portrait dimensions, not maximized.
+  // Ghost browser and verify-mode windows open at phone portrait dimensions.
   // Regular account EB windows open full-screen maximized.
   _ebCrashLog(profileId, "STEP-11: creating BrowserWindow");
   const win = new BrowserWindow({
-    width:           isGhostBrowser ? 430 : 1280,
-    height:          isGhostBrowser ? 932 : 820,
+    width:           (isGhostBrowser || verifyMode) ? 430 : 1280,
+    height:          (isGhostBrowser || verifyMode) ? 700 : 820,
     title:           `@${username} — Equinox Browser`,
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
@@ -2107,11 +2115,24 @@ export async function openEbWindow(opts: {
       const gy = Math.max(0, Math.floor((sh - wh) / 2));
       win.setPosition(gx, gy);
       win.show();
+    } else if (verifyMode) {
+      // Verify-mode: show as a small phone-sized window at the bottom-right
+      // corner of the screen.  NEVER minimize — Chromium throttles minimised
+      // windows (timers fire seconds late) which causes form-fill to type the
+      // password into the username field.  A corner window is fully visible to
+      // Chromium so timing is accurate, but small enough not to block the screen.
+      const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
+      const { width: ww, height: wh } = win.getBounds();
+      const gx = Math.max(0, sw - ww - 8);
+      const gy = Math.max(0, sh - wh - 8);
+      win.setPosition(gx, gy);
+      win.showInactive(); // show without stealing focus from the user's current window
     } else {
-      // Show minimized — appears in the taskbar without blocking the user's screen.
-      // The user can click the taskbar entry at any time to bring it into view.
+      // Regular manual open — full screen.
+      // Use workArea bounds — never covers the Windows taskbar.
+      const _disp = eScreen.getPrimaryDisplay();
       win.show();
-      win.minimize();
+      win.setBounds(_disp.workArea);
     }
   });
 
@@ -4187,6 +4208,7 @@ export function startEbIpcServer(
           apiUA:     body.apiUA,
           ebFingerprint: parsedFp,
           initialUrl: body.initialUrl ?? undefined,
+          verifyMode: body.verifyMode === true,
         }).catch(err => console.error(`[eb:open:${pid}] openEbWindow error:`, err?.message ?? err));
         return send(res, 200, { ok: true });
       }
