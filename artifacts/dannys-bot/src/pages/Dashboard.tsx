@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.963",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: mobile API calls now run even when Instagram redirects through a suspended/human-check page after login — the browser login sets the sessionid cookie, which is all the mobile API needs. The mobile API is now the authoritative pass/fail judge, not the browser URL." },
+      { category: "Fix", text: "Verify: fixed a crash ('No values to set') that was resetting status back to pending after a ban/suspended result — the account card now correctly shows the final status." },
+    ],
+  },
+  {
     version: "1.0.962",
     date: "14 Jun 2026",
     items: [

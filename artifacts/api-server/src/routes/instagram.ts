@@ -1471,9 +1471,15 @@ export async function registerInstagramRoutes(
     // IgApiClient session with the same sessionid before the first one completes.
     // The lock is released at every exit point below (early returns + final response).
 
-    // Step 3: Extract cookies and build result
-    console.log(`[verify:${profileId}] @${profile.username} — step 3: loginResult.ok=${loginResult.ok} msg="${loginResult.message}"`);
-    if (loginResult.ok) {
+    // Step 3: Extract cookies and build result.
+    // Proceed to the mobile API call whenever sessionid is present in the harvested
+    // cookies — even when loginResult.ok=false.  Instagram often redirects through
+    // accounts/suspended or challenge pages AFTER a successful login; the sessionid
+    // cookie is already set at that point.  The mobile API is the authoritative judge
+    // of whether the account is actually banned — the browser URL alone is not enough.
+    const _silentSessionPresent = !!(_silentCookies?.some(c => c.name === "sessionid"));
+    console.log(`[verify:${profileId}] @${profile.username} — step 3: loginResult.ok=${loginResult.ok} silentSessionPresent=${_silentSessionPresent} msg="${loginResult.message}"`);
+    if (loginResult.ok || _silentSessionPresent) {
       const rawCookies = _silentCookies ?? await getSessionPageCookies(profileId);
       console.log(`[verify:${profileId}] @${profile.username} — rawCookies (${rawCookies.length}): [${rawCookies.map(c => c.name).join(",")}]`);
       const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
@@ -1573,11 +1579,15 @@ export async function registerInstagramRoutes(
       await triggerBanPipeline(profile.id, "verify").catch((e: any) =>
         console.error(`[verify] triggerBanPipeline failed for @${profile.username}: ${e?.message}`)
       );
-      // Still persist any device state / cookies from the result
-      await storage.updateProfile(profile.id, {
-        ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
-        ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
-      });
+      // Still persist any device state / cookies from the result — but only if
+      // there is something to write.  updateProfile({}) throws "No values to set"
+      // which was crashing the verify flow and resetting the status to "pending".
+      const _banExtra: Record<string, unknown> = {};
+      if (result.igDeviceState)                                    _banExtra.igDeviceState = result.igDeviceState;
+      if ("igApiCookies" in result && result.igApiCookies)         _banExtra.igApiCookies  = result.igApiCookies;
+      if (Object.keys(_banExtra).length > 0) {
+        await storage.updateProfile(profile.id, _banExtra as any);
+      }
     } else {
       await storage.updateProfile(profile.id, {
         accountStatus: finalStatus,
