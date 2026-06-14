@@ -2108,13 +2108,10 @@ export async function openEbWindow(opts: {
       win.setPosition(gx, gy);
       win.show();
     } else {
-      // Use workArea bounds — never covers the Windows taskbar.
-      // win.maximize() on frameless windows ignores the taskbar on some Windows
-      // DPI/taskbar configurations and extends behind it.  setBounds(workArea)
-      // explicitly fills only the usable desktop area.
-      const _disp = eScreen.getPrimaryDisplay();
+      // Show minimized — appears in the taskbar without blocking the user's screen.
+      // The user can click the taskbar entry at any time to bring it into view.
       win.show();
-      win.setBounds(_disp.workArea);
+      win.minimize();
     }
   });
 
@@ -4458,9 +4455,12 @@ export function startEbIpcServer(
             // toolbar frame.  Using the toolbar frame means doAutoLogin's CDP
             // commands run against the nav-bar HTML, not the Instagram page,
             // so the login fields are never found and cookies are never set.
+            const _activeWc = _useVisible ? getActiveWc(pid) : null;
             const _loginTarget = _useVisible
-              ? { webContents: getActiveWc(pid) ?? _verifyWin.webContents }
+              ? { webContents: _activeWc ?? _verifyWin.webContents }
               : _verifyWin;
+            const _wcUrl = (() => { try { return (_loginTarget as any).webContents?.getURL?.() ?? "(no getURL)"; } catch { return "(error)"; } })();
+            console.log(`[silent-verify:${pid}] @${body.username} — _loginTarget: _useVisible=${_useVisible} getActiveWc=${_activeWc ? "BrowserView" : "null"} wcUrl="${_wcUrl}"`);
             const loginResult = await doAutoLogin(pid, _loginTarget, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
             const c1 = await ses.cookies.get({ domain: ".instagram.com" });
             const c2 = await ses.cookies.get({ domain: "instagram.com" });

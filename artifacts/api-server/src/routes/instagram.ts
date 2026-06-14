@@ -1375,25 +1375,34 @@ export async function registerInstagramRoutes(
       const _verifyIpcPort = Number(process.env.EB_IPC_PORT);
       // Step 1: open the visible EB browser so the user can watch the login flow.
       try {
+        console.log(`[verify:${profileId}] @${profile.username} — opening EB window via /eb/open`);
         await fetch(`http://127.0.0.1:${_verifyIpcPort}/eb/open`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             profileId,
             username: profile.username,
-            password: profile.password,
-            twoFAKey: profile.twoFASecretKey ?? "",
+            // NOTE: password is intentionally NOT passed here.
+            // Passing password registers openEbWindow's did-navigate auto-fill handler,
+            // which conflicts with doAutoLogin — both fire simultaneously and try to fill
+            // the same login form, causing both to silently fail (garbled input, missed
+            // fields).  doAutoLogin (called from /eb/silent-verify) is the sole owner of
+            // form interaction during the verify flow.
             proxy:    proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
             userAgent: ebUA,
             apiUA:     effectiveProfile.userAgentApi ?? undefined,
           }),
         });
+        console.log(`[verify:${profileId}] @${profile.username} — /eb/open responded OK, waiting 3 s for window init`);
         // Allow the BrowserWindow and its session to fully initialise before verify runs.
         await new Promise(r => setTimeout(r, 3000));
-      } catch { /* non-fatal — silent verify falls back to opening its own window */ }
+      } catch (openErr: any) {
+        console.warn(`[verify:${profileId}] @${profile.username} — /eb/open failed (non-fatal): ${openErr?.message}`);
+      }
 
       await acquireSilentVerifySlot();
       try {
+        console.log(`[verify:${profileId}] @${profile.username} — calling electronSilentVerify`);
         const silentRes = await electronSilentVerify({
           profileId,
           username:  profile.username,
@@ -1402,6 +1411,7 @@ export async function registerInstagramRoutes(
           proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
           userAgent: ebUA,
         });
+        console.log(`[verify:${profileId}] @${profile.username} — electronSilentVerify done: ok=${silentRes.ok} msg="${silentRes.message}" cookies=${silentRes.cookies.length} (${silentRes.cookies.map(c => c.name).join(",")})`);
         loginResult    = { ok: silentRes.ok, message: silentRes.message };
         _silentCookies = silentRes.cookies;
       } catch (ebErr: any) {
@@ -1454,20 +1464,24 @@ export async function registerInstagramRoutes(
     // The lock is released at every exit point below (early returns + final response).
 
     // Step 3: Extract cookies and build result
+    console.log(`[verify:${profileId}] @${profile.username} — step 3: loginResult.ok=${loginResult.ok} msg="${loginResult.message}"`);
     if (loginResult.ok) {
       const rawCookies = _silentCookies ?? await getSessionPageCookies(profileId);
+      console.log(`[verify:${profileId}] @${profile.username} — rawCookies (${rawCookies.length}): [${rawCookies.map(c => c.name).join(",")}]`);
       const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
       const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
       const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
       const mid       = rawCookies.find(c => c.name === "mid")?.value;
 
       if (!sessionid) {
+        console.warn(`[verify:${profileId}] @${profile.username} — no sessionid in cookies — aborting`);
         result = {
           ok: false,
           accountStatus: "pending",
           message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found. Try again.`,
         };
       } else {
+        console.log(`[verify:${profileId}] @${profile.username} — sessionid found, building igApiCookies and calling verifyInstagramCredentials`);
         // Step 4: Build cookie string from EB session and persist it immediately.
         // Include ig_did so buildIgClient can restore the exact device identity
         // that Chrome presented to Instagram — prevents "Unrecognized device" SMS.

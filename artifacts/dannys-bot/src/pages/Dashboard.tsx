@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.961",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: browser now opens minimised in the taskbar instead of full-screen — it no longer blocks your screen while you work." },
+      { category: "Fix", text: "Verify: fixed the root cause of cookies never being harvested — the auto-fill from the browser window was racing with the verify auto-fill and both were failing silently. Only one fill now runs." },
+      { category: "Fix", text: "Verify: added step-by-step debug logging across the full verify flow so failures are visible in the log file." },
+    ],
+  },
+  {
     version: "1.0.960",
     date: "14 Jun 2026",
     items: [
