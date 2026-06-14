@@ -3562,6 +3562,20 @@ function setupToolbarIpc(): void {
 
             if (_flds === 'navigate') return 'navigate';
 
+            // Tab twice before clicking username — moves keyboard focus off any
+            // post-cookie-banner element (e.g. "Decline optional cookies" link) and
+            // lands it on the username input. This mirrors the user pressing Tab
+            // twice after dismissing the cookie banner before touching the form.
+            await _ms(300);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(150);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(300);
+
             // Fill username via CDP touch tap
             await cdpTapGesture(_d, _flds.u.x, _flds.u.y);
             await _ms(150);

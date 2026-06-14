@@ -497,6 +497,18 @@ export function SettingsPage() {
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
   const jarveeFileRef = useRef<HTMLInputElement>(null);
+
+  const verifyAllMinMinsRef = useRef<HTMLInputElement>(null);
+  const verifyAllMinSecsRef = useRef<HTMLInputElement>(null);
+  const verifyAllMaxMinsRef = useRef<HTMLInputElement>(null);
+  const verifyAllMaxSecsRef = useRef<HTMLInputElement>(null);
+  const sameProxyMinMinsRef = useRef<HTMLInputElement>(null);
+  const sameProxyMinSecsRef = useRef<HTMLInputElement>(null);
+  const sameProxyMaxMinsRef = useRef<HTMLInputElement>(null);
+  const sameProxyMaxSecsRef = useRef<HTMLInputElement>(null);
+
+  const toSecs = (m: number, s: number) => Math.max(0, Math.round(m) * 60 + Math.round(s));
+  const msOf = (totalSecs: number) => ({ m: Math.floor((totalSecs ?? 0) / 60), s: (totalSecs ?? 0) % 60 });
   const [jarveeGroups, setJarveeGroups] = useState<JarveeGroup[] | null>(null);
   const [jarveeFileName, setJarveeFileName] = useState<string>("");
   const [jarveeImporting, setJarveeImporting] = useState(false);
@@ -1048,8 +1060,43 @@ export function SettingsPage() {
 
 
 
+        {/* Verify Delay Mode selector */}
+        <div className="desktop-card p-5" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
+          <p className="text-sm font-semibold mb-1">Verify Delay Mode</p>
+          <p className="text-xs text-muted-foreground mb-4">Select one — only the active mode applies when verifying accounts.</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => mutation.mutate({ verifyDelayMode: "general" })}
+              className={`flex-1 rounded-lg border-2 p-3 text-left transition-colors ${(settings?.verifyDelayMode ?? "general") === "general" ? "border-green-500 bg-green-50 dark:bg-green-950/40" : "border-border opacity-60"}`}
+            >
+              <div className="flex items-center gap-2 mb-0.5">
+                <div className={`w-3 h-3 rounded-full border-2 ${(settings?.verifyDelayMode ?? "general") === "general" ? "border-green-500 bg-green-500" : "border-muted-foreground"}`} />
+                <span className="text-sm font-medium">Verify All Accounts Delay</span>
+              </div>
+              <p className="text-xs text-muted-foreground pl-5">Flat delay between every account one at a time, regardless of proxy</p>
+            </button>
+            <button
+              onClick={() => mutation.mutate({ verifyDelayMode: "sameProxy" })}
+              className={`flex-1 rounded-lg border-2 p-3 text-left transition-colors ${settings?.verifyDelayMode === "sameProxy" ? "border-orange-500 bg-orange-50 dark:bg-orange-950/40" : "border-border opacity-60"}`}
+            >
+              <div className="flex items-center gap-2 mb-0.5">
+                <div className={`w-3 h-3 rounded-full border-2 ${settings?.verifyDelayMode === "sameProxy" ? "border-orange-500 bg-orange-500" : "border-muted-foreground"}`} />
+                <span className="text-sm font-medium">Same Proxy Delay</span>
+              </div>
+              <p className="text-xs text-muted-foreground pl-5">Different proxies verify simultaneously — stagger accounts on the same IP</p>
+            </button>
+          </div>
+        </div>
+
         {/* Verify All Delay */}
-        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
+        <div
+          className="desktop-card p-6"
+          style={{
+            display: settingsTab !== "automation" ? "none" : undefined,
+            opacity: (settings?.verifyDelayMode ?? "general") !== "general" ? 0.4 : undefined,
+            pointerEvents: (settings?.verifyDelayMode ?? "general") !== "general" ? "none" : undefined,
+          }}
+        >
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-green-100 text-green-600">
               <Timer className="w-4 h-4" />
@@ -1057,40 +1104,170 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">Verify All Accounts Delay</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            When "Verify All Accounts" is triggered from the Accounts page, this delay is applied between each verification to avoid rate limiting.
+            Sequential delay applied between every account when this mode is active.
           </p>
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Min delay (seconds)</Label>
-              <Input
-                type="number" min={0} max={300}
-                className="w-28"
-                defaultValue={settings?.verifyAllDelayMin ?? 5}
-                key={settings?.verifyAllDelayMin}
-                onBlur={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!isNaN(v) && v !== settings?.verifyAllDelayMin) {
-                    mutation.mutate({ verifyAllDelayMin: v });
-                  }
-                }}
-                disabled={isLoading}
-              />
+          <div className="flex flex-col gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Min delay</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={verifyAllMinMinsRef}
+                  type="number" min={0} max={1440}
+                  className="w-24"
+                  defaultValue={msOf(settings?.verifyAllDelayMin ?? 5).m}
+                  key={`vamin-m-${settings?.verifyAllDelayMin}`}
+                  onBlur={() => {
+                    const m = parseInt(verifyAllMinMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(verifyAllMinSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.verifyAllDelayMin) mutation.mutate({ verifyAllDelayMin: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">min</span>
+                <Input
+                  ref={verifyAllMinSecsRef}
+                  type="number" min={0} max={59}
+                  className="w-24"
+                  defaultValue={msOf(settings?.verifyAllDelayMin ?? 5).s}
+                  key={`vamin-s-${settings?.verifyAllDelayMin}`}
+                  onBlur={() => {
+                    const m = parseInt(verifyAllMinMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(verifyAllMinSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.verifyAllDelayMin) mutation.mutate({ verifyAllDelayMin: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">sec</span>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Max delay (seconds)</Label>
-              <Input
-                type="number" min={0} max={300}
-                className="w-28"
-                defaultValue={settings?.verifyAllDelayMax ?? 15}
-                key={settings?.verifyAllDelayMax}
-                onBlur={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!isNaN(v) && v !== settings?.verifyAllDelayMax) {
-                    mutation.mutate({ verifyAllDelayMax: v });
-                  }
-                }}
-                disabled={isLoading}
-              />
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Max delay</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={verifyAllMaxMinsRef}
+                  type="number" min={0} max={1440}
+                  className="w-24"
+                  defaultValue={msOf(settings?.verifyAllDelayMax ?? 15).m}
+                  key={`vamax-m-${settings?.verifyAllDelayMax}`}
+                  onBlur={() => {
+                    const m = parseInt(verifyAllMaxMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(verifyAllMaxSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.verifyAllDelayMax) mutation.mutate({ verifyAllDelayMax: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">min</span>
+                <Input
+                  ref={verifyAllMaxSecsRef}
+                  type="number" min={0} max={59}
+                  className="w-24"
+                  defaultValue={msOf(settings?.verifyAllDelayMax ?? 15).s}
+                  key={`vamax-s-${settings?.verifyAllDelayMax}`}
+                  onBlur={() => {
+                    const m = parseInt(verifyAllMaxMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(verifyAllMaxSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.verifyAllDelayMax) mutation.mutate({ verifyAllDelayMax: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">sec</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Same Proxy Delay */}
+        <div
+          className="desktop-card p-6"
+          style={{
+            display: settingsTab !== "automation" ? "none" : undefined,
+            opacity: settings?.verifyDelayMode !== "sameProxy" ? 0.4 : undefined,
+            pointerEvents: settings?.verifyDelayMode !== "sameProxy" ? "none" : undefined,
+          }}
+        >
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+              <Timer className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Verify Accounts Sharing the Same Proxy — Delay</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            When verifying multiple accounts that share the same proxy IP, this delay is applied between each account on that proxy. Accounts on different proxies are verified simultaneously — so 10 accounts across 10 proxies all start at once, with this delay staggering the remaining 9 on each proxy.
+          </p>
+          <div className="flex flex-col gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Min delay</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={sameProxyMinMinsRef}
+                  type="number" min={0} max={1440}
+                  className="w-24"
+                  defaultValue={msOf(settings?.sameProxyDelayMin ?? 0).m}
+                  key={`spmin-m-${settings?.sameProxyDelayMin}`}
+                  onBlur={() => {
+                    const m = parseInt(sameProxyMinMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(sameProxyMinSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.sameProxyDelayMin) mutation.mutate({ sameProxyDelayMin: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">min</span>
+                <Input
+                  ref={sameProxyMinSecsRef}
+                  type="number" min={0} max={59}
+                  className="w-24"
+                  defaultValue={msOf(settings?.sameProxyDelayMin ?? 0).s}
+                  key={`spmin-s-${settings?.sameProxyDelayMin}`}
+                  onBlur={() => {
+                    const m = parseInt(sameProxyMinMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(sameProxyMinSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.sameProxyDelayMin) mutation.mutate({ sameProxyDelayMin: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">sec</span>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Max delay</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={sameProxyMaxMinsRef}
+                  type="number" min={0} max={1440}
+                  className="w-24"
+                  defaultValue={msOf(settings?.sameProxyDelayMax ?? 0).m}
+                  key={`spmax-m-${settings?.sameProxyDelayMax}`}
+                  onBlur={() => {
+                    const m = parseInt(sameProxyMaxMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(sameProxyMaxSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.sameProxyDelayMax) mutation.mutate({ sameProxyDelayMax: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">min</span>
+                <Input
+                  ref={sameProxyMaxSecsRef}
+                  type="number" min={0} max={59}
+                  className="w-24"
+                  defaultValue={msOf(settings?.sameProxyDelayMax ?? 0).s}
+                  key={`spmax-s-${settings?.sameProxyDelayMax}`}
+                  onBlur={() => {
+                    const m = parseInt(sameProxyMaxMinsRef.current?.value ?? "0", 10);
+                    const s = parseInt(sameProxyMaxSecsRef.current?.value ?? "0", 10);
+                    const total = toSecs(isNaN(m) ? 0 : m, isNaN(s) ? 0 : s);
+                    if (total !== settings?.sameProxyDelayMax) mutation.mutate({ sameProxyDelayMax: total });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">sec</span>
+              </div>
             </div>
           </div>
         </div>

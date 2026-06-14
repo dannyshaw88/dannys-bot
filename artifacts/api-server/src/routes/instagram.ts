@@ -3092,8 +3092,15 @@ export async function registerInstagramRoutes(
 
     // Read delay from global settings (set on the Settings page)
     const globalSettings = await storage.getGlobalSettings();
+    const verifyDelayMode = globalSettings.verifyDelayMode ?? "general";
     const delayMin = parseInt(globalSettings.verifyAllDelayMin ?? "5", 10);
     const delayMax = parseInt(globalSettings.verifyAllDelayMax ?? "15", 10);
+    const sameProxyMin = parseInt(globalSettings.sameProxyDelayMin ?? "0", 10);
+    const sameProxyMax = parseInt(globalSettings.sameProxyDelayMax ?? "0", 10);
+    // groupDelayMin/Max are used between accounts on the same proxy (sameProxy mode)
+    // or between every account sequentially (general mode)
+    const groupDelayMin = verifyDelayMode === "sameProxy" ? sameProxyMin : delayMin;
+    const groupDelayMax = verifyDelayMode === "sameProxy" ? sameProxyMax : delayMax;
 
     // Block any target without a proxy — never connect via bare server IP
     const allProxies = await storage.getProxies();
@@ -3257,17 +3264,40 @@ export async function registerInstagramRoutes(
       }
     };
 
-    // Run accounts sequentially with a random delay between each so Instagram
-    // doesn't see a burst of logins from the same server IP at once.
-    (async () => {
-      for (let idx = 0; idx < eligible.length; idx++) {
-        await verifyOne(eligible[idx]);
-        if (idx < eligible.length - 1) {
-          const delaySec = delayMin + Math.random() * Math.max(0, delayMax - delayMin);
-          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
-        }
+    if (verifyDelayMode === "sameProxy") {
+      // sameProxy mode: group by proxy, run all proxy groups in parallel.
+      // Accounts on different proxies start simultaneously; accounts sharing a
+      // proxy are staggered by groupDelayMin–groupDelayMax seconds.
+      const proxyGroups = new Map<string, typeof eligible>();
+      for (const p of eligible) {
+        const proxyKey = p.proxyHost ? `${p.proxyHost}:${p.proxyPort}` : `noproxy_${p.id}`;
+        if (!proxyGroups.has(proxyKey)) proxyGroups.set(proxyKey, []);
+        proxyGroups.get(proxyKey)!.push(p);
       }
-    })().catch(() => {});
+      (async () => {
+        const groupPromises = Array.from(proxyGroups.values()).map(async (group) => {
+          for (let idx = 0; idx < group.length; idx++) {
+            await verifyOne(group[idx]);
+            if (idx < group.length - 1) {
+              const delaySec = groupDelayMin + Math.random() * Math.max(0, groupDelayMax - groupDelayMin);
+              await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+            }
+          }
+        });
+        await Promise.all(groupPromises);
+      })().catch(() => {});
+    } else {
+      // general mode: run all accounts sequentially with a flat delay between each.
+      (async () => {
+        for (let idx = 0; idx < eligible.length; idx++) {
+          await verifyOne(eligible[idx]);
+          if (idx < eligible.length - 1) {
+            const delaySec = groupDelayMin + Math.random() * Math.max(0, groupDelayMax - groupDelayMin);
+            await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+          }
+        }
+      })().catch(() => {});
+    }
   });
 
   // ── Fix Captcha via 2captcha ──────────────────────────────────────────────
@@ -3363,8 +3393,11 @@ export async function registerInstagramRoutes(
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       openaiApiKey: settings.openaiApiKey ?? "",
       geminiApiKey: settings.geminiApiKey ?? "",
+      verifyDelayMode: settings.verifyDelayMode ?? "general",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      sameProxyDelayMin: parseInt(settings.sameProxyDelayMin ?? "0", 10),
+      sameProxyDelayMax: parseInt(settings.sameProxyDelayMax ?? "0", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
@@ -3374,8 +3407,9 @@ export async function registerInstagramRoutes(
     });
   });
 
+
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -3409,11 +3443,20 @@ export async function registerInstagramRoutes(
     if (typeof geminiApiKey === "string") {
       await storage.setGlobalSetting("geminiApiKey", geminiApiKey);
     }
+    if (typeof verifyDelayMode === "string" && (verifyDelayMode === "general" || verifyDelayMode === "sameProxy")) {
+      await storage.setGlobalSetting("verifyDelayMode", verifyDelayMode);
+    }
     if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
     }
     if (typeof verifyAllDelayMax === "number" && verifyAllDelayMax >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMax", String(Math.round(verifyAllDelayMax)));
+    }
+    if (typeof sameProxyDelayMin === "number" && sameProxyDelayMin >= 0) {
+      await storage.setGlobalSetting("sameProxyDelayMin", String(Math.round(sameProxyDelayMin)));
+    }
+    if (typeof sameProxyDelayMax === "number" && sameProxyDelayMax >= 0) {
+      await storage.setGlobalSetting("sameProxyDelayMax", String(Math.round(sameProxyDelayMax)));
     }
     if (typeof logMaxRows === "number" && logMaxRows > 0) {
       await storage.setGlobalSetting("logMaxRows", String(Math.round(logMaxRows)));
@@ -3446,8 +3489,11 @@ export async function registerInstagramRoutes(
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       openaiApiKey: settings.openaiApiKey ?? "",
       geminiApiKey: settings.geminiApiKey ?? "",
+      verifyDelayMode: settings.verifyDelayMode ?? "general",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      sameProxyDelayMin: parseInt(settings.sameProxyDelayMin ?? "0", 10),
+      sameProxyDelayMax: parseInt(settings.sameProxyDelayMax ?? "0", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),

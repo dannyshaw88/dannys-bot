@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.947",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "Settings: Verify All Accounts Delay now uses minutes and seconds instead of seconds only." },
+      { category: "New", text: "Settings: Added 'Verify Accounts Sharing the Same Proxy' delay — accounts on the same proxy are staggered by this amount while accounts on different proxies verify simultaneously." },
+      { category: "New", text: "Settings: The two verify delay modes are mutually exclusive — only one can be active at a time." },
+      { category: "Fix", text: "Login button: Two Tab keypresses are now sent after the cookie banner is dismissed and before the username field is filled, matching manual login behaviour." },
+    ],
+  },
+  {
     version: "1.0.946",
     date: "14 Jun 2026",
     items: [

@@ -262,8 +262,11 @@ export type GlobalSettings = {
   twoCaptchaApiKey: string;
   openaiApiKey: string;
   geminiApiKey: string;
+  verifyDelayMode: string;
   verifyAllDelayMin: number;
   verifyAllDelayMax: number;
+  sameProxyDelayMin: number;
+  sameProxyDelayMax: number;
   logMaxRows: number;
   backupEnabled: boolean;
   backupIntervalDays: number;
