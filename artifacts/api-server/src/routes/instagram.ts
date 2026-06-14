@@ -1542,6 +1542,24 @@ export async function registerInstagramRoutes(
           // they're needed for the next attempt if the API call transiently failed.
           igApiCookies: freshCookies,
         };
+
+        // Status reconciliation: when the mobile API says automated_behaviour_detected
+        // but the EB URL was accounts/suspended (the "Confirm you're human" page), the
+        // two signals agree that there is a challenge — but the EB URL tells us the
+        // specific challenge TYPE the user needs to resolve.  accounts/suspended is a
+        // basic human-verification prompt (click Continue), NOT an ABD flag caused by
+        // this tool's activity.  Showing "AUTO BEHAV" in the UI misleads the user into
+        // thinking their account was flagged for bot behaviour when in fact they just
+        // need to click Continue in the browser.
+        // Rule: if the EB message contains accounts/suspended and the mobile API says
+        // automated_behaviour_detected, override the status to confirm_human.
+        if (
+          result.accountStatus === "automated_behaviour_detected" &&
+          /accounts\/suspended/i.test(loginResult.message ?? "")
+        ) {
+          console.log(`[verify:${profileId}] @${profile.username} — ABD overridden to confirm_human (EB URL was accounts/suspended)`);
+          result = { ...result, accountStatus: "confirm_human" };
+        }
       }
     } else {
       // Classify the failure

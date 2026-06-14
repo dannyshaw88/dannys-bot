@@ -2090,10 +2090,33 @@ export async function openEbWindow(opts: {
 
   // Ghost browser and verify-mode windows open at phone portrait dimensions.
   // Regular account EB windows open full-screen maximized.
+  //
+  // IMPORTANT: compute the target position BEFORE calling new BrowserWindow().
+  // Setting position only in ready-to-show causes the window to briefly appear
+  // at the default center-of-screen position first, then jump — the flash is
+  // visible to the user even though show:false is set.  Passing x/y directly
+  // to the constructor locks the position from creation time.
   _ebCrashLog(profileId, "STEP-11: creating BrowserWindow");
+  let _initX: number | undefined;
+  let _initY: number | undefined;
+  if (isGhostBrowser || verifyMode) {
+    const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
+    const ww = 430;
+    const wh = 700;
+    if (isGhostBrowser) {
+      _initX = Math.max(0, sw - ww - 8);
+      _initY = Math.max(0, Math.floor((sh - wh) / 2));
+    } else {
+      // Verify-mode: bottom-right corner, away from the user's working area.
+      _initX = Math.max(0, sw - ww - 8);
+      _initY = Math.max(0, sh - wh - 8);
+    }
+  }
   const win = new BrowserWindow({
     width:           (isGhostBrowser || verifyMode) ? 430 : 1280,
     height:          (isGhostBrowser || verifyMode) ? 700 : 820,
+    x:               _initX,
+    y:               _initY,
     title:           `@${username} — Equinox Browser`,
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
@@ -2107,26 +2130,14 @@ export async function openEbWindow(opts: {
   });
   win.once("ready-to-show", () => {
     if (win.isDestroyed()) return;
-    if (isGhostBrowser) {
-      // Position ghost browser at the absolute right edge of the primary display
-      const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
-      const { width: ww, height: wh } = win.getBounds();
-      const gx = Math.max(0, sw - ww - 8);
-      const gy = Math.max(0, Math.floor((sh - wh) / 2));
-      win.setPosition(gx, gy);
-      win.show();
-    } else if (verifyMode) {
-      // Verify-mode: show as a small phone-sized window at the bottom-right
-      // corner of the screen.  NEVER minimize — Chromium throttles minimised
-      // windows (timers fire seconds late) which causes form-fill to type the
-      // password into the username field.  A corner window is fully visible to
-      // Chromium so timing is accurate, but small enough not to block the screen.
-      const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
-      const { width: ww, height: wh } = win.getBounds();
-      const gx = Math.max(0, sw - ww - 8);
-      const gy = Math.max(0, sh - wh - 8);
-      win.setPosition(gx, gy);
-      win.showInactive(); // show without stealing focus from the user's current window
+    if (isGhostBrowser || verifyMode) {
+      if (verifyMode) {
+        // Appear without stealing focus — NEVER minimize, Chromium throttles
+        // minimised windows (timers fire seconds late, form-fill breaks).
+        win.showInactive();
+      } else {
+        win.show();
+      }
     } else {
       // Regular manual open — full screen.
       // Use workArea bounds — never covers the Windows taskbar.

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.964",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: browser window no longer flashes in the centre of the screen before moving to the corner — position is now locked from creation." },
+      { category: "Fix", text: "Verify: accounts that show 'Confirm you're human' in the browser now correctly display as Confirm Human, not Auto Behav — the two statuses look similar to Instagram but mean different things to you." },
+    ],
+  },
+  {
     version: "1.0.963",
     date: "14 Jun 2026",
     items: [
