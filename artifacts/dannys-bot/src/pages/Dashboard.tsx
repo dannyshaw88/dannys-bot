@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.953",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify button: stuck 'already in progress' lock now auto-clears after 10 minutes — previously a crashed background verify permanently blocked re-verify until the app was restarted." },
+      { category: "Fix", text: "Verify button: if the background verify crashes unexpectedly, the account status now resets to 'pending' instead of getting stuck on 'verifying' forever." },
+    ],
+  },
+  {
     version: "1.0.952",
     date: "14 Jun 2026",
     items: [

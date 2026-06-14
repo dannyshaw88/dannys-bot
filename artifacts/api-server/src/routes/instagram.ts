@@ -100,7 +100,10 @@ const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKi
 // Per-account verify lock — prevents concurrent logins for the same account.
 // Multiple simultaneous IgApiClient instances logging in with the same device
 // fingerprint look like a device leak to Instagram and cause blocks.
-const verifyInFlight = new Set<number>();
+// Stored as Map<profileId, startTimestamp> so stale locks (> 10 min) auto-clear
+// instead of permanently blocking re-verify after a crash in the background worker.
+const verifyInFlight = new Map<number, number>();
+const VERIFY_LOCK_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Global concurrency gate for electronSilentVerify — limits to 1 simultaneous
 // hidden BrowserWindow at a time.  Electron's main process cannot handle
@@ -1265,10 +1268,15 @@ export async function registerInstagramRoutes(
     // Reject concurrent verify calls for the same account — multiple simultaneous
     // IgApiClient instances logging in with the same device fingerprint look like
     // a device leak to Instagram and will trigger account blocks.
-    if (verifyInFlight.has(profileId)) {
+    // Stale locks (> 10 min) are auto-cleared so a crash in the background worker
+    // never permanently blocks re-verify.
+    const _existingVerifyStart = verifyInFlight.get(profileId);
+    if (_existingVerifyStart && (Date.now() - _existingVerifyStart) < VERIFY_LOCK_TTL_MS) {
       return res.status(429).json({ ok: false, message: "Verification already in progress for this account. Please wait." });
     }
-    verifyInFlight.add(profileId);
+    // Clear any stale lock before setting the fresh one
+    verifyInFlight.delete(profileId);
+    verifyInFlight.set(profileId, Date.now());
 
     // Helper: release lock + send error (avoids repeating delete on every early return)
     const fail = (status: number, message: string) => {
@@ -1354,7 +1362,7 @@ export async function registerInstagramRoutes(
     // The accounts list is polled every 5 s so the UI picks up the real result automatically.
     res.json({ ok: true, message: "Verification started" });
 
-    setImmediate(async () => {
+    setImmediate(async () => { try {
     // Steps 1-2: Launch EB + auto-login via the visible embedded browser.
     // The visible EB handles the cookie consent banner, credential entry, 2FA,
     // and any challenges — exactly as the user would see it.
@@ -1565,7 +1573,12 @@ export async function registerInstagramRoutes(
       setCheckpointUrl(profile.id, result.checkpointUrl);
     }
 
-    verifyInFlight.delete(profileId);
+    } catch (_topVerifyErr: any) {
+      console.error(`[verify:${profileId}] unhandled crash in background verify — clearing lock:`, _topVerifyErr?.message ?? _topVerifyErr);
+      await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
+    } finally {
+      verifyInFlight.delete(profileId);
+    }
     }); // end setImmediate
   }); // end app.post
 
@@ -3121,9 +3134,12 @@ export async function registerInstagramRoutes(
     res.json({ ok: true, total: eligible.length, skippedNoProxy });
 
     const verifyOne = async (profile: typeof eligible[0]) => {
-      // Skip accounts already being verified by a concurrent single-verify call
-      if (verifyInFlight.has(profile.id)) return;
-      verifyInFlight.add(profile.id);
+      // Skip accounts already being verified by a concurrent single-verify call.
+      // Stale locks (> 10 min) auto-clear so crashes don't permanently block re-verify.
+      const _vaExisting = verifyInFlight.get(profile.id);
+      if (_vaExisting && (Date.now() - _vaExisting) < VERIFY_LOCK_TTL_MS) return;
+      verifyInFlight.delete(profile.id);
+      verifyInFlight.set(profile.id, Date.now());
 
       try {
         await storage.updateProfile(profile.id, { accountStatus: "verifying" });
