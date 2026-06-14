@@ -1556,6 +1556,17 @@ async function doAutoLogin(
     await delay(100);
     await typeTextCDP(wc.debugger, username);
 
+    // Press Tab to move keyboard focus from username → password field.
+    // This is required: Instagram shows an async username-validation spinner /
+    // suggestion list after the username is typed, which can shift the password
+    // field's DOM position. Without Tab the tap gesture below can land on the
+    // spinner or the end of the username field, causing the password to be typed
+    // into the username input. Tab moves focus deterministically regardless of
+    // any re-render.
+    await delay(150);
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+
     // Wait for Instagram's async username validation to settle before tapping the
     // password field. Instagram re-renders the form (shows a checking-username
     // spinner / suggestion list) which shifts the password field position. Using
