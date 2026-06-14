@@ -1362,7 +1362,7 @@ function waitForNav(
 
 async function doAutoLogin(
   profileId: number,
-  win: BrowserWindow,
+  win: BrowserWindow | { webContents: Electron.WebContents },
   username: string,
   password: string,
   twoFAKey: string,
@@ -4387,9 +4387,15 @@ export function startEbIpcServer(
         }
 
         // ── Pick the window to run verify in ─────────────────────────────────
-        // If the user already has the EB open for this account, run doAutoLogin
-        // in that visible window so they can watch the flow.
-        // If no EB is open, create a hidden BrowserWindow for silent background verify.
+        // The verify route calls /eb/open before hitting this endpoint, so the
+        // EB window should already be in ebMap.  Poll briefly to let openEbWindow
+        // finish registering (it fires-and-forgets from the /eb/open handler).
+        {
+          const _pollDeadline = Date.now() + 10_000;
+          while (!ebMap.has(pid) && Date.now() < _pollDeadline) {
+            await new Promise(r => setTimeout(r, 400));
+          }
+        }
         const _openEb    = ebMap.get(pid);
         const _useVisible = !!(_openEb && !_openEb.win.isDestroyed());
         let _hiddenWin: BrowserWindow | null = null;
@@ -4401,11 +4407,13 @@ export function startEbIpcServer(
           _verifyWin.focus();
           console.log(`[silent-verify:${pid}] @${body.username} — visible EB window found, using it`);
         } else {
+          // Fallback: no EB window in ebMap yet — open a visible BrowserWindow
+          // so the user can watch the login flow (show: true, not hidden).
           _hiddenWin = new BrowserWindow({
             width: 1280,
             height: 820,
-            show: false,
-            skipTaskbar: true,
+            show: true,
+            skipTaskbar: false,
             webPreferences: {
               nodeIntegration: false,
               contextIsolation: true,
@@ -4442,10 +4450,18 @@ export function startEbIpcServer(
         _silentVerifyResults.set(pid, { done: false });
         send(res, 202, { pending: true, profileId: pid });
 
-        console.log(`[silent-verify:${pid}] @${body.username} — 202 sent, starting doAutoLogin (${_useVisible ? "visible EB" : "hidden window"})`);
+        console.log(`[silent-verify:${pid}] @${body.username} — 202 sent, starting doAutoLogin (${_useVisible ? "visible EB" : "visible fallback window"})`);
         ;(async () => {
           try {
-            const loginResult = await doAutoLogin(pid, _verifyWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
+            // When using the visible EB window, getActiveWc returns the active
+            // tab's BrowserView WebContents — NOT win.webContents which is the
+            // toolbar frame.  Using the toolbar frame means doAutoLogin's CDP
+            // commands run against the nav-bar HTML, not the Instagram page,
+            // so the login fields are never found and cookies are never set.
+            const _loginTarget = _useVisible
+              ? { webContents: getActiveWc(pid) ?? _verifyWin.webContents }
+              : _verifyWin;
+            const loginResult = await doAutoLogin(pid, _loginTarget, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
             const c1 = await ses.cookies.get({ domain: ".instagram.com" });
             const c2 = await ses.cookies.get({ domain: "instagram.com" });
             const seen = new Set<string>();

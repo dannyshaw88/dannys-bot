@@ -1371,8 +1371,27 @@ export async function registerInstagramRoutes(
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
 
     if (process.env.EB_IPC_PORT) {
-      // Electron mode — run entirely in a hidden background BrowserWindow.
-      // No visible EB window is shown to the user during verify.
+      // Electron mode — auto-open the visible EB, run login, harvest cookies, auto-close.
+      const _verifyIpcPort = Number(process.env.EB_IPC_PORT);
+      // Step 1: open the visible EB browser so the user can watch the login flow.
+      try {
+        await fetch(`http://127.0.0.1:${_verifyIpcPort}/eb/open`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profileId,
+            username: profile.username,
+            password: profile.password,
+            twoFAKey: profile.twoFASecretKey ?? "",
+            proxy:    proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+            userAgent: ebUA,
+            apiUA:     effectiveProfile.userAgentApi ?? undefined,
+          }),
+        });
+        // Allow the BrowserWindow and its session to fully initialise before verify runs.
+        await new Promise(r => setTimeout(r, 3000));
+      } catch { /* non-fatal — silent verify falls back to opening its own window */ }
+
       await acquireSilentVerifySlot();
       try {
         const silentRes = await electronSilentVerify({
@@ -1389,6 +1408,13 @@ export async function registerInstagramRoutes(
         loginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
       } finally {
         releaseSilentVerifySlot();
+        // Step: auto-close the EB now that cookies are harvested — the mobile API
+        // confirmation step does not need the browser open.
+        fetch(`http://127.0.0.1:${_verifyIpcPort}/eb/close`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ profileId }),
+        }).catch(() => {});
       }
     } else {
       // Puppeteer / dev mode — use the visible EB window.

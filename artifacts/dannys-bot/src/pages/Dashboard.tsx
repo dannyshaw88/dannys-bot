@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.960",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: clicking Verify now automatically opens the browser so you can watch the login flow, and closes it automatically once cookies are captured." },
+      { category: "Fix", text: "Verify: cookies are now correctly harvested from the active Instagram tab — previously the automation was running against the toolbar frame instead of the page." },
+      { category: "Fix", text: "Verify: when no browser was open, the fallback login window is now visible instead of hidden — so nothing appears to happen no more." },
+    ],
+  },
+  {
     version: "1.0.959",
     date: "14 Jun 2026",
     items: [
