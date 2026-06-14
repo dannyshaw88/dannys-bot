@@ -147,7 +147,7 @@ export function AIPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">Install Stable Diffusion Forge (free, one-click)</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Download from <span className="text-primary font-mono">github.com/lllyasviel/stable-diffusion-webui-forge</span> → run <span className="font-mono bg-muted px-1 rounded">run.bat</span>
+                      Download from <span className="text-primary font-mono">github.com/lllyasviel/stable-diffusion-webui-forge</span> → run <span className="font-mono bg-muted px-1 rounded">webui-user.bat</span> (not webui.bat — that one is for devs)
                     </p>
                   </div>
                 </div>
