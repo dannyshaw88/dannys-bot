@@ -2147,6 +2147,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.943",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Gemini AI now tries gemini-1.5-flash first, then gemini-1.5-flash-8b, then gemini-2.0-flash — each model has its own free-tier quota so if one is blocked another will work." },
+    ],
+  },
+  {
     version: "1.0.942",
     date: "14 Jun 2026",
     items: [

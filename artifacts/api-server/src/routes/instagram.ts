@@ -3571,23 +3571,34 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
         }));
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: geminiMessages,
-            generationConfig: { maxOutputTokens: 600, temperature: 0.65 },
-          }),
+        const geminiBody = JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: geminiMessages,
+          generationConfig: { maxOutputTokens: 600, temperature: 0.65 },
         });
-        if (!r.ok) {
+        // Cascade through models — each has its own free-tier quota bucket
+        const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash"];
+        let lastError = "";
+        for (const model of GEMINI_MODELS) {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: geminiBody,
+          });
+          if (r.ok) {
+            const j = await r.json() as any;
+            const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "Sorry, no response received.";
+            return res.json({ reply: text });
+          }
           const j = await r.json() as any;
-          const msg = j?.error?.message ?? `HTTP ${r.status}`;
-          return res.json({ reply: `AI service error. ${msg}` });
+          const msg: string = j?.error?.message ?? `HTTP ${r.status}`;
+          const isQuota = r.status === 429 || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate");
+          if (!isQuota) {
+            return res.json({ reply: `AI service error. ${msg}` });
+          }
+          lastError = msg;
         }
-        const j = await r.json() as any;
-        const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "Sorry, no response received.";
-        return res.json({ reply: text });
+        return res.json({ reply: `All Gemini models are currently rate-limited. Please wait a minute and try again, or check your API key at aistudio.google.com. Details: ${lastError}` });
       } else {
         const r = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
