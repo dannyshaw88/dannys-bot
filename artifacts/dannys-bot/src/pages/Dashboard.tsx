@@ -2147,6 +2147,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.942",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "Equinox Bot and Scan with AI now support Google Gemini — add your free Gemini API key in Settings → Security. Gemini is used automatically if set, with OpenAI as a fallback." },
+      { category: "Fix", text: "Scan with AI no longer fails with a quota error for users who have a free or expired OpenAI account." },
+    ],
+  },
+  {
     version: "1.0.708",
     date: "1 Jun 2026",
     items: [

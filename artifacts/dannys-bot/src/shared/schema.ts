@@ -261,6 +261,7 @@ export type GlobalSettings = {
   useLocalTime: boolean;
   twoCaptchaApiKey: string;
   openaiApiKey: string;
+  geminiApiKey: string;
   verifyAllDelayMin: number;
   verifyAllDelayMax: number;
   logMaxRows: number;

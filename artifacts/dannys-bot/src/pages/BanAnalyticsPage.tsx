@@ -1479,7 +1479,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       const j = await res.json();
       setAiResult(j.reply ?? "No response.");
     } catch {
-      setAiResult("Could not reach the AI. Check your OpenAI API key in Settings.");
+      setAiResult("Could not reach the AI. Check your Gemini or OpenAI API key in Settings → Security.");
     }
     setAiLoading(false);
   }

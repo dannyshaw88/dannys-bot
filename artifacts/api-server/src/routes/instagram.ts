@@ -3362,6 +3362,7 @@ export async function registerInstagramRoutes(
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       openaiApiKey: settings.openaiApiKey ?? "",
+      geminiApiKey: settings.geminiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -3374,7 +3375,7 @@ export async function registerInstagramRoutes(
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -3404,6 +3405,9 @@ export async function registerInstagramRoutes(
     }
     if (typeof openaiApiKey === "string") {
       await storage.setGlobalSetting("openaiApiKey", openaiApiKey);
+    }
+    if (typeof geminiApiKey === "string") {
+      await storage.setGlobalSetting("geminiApiKey", geminiApiKey);
     }
     if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
@@ -3441,6 +3445,7 @@ export async function registerInstagramRoutes(
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       openaiApiKey: settings.openaiApiKey ?? "",
+      geminiApiKey: settings.geminiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -3471,9 +3476,11 @@ export async function registerInstagramRoutes(
 
   app.post("/api/equinox-bot/chat", async (req, res) => {
     const settings = await storage.getGlobalSettings();
-    const key = ((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
-    if (!key) {
-      return res.json({ reply: "No OpenAI API key is configured. Add your key in Settings → General → OpenAI API Key, then try again." });
+    const geminiKey = ((settings as any).geminiApiKey ?? "").trim() || (process.env.GEMINI_API_KEY ?? "").trim();
+    const openaiKey = ((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
+    const useGemini = !!geminiKey;
+    if (!geminiKey && !openaiKey) {
+      return res.json({ reply: "No AI API key is configured. Add a Gemini API key (free) or OpenAI API key in Settings → Security, then try again." });
     }
     const { messages } = req.body as { messages?: Array<{ role: string; content: string }> };
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -3559,22 +3566,46 @@ TIPS:
 If asked about something outside Equinox, say: "I can only help with Equinox-related questions. What would you like to know about the software?"`;
 
     try {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "system", content: systemPrompt }, ...messages.slice(-20)],
-          max_tokens: 600,
-          temperature: 0.65,
-        }),
-      });
-      if (!r.ok) {
+      if (useGemini) {
+        const geminiMessages = messages.slice(-20).map(m => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: geminiMessages,
+            generationConfig: { maxOutputTokens: 600, temperature: 0.65 },
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json() as any;
+          const msg = j?.error?.message ?? `HTTP ${r.status}`;
+          return res.json({ reply: `AI service error. ${msg}` });
+        }
         const j = await r.json() as any;
-        return res.json({ reply: `AI service error: ${j?.error?.message ?? `HTTP ${r.status}`}` });
+        const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "Sorry, no response received.";
+        return res.json({ reply: text });
+      } else {
+        const r = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "system", content: systemPrompt }, ...messages.slice(-20)],
+            max_tokens: 600,
+            temperature: 0.65,
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json() as any;
+          return res.json({ reply: `AI service error. ${j?.error?.message ?? `HTTP ${r.status}`}` });
+        }
+        const j = await r.json() as any;
+        return res.json({ reply: j.choices?.[0]?.message?.content ?? "Sorry, no response received." });
       }
-      const j = await r.json() as any;
-      return res.json({ reply: j.choices?.[0]?.message?.content ?? "Sorry, no response received." });
     } catch (e: any) {
       return res.json({ reply: "Connection error — please try again." });
     }
@@ -3588,6 +3619,20 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       const r = await fetch("https://api.openai.com/v1/models", {
         headers: { "Authorization": `Bearer ${key}` },
       });
+      if (r.ok) return res.json({ ok: true });
+      const j = await r.json() as any;
+      return res.json({ ok: false, error: j?.error?.message ?? `HTTP ${r.status}` });
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+    }
+  });
+
+  app.get("/api/settings/test-gemini", async (_req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = ((settings as any).geminiApiKey ?? "").trim() || (process.env.GEMINI_API_KEY ?? "").trim();
+    if (!key) return res.json({ ok: false, error: "No Gemini API key configured" });
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
       if (r.ok) return res.json({ ok: true });
       const j = await r.json() as any;
       return res.json({ ok: false, error: j?.error?.message ?? `HTTP ${r.status}` });

@@ -489,6 +489,10 @@ export function SettingsPage() {
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
   const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
+  const [geminiKeyDraft, setGeminiKeyDraft] = useState<string | null>(null);
+  const [geminiKeyInitialized, setGeminiKeyInitialized] = useState(false);
+  const [geminiTestState, setGeminiTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const [geminiTestResult, setGeminiTestResult] = useState<string>("");
   const [settingsTab, setSettingsTab] = useState("my account");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
@@ -531,6 +535,10 @@ export function SettingsPage() {
     setTwoCaptchaKeyDraft(settings.twoCaptchaApiKey ?? "");
     setTokenInitialized(true);
     setTwoCaptchaKeyInitialized(true);
+  }
+  if (settings && !geminiKeyInitialized) {
+    setGeminiKeyDraft((settings as any).geminiApiKey ?? "");
+    setGeminiKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -940,8 +948,70 @@ export function SettingsPage() {
           </div>
         </div>
 
-
-
+        {/* Gemini API Key */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Gemini API Key (AI Bot)</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Powers the Equinox Bot chat and the Scan with AI feature in Evasion Stats. Gemini has a generous free tier —
+            get your key at <span className="font-medium">aistudio.google.com</span> → Get API Key. If both Gemini and OpenAI keys are set, Gemini is used.
+          </p>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">API Key</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="password"
+                placeholder="Enter your Gemini API key"
+                value={geminiKeyDraft ?? ""}
+                onChange={(e) => setGeminiKeyDraft(e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== ((settings as any)?.geminiApiKey ?? "")) {
+                    mutation.mutate({ geminiApiKey: v } as any);
+                  }
+                }}
+                className="font-mono text-sm flex-1"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={geminiTestState === "loading" || !geminiKeyDraft}
+                onClick={async () => {
+                  setGeminiTestState("loading");
+                  try {
+                    const r = await fetch("/api/settings/test-gemini");
+                    const j = await r.json();
+                    if (j.ok) {
+                      setGeminiTestResult("Key is valid");
+                      setGeminiTestState("ok");
+                    } else {
+                      setGeminiTestResult(j.error ?? "Failed");
+                      setGeminiTestState("fail");
+                    }
+                  } catch {
+                    setGeminiTestResult("Request failed");
+                    setGeminiTestState("fail");
+                  }
+                }}
+                className="shrink-0"
+              >
+                {geminiTestState === "loading" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+              </Button>
+            </div>
+            {geminiTestState !== "idle" && geminiTestState !== "loading" && (
+              <p className={`text-xs flex items-center gap-1.5 ${geminiTestState === "ok" ? "text-green-600" : "text-destructive"}`}>
+                {geminiTestState === "ok" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                {geminiTestResult}
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* Dashboard Log Limit */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
