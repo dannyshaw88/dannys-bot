@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.951",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify button: if the EB browser is already open for that account, the verify now runs visibly inside it so you can watch the flow — instead of silently in a hidden background window." },
+      { category: "Fix", text: "Verify button: same fix applies to the big Verify button inside Account Settings." },
+    ],
+  },
+  {
     version: "1.0.950",
     date: "14 Jun 2026",
     items: [

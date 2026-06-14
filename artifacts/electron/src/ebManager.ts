@@ -4362,55 +4362,66 @@ export function startEbIpcServer(
           return send(res, 200, { ok: true, message: "Using existing EB session", cookies });
         }
 
-        const hiddenWin = new BrowserWindow({
-          width: 1280,
-          height: 820,
-          show: false,
-          skipTaskbar: true,
-          webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            partition,
-          },
-        });
+        // ── Pick the window to run verify in ─────────────────────────────────
+        // If the user already has the EB open for this account, run doAutoLogin
+        // in that visible window so they can watch the flow.
+        // If no EB is open, create a hidden BrowserWindow for silent background verify.
+        const _openEb    = ebMap.get(pid);
+        const _useVisible = !!(_openEb && !_openEb.win.isDestroyed());
+        let _hiddenWin: BrowserWindow | null = null;
+        let _verifyWin: BrowserWindow;
 
-        void (async () => {
-          try {
-            try { hiddenWin.webContents.debugger.attach("1.3"); } catch {}
-            await hiddenWin.webContents.debugger.sendCommand("Page.enable");
-            await hiddenWin.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
-          } catch {}
-        })();
-        hiddenWin.webContents.on("dom-ready", () => {
-          hiddenWin.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
-        });
-
-        if (body.proxy) {
-          hiddenWin.webContents.on("login", (ev: any, _rq: any, _auth: any, cb: any) => {
-            ev.preventDefault();
-            cb(body.proxy.user ?? "", body.proxy.pass ?? "");
+        if (_useVisible) {
+          _verifyWin = _openEb!.win;
+          if (!_verifyWin.isVisible()) _verifyWin.show();
+          _verifyWin.focus();
+          console.log(`[silent-verify:${pid}] @${body.username} — visible EB window found, using it`);
+        } else {
+          _hiddenWin = new BrowserWindow({
+            width: 1280,
+            height: 820,
+            show: false,
+            skipTaskbar: true,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true,
+              partition,
+            },
           });
-        }
-        if (body.userAgent) {
-          hiddenWin.webContents.setUserAgent(body.userAgent);
+          _verifyWin = _hiddenWin;
+
+          void (async () => {
+            try {
+              try { _hiddenWin!.webContents.debugger.attach("1.3"); } catch {}
+              await _hiddenWin!.webContents.debugger.sendCommand("Page.enable");
+              await _hiddenWin!.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
+            } catch {}
+          })();
+          _hiddenWin.webContents.on("dom-ready", () => {
+            _hiddenWin!.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
+          });
+          if (body.proxy) {
+            _hiddenWin.webContents.on("login", (ev: any, _rq: any, _auth: any, cb: any) => {
+              ev.preventDefault();
+              cb(body.proxy.user ?? "", body.proxy.pass ?? "");
+            });
+          }
+          if (body.userAgent) {
+            _hiddenWin.webContents.setUserAgent(body.userAgent);
+          }
+          console.log(`[silent-verify:${pid}] @${body.username} — no open EB, using hidden window`);
         }
 
         // ── FIRE AND FORGET — return 202 immediately ──────────────────────────
-        // The critical fix: previously this handler awaited doAutoLogin (which can
-        // take several minutes), holding the HTTP connection open the entire time.
-        // Node.js HTTP servers close connections that are held open too long,
-        // causing "fetch failed" in the API server regardless of timeout settings.
-        //
-        // Solution: mark the job as pending, reply 202 immediately so the HTTP
-        // connection closes, then run doAutoLogin in the background. The API server
-        // polls /eb/silent-verify-status until done.
+        // doAutoLogin can take several minutes. Returning 202 immediately keeps the
+        // HTTP connection from timing out; the API server polls /eb/silent-verify-status.
         _silentVerifyResults.set(pid, { done: false });
         send(res, 202, { pending: true, profileId: pid });
 
-        console.log(`[silent-verify:${pid}] @${body.username} — 202 sent, starting doAutoLogin in background`);
+        console.log(`[silent-verify:${pid}] @${body.username} — 202 sent, starting doAutoLogin (${_useVisible ? "visible EB" : "hidden window"})`);
         ;(async () => {
           try {
-            const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
+            const loginResult = await doAutoLogin(pid, _verifyWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
             const c1 = await ses.cookies.get({ domain: ".instagram.com" });
             const c2 = await ses.cookies.get({ domain: "instagram.com" });
             const seen = new Set<string>();
@@ -4425,7 +4436,11 @@ export function startEbIpcServer(
             console.error(`[silent-verify:${pid}] @${body.username} — doAutoLogin threw: ${err?.message}`);
             _silentVerifyResults.set(pid, { done: true, ok: false, message: err?.message ?? "Silent verify error", cookies: [] });
           } finally {
-            try { hiddenWin.destroy(); } catch {}
+            // Only destroy the window if we created a hidden one — never destroy
+            // the user's visible EB window.
+            if (_hiddenWin) {
+              try { _hiddenWin.destroy(); } catch {}
+            }
           }
         })();
 
