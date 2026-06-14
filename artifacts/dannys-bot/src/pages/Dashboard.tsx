@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.944",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: Scan with AI removed from the Theories tab — it required an API key that frequently hit quota limits." },
+      { category: "Fix", text: "Accounts: When a ban is detected, accounts on the same proxy are paused silently — no 'Proxy taint' message is written to their notes any more." },
+      { category: "Fix", text: "Ghost Browser: Text entry now uses clipboard-style insertion (same as pasting on Android) instead of simulated keyboard typing, which was detectable by Instagram's input-timing classifier." },
+    ],
+  },
+  {
     version: "1.0.941",
     date: "14 Jun 2026",
     items: [

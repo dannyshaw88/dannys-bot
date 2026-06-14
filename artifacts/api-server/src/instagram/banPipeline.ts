@@ -59,13 +59,10 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
   const sameProxy = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
   for (const sibling of sameProxy) {
     if (sibling.id === profileId || sibling.accountStatus === "banned" || !!sibling.resumingUntil) continue;
-    const siblingStamp = `Proxy taint: paused 90 min — same IP as @${profile.username} which was banned at ${ts}`;
-    const siblingNotes = sibling.notes ?? "";
     await storage.updateProfile(sibling.id, {
       accountStatus: "stopped",
       resumingUntil: now90,
       resumingPrevStatus: sibling.accountStatus,
-      notes: siblingNotes ? `${siblingNotes}\n${siblingStamp}` : siblingStamp,
     });
     console.log(`[ban-pipeline] Paused @${sibling.username} (proxy taint) — resumes at ${now90}`);
   }

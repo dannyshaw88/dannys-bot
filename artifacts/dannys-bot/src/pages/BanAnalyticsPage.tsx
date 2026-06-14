@@ -1317,8 +1317,6 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
   captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
 }) {
-  const [aiResult, setAiResult] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const allEntries = useMemo(() => [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries], [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const total = allEntries.length;
   const allMetrics = useMemo(() => allEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [allEntries]);
@@ -1457,70 +1455,6 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
     },
   ];
 
-  async function runAiScan() {
-    if (total === 0 || aiLoading) return;
-    setAiLoading(true);
-    setAiResult(null);
-    const summary = allEntrics_summary(allEntries, allMetrics);
-    try {
-      const res = await fetch("/api/equinox-bot/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "user",
-              content: `You are analysing Instagram automation ban data for the Equinox bot. Below is a statistical summary of ${total} flagged accounts (banned/automated/captcha/locked). Identify any NEW patterns or theories NOT already covered by the 6 hardcoded theories (IP Trust Budget, Warmup Gate, Robotic Timing CoV, Auth Overcalling, Velocity Cap, Trust Decay Chain). Focus on patterns that are actionable. Be concise — bullet points preferred. If the data is too thin to draw conclusions, say so.\n\n${summary}`,
-            },
-          ],
-        }),
-        credentials: "include",
-      });
-      const j = await res.json();
-      setAiResult(j.reply ?? "No response.");
-    } catch {
-      setAiResult("Could not reach the AI. Check your Gemini or OpenAI API key in Settings → Security.");
-    }
-    setAiLoading(false);
-  }
-
-  function allEntrics_summary(entries: AnalyticsEntry[], metrics: EntryMetrics[]): string {
-    const banned = entries.filter(e => banEntries.includes(e)).length;
-    const automated = entries.filter(e => automatedEntries.includes(e)).length;
-    const captcha = entries.filter(e => captchaEntries.includes(e)).length;
-    const locked = entries.filter(e => lockedEntries.includes(e)).length;
-    const zeroWarmup = metrics.filter(m => m.preActionWarmup === 0).length;
-    const robotic = metrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
-    const highVelocity = metrics.filter(m => m.actionVelocityPerHour > 40).length;
-    const verifyOnly = entries.filter(e => { const eps = filterHiker(parseEps(e.endpointSnapshot)); return eps.length > 0 && eps.every(ep => (ep.source ?? "").toLowerCase() === "verify"); }).length;
-    const proxyCounts = new Map<string, number>();
-    for (const e of entries) { const h = e.proxyHost || "(none)"; proxyCounts.set(h, (proxyCounts.get(h) ?? 0) + 1); }
-    const topProxies = Array.from(proxyCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([h,c])=>`${h}:${c}`).join(", ");
-    const covVals = metrics.map(m => m.timingCoV).filter(v => v >= 0);
-    const covMed = covVals.length ? covVals.slice().sort((a,b)=>a-b)[Math.floor(covVals.length/2)] : -1;
-    const warmupVals = metrics.map(m => m.preActionWarmup);
-    const warmupMed = warmupVals.length ? warmupVals.slice().sort((a,b)=>a-b)[Math.floor(warmupVals.length/2)] : -1;
-    const spans = metrics.map(m=>m.spanMin).filter(v=>v>0);
-    const spanMed = spans.length ? spans.slice().sort((a,b)=>a-b)[Math.floor(spans.length/2)] : -1;
-    const actionRatios = metrics.map(m=>m.totalCalls>0?m.actionCount/m.totalCalls:0);
-    const actionRatioMed = actionRatios.length ? actionRatios.slice().sort((a,b)=>a-b)[Math.floor(actionRatios.length/2)] : 0;
-    const sources = new Map<string, number>();
-    for (const e of entries) { for (const ep of filterHiker(parseEps(e.endpointSnapshot))) { const s = ep.source ?? "unknown"; sources.set(s, (sources.get(s) ?? 0) + 1); } }
-    const sourceSummary = Array.from(sources.entries()).sort((a,b)=>b[1]-a[1]).map(([s,c])=>`${s}:${c}`).join(", ");
-    return [
-      `Total events: ${total} (Banned:${banned} Automated:${automated} Captcha:${captcha} Locked:${locked})`,
-      `Verify-only bans (zero tool activity): ${verifyOnly}/${total}`,
-      `Zero warmup (action as first call): ${zeroWarmup}/${total}`,
-      `Robotic timing (CoV<0.5): ${robotic}/${total}, median CoV: ${covMed >= 0 ? covMed.toFixed(3) : "n/a"}`,
-      `High velocity (>40 actions/hr): ${highVelocity}/${total}`,
-      `Median pre-action warmup calls: ${warmupMed}`,
-      `Median session span: ${spanMed >= 0 ? spanMed.toFixed(1) + " min" : "n/a"}`,
-      `Median action ratio (actions/total calls): ${(actionRatioMed * 100).toFixed(1)}%`,
-      `Top proxies by event count: ${topProxies || "none"}`,
-      `Endpoint source breakdown: ${sourceSummary || "none"}`,
-    ].join("\n");
-  }
-
   return (
     <div className="space-y-4">
       {total === 0 && (
@@ -1528,16 +1462,6 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           <FlaskConical className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm font-medium">No data yet</p>
           <p className="text-xs text-muted-foreground mt-1">Flag accounts across the Banned, Automated, Captcha, and Locked tabs to populate theory likelihood counters.</p>
-        </div>
-      )}
-      {aiResult && (
-        <div className="border border-violet-300 dark:border-violet-700 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-violet-500 shrink-0" />
-            <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">AI Pattern Analysis</span>
-            <button onClick={() => setAiResult(null)} className="ml-auto text-violet-400 hover:text-violet-600 transition-colors"><X className="w-3.5 h-3.5" /></button>
-          </div>
-          <div className="px-4 py-3 text-[11px] leading-relaxed whitespace-pre-wrap">{aiResult}</div>
         </div>
       )}
       <div className="border border-border rounded-lg overflow-hidden">
@@ -1549,11 +1473,6 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {total > 0 && <span className="text-[10px] text-muted-foreground pt-0.5">based on {total} events</span>}
-            {total >= 3 && (
-              <button onClick={runAiScan} disabled={aiLoading} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-800/40 transition-colors disabled:opacity-50">
-                {aiLoading ? <><Loader2 className="w-3 h-3 animate-spin" />Scanning…</> : <><Cpu className="w-3 h-3" />Scan with AI</>}
-              </button>
-            )}
           </div>
         </div>
         <div className="divide-y divide-border">

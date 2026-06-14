@@ -216,10 +216,22 @@ export async function antidetectInput(msg: {
       await page.mouse.wheel({ deltaX: Number(msg.deltaX) || 0, deltaY: Number(msg.deltaY) || 0 });
       break;
 
-    case "type":
-      // Printable character — keyboard.type() fires keydown + keypress + input + keyup reliably
-      await page.keyboard.type(String(msg.text), { delay: 0 });
+    case "type": {
+      // Use CDP Input.insertText — identical to clipboard paste on Android.
+      // keyboard.type() with delay:0 is an instant-delivery bot tell that
+      // Instagram's input-timing classifier catches immediately.
+      // insertText delivers the full string as a single native text insertion
+      // event, matching how mobile autocomplete / paste works on a real phone.
+      const txt = String(msg.text);
+      const { cdp } = _session;
+      try {
+        await cdp.send("Input.insertText", { text: txt });
+      } catch {
+        // cdp insertText not available (older Chromium) — fall back to keyboard
+        await page.keyboard.type(txt, { delay: 30 + Math.random() * 40 });
+      }
       break;
+    }
 
     case "keydown": {
       const key = String(msg.key) as any;
