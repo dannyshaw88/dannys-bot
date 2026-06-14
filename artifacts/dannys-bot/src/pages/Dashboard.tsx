@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.955",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Auto-login: now presses Tab twice after typing the username to correctly land focus on the password field — one Tab was landing on an intermediate element and still causing the password to overwrite the username." },
+    ],
+  },
+  {
     version: "1.0.954",
     date: "14 Jun 2026",
     items: [
