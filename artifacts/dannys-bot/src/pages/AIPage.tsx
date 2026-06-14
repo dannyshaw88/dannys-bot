@@ -142,36 +142,57 @@ export function AIPage() {
           {showSetup && (
             <div className="px-4 pb-4 pt-1 space-y-4 bg-card/50 border-t border-border">
               <div className="space-y-3">
+
                 <div className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">1</span>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Install Stable Diffusion Forge (free, one-click)</p>
+                    <p className="text-sm font-medium text-foreground">Install Python 3.10 or 3.11</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Download from <span className="text-primary font-mono">github.com/lllyasviel/stable-diffusion-webui-forge</span> → run <span className="font-mono bg-muted px-1 rounded">webui-user.bat</span> (not webui.bat — that one is for devs)
+                      Go to <span className="text-primary font-mono">python.org/downloads</span> → download <strong className="text-foreground">Python 3.10.x or 3.11.x</strong> (not 3.12+)
                     </p>
+                    <div className="mt-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1.5">
+                      <p className="text-xs text-yellow-400 font-medium">⚠ On the installer's first screen — tick "Add Python to PATH" before clicking Install</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Do NOT install Python from the Microsoft Store — use python.org only.</p>
                   </div>
                 </div>
+
                 <div className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">2</span>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Download a realistic model from CivitAI</p>
+                    <p className="text-sm font-medium text-foreground">Install Git for Windows</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Search <span className="font-mono bg-muted px-1 rounded">"Realistic Vision v6"</span> or <span className="font-mono bg-muted px-1 rounded">"epiCRealism"</span> → place the .safetensors file in your <span className="font-mono bg-muted px-1 rounded">models/Stable-diffusion/</span> folder
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Your GTX 1050 (4GB) runs SD 1.5 models well — no SDXL
+                      Go to <span className="text-primary font-mono">git-scm.com</span> → download and install with default options. Forge uses git to manage itself.
                     </p>
                   </div>
                 </div>
+
                 <div className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">3</span>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Launch Forge and come back here</p>
+                    <p className="text-sm font-medium text-foreground">Run webui-user.bat in your Forge folder</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Forge starts at <span className="font-mono bg-muted px-1 rounded">http://localhost:7860</span> — the status above will turn green. No internet required after this.
+                      Double-click <span className="font-mono bg-muted px-1 rounded">webui-user.bat</span> — first run downloads ~5 GB of dependencies automatically. Leave the CMD window open.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      When it's ready it will say <span className="font-mono bg-muted px-1 rounded">Running on local URL: http://127.0.0.1:7860</span> — then come back here, the status badge will turn green.
                     </p>
                   </div>
                 </div>
+
+                <div className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">4</span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Download a model from CivitAI</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Search <span className="font-mono bg-muted px-1 rounded">"Realistic Vision v6"</span> or <span className="font-mono bg-muted px-1 rounded">"epiCRealism"</span> on civitai.com → download the <strong className="text-foreground">.safetensors</strong> file → place it in your <span className="font-mono bg-muted px-1 rounded">stable-diffusion-webui-forge-main/models/Stable-diffusion/</span> folder
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your GTX 1050 (4GB) runs SD 1.5 models well — avoid SDXL models (too large for 4GB VRAM).
+                    </p>
+                  </div>
+                </div>
+
               </div>
               <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground">
                 <strong className="text-foreground">No content filters.</strong> Everything runs on your PC — nothing is sent to any server. SFW and NSFW generation both work.

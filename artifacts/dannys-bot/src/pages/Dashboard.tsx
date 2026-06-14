@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.932",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Studio setup guide: expanded to 4 steps — install Python 3.10/3.11 from python.org (with 'Add to PATH' warning), install Git, run webui-user.bat, then download a model. Fixes 'Couldn't launch python' error on first run." },
+    ],
+  },
+  {
     version: "1.0.931",
     date: "14 Jun 2026",
     items: [
