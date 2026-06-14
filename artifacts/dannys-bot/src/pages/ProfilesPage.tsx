@@ -414,6 +414,24 @@ export function ProfilesPage() {
     return Infinity;
   };
 
+  // Resolve the actual proxy host for a profile, checking proxyId → proxies array first,
+  // then falling back to inline proxyHost. Accounts linked via Proxy Manager have proxyHost=null
+  // on the profile row itself; without this lookup IP:PORT sort treats them all as equal (Infinity).
+  const resolveProfileProxyHost = (p: { proxyId?: number | null; proxyHost?: string | null }): string | null => {
+    if (p.proxyId && proxies) {
+      const px = proxies.find(x => x.id === p.proxyId);
+      if (px?.host) return px.host;
+    }
+    return p.proxyHost ?? null;
+  };
+  const resolveProfileProxyPort = (p: { proxyId?: number | null; proxyPort?: number | null }): number => {
+    if (p.proxyId && proxies) {
+      const px = proxies.find(x => x.id === p.proxyId);
+      if (px?.port != null) return px.port;
+    }
+    return p.proxyPort ?? 0;
+  };
+
   const ERROR_STATUSES = new Set([
     "logged_out", "bad_password", "captcha", "error", "banned",
     "api_block", "compromised", "invalid_credentials", "password_reset",
@@ -452,12 +470,12 @@ export function ProfilesPage() {
     // No stable order yet — sort live as a one-time fallback (before first load)
     return [...base].sort((a, b) => {
       if (sortField === "ip") {
-        const na = ipToNum(a.proxyHost);
-        const nb = ipToNum(b.proxyHost);
+        const na = ipToNum(resolveProfileProxyHost(a));
+        const nb = ipToNum(resolveProfileProxyHost(b));
         const diff = na - nb;
         if (diff !== 0) return sortDir === "asc" ? diff : -diff;
-        const pa = a.proxyPort ?? 0;
-        const pb = b.proxyPort ?? 0;
+        const pa = resolveProfileProxyPort(a);
+        const pb = resolveProfileProxyPort(b);
         return sortDir === "asc" ? pa - pb : pb - pa;
       }
       if (sortField === "followers" || sortField === "following") {
@@ -560,12 +578,12 @@ export function ProfilesPage() {
 
     const sorted = [...base].sort((a, b) => {
       if (field === "ip") {
-        const na = ipToNum(a.proxyHost);
-        const nb = ipToNum(b.proxyHost);
+        const na = ipToNum(resolveProfileProxyHost(a));
+        const nb = ipToNum(resolveProfileProxyHost(b));
         const diff = na - nb;
         if (diff !== 0) return newDir === "asc" ? diff : -diff;
-        const pa = a.proxyPort ?? 0;
-        const pb = b.proxyPort ?? 0;
+        const pa = resolveProfileProxyPort(a);
+        const pb = resolveProfileProxyPort(b);
         return newDir === "asc" ? pa - pb : pb - pa;
       }
       if (field === "trustscore") {
@@ -1494,7 +1512,7 @@ export function ProfilesPage() {
                     }
                     return (
                       <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2 ml-auto" title={ip || "No proxy"}>
-                        <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || " "}</span>
+                        <span className="text-[11px] font-mono text-foreground/80 truncate block">{ip || " "}</span>
                       </div>
                     );
                   })()}

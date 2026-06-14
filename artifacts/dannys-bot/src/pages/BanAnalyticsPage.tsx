@@ -13,7 +13,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; }
+interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; proxyId?: number | null; proxyHost?: string | null; proxyPort?: number | null; }
+interface ProxyRow { id: number; host: string | null; port: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface AnalyticsEntry { id: number; username: string; proxyHost: string; endpointCount: number; endpointSnapshot: string; bannedAt?: string; flaggedAt?: string; }
 interface EpItem { operationName: string; date: string; source?: string | null; }
 interface ProxyRisk { host: string; banCount: number; automatedCount: number; captchaCount: number; lockedCount: number; total: number; accounts: string[]; entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] }; }
@@ -92,6 +93,8 @@ const EP_LABELS: Record<string, { label: string; category: "follow" | "unfollow"
   "tags/search":          { label: "Hashtag Search",     category: "session" },
   "users/search":         { label: "User Search",        category: "session" },
   "media/info":           { label: "Media Info",         category: "session" },
+  "eb/auto-login":        { label: "EB Login Start",     category: "auth" },
+  "eb/auto-login-result": { label: "EB Login Result",    category: "auth" },
 };
 
 function matchLabel(name: string) {
@@ -436,6 +439,107 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   const id = profileMap.get(username);
   if (!id) return <span className="font-semibold">@{username}</span>;
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
+}
+
+// ── Live IP Occupancy Panel ───────────────────────────────────────────────────
+interface IpGroup {
+  key: string;
+  displayHost: string;
+  accounts: Array<{ username: string; id: number; addedDate: Date | null; status: string }>;
+}
+
+function LiveIpOccupancyPanel({ profiles, proxies, profileMap }: { profiles: ProfileRow[]; proxies: ProxyRow[]; profileMap: Map<string, number> }) {
+  const proxyMap = new Map<number, { host: string; port: number | null }>();
+  for (const px of proxies) {
+    const h = px.host ?? px.proxyHost ?? null;
+    const p = px.port ?? px.proxyPort ?? null;
+    if (h) proxyMap.set(px.id, { host: h, port: p });
+  }
+
+  const groups = new Map<string, IpGroup>();
+  for (const p of profiles) {
+    let host: string | null = null;
+    let port: number | null = null;
+    if (p.proxyId && proxyMap.has(p.proxyId)) {
+      const px = proxyMap.get(p.proxyId)!;
+      host = px.host; port = px.port;
+    } else if (p.proxyHost) {
+      host = p.proxyHost; port = p.proxyPort ?? null;
+    }
+    const key = host ? `${host}:${port ?? ""}` : "__none__";
+    if (!groups.has(key)) groups.set(key, { key, displayHost: host ? `${host}${port ? `:${port}` : ""}` : "No Proxy", accounts: [] });
+    const addedDate = parseFirstAddedDate(p.notes);
+    groups.get(key)!.accounts.push({ username: p.username, id: p.id, addedDate, status: p.accountStatus ?? "pending" });
+  }
+
+  const sorted = Array.from(groups.values())
+    .filter(g => g.key !== "__none__")
+    .sort((a, b) => b.accounts.length - a.accounts.length);
+
+  const noProxyGroup = groups.get("__none__");
+
+  if (sorted.length === 0) return null;
+
+  const now = Date.now();
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <Network className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold">Live IP Occupancy</span>
+        <span className="text-xs text-muted-foreground ml-auto">current accounts per proxy — based on now, not history</span>
+      </div>
+      <div className="divide-y divide-border">
+        {sorted.map(g => {
+          const count = g.accounts.length;
+          const accsWithDate = g.accounts.filter(a => a.addedDate !== null).sort((a, b) => (a.addedDate!.getTime()) - (b.addedDate!.getTime()));
+          // "Shared since" = when the 2nd oldest account joined this proxy
+          const sharedSinceDate = accsWithDate.length >= 2 ? accsWithDate[1].addedDate! : null;
+          const sharedMs = sharedSinceDate ? now - sharedSinceDate.getTime() : null;
+          const highLoad = count > 5;
+          return (
+            <div key={g.key} className="px-4 py-3">
+              <div className="flex items-center gap-3 mb-1.5">
+                <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-sm font-mono font-semibold">{g.displayHost}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${highLoad ? "bg-orange-100 text-orange-700 border border-orange-300" : "bg-muted text-muted-foreground"}`}>
+                  {count} account{count !== 1 ? "s" : ""}
+                </span>
+                {highLoad && <span className="text-[10px] text-orange-600 font-semibold">⚠ over 5/proxy limit</span>}
+                {sharedMs !== null && count >= 2 && (
+                  <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+                    shared {formatDuration(sharedMs)}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 pl-6">
+                {g.accounts.map(a => {
+                  const ageMs = a.addedDate ? now - a.addedDate.getTime() : null;
+                  const statusOk = (a.status ?? "").toLowerCase() === "valid";
+                  return (
+                    <div key={a.username} className="flex items-center gap-1 text-[10px] bg-muted/60 rounded px-1.5 py-0.5 border border-border">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusOk ? "bg-green-500" : "bg-muted-foreground"}`} />
+                      <span className="font-mono">@{a.username}</span>
+                      {ageMs !== null && <span className="text-muted-foreground">· {formatDuration(ageMs)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {noProxyGroup && noProxyGroup.accounts.length > 0 && (
+          <div className="px-4 py-2 flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground">{noProxyGroup.accounts.length} account{noProxyGroup.accounts.length !== 1 ? "s" : ""} with no proxy assigned</span>
+          </div>
+        )}
+      </div>
+      <div className="px-4 py-2 border-t border-border bg-muted/20">
+        <p className="text-[10px] text-muted-foreground">Age shown is time since "Added:" date in Notes — this approximates time on this IP. Accounts without an "Added:" date show no age. Sharing duration starts when the 2nd account joined.</p>
+      </div>
+    </div>
+  );
 }
 
 type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "theories";
@@ -1404,6 +1508,7 @@ export function BanAnalyticsPage() {
   const { data: captchaEntries = [], isLoading: captchaLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/captcha-patterns"], queryFn: async () => (await fetch("/api/analytics/captcha-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
   const { data: lockedEntries = [], isLoading: lockedLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/locked-patterns"], queryFn: async () => (await fetch("/api/analytics/locked-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
   const { data: allProfiles = [] } = useQuery<ProfileRow[]>({ queryKey: ["/api/profiles"], queryFn: async () => (await fetch("/api/profiles", { credentials: "include" })).json(), refetchInterval: 60000 });
+  const { data: allProxies = [] } = useQuery<ProxyRow[]>({ queryKey: ["/api/proxies"], queryFn: async () => (await fetch("/api/proxies", { credentials: "include" })).json(), refetchInterval: 60000 });
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
   const profileMap   = useMemo(() => new Map<string, number>(allProfiles.map(p => [p.username, p.id])), [allProfiles]);
@@ -1588,6 +1693,8 @@ export function BanAnalyticsPage() {
               )}
             </div>
           )}
+
+          <LiveIpOccupancyPanel profiles={allProfiles} proxies={allProxies} profileMap={profileMap} />
 
           {concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">

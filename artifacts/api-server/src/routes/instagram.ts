@@ -1153,6 +1153,17 @@ export async function registerInstagramRoutes(
       apiUA:         profile.userAgentApi      ?? undefined,
       ebFingerprint: profile.ebFingerprint     ?? undefined,
     };
+    // Log the EB login attempt as an API call so Evasion Stats can account for the
+    // Instagram requests the embedded browser makes during the login flow.
+    storage.createInstagramApiCall({
+      profileId,
+      username: profile.username ?? "",
+      operationName: "eb/auto-login",
+      date: new Date().toISOString(),
+      source: "EB",
+      message: "EB auto-login initiated",
+    }).catch(() => {});
+
     try {
       const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/auto-login`, {
         method:  "POST",
@@ -1160,6 +1171,15 @@ export async function registerInstagramRoutes(
         body:    JSON.stringify(body),
       });
       const data = await r.json().catch(() => ({ ok: false, message: "IPC parse error" }));
+      // Log the result so we can see successful vs failed EB logins in the API call log.
+      storage.createInstagramApiCall({
+        profileId,
+        username: profile.username ?? "",
+        operationName: "eb/auto-login-result",
+        date: new Date().toISOString(),
+        source: "EB",
+        message: data?.ok ? "EB auto-login completed" : `EB auto-login failed: ${data?.message ?? "unknown"}`,
+      }).catch(() => {});
       return res.json(data);
     } catch (err: any) {
       return res.status(500).json({ ok: false, message: err?.message ?? "IPC error" });

@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.940",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts: IP:PORT column font is now the same size and weight as the username column — easier to read." },
+      { category: "Fix", text: "Accounts: IP:PORT column sort now correctly orders accounts that use a linked proxy (not just inline proxies)." },
+      { category: "Improvement", text: "Evasion Stats: EB login events are now tracked as API calls so they show up in the endpoint log and stats." },
+      { category: "New", text: "Evasion Stats: new Live IP Occupancy panel shows how many accounts are on each proxy right now, how long they've been on it, and how long they've been sharing it." },
+    ],
+  },
+  {
     version: "1.0.939",
     date: "14 Jun 2026",
     items: [
