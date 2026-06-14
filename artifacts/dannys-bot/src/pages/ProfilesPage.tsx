@@ -1421,7 +1421,7 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-muted-foreground truncate">{syncLabel}</span>
+                          <span className="text-[10px] text-foreground truncate">{syncLabel}</span>
                         </div>
                       );
                     }
@@ -1440,7 +1440,7 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-muted-foreground truncate">{label}</span>
+                          <span className="text-[10px] text-foreground truncate">{label}</span>
                         </div>
                       );
                     }

@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.941",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts: Sync and Last API Call column text is now full black instead of grey — easier to read at a glance." },
+      { category: "Improvement", text: "Evasion Stats: Verify-only ban detection now also catches accounts where the EB login (browser phase) was the only activity — not just API Verify calls." },
+      { category: "New", text: "Evasion Stats: Verify Cluster Fingerprint added as a hardcoded theory — detects when multiple accounts were verified on the same proxy within 30 minutes of each other, which is a high-signal bot cluster pattern." },
+      { category: "New", text: "Evasion Stats: Scan with AI button on the Theories tab sends your ban data summary to Equinox AI to find patterns beyond the 6 built-in theories (requires OpenAI key in Settings)." },
+      { category: "Fix", text: "Proxy Manager: IP:port, username, and password input text is now full black instead of grey." },
+    ],
+  },
+  {
     version: "1.0.940",
     date: "14 Jun 2026",
     items: [

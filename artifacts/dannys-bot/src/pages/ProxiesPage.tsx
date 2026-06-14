@@ -200,7 +200,7 @@ function ProxyRow({
           );
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
-              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
+              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-foreground" placeholder="host:port" />
             </div>
           );
           if (col === "type") return (
@@ -217,12 +217,12 @@ function ProxyRow({
           );
           if (col === "username") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.username }}>
-              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full" />
+              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-foreground" />
             </div>
           );
           if (col === "password") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.password }}>
-              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full" />
+              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-foreground" />
             </div>
           );
           if (col === "status") return (

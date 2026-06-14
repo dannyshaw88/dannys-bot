@@ -56,6 +56,12 @@ interface CrossStats {
   lowTrustPct: number; highTrustPct: number;
   // Reliability
   unreliablePct: number; lowReliabilityEntries: number;
+  // Verify-only bans
+  verifyOnlyPct: number; verifyOnlyCount: number;
+  // Proxy blast radius
+  proxyBlastEntries: Array<{ proxy: string; count: number }>;
+  // Verify clustering: multiple verify-only accounts on same proxy within 30 min
+  verifyClusterGroups: Array<{ proxy: string; accounts: string[]; windowMinutes: number }>;
 }
 
 // ── Known Instagram mobile-API endpoint labels ────────────────────────────────
@@ -258,6 +264,9 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
     commonFirstEps: [], commonLastEps: [],
     trustRankMean: 0, trustRankMedian: 0, trustDistribution: {}, lowTrustPct: 0, highTrustPct: 0,
     unreliablePct: 0, lowReliabilityEntries: 0,
+    verifyOnlyPct: 0, verifyOnlyCount: 0,
+    proxyBlastEntries: [],
+    verifyClusterGroups: [],
   };
   if (!entries.length) return emptyStats;
 
@@ -339,6 +348,57 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
   const lowTrustPct  = trustRanks.length ? Math.round(trustRanks.filter(r => r <= 4).length / trustRanks.length * 100) : 0;
   const highTrustPct = trustRanks.length ? Math.round(trustRanks.filter(r => r >= 9).length / trustRanks.length * 100) : 0;
 
+  // Verify-only bans: accounts where every recorded endpoint came from the Verify process (no tool activity at all)
+  const verifyOnlyCount = entries.filter(e => {
+    const eps = filterHiker(parseEps(e.endpointSnapshot));
+    if (eps.length === 0) return false;
+    return eps.every(ep => { const s = (ep.source ?? "").toLowerCase(); return s === "verify" || s === "eb" || s === ""; });
+  }).length;
+
+  // Proxy blast radius: proxies with 3+ bans on the exact same IP
+  const proxyBlastEntries = Array.from(proxyCounts.entries())
+    .filter(([proxy, count]) => proxy !== "(no proxy)" && count >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .map(([proxy, count]) => ({ proxy, count }));
+
+  // Verify clustering: detect multiple verify-only accounts on the same proxy whose
+  // verify sequences overlapped within a 30-minute window.
+  // Each verify-only entry contributes its earliest endpoint timestamp as "verify start time".
+  const CLUSTER_WINDOW_MS = 30 * 60 * 1000;
+  const verifyOnlyEntries = entries.filter(e => {
+    const eps = filterHiker(parseEps(e.endpointSnapshot));
+    return eps.length > 0 && eps.every(ep => { const s = (ep.source ?? "").toLowerCase(); return s === "verify" || s === "eb" || s === ""; });
+  });
+  const verifyByProxy = new Map<string, Array<{ username: string; firstTs: number }>>();
+  for (const e of verifyOnlyEntries) {
+    if (!e.proxyHost) continue;
+    const eps = filterHiker(parseEps(e.endpointSnapshot));
+    const timestamps = eps.map(ep => new Date(ep.date).getTime()).filter(t => !isNaN(t));
+    if (timestamps.length === 0) continue;
+    const firstTs = Math.min(...timestamps);
+    if (!verifyByProxy.has(e.proxyHost)) verifyByProxy.set(e.proxyHost, []);
+    verifyByProxy.get(e.proxyHost)!.push({ username: e.username, firstTs });
+  }
+  const verifyClusterGroups: Array<{ proxy: string; accounts: string[]; windowMinutes: number }> = [];
+  for (const [proxy, items] of verifyByProxy.entries()) {
+    if (items.length < 2) continue;
+    const sorted = items.slice().sort((a, b) => a.firstTs - b.firstTs);
+    // Sliding window: find the tightest cluster of 2+ accounts within CLUSTER_WINDOW_MS
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const windowAccounts = [sorted[i].username];
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (sorted[j].firstTs - sorted[i].firstTs <= CLUSTER_WINDOW_MS) {
+          windowAccounts.push(sorted[j].username);
+        } else break;
+      }
+      if (windowAccounts.length >= 2) {
+        const spanMs = sorted[Math.min(i + windowAccounts.length - 1, sorted.length - 1)].firstTs - sorted[i].firstTs;
+        verifyClusterGroups.push({ proxy, accounts: windowAccounts, windowMinutes: Math.round(spanMs / 60000) });
+        break; // one cluster report per proxy
+      }
+    }
+  }
+
   return {
     n: entries.length, weightedN,
     callRateMean: mean(callRates), callRateMedian: median(callRates), callRateStdDev: stddev(callRates), callRateP90: pctile(callRates, 90),
@@ -360,6 +420,10 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
     trustRankMean: mean(trustRanks), trustRankMedian: median(trustRanks), trustDistribution,
     lowTrustPct, highTrustPct,
     unreliablePct, lowReliabilityEntries,
+    verifyOnlyPct: entries.length ? Math.round(verifyOnlyCount / entries.length * 100) : 0,
+    verifyOnlyCount,
+    proxyBlastEntries,
+    verifyClusterGroups,
   };
 }
 
@@ -439,107 +503,6 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   const id = profileMap.get(username);
   if (!id) return <span className="font-semibold">@{username}</span>;
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
-}
-
-// ── Live IP Occupancy Panel ───────────────────────────────────────────────────
-interface IpGroup {
-  key: string;
-  displayHost: string;
-  accounts: Array<{ username: string; id: number; addedDate: Date | null; status: string }>;
-}
-
-function LiveIpOccupancyPanel({ profiles, proxies, profileMap }: { profiles: ProfileRow[]; proxies: ProxyRow[]; profileMap: Map<string, number> }) {
-  const proxyMap = new Map<number, { host: string; port: number | null }>();
-  for (const px of proxies) {
-    const h = px.host ?? px.proxyHost ?? null;
-    const p = px.port ?? px.proxyPort ?? null;
-    if (h) proxyMap.set(px.id, { host: h, port: p });
-  }
-
-  const groups = new Map<string, IpGroup>();
-  for (const p of profiles) {
-    let host: string | null = null;
-    let port: number | null = null;
-    if (p.proxyId && proxyMap.has(p.proxyId)) {
-      const px = proxyMap.get(p.proxyId)!;
-      host = px.host; port = px.port;
-    } else if (p.proxyHost) {
-      host = p.proxyHost; port = p.proxyPort ?? null;
-    }
-    const key = host ? `${host}:${port ?? ""}` : "__none__";
-    if (!groups.has(key)) groups.set(key, { key, displayHost: host ? `${host}${port ? `:${port}` : ""}` : "No Proxy", accounts: [] });
-    const addedDate = parseFirstAddedDate(p.notes);
-    groups.get(key)!.accounts.push({ username: p.username, id: p.id, addedDate, status: p.accountStatus ?? "pending" });
-  }
-
-  const sorted = Array.from(groups.values())
-    .filter(g => g.key !== "__none__")
-    .sort((a, b) => b.accounts.length - a.accounts.length);
-
-  const noProxyGroup = groups.get("__none__");
-
-  if (sorted.length === 0) return null;
-
-  const now = Date.now();
-
-  return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <Network className="w-4 h-4 text-indigo-500" />
-        <span className="text-sm font-semibold">Live IP Occupancy</span>
-        <span className="text-xs text-muted-foreground ml-auto">current accounts per proxy — based on now, not history</span>
-      </div>
-      <div className="divide-y divide-border">
-        {sorted.map(g => {
-          const count = g.accounts.length;
-          const accsWithDate = g.accounts.filter(a => a.addedDate !== null).sort((a, b) => (a.addedDate!.getTime()) - (b.addedDate!.getTime()));
-          // "Shared since" = when the 2nd oldest account joined this proxy
-          const sharedSinceDate = accsWithDate.length >= 2 ? accsWithDate[1].addedDate! : null;
-          const sharedMs = sharedSinceDate ? now - sharedSinceDate.getTime() : null;
-          const highLoad = count > 5;
-          return (
-            <div key={g.key} className="px-4 py-3">
-              <div className="flex items-center gap-3 mb-1.5">
-                <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-sm font-mono font-semibold">{g.displayHost}</span>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${highLoad ? "bg-orange-100 text-orange-700 border border-orange-300" : "bg-muted text-muted-foreground"}`}>
-                  {count} account{count !== 1 ? "s" : ""}
-                </span>
-                {highLoad && <span className="text-[10px] text-orange-600 font-semibold">⚠ over 5/proxy limit</span>}
-                {sharedMs !== null && count >= 2 && (
-                  <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-                    shared {formatDuration(sharedMs)}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5 pl-6">
-                {g.accounts.map(a => {
-                  const ageMs = a.addedDate ? now - a.addedDate.getTime() : null;
-                  const statusOk = (a.status ?? "").toLowerCase() === "valid";
-                  return (
-                    <div key={a.username} className="flex items-center gap-1 text-[10px] bg-muted/60 rounded px-1.5 py-0.5 border border-border">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusOk ? "bg-green-500" : "bg-muted-foreground"}`} />
-                      <span className="font-mono">@{a.username}</span>
-                      {ageMs !== null && <span className="text-muted-foreground">· {formatDuration(ageMs)}</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        {noProxyGroup && noProxyGroup.accounts.length > 0 && (
-          <div className="px-4 py-2 flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs text-muted-foreground">{noProxyGroup.accounts.length} account{noProxyGroup.accounts.length !== 1 ? "s" : ""} with no proxy assigned</span>
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-2 border-t border-border bg-muted/20">
-        <p className="text-[10px] text-muted-foreground">Age shown is time since "Added:" date in Notes — this approximates time on this IP. Accounts without an "Added:" date show no age. Sharing duration starts when the 2nd account joined.</p>
-      </div>
-    </div>
-  );
 }
 
 type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "theories";
@@ -1053,7 +1016,10 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
     if (cross.callRateStdDev < cross.callRateMean * 0.2 && cross.n >= 3) findings.push({ severity: "info", text: `Consistent call rates across accounts (σ/μ=${cross.callRateMean > 0 ? (cross.callRateStdDev/cross.callRateMean).toFixed(4) : "—"}) — systemic tool config issue, not account-specific.` });
     if (cross.unreliablePct >= 40) findings.push({ severity: "info", text: `${cross.unreliablePct}% of events from accounts with 2+ re-adds — lower confidence data. See Reliability section above.` });
     if (cross.highTrustPct >= 30 && Object.keys(cross.trustDistribution).length > 0) findings.push({ severity: "info", text: `${cross.highTrustPct}% of flagged accounts are at TrustScore rank 9+ — high-trust accounts being flagged indicates a severe trigger, not baseline scrutiny.` });
-    if (cross.peakHour >= 0 && cross.hourBuckets[cross.peakHour] >= 2) findings.push({ severity: "info", text: `Peak flag hour: ${String(cross.peakHour).padStart(2,"0")}:00 UTC (${cross.hourBuckets[cross.peakHour]} events). Repeating daily at the same time is itself a detectable pattern.` });
+    if (cross.verifyOnlyCount >= 2) findings.push({ severity: "warning", text: `${cross.verifyOnlyCount} account${cross.verifyOnlyCount !== 1 ? "s" : ""} (${cross.verifyOnlyPct}%) were banned with zero tool activity — Verify calls only. These accounts were already dead before any tool ran. Don't waste time debugging tool behaviour on them.` });
+    else if (cross.verifyOnlyCount === 1) findings.push({ severity: "info", text: `1 account was banned with only Verify calls recorded — it was already flagged before any tool ran.` });
+    for (const g of cross.verifyClusterGroups) findings.push({ severity: "critical", text: `Verify cluster on ${g.proxy}: ${g.accounts.length} accounts all verified within ${g.windowMinutes === 0 ? "<1" : g.windowMinutes} min of each other (${g.accounts.slice(0, 3).map(a => `@${a}`).join(", ")}${g.accounts.length > 3 ? ` +${g.accounts.length - 3}` : ""}). Rapid concurrent verify sessions on the same IP are a high-signal bot cluster pattern — stagger verifications by at least 10 min per account.` });
+    for (const blast of cross.proxyBlastEntries) findings.push({ severity: "critical", text: `Proxy blast: ${blast.count} accounts banned on the same IP ${blast.proxy}. That proxy is burned — stop assigning new accounts to it.` });
   }
 
   return (
@@ -1351,6 +1317,8 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
   captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
 }) {
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const allEntries = useMemo(() => [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries], [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const total = allEntries.length;
   const allMetrics = useMemo(() => allEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [allEntries]);
@@ -1375,6 +1343,38 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   const banUsernames = useMemo(() => new Set(banEntries.map(e => e.username)), [banEntries]);
   const autoThenBanCount = automatedEntries.filter(e => banUsernames.has(e.username)).length;
   const decayPct = automatedEntries.length > 2 ? Math.round((autoThenBanCount / automatedEntries.length) * 100) : -1;
+
+  const verifyClusterData = useMemo(() => {
+    const WINDOW_MS = 30 * 60 * 1000;
+    const noToolEntries = allEntries.filter(e => {
+      const eps = filterHiker(parseEps(e.endpointSnapshot));
+      return eps.length > 0 && eps.every(ep => { const s = (ep.source ?? "").toLowerCase(); return s === "verify" || s === "eb" || s === ""; });
+    });
+    const byProxy = new Map<string, Array<{ username: string; firstTs: number }>>();
+    for (const e of noToolEntries) {
+      if (!e.proxyHost) continue;
+      const eps = filterHiker(parseEps(e.endpointSnapshot));
+      const ts = eps.map(ep => new Date(ep.date).getTime()).filter(t => !isNaN(t));
+      if (ts.length === 0) continue;
+      if (!byProxy.has(e.proxyHost)) byProxy.set(e.proxyHost, []);
+      byProxy.get(e.proxyHost)!.push({ username: e.username, firstTs: Math.min(...ts) });
+    }
+    let clusteredAccounts = 0;
+    for (const items of byProxy.values()) {
+      if (items.length < 2) continue;
+      const sorted = items.slice().sort((a, b) => a.firstTs - b.firstTs);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        let inWindow = 1;
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (sorted[j].firstTs - sorted[i].firstTs <= WINDOW_MS) inWindow++;
+          else break;
+        }
+        if (inWindow >= 2) { clusteredAccounts += inWindow; break; }
+      }
+    }
+    return clusteredAccounts;
+  }, [allEntries]);
+  const verifyClusterPct = total > 2 ? Math.round((verifyClusterData / total) * 100) : -1;
 
   function LikelihoodBar({ pct }: { pct: number }) {
     if (pct < 0) return <span className="text-xs text-muted-foreground italic">— no data yet (need 3+ events)</span>;
@@ -1438,6 +1438,15 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       advice: "Target 20–30 actions/hour with irregular spacing. A burst of 5 follows in 2 minutes is fine. Sustaining 60/hr for 45+ minutes is not. Build in 5–15 min pauses between bursts.",
     },
     {
+      id: "verify-cluster", Icon: Network,
+      title: "Verify Cluster Fingerprint",
+      tagline: "Verifying multiple accounts on the same IP within minutes signals a bot farm to Instagram",
+      likelihood: verifyClusterPct,
+      description: "Instagram's anti-abuse system watches for tight temporal clusters of verify sequences — multiple accounts hitting the Verify endpoint flow on the same IP address within a short window. A single account verifying is normal. Two accounts verifying on the same IP within 5 minutes is suspicious. Three or more within 30 minutes is a high-confidence bot-cluster signal. This pattern is hard to disguise because the verify flow has a distinctive call sequence (launcher/sync → tokens/keyed → users/{id}/info) that Instagram can pattern-match at the IP level regardless of device fingerprints. The EB login itself (browser cookies extraction) also runs through the same IP, doubling the signal: one IP producing both browser-side auth AND mobile API auth sequences for multiple accounts in rapid succession.",
+      evidence: verifyClusterPct >= 0 ? `${verifyClusterData} of ${total} flagged accounts (${verifyClusterPct}%) were verified in overlapping clusters — multiple accounts hitting the verify sequence on the same IP within a 30-min window.` : "Not enough data yet.",
+      advice: "Stagger Verify operations by at least 10 minutes per account per IP. If verifying multiple accounts on the same proxy, do them sequentially with a full human-like pause in between — never run concurrent Verify sessions on the same proxy.",
+    },
+    {
       id: "trust-decay", Icon: TrendingUp,
       title: "Account TrustScore Decay Chain",
       tagline: "Automated → Captcha → Ban is a detectable escalation ladder, not independent events",
@@ -1448,6 +1457,70 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
     },
   ];
 
+  async function runAiScan() {
+    if (total === 0 || aiLoading) return;
+    setAiLoading(true);
+    setAiResult(null);
+    const summary = allEntrics_summary(allEntries, allMetrics);
+    try {
+      const res = await fetch("/api/equinox-bot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "user",
+              content: `You are analysing Instagram automation ban data for the Equinox bot. Below is a statistical summary of ${total} flagged accounts (banned/automated/captcha/locked). Identify any NEW patterns or theories NOT already covered by the 6 hardcoded theories (IP Trust Budget, Warmup Gate, Robotic Timing CoV, Auth Overcalling, Velocity Cap, Trust Decay Chain). Focus on patterns that are actionable. Be concise — bullet points preferred. If the data is too thin to draw conclusions, say so.\n\n${summary}`,
+            },
+          ],
+        }),
+        credentials: "include",
+      });
+      const j = await res.json();
+      setAiResult(j.reply ?? "No response.");
+    } catch {
+      setAiResult("Could not reach the AI. Check your OpenAI API key in Settings.");
+    }
+    setAiLoading(false);
+  }
+
+  function allEntrics_summary(entries: AnalyticsEntry[], metrics: EntryMetrics[]): string {
+    const banned = entries.filter(e => banEntries.includes(e)).length;
+    const automated = entries.filter(e => automatedEntries.includes(e)).length;
+    const captcha = entries.filter(e => captchaEntries.includes(e)).length;
+    const locked = entries.filter(e => lockedEntries.includes(e)).length;
+    const zeroWarmup = metrics.filter(m => m.preActionWarmup === 0).length;
+    const robotic = metrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
+    const highVelocity = metrics.filter(m => m.actionVelocityPerHour > 40).length;
+    const verifyOnly = entries.filter(e => { const eps = filterHiker(parseEps(e.endpointSnapshot)); return eps.length > 0 && eps.every(ep => (ep.source ?? "").toLowerCase() === "verify"); }).length;
+    const proxyCounts = new Map<string, number>();
+    for (const e of entries) { const h = e.proxyHost || "(none)"; proxyCounts.set(h, (proxyCounts.get(h) ?? 0) + 1); }
+    const topProxies = Array.from(proxyCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([h,c])=>`${h}:${c}`).join(", ");
+    const covVals = metrics.map(m => m.timingCoV).filter(v => v >= 0);
+    const covMed = covVals.length ? covVals.slice().sort((a,b)=>a-b)[Math.floor(covVals.length/2)] : -1;
+    const warmupVals = metrics.map(m => m.preActionWarmup);
+    const warmupMed = warmupVals.length ? warmupVals.slice().sort((a,b)=>a-b)[Math.floor(warmupVals.length/2)] : -1;
+    const spans = metrics.map(m=>m.spanMin).filter(v=>v>0);
+    const spanMed = spans.length ? spans.slice().sort((a,b)=>a-b)[Math.floor(spans.length/2)] : -1;
+    const actionRatios = metrics.map(m=>m.totalCalls>0?m.actionCount/m.totalCalls:0);
+    const actionRatioMed = actionRatios.length ? actionRatios.slice().sort((a,b)=>a-b)[Math.floor(actionRatios.length/2)] : 0;
+    const sources = new Map<string, number>();
+    for (const e of entries) { for (const ep of filterHiker(parseEps(e.endpointSnapshot))) { const s = ep.source ?? "unknown"; sources.set(s, (sources.get(s) ?? 0) + 1); } }
+    const sourceSummary = Array.from(sources.entries()).sort((a,b)=>b[1]-a[1]).map(([s,c])=>`${s}:${c}`).join(", ");
+    return [
+      `Total events: ${total} (Banned:${banned} Automated:${automated} Captcha:${captcha} Locked:${locked})`,
+      `Verify-only bans (zero tool activity): ${verifyOnly}/${total}`,
+      `Zero warmup (action as first call): ${zeroWarmup}/${total}`,
+      `Robotic timing (CoV<0.5): ${robotic}/${total}, median CoV: ${covMed >= 0 ? covMed.toFixed(3) : "n/a"}`,
+      `High velocity (>40 actions/hr): ${highVelocity}/${total}`,
+      `Median pre-action warmup calls: ${warmupMed}`,
+      `Median session span: ${spanMed >= 0 ? spanMed.toFixed(1) + " min" : "n/a"}`,
+      `Median action ratio (actions/total calls): ${(actionRatioMed * 100).toFixed(1)}%`,
+      `Top proxies by event count: ${topProxies || "none"}`,
+      `Endpoint source breakdown: ${sourceSummary || "none"}`,
+    ].join("\n");
+  }
+
   return (
     <div className="space-y-4">
       {total === 0 && (
@@ -1457,6 +1530,16 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           <p className="text-xs text-muted-foreground mt-1">Flag accounts across the Banned, Automated, Captcha, and Locked tabs to populate theory likelihood counters.</p>
         </div>
       )}
+      {aiResult && (
+        <div className="border border-violet-300 dark:border-violet-700 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-violet-500 shrink-0" />
+            <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">AI Pattern Analysis</span>
+            <button onClick={() => setAiResult(null)} className="ml-auto text-violet-400 hover:text-violet-600 transition-colors"><X className="w-3.5 h-3.5" /></button>
+          </div>
+          <div className="px-4 py-3 text-[11px] leading-relaxed whitespace-pre-wrap">{aiResult}</div>
+        </div>
+      )}
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-start gap-2">
           <FlaskConical className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
@@ -1464,7 +1547,14 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
             <span className="text-sm font-semibold">Detection Theories</span>
             <p className="text-[11px] text-muted-foreground mt-0.5">Each theory's likelihood is computed live from your flagged account data. The more accounts you mark, the more accurate these percentages become. Theories are not mutually exclusive — multiple can be active simultaneously.</p>
           </div>
-          {total > 0 && <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5 ml-2">based on {total} events</span>}
+          <div className="flex items-center gap-2 shrink-0">
+            {total > 0 && <span className="text-[10px] text-muted-foreground pt-0.5">based on {total} events</span>}
+            {total >= 3 && (
+              <button onClick={runAiScan} disabled={aiLoading} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-800/40 transition-colors disabled:opacity-50">
+                {aiLoading ? <><Loader2 className="w-3 h-3 animate-spin" />Scanning…</> : <><Cpu className="w-3 h-3" />Scan with AI</>}
+              </button>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-border">
           {theories.map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => (
@@ -1676,7 +1766,7 @@ export function BanAnalyticsPage() {
             </div>
           </div>
 
-          {proxyRisks.length > 0 && (
+          {activeTab !== "theories" && proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
@@ -1694,9 +1784,7 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
-          <LiveIpOccupancyPanel profiles={allProfiles} proxies={allProxies} profileMap={profileMap} />
-
-          {concurrencyAlerts.length > 0 && (
+          {activeTab !== "theories" && concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
