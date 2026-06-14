@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.935",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Improvement", text: "AI Studio: model list now fetched live from Pollinations on every open — always shows all currently available models without needing an app update." },
+      { category: "Improvement", text: "AI Studio: added custom model name input — type any model name you find on pollinations.ai and it will be used directly." },
+      { category: "Improvement", text: "AI Studio: added HD and HD Wide size options (768×1024 and 1024×768)." },
+    ],
+  },
+  {
     version: "1.0.934",
     date: "14 Jun 2026",
     items: [
