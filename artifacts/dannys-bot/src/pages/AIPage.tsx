@@ -16,8 +16,6 @@ const SIZES = [
   { label: "HD Wide   1024×768", w: 1024, h: 768  },
 ];
 
-// Hardcoded comprehensive model list — the /models endpoint only returns a subset.
-// These are confirmed working model IDs on Pollinations free tier.
 const BUILTIN_MODELS: { id: string; label: string }[] = [
   { id: "flux",             label: "Flux Schnell (fastest)" },
   { id: "turbo",            label: "Turbo" },
@@ -34,32 +32,11 @@ const BUILTIN_MODELS: { id: string; label: string }[] = [
   { id: "sana",             label: "Sana" },
 ];
 
-function buildUrl(
-  prompt: string,
-  w: number, h: number,
-  model: string,
-  seed: number,
-  nsfw: boolean,
-  enhance: boolean,
-  refImageUrl?: string,
-) {
-  const p = encodeURIComponent(prompt.trim());
-  const safe = nsfw ? "false" : "true";
-  let url = `https://image.pollinations.ai/prompt/${p}?width=${w}&height=${h}&seed=${seed}&model=${model}&nologo=true&safe=${safe}&enhance=${enhance}`;
-  if (refImageUrl && refImageUrl.trim()) {
-    url += `&image=${encodeURIComponent(refImageUrl.trim())}`;
-  }
-  return url;
-}
-
 // Upload image to telegra.ph (free, no API key) → returns public URL
 async function uploadToTelegraph(file: File): Promise<string> {
   const form = new FormData();
   form.append("file", file, file.name);
-  const res = await fetch("https://telegra.ph/upload", {
-    method: "POST",
-    body: form,
-  });
+  const res = await fetch("https://telegra.ph/upload", { method: "POST", body: form });
   if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
   const data = await res.json();
   if (!Array.isArray(data) || !data[0]?.src) throw new Error("Unexpected response from upload service");
@@ -74,34 +51,32 @@ export function AIPage() {
   const [nsfw, setNsfw]             = useState(false);
   const [enhance, setEnhance]       = useState(false);
   const [seed, setSeed]             = useState(() => Math.floor(Math.random() * 999999));
-  const [imgUrl, setImgUrl]         = useState<string | null>(null);
+  const [resultImg, setResultImg]   = useState<string | null>(null);   // base64 data URL
   const [loading, setLoading]       = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Generating…");
   const [error, setError]           = useState<string | null>(null);
   const [apiModels, setApiModels]   = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
 
-  // Reference image state
-  const [refPreview, setRefPreview]   = useState<string | null>(null);   // local data URL for display
-  const [refPublicUrl, setRefPublicUrl] = useState<string>("");           // telegra.ph URL for generation
+  // Reference image
+  const [refPreview, setRefPreview]     = useState<string | null>(null);
+  const [refPublicUrl, setRefPublicUrl] = useState("");
   const [refUploading, setRefUploading] = useState(false);
-  const [refError, setRefError]       = useState<string | null>(null);
+  const [refError, setRefError]         = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch live model list from Pollinations on mount — use as supplement to built-ins
+  // Fetch live model list — supplement to built-ins
   useEffect(() => {
     async function fetchModels() {
       try {
         const res = await fetch("https://image.pollinations.ai/models");
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data) && data.length > 3) {
             const ids: string[] = data.map((m: any) =>
               typeof m === "string" ? m : (m.name ?? m.id ?? String(m))
             );
-            if (ids.length > 3) {
-              setApiModels(ids);
-              setSelectedModel(ids[0]);
-            }
+            setApiModels(ids);
           }
         }
       } catch {}
@@ -110,68 +85,90 @@ export function AIPage() {
     fetchModels();
   }, []);
 
-  // Merged model list: built-ins first, then any extra from API not in built-ins
   const builtinIds = new Set(BUILTIN_MODELS.map(m => m.id));
-  const extraApiModels = apiModels.filter(id => !builtinIds.has(id));
-  const allModels: { id: string; label: string }[] = [
+  const allModels = [
     ...BUILTIN_MODELS,
-    ...extraApiModels.map(id => ({ id, label: id })),
+    ...apiModels.filter(id => !builtinIds.has(id)).map(id => ({ id, label: id })),
   ];
 
   const activeModel = customModel.trim() || selectedModel;
   const size = SIZES[sizeIdx];
 
+  async function runGenerate(useSeed: number) {
+    if (!prompt.trim() || loading) return;
+    setLoading(true);
+    setLoadingMsg("Generating… (auto-retries if rate-limited)");
+    setError(null);
+    setResultImg(null);
+
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          model: activeModel,
+          width: size.w,
+          height: size.h,
+          seed: useSeed,
+          nsfw,
+          enhance,
+          imageUrl: refPublicUrl || undefined,
+        }),
+        signal: AbortSignal.timeout(180_000),   // 3 min total — server may retry several times
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.image) {
+        setError(json.error ?? `Generation failed (${res.status})`);
+        return;
+      }
+      const ct = json.contentType ?? "image/jpeg";
+      setResultImg(`data:${ct};base64,${json.image}`);
+    } catch (e: any) {
+      setError(e?.name === "TimeoutError"
+        ? "Request timed out — Pollinations may be overloaded. Try again."
+        : (e?.message ?? "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const generate = useCallback(() => {
-    if (!prompt.trim()) return;
     const newSeed = Math.floor(Math.random() * 999999);
     setSeed(newSeed);
-    setError(null);
-    setLoading(true);
-    setImgUrl(buildUrl(prompt, size.w, size.h, activeModel, newSeed, nsfw, enhance, refPublicUrl || undefined));
+    runGenerate(newSeed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, size, activeModel, nsfw, enhance, refPublicUrl]);
 
   const regenerate = useCallback(() => {
-    if (!prompt.trim()) return;
     const newSeed = Math.floor(Math.random() * 999999);
     setSeed(newSeed);
-    setError(null);
-    setLoading(true);
-    setImgUrl(buildUrl(prompt, size.w, size.h, activeModel, newSeed, nsfw, enhance, refPublicUrl || undefined));
+    runGenerate(newSeed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, size, activeModel, nsfw, enhance, refPublicUrl]);
 
-  async function handleSave() {
-    if (!imgUrl) return;
-    try {
-      const res = await fetch(imgUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `equinox-ai-${seed}.jpg`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Failed to save image.");
-    }
+  function handleSave() {
+    if (!resultImg) return;
+    const a = document.createElement("a");
+    a.href = resultImg;
+    a.download = `equinox-ai-${seed}.jpg`;
+    a.click();
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = ev => setRefPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
-
-    // Upload to get a public URL for Pollinations
     setRefUploading(true);
     setRefError(null);
     setRefPublicUrl("");
     try {
       const url = await uploadToTelegraph(file);
       setRefPublicUrl(url);
-    } catch (err: any) {
+    } catch {
       setRefError("Upload failed — check your internet connection and try again.");
     } finally {
       setRefUploading(false);
@@ -198,8 +195,10 @@ export function AIPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-5">
 
-          {/* Left: prompt + generate */}
+          {/* Left */}
           <div className="space-y-4">
+
+            {/* Prompt */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Prompt</Label>
               <Textarea
@@ -228,61 +227,41 @@ export function AIPage() {
                   )}
                 </Label>
                 {refPreview && (
-                  <button
-                    onClick={clearRef}
-                    className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-red-400 transition-colors"
-                  >
+                  <button onClick={clearRef}
+                    className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-red-400 transition-colors">
                     <X className="w-2.5 h-2.5" /> Remove
                   </button>
                 )}
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,image/jpg"
-                onChange={handleFileChange}
-                className="hidden"
-                id="ref-image-input"
-              />
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/jpg"
+                onChange={handleFileChange} className="hidden" id="ref-image-input" />
 
               {refPreview ? (
                 <div className="space-y-2">
                   <div className="relative rounded-md overflow-hidden border border-border bg-muted/20">
-                    <img
-                      src={refPreview}
-                      alt="Reference"
-                      className="w-full max-h-40 object-contain"
-                    />
+                    <img src={refPreview} alt="Reference" className="w-full max-h-40 object-contain" />
                     {refUploading && (
                       <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
                         <div className="text-center space-y-1">
                           <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />
-                          <p className="text-[10px] text-muted-foreground">Uploading for generation…</p>
+                          <p className="text-[10px] text-muted-foreground">Uploading…</p>
                         </div>
                       </div>
                     )}
                   </div>
                   {refPublicUrl && !refUploading && (
-                    <p className="text-[10px] text-emerald-500">
-                      ✓ Uploaded — will be used as reference on Generate
-                    </p>
+                    <p className="text-[10px] text-emerald-500">✓ Uploaded — will be used as reference on Generate</p>
                   )}
-                  {refError && (
-                    <p className="text-[10px] text-red-400">{refError}</p>
-                  )}
-                  <label
-                    htmlFor="ref-image-input"
-                    className="flex items-center justify-center gap-1.5 w-full text-[11px] py-1.5 rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/40 cursor-pointer transition-colors"
-                  >
+                  {refError && <p className="text-[10px] text-red-400">{refError}</p>}
+                  <label htmlFor="ref-image-input"
+                    className="flex items-center justify-center gap-1.5 w-full text-[11px] py-1.5 rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/40 cursor-pointer transition-colors">
                     <Upload className="w-3 h-3" /> Change image
                   </label>
                 </div>
               ) : (
-                <label
-                  htmlFor="ref-image-input"
-                  className="flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-md py-5 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                >
+                <label htmlFor="ref-image-input"
+                  className="flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-md py-5 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
                   <Upload className="w-5 h-5 text-muted-foreground" />
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground font-medium">Upload reference image</p>
@@ -310,15 +289,12 @@ export function AIPage() {
               </label>
             </div>
 
-            <Button
-              className="w-full h-11 font-semibold"
-              onClick={generate}
-              disabled={!prompt.trim() || loading || refUploading}
-            >
+            <Button className="w-full h-11 font-semibold" onClick={generate}
+              disabled={!prompt.trim() || loading || refUploading}>
               {loading
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {loadingMsg}</>
                 : refUploading
-                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading reference...</>
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading reference…</>
                   : <><Sparkles className="w-4 h-4 mr-2" /> Generate{refPublicUrl ? " with Reference" : ""}</>
               }
             </Button>
@@ -331,7 +307,6 @@ export function AIPage() {
           {/* Right: settings */}
           <div className="space-y-4">
 
-            {/* Model */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -339,29 +314,19 @@ export function AIPage() {
                 </Label>
                 <span className="text-[10px] text-muted-foreground">{allModels.length} available</span>
               </div>
-              <select
-                value={customModel ? "__custom__" : selectedModel}
+              <select value={customModel ? "__custom__" : selectedModel}
                 onChange={e => {
                   if (e.target.value === "__custom__") return;
-                  setCustomModel("");
-                  setSelectedModel(e.target.value);
+                  setCustomModel(""); setSelectedModel(e.target.value);
                 }}
-                className="w-full text-xs px-3 py-2 rounded-md border border-border bg-card text-foreground"
-              >
-                {allModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
+                className="w-full text-xs px-3 py-2 rounded-md border border-border bg-card text-foreground">
+                {allModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 {customModel && <option value="__custom__">✎ {customModel}</option>}
               </select>
-
-              {/* Custom model input */}
               <div className="relative">
-                <Input
-                  placeholder="Or type any model name from pollinations.ai…"
-                  value={customModel}
-                  onChange={e => setCustomModel(e.target.value)}
-                  className="text-xs pr-7 h-8"
-                />
+                <Input placeholder="Or type any model name from pollinations.ai…"
+                  value={customModel} onChange={e => setCustomModel(e.target.value)}
+                  className="text-xs pr-7 h-8" />
                 {customModel && (
                   <button onClick={() => setCustomModel("")}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -370,11 +335,10 @@ export function AIPage() {
                 )}
               </div>
               {customModel && (
-                <p className="text-[10px] text-primary">Using custom model: <span className="font-mono">{customModel}</span></p>
+                <p className="text-[10px] text-primary">Using custom: <span className="font-mono">{customModel}</span></p>
               )}
             </div>
 
-            {/* Size */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Size</Label>
               <div className="space-y-1">
@@ -391,7 +355,6 @@ export function AIPage() {
               </div>
             </div>
 
-            {/* Seed */}
             <div className="space-y-1">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Seed: <span className="text-foreground font-mono">{seed}</span>
@@ -406,40 +369,23 @@ export function AIPage() {
         </div>
 
         {/* Result */}
-        {imgUrl && (
+        {resultImg && (
           <div className="border border-border rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/50">
-              <span className="text-xs font-medium text-muted-foreground">Result · <span className="font-mono">{activeModel}</span></span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Result · <span className="font-mono">{activeModel}</span>
+              </span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={regenerate} disabled={loading}>
                   <RefreshCw className="w-3.5 h-3.5 mr-1.5" />Re-roll
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSave} disabled={loading}>
+                <Button variant="outline" size="sm" onClick={handleSave}>
                   <Download className="w-3.5 h-3.5 mr-1.5" />Save
                 </Button>
               </div>
             </div>
-            <div className="relative bg-muted/20">
-              {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/60 z-10">
-                  <div className="text-center space-y-2">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-                    <p className="text-sm text-muted-foreground">Generating...</p>
-                  </div>
-                </div>
-              )}
-              <img
-                key={imgUrl}
-                src={imgUrl}
-                alt="Generated"
-                className="w-full object-contain max-h-[600px]"
-                onLoad={() => setLoading(false)}
-                onError={() => {
-                  setLoading(false);
-                  setError("Generation failed — model may be unavailable or busy. Try Flux or Turbo.");
-                  setImgUrl(null);
-                }}
-              />
+            <div className="bg-muted/20">
+              <img src={resultImg} alt="Generated" className="w-full object-contain max-h-[600px]" />
             </div>
           </div>
         )}

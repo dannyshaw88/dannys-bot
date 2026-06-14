@@ -225,3 +225,63 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     return res.status(500).json({ error: err?.message ?? "Unknown error" });
   }
 });
+
+// ── AI Studio image generation — proxy with retry (handles 402 rate-limit) ──
+aiRouter.post("/generate", async (req: Request, res: Response) => {
+  try {
+    const { prompt, model, width, height, seed, nsfw, enhance, imageUrl } = req.body as {
+      prompt: string; model: string; width: number; height: number;
+      seed: number; nsfw: boolean; enhance: boolean; imageUrl?: string;
+    };
+    if (!prompt?.trim()) return res.status(400).json({ error: "Prompt is required." });
+
+    const safe = nsfw ? "false" : "true";
+    const p = encodeURIComponent(prompt.trim());
+    let url = `https://image.pollinations.ai/prompt/${p}?width=${width}&height=${height}&seed=${seed}&model=${encodeURIComponent(model)}&nologo=true&safe=${safe}&enhance=${enhance}`;
+    if (imageUrl?.trim()) url += `&image=${encodeURIComponent(imageUrl.trim())}`;
+
+    const MAX_ATTEMPTS = 8;
+    const RETRY_DELAY_MS = 6000;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      let imgRes: Response;
+      try {
+        imgRes = await fetch(url, { signal: AbortSignal.timeout(90000) });
+      } catch (e: any) {
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+        return res.status(504).json({ error: "Pollinations timed out. Try again." });
+      }
+
+      if (imgRes.ok) {
+        const ct = imgRes.headers.get("content-type") ?? "image/jpeg";
+        if (!ct.startsWith("image/")) {
+          const text = await imgRes.text();
+          return res.status(500).json({ error: `Unexpected content type: ${ct}. Body: ${text.slice(0, 200)}` });
+        }
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        return res.json({ image: buffer.toString("base64"), contentType: ct });
+      }
+
+      if (imgRes.status === 402) {
+        // Rate-limited: "1 request already queued (max: 1)" — wait and retry
+        console.log(`[ai/generate] 402 rate-limit (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying in ${RETRY_DELAY_MS}ms`);
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS + attempt * 2000));
+          continue;
+        }
+        return res.status(429).json({ error: "Pollinations rate-limited after 8 retries. Wait a minute and try again." });
+      }
+
+      const errText = await imgRes.text().catch(() => "");
+      return res.status(imgRes.status).json({ error: `Pollinations returned ${imgRes.status}: ${errText.slice(0, 200)}` });
+    }
+
+    return res.status(429).json({ error: "Max retries exceeded." });
+  } catch (err: any) {
+    console.error("[ai/generate] error:", err);
+    return res.status(500).json({ error: err?.message ?? "Unknown error" });
+  }
+});

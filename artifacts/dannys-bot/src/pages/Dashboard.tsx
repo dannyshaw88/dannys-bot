@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.938",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Studio: generation now routes through the local server instead of directly to Pollinations — this fixes the 'model unavailable' error caused by Pollinations rate-limiting direct browser requests." },
+      { category: "Fix", text: "AI Studio: server automatically retries up to 8 times when Pollinations is busy (rate limit = 1 request queued per IP), so you no longer have to manually retry." },
+    ],
+  },
+  {
     version: "1.0.937",
     date: "14 Jun 2026",
     items: [
