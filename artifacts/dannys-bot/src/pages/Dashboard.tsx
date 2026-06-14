@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.965",
+    date: "14 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats Theories: added IP Login Rate Limit theory — Instagram appears to limit how many browser + API login pairs an IP can perform per hour. Each verify = 2 logins. Theory threshold: ~1–2 verifies per 90 min per IP. The likelihood bar is computed live from your flagged accounts that were banned with zero tool activity." },
+    ],
+  },
+  {
     version: "1.0.964",
     date: "14 Jun 2026",
     items: [

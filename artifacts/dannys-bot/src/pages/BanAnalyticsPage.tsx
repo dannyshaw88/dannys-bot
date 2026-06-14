@@ -1374,6 +1374,20 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   }, [allEntries]);
   const verifyClusterPct = total > 2 ? Math.round((verifyClusterData / total) * 100) : -1;
 
+  // Login Rate Limit Per IP theory
+  // Counts accounts that were flagged with ONLY verify/system-source endpoint calls —
+  // no follow, DM, or any tool activity whatsoever.  An account that gets banned
+  // purely from login events is direct evidence of an IP-level login rate budget.
+  const loginRateLimitCount = allEntries.filter(e => {
+    const eps = filterHiker(parseEps(e.endpointSnapshot));
+    if (eps.length === 0) return false;
+    return eps.every(ep => {
+      const s = (ep.source ?? "").toLowerCase();
+      return s === "verify" || s === "system" || s === "eb" || s === "hiker_api" || s === "";
+    });
+  }).length;
+  const loginRateLimitPct = total > 2 ? Math.round((loginRateLimitCount / total) * 100) : -1;
+
   function LikelihoodBar({ pct }: { pct: number }) {
     if (pct < 0) return <span className="text-xs text-muted-foreground italic">— no data yet (need 3+ events)</span>;
     const color = pct >= 70 ? "bg-red-500" : pct >= 45 ? "bg-orange-400" : pct >= 25 ? "bg-yellow-400" : "bg-blue-400";
@@ -1443,6 +1457,17 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       description: "Instagram's anti-abuse system watches for tight temporal clusters of verify sequences — multiple accounts hitting the Verify endpoint flow on the same IP address within a short window. A single account verifying is normal. Two accounts verifying on the same IP within 5 minutes is suspicious. Three or more within 30 minutes is a high-confidence bot-cluster signal. This pattern is hard to disguise because the verify flow has a distinctive call sequence (launcher/sync → tokens/keyed → users/{id}/info) that Instagram can pattern-match at the IP level regardless of device fingerprints. The EB login itself (browser cookies extraction) also runs through the same IP, doubling the signal: one IP producing both browser-side auth AND mobile API auth sequences for multiple accounts in rapid succession.",
       evidence: verifyClusterPct >= 0 ? `${verifyClusterData} of ${total} flagged accounts (${verifyClusterPct}%) were verified in overlapping clusters — multiple accounts hitting the verify sequence on the same IP within a 30-min window.` : "Not enough data yet.",
       advice: "Stagger Verify operations by at least 10 minutes per account per IP. If verifying multiple accounts on the same proxy, do them sequentially with a full human-like pause in between — never run concurrent Verify sessions on the same proxy.",
+    },
+    {
+      id: "login-rate-limit", Icon: Clock,
+      title: "IP Login Rate Limit (~1–2 Logins per 90 min)",
+      tagline: "Each browser + API login pair counts as 2 logins against a shared per-IP quota",
+      likelihood: loginRateLimitPct,
+      description: "Instagram appears to enforce a per-IP login rate budget independent of action endpoints. Every account verify produces two login events on the same IP: one browser login (Chrome cookie extraction) and one mobile API login (cold-start sequence). An IP that processes 5 verifies in one hour has generated 10 login events — Instagram's abuse system treats this as a bot farm warming up accounts in bulk. The theory threshold is approximately 1–2 full account logins (browser + API) per 90 minutes per IP. Exceeding this does not just slow down the current account — it poisons the IP for all subsequent accounts, causing them to be flagged purely from login activity before any tool has ever run. This is the most plausible explanation for accounts with zero tool history appearing in the ban list with only verify-source endpoints. This is an unconfirmed theory — it is consistent with the observed data but has not been isolated in a controlled test.",
+      evidence: loginRateLimitPct >= 0
+        ? `${loginRateLimitCount} of ${total} flagged accounts (${loginRateLimitPct}%) show zero tool activity — banned purely from login/verify endpoints. This is the strongest signal for an IP-level login rate limit.`
+        : "Not enough data yet. Flag more accounts to measure verify-only ban patterns.",
+      advice: "Space verifications at least 90 minutes apart per IP. If you must verify multiple accounts on the same proxy, do them one at a time with a full 90-min gap between each — or use a different proxy for each batch. Never mass-verify on a single IP within the same session.",
     },
     {
       id: "trust-decay", Icon: TrendingUp,
