@@ -77,15 +77,6 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
   );
 }
 
-function FilledSparkleIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" d="M12 2 L13.5 9.5 L21 11 L13.5 12.5 L12 20 L10.5 12.5 L3 11 L10.5 9.5 Z"/>
-      <path fill="currentColor" opacity="0.6" d="M19 2 L19.8 5.2 L23 6 L19.8 6.8 L19 10 L18.2 6.8 L15 6 L18.2 5.2 Z"/>
-      <path fill="currentColor" opacity="0.6" d="M5 16 L5.6 18.4 L8 19 L5.6 19.6 L5 22 L4.4 19.6 L2 19 L4.4 18.4 Z"/>
-    </svg>
-  );
-}
 
 function FilledSpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -115,7 +106,6 @@ export function Sidebar() {
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon          },
     { name: "Evasion Stats",   shortLabel: "EVASION STATS",  path: "/ban-analytics",  icon: FilledSpyIcon            },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
-    { name: "AI Studio",       shortLabel: "AI STUDIO",      path: "/ai",             icon: FilledSparkleIcon        },
   ];
 
   return (

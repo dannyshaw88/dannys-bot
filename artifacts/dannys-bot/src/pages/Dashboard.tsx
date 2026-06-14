@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.939",
+    date: "14 Jun 2026",
+    items: [
+      { category: "Removed", text: "AI Studio tab removed." },
+    ],
+  },
+  {
     version: "1.0.938",
     date: "14 Jun 2026",
     items: [
