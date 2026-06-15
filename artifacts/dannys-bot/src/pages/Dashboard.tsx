@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.976",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "When a cooldown timer expires on a resuming account, the active toggle now automatically flips back on without needing a manual refresh." },
+    ],
+  },
+  {
     version: "1.0.975",
     date: "15 Jun 2026",
     items: [
