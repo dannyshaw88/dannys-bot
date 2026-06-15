@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, ChevronRight, Bot, Monitor, ImagePlus,
+  Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, Monitor, ImagePlus,
   BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
@@ -81,7 +81,7 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "comment",       label: "Comments",      icon: <MessageCircle className="w-3.5 h-3.5" />, color: "text-indigo-500",  isTool: false, pieColor: "#6366f1" },
   { key: "story",         label: "Story Views",   icon: <Eye className="w-3.5 h-3.5" />,           color: "text-emerald-500", isTool: false, pieColor: "#10b981" },
   { key: "repost",        label: "Reposts",       icon: <Repeat2 className="w-3.5 h-3.5" />,       color: "text-sky-500",     isTool: false, pieColor: "#0ea5e9" },
-  { key: "human_session", label: "Human Session", icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_sessions", pieColor: "#06b6d4" },
+  { key: "human_session", label: "Human Session", icon: <Fingerprint className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_sessions", pieColor: "#06b6d4" },
 ];
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {

@@ -85,7 +85,7 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
       >
         <span className="flex items-center gap-2 min-w-0 overflow-hidden">
           <Smartphone className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate font-mono text-xs">{currentLabel}</span>
+          <span className="truncate text-sm">{currentLabel}</span>
         </span>
         <ChevronDown className={`ml-2 w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>

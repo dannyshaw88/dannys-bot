@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -1468,6 +1468,15 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
         ? `${loginRateLimitCount} of ${total} flagged accounts (${loginRateLimitPct}%) show zero tool activity — banned purely from login/verify endpoints. This is the strongest signal for an IP-level login rate limit.`
         : "Not enough data yet. Flag more accounts to measure verify-only ban patterns.",
       advice: "Space verifications at least 90 minutes apart per IP. If you must verify multiple accounts on the same proxy, do them one at a time with a full 90-min gap between each — or use a different proxy for each batch. Never mass-verify on a single IP within the same session.",
+    },
+    {
+      id: "concurrent-endpoints", Icon: Shuffle,
+      title: "Concurrent Endpoint Monotony",
+      tagline: "Repeating the same endpoint back-to-back is a stronger bot signal than mixing different endpoints",
+      likelihood: -1,
+      description: "Instagram's abuse detection is believed to weigh not just action velocity, but endpoint diversity within a session. A session that issues the same API call type repeatedly (e.g. autofollow → autofollow → autofollow → autofollow) produces a perfectly monotone call pattern that organic users never generate — they would naturally intersperse feed views, timeline scrapes, profile lookups, and story checks between intentional actions. A session that mixes endpoints (autofollow → view timeline → like → autofollow → view profile) looks statistically much closer to natural browsing even at the same action rate. The weight of each endpoint type is unknown: high-signal action endpoints (follow, unfollow, DM) may carry heavier monotony penalties than passive endpoints (view timeline, view story). An exclusively passive session (view timeline → view timeline → view timeline) may not trigger this at all. This is an unconfirmed theory — no controlled test has isolated endpoint diversity from action rate.",
+      evidence: "Cannot be computed from current data. This theory requires endpoint sequence analysis across sessions — the ban log records endpoint counts and types but not session-by-session ordering. Flag accounts and monitor whether zero-diversity endpoint snapshots (single endpoint repeated N times) appear more often than expected.",
+      advice: "Interleave action endpoints with passive ones between every burst. After 3–5 follows, trigger a timeline view or profile lookup before the next follow batch. Configure tools to inject passive calls (view timeline, view story) as natural pauses between action sequences.",
     },
     {
       id: "trust-decay", Icon: TrendingUp,

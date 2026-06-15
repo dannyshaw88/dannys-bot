@@ -62,6 +62,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.967",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "Theories tab: added Concurrent Endpoint Monotony theory — repeating the same endpoint (e.g. follow → follow → follow) without mixing in passive actions is believed to be a stronger bot signal than a mixed session." },
+      { category: "Fix", text: "Logged Out status pill is now amber (same style as Resuming) instead of a solid red fill." },
+      { category: "Fix", text: "Verify Delay Mode in Settings: the inactive mode's delay settings are now greyed out so it's obvious which one is active." },
+      { category: "Fix", text: "Account Settings tab buttons (ACCOUNTS, SETTINGS, HUMAN SESSION, etc.) now use the cyan accent colour used elsewhere in the app instead of blue." },
+      { category: "Fix", text: "Account Settings: Proxy Settings and API Limits controls are now shown side by side in a two-column layout." },
+      { category: "Fix", text: "Account Settings: Profile Sync section now has a gap below its divider line." },
+      { category: "Fix", text: "Account Settings: cookie injection description reworded to one short line." },
+      { category: "Fix", text: "Account Settings: API User Agent picker text now uses the same size font as the Embedded Browser Agent field." },
+      { category: "Fix", text: "Statistics page: Human Session column now uses the fingerprint icon instead of the robot icon." },
+    ],
+  },
+  {
     version: "1.0.966",
     date: "15 Jun 2026",
     items: [

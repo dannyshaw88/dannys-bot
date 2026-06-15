@@ -47,7 +47,7 @@ const STATUS_META: Record<AccountStatus, {
   phone_verification:   { label: "Phone Verify",         icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   "2fa_verification":   { label: "2FA Verify",           icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200" },
   stopped:              { label: "Stopped",              icon: PowerOff,    pill: "bg-slate-100 text-slate-600  border-slate-200"  },
-  logged_out:           { label: "Logged Out",           icon: LogOut,      pill: "bg-red-600 text-white border-red-600" },
+  logged_out:           { label: "Logged Out",           icon: LogOut,      pill: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   bad_password:         { label: "Incorrect Password",    icon: KeyRound,    pill: "bg-red-50    text-red-700    border-red-200"    },
   action_blocked:       { label: "Action Blocked",       icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200"    },
   action_required:      { label: "Action Required",      icon: AlertTriangle, pill: "bg-amber-50  text-amber-700  border-amber-200"  },

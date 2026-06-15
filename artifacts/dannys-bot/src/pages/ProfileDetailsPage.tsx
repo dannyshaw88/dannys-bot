@@ -875,7 +875,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-blue-500 border-transparent hover:border-border",
+                      : "text-cyan-500 border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -887,20 +887,20 @@ export function ProfileDetailsPage() {
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
                 <button
                   onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Monitor className="w-3.5 h-3.5 shrink-0" />
                   BROWSER
                 </button>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);
@@ -1324,9 +1324,11 @@ export function ProfileDetailsPage() {
                     </AlertDialog>
                   </div>
 
-                  <div className="space-y-3 pt-4 border-t border-border mt-4">
+                  <div className="flex gap-6 pt-4 border-t border-border mt-4 items-start">
+                    {/* API Limits & Control */}
+                    <div className="space-y-3 flex-1 min-w-0">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
-                    <div className="flex gap-2 items-end">
+                    <div className="flex flex-wrap gap-2 items-end">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
                         <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
@@ -1363,9 +1365,10 @@ export function ProfileDetailsPage() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
-                  </div>
+                    </div>
 
-                  <div className="space-y-3 pt-4 border-t border-border mt-4">
+                    {/* Proxy Settings */}
+                    <div className="space-y-3 flex-1 min-w-0 pl-6 border-l border-border">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
 
                     {(() => {
@@ -1466,7 +1469,8 @@ export function ProfileDetailsPage() {
                       );
                     })()}
 
-                  </div>
+                  </div>{/* end Proxy Settings */}
+                  </div>{/* end flex row */}
 
                   {/* ── Active Timer ── */}
                   <div className="space-y-4 pt-4 border-t border-border mt-4">
@@ -1662,7 +1666,7 @@ export function ProfileDetailsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Paste a raw cookie string (e.g. from a Chrome export). Must include <code className="font-mono">sessionid</code>. Injection writes cookies to both the database and the browser cookie file — the embedded browser will pick them up automatically on its next session without you needing to clear anything. Run Verify Credentials afterwards to confirm the session is active.</p>
+                  <p className="text-[11px] text-muted-foreground">Paste Chrome cookies. Must include <code className="font-mono">sessionid</code>. Writes to DB and browser cookie file automatically. Run Verify Credentials after.</p>
                 </div>
               </CardContent>
             </Card>
@@ -1733,6 +1737,7 @@ export function ProfileDetailsPage() {
               Profile Sync
               <span className="ml-auto text-xs font-normal">{showProfileSync ? "▲ Collapse" : "▼ Expand"}</span>
             </button>
+            <div className="mb-4" />
           </div>
           {showProfileSync && (
           <div className="mt-4">
