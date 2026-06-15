@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.971",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: follow call density metric now measures the average number of API calls already logged before each individual follow call in the session, averaged across all follows. Sessions with no follow calls show — instead of a count." },
+      { category: "Fix", text: "The 'Follow Call Density' theory card now describes exactly what is measured with no causal claims — it is a factual log count, not a safety indicator." },
+      { category: "Fix", text: "FOLLOW EARLY badge now appears on event cards where the average position of follow calls was fewer than 3 calls into the session." },
+    ],
+  },
+  {
     version: "1.0.970",
     date: "15 Jun 2026",
     items: [

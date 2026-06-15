@@ -167,13 +167,15 @@ function computeTimingCoV(timestamps: number[]): number {
   return m > 0 ? stddev(gaps) / m : -1;
 }
 function preActionWarmup(eps: EpItem[]): number {
-  let count = 0;
-  for (const ep of eps) {
-    const cat = matchLabel(ep.operationName)?.category ?? "other";
-    if (cat === "follow" || cat === "unfollow" || cat === "dm" || cat === "like") break;
-    count++;
+  // Returns the average number of calls that had already fired before each follow call.
+  // -1 means no follow calls in this session.
+  const indexes: number[] = [];
+  for (let i = 0; i < eps.length; i++) {
+    const cat = matchLabel(eps[i].operationName)?.category ?? "other";
+    if (cat === "follow") indexes.push(i);
   }
-  return count;
+  if (indexes.length === 0) return -1;
+  return Math.round(indexes.reduce((a, b) => a + b, 0) / indexes.length);
 }
 function extractSubnet24(host: string): string {
   const ip = host.split(":")[0];
@@ -286,7 +288,7 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
   const gapList    = metricsList.map(m => m.avgInterCallSec).filter(v => v > 0);
   const minGapList = metricsList.map(m => m.minInterCallSec).filter(v => v >= 0);
   const entropyList = metricsList.map(m => m.shannonEntropy);
-  const warmupList = metricsList.map(m => m.preActionWarmup);
+  const warmupList = metricsList.map(m => m.preActionWarmup).filter(v => v >= 0);
   const velList    = metricsList.map(m => m.actionVelocityPerHour).filter(v => v > 0);
   const uniqueEpList = metricsList.map(m => m.uniqueEndpoints);
   const diversityList = metricsList.map(m => m.endpointDiversity);
@@ -408,7 +410,7 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
     timingCoVMean: mean(covList), timingCoVMedian: median(covList), avgGapMean: mean(gapList), minGapMean: mean(minGapList),
     entropyMean: mean(entropyList), entropyMedian: median(entropyList), entropyStdDev: stddev(entropyList),
     uniqueEpMean: mean(uniqueEpList), endpointDiversityMean: mean(diversityList),
-    warmupMean: mean(warmupList), warmupMedian: median(warmupList), zeroWarmupPct: entries.length ? Math.round(warmupList.filter(v => v === 0).length / entries.length * 100) : 0,
+    warmupMean: mean(warmupList), warmupMedian: median(warmupList), zeroWarmupPct: entries.length ? Math.round(warmupList.filter(v => v < 5).length / entries.length * 100) : 0,
     actionVelocityMean: mean(velList), actionVelocityMedian: median(velList), authPerActionMean: mean(authList),
     burstPct: entries.length ? Math.round(burstCount / entries.length * 100) : 0,
     fastFlagPct: entries.length ? Math.round(fastFlagCount / entries.length * 100) : 0, avgSpanMin: mean(spanList),
@@ -437,7 +439,7 @@ function computeAnomalyScore(m: EntryMetrics, cross: CrossStats): number {
   if (m.timingCoV >= 0 && m.timingCoV < 0.3) s += 15; else if (m.timingCoV >= 0 && m.timingCoV < 0.5) s += 8;
   if (cross.entropyStdDev > 0) s += Math.min(12, Math.max(0, zScore(cross.entropyMean, m.shannonEntropy, cross.entropyStdDev) * 6));
   if (m.burstCount > 5) s += 10; else if (m.burstCount > 0) s += 5;
-  if (m.preActionWarmup === 0 && m.actionCount > 0) s += 10;
+  if (m.preActionWarmup >= 0 && m.preActionWarmup < 5 && m.cats.follow > 0) s += 10;
   if (m.spanMin > 0 && m.spanMin < 30) s += 10; else if (m.spanMin > 0 && m.spanMin < 60) s += 5;
   if (m.avgInterCallSec > 0 && m.avgInterCallSec < 0.5) s += 8;
   return Math.min(100, Math.round(s));
@@ -594,17 +596,17 @@ function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivor
     validations.push({ signal: "Robotic timing (CoV<0.5)", status: cross.roboticTimingPct >= 50 ? "confirmed" : cross.roboticTimingPct >= 20 ? "partial" : "not_seen", value: `${cross.roboticTimingPct}% of events` });
     validations.push({ signal: "Low session noise (<5)", status: cross.sessionPerActionMedian < 5 ? "confirmed" : cross.sessionPerActionMedian < 10 ? "partial" : "not_seen", value: `median ${cross.sessionPerActionMedian.toFixed(2)}/action` });
     validations.push({ signal: "High burst rate (>30%)", status: cross.burstPct >= 50 ? "confirmed" : cross.burstPct >= 20 ? "partial" : "not_seen", value: `${cross.burstPct}% of events` });
-    validations.push({ signal: "First call was an action", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
+    validations.push({ signal: "Follows with <5 prior calls", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
     validations.push({ signal: "Low entropy (<1.5 bits)", status: cross.entropyMedian < 1.5 ? "confirmed" : cross.entropyMedian < 2.5 ? "partial" : "not_seen", value: `median ${cross.entropyMedian.toFixed(3)} bits` });
   } else if (tabKey === "captcha") {
     validations.push({ signal: "High auth ratio", status: cross.avgAuthRatio > 0.2 ? "confirmed" : cross.avgAuthRatio > 0.08 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
     validations.push({ signal: "Fast session challenge (<30m)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
-    validations.push({ signal: "Few calls before first action", status: cross.warmupMedian < 3 ? "confirmed" : cross.warmupMedian < 8 ? "partial" : "not_seen", value: `median ${cross.warmupMedian.toFixed(1)} calls before action` });
+    validations.push({ signal: "Low avg calls before follow", status: cross.warmupMedian < 3 ? "confirmed" : cross.warmupMedian < 8 ? "partial" : "not_seen", value: `median ${cross.warmupMedian.toFixed(1)} calls before each follow` });
     validations.push({ signal: "High auth per action", status: cross.authPerActionMean > 2 ? "confirmed" : cross.authPerActionMean > 0.5 ? "partial" : "not_seen", value: `${cross.authPerActionMean.toFixed(3)} auth/action` });
     validations.push({ signal: "Min gap issues", status: cross.minGapMean < 0.5 ? "confirmed" : cross.minGapMean < 2 ? "partial" : "not_seen", value: cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms avg min gap` : `${cross.minGapMean.toFixed(1)}s avg min gap` });
   } else {
     validations.push({ signal: "High auth ratio (fingerprint renegotiation)", status: cross.avgAuthRatio > 0.25 ? "confirmed" : cross.avgAuthRatio > 0.1 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
-    validations.push({ signal: "High action ratio at start", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
+    validations.push({ signal: "Follows with <5 prior calls", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
     validations.push({ signal: "Fast lock (<30 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
     validations.push({ signal: "Concurrent sessions / subnet", status: cross.subnetGroups.length > 0 ? (cross.subnetConcentration >= 50 ? "confirmed" : "partial") : "not_seen", value: cross.subnetGroups.length > 0 ? `${cross.subnetGroups.length} shared subnet${cross.subnetGroups.length !== 1 ? "s" : ""}` : "none" });
     validations.push({ signal: "Short avg session span", status: cross.avgSpanMin > 0 && cross.avgSpanMin < 15 ? "confirmed" : cross.avgSpanMin < 30 ? "partial" : "not_seen", value: cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(1)}m avg` : `${(cross.avgSpanMin/60).toFixed(2)}h avg`) : "—" });
@@ -847,7 +849,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
             {reliability.reAddCount >= 2 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-600">{reliability.label}</span>}
             {cross.n >= 2 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${anomaly >= 70 ? "bg-red-50 border-red-200 text-red-600" : anomaly >= 40 ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-green-50 border-green-200 text-green-600"}`}>ANOMALY {anomalyLabel} {anomaly}</span>}
             {m.timingCoV >= 0 && m.timingCoV < 0.5 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-50 border-red-200 text-red-600">ROBOTIC TIMING</span>}
-            {m.preActionWarmup === 0 && m.actionCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">ACTION FIRST</span>}
+            {m.preActionWarmup >= 0 && m.preActionWarmup < 3 && m.cats.follow > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">FOLLOW EARLY</span>}
             <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
@@ -890,7 +892,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
                   ["Shannon entropy", `${m.shannonEntropy.toFixed(4)} bits`],
                   ["Unique endpoints", `${m.uniqueEndpoints} (${(m.endpointDiversity * 100).toFixed(1)}% diverse)`],
                   ["Burst windows (≤60s)", `${m.burstCount}`],
-                  ["Calls before first action", `${m.preActionWarmup}`],
+                  ["Avg calls before each follow", m.preActionWarmup >= 0 ? `${m.preActionWarmup}` : "—"],
                   ["Action velocity", m.actionVelocityPerHour > 0 ? `${m.actionVelocityPerHour.toFixed(2)}/hr` : "—"],
                   ["Session / action", m.actionCount > 0 ? `${m.sessionPerAction.toFixed(3)}  (median: ${cross.sessionPerActionMedian.toFixed(3)})` : "no actions"],
                   ["Session / follow", m.sessionPerFollow > 0 ? `${m.sessionPerFollow.toFixed(3)}` : "—"],
@@ -1007,8 +1009,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
     else if (cross.roboticTimingPct >= 40) findings.push({ severity: "warning", text: `${cross.roboticTimingPct}% of events show robotic timing (CoV<0.5).` });
     if (cross.burstPct >= 70) findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart.` });
     else if (cross.burstPct >= 30) findings.push({ severity: "warning", text: `Burst patterns in ${cross.burstPct}% of events.` });
-    if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions had an action endpoint as the first logged call — no other calls were recorded before it.` });
-    else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions had an action endpoint as the first logged call.` });
+    if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions with follows had an average of fewer than 5 calls already logged before each follow.` });
+    else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions with follows had fewer than 5 calls logged before each follow on average.` });
     if (cross.entropyMedian < 1.5) findings.push({ severity: "warning", text: `Low endpoint diversity — median Shannon entropy ${cross.entropyMedian.toFixed(4)} bits. Humans mix feed reads, profile views, stories, explore.` });
     if (cross.fastFlagPct >= 50) findings.push({ severity: "critical", text: `${cross.fastFlagPct}% flagged within 60 minutes of session start — IP/account reputation likely pre-damaged.` });
     if (cross.minGapMean < 0.5) findings.push({ severity: "critical", text: `Average minimum inter-call gap ${(cross.minGapMean * 1000).toFixed(0)}ms — sub-second gaps are physically impossible for humans.` });
@@ -1081,8 +1083,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <StatRow label="Auth (% of calls)"    val={(cross.avgAuthRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Session (% of calls)" val={(cross.avgSessionRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Action (% of calls)"  val={(cross.avgActionRatio * 100).toFixed(2) + "%"} warn={cross.avgActionRatio > 0.4} />
-            <StatRow label="Pre-action call mean"  val={cross.warmupMean.toFixed(2) + " calls"} />
-            <StatRow label="Action-first sessions"  val={`${cross.zeroWarmupPct}%`} warn={cross.zeroWarmupPct >= 30} />
+            <StatRow label="Avg calls before follow (mean)"  val={warmupList.length > 0 ? cross.warmupMean.toFixed(1) : "—"} />
+            <StatRow label="Follow sessions with <5 prior calls"  val={`${cross.zeroWarmupPct}%`} />
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Flame className="w-3 h-3" /> Risk Indicators</p>
@@ -1107,7 +1109,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Timing CoV (σ/μ of gaps)</p><MiniHistogram buckets={covBuckets} note="CoV <0.3 = machine-uniform" /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">API call rate (calls/min)</p><MiniHistogram buckets={rateBuckets} /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shannon entropy (bits)</p><MiniHistogram buckets={entropyBuckets} note="Higher = more diverse = more human" /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calls before first action</p><MiniHistogram buckets={warmupBuckets} note="Zero = first logged call was already an action endpoint" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Avg calls before each follow</p><MiniHistogram buckets={warmupBuckets} note="Sessions with no follow calls are excluded" /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Flag time of day (UTC blocks)</p><MiniHistogram buckets={hourBlocks} note={cross.peakHour >= 0 ? `Peak: ${String(cross.peakHour).padStart(2,"0")}:00 UTC` : ""} /></div>
           </div>
         </div>
@@ -1219,7 +1221,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
       {cross.n >= 3 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Cpu className="w-4 h-4 text-red-500" /><span className="text-sm font-semibold">Per-Event Anomaly Scoring (0–100)</span></div>
-          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, pre-action call count, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
+          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, avg calls before each follow, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
         </div>
       )}
     </div>
@@ -1327,7 +1329,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   const onHotProxy = allEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
   const ipTrustPct = total > 2 ? Math.round((onHotProxy / total) * 100) : -1;
 
-  const lowWarmupCount = allMetrics.filter(m => m.preActionWarmup < 5).length;
+  const lowWarmupCount = allMetrics.filter(m => m.preActionWarmup >= 0 && m.preActionWarmup < 5).length;
   const warmupPct = total > 2 ? Math.round((lowWarmupCount / total) * 100) : -1;
 
   const roboticCount = allMetrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
@@ -1416,12 +1418,12 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
     },
     {
       id: "warmup-gate", Icon: Zap,
-      title: "Action-First Sessions",
-      tagline: "Sessions where the first logged call was already an action endpoint",
+      title: "Follow Call Density",
+      tagline: "How many calls were already logged before each follow, averaged across all follows",
       likelihood: warmupPct,
-      description: "In the logged data, a notable proportion of flagged sessions had their first action endpoint (follow, unfollow, DM, like) appear as the very first or near-first call in the log — with zero or very few other calls recorded before it. This is a factual observation about the call sequence in the log. Whether the absence of prior calls is a causal factor, a consequence of how logging captures sessions, or something else entirely is unknown. No call category is inherently 'safe' — any endpoint called in volume can contribute to detection.",
-      evidence: warmupPct >= 0 ? `${lowWarmupCount} of ${total} flagged accounts (${warmupPct}%) had fewer than 5 logged calls before their first action endpoint.` : "Not enough data yet.",
-      advice: "This metric reflects what the log captured. A low pre-action call count may mean the session started directly on an action, or it may mean earlier calls were not recorded. Treat it as a count, not a quality signal.",
+      description: "For every follow call in a session, this counts how many total API calls had already been logged before it, then averages that across all follow calls in the session. A lower average means follows are happening with few other calls around them. A higher average means follows are spread through a denser session. This is a factual log measurement — no claim is made about whether more or fewer calls before a follow affects detection risk.",
+      evidence: warmupPct >= 0 ? `${lowWarmupCount} of ${total} flagged sessions with follow operations (${warmupPct}%) had an average of fewer than 5 calls already logged before each follow.` : "Not enough data yet.",
+      advice: "This metric is descriptive only — it tells you the call density around follow operations in flagged sessions. Compare it to surviving accounts to see if there is a structural difference in session density.",
     },
     {
       id: "timing-cov", Icon: Activity,
@@ -1803,7 +1805,7 @@ export function BanAnalyticsPage() {
                               <div className="flex-1"></div>
                               <span className="w-16 text-left text-green-600">SURVIVOR avg</span>
                             </div>
-                            <CompareRow label="Calls before first action" banVal={avg(bWarmup)} survVal={avg(sWarmup)} higherIsBetter={false} />
+                            <CompareRow label="Avg calls before each follow" banVal={avg(bWarmup)} survVal={avg(sWarmup)} higherIsBetter={false} />
                             <CompareRow label="Session/action ratio" banVal={avg(bRatio)} survVal={avg(sRatio)} higherIsBetter={true} />
                             <CompareRow label="Follow count" banVal={avg(bFollow)} survVal={avg(sFollow)} higherIsBetter={false} />
                             <CompareRow label="Timing CoV" banVal={avg(bCoV)} survVal={avg(sCoV)} higherIsBetter={true} />
@@ -1852,7 +1854,7 @@ export function BanAnalyticsPage() {
                                     </div>
                                     {sm && (
                                       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
-                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Calls before first action</span><span className="font-mono font-semibold">{sm.preActionWarmup}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Avg calls before each follow</span><span className="font-mono font-semibold">{sm.preActionWarmup >= 0 ? sm.preActionWarmup : "—"}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Session/action</span><span className={`font-mono font-semibold ${sm.actionCount > 0 ? sm.sessionPerAction >= 3 ? "text-green-600" : sm.sessionPerAction >= 1 ? "text-amber-500" : "text-red-500" : "text-muted-foreground"}`}>{sm.actionCount > 0 ? sm.sessionPerAction.toFixed(2) : "—"}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Follow ops</span><span className={`font-mono font-semibold ${(sm.cats.follow ?? 0) === 0 ? "text-green-600" : (sm.cats.follow ?? 0) <= 3 ? "text-amber-500" : "text-red-500"}`}>{sm.cats.follow ?? 0}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Timing CoV</span><span className={`font-mono font-semibold ${spCovColor}`}>{sm.timingCoV >= 0 ? `${sm.timingCoV.toFixed(2)} [${spCovLabel}]` : "—"}</span></div>
