@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.973",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: deleting an account no longer deletes a manually-added proxy. Auto-cleanup only applies to proxies that were auto-created by the Link Proxies import flow." },
+    ],
+  },
+  {
     version: "1.0.972",
     date: "15 Jun 2026",
     items: [

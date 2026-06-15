@@ -332,13 +332,16 @@ export async function registerInstagramRoutes(
       let proxyId = proxyByHostPort.get(key);
 
       if (!proxyId) {
-        // Proxy not yet in the Proxy Manager — create it from the inline profile data
+        // Proxy not yet in the Proxy Manager — create it from the inline profile data.
+        // importLinked = 1 marks this as auto-created for this account so it is
+        // cleaned up automatically if its last linked account is deleted.
         const newProxy = await storage.createProxy({
           name: key,
           host: profile.proxyHost,
           port: profile.proxyPort,
           username: profile.proxyUsername ?? null,
           password: profile.proxyPassword ?? null,
+          importLinked: 1,
         });
         proxyByHostPort.set(key, newProxy.id);
         proxyId = newProxy.id;

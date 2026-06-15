@@ -244,9 +244,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(profiles).where(eq(profiles.id, id));
 
     if (linkedProxyId) {
-      const others = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.proxyId, linkedProxyId));
-      if (others.length === 0) {
-        await db.delete(proxies).where(eq(proxies.id, linkedProxyId));
+      const [linkedProxy] = await db.select({ importLinked: proxies.importLinked }).from(proxies).where(eq(proxies.id, linkedProxyId));
+      if (linkedProxy?.importLinked === 1) {
+        const others = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.proxyId, linkedProxyId));
+        if (others.length === 0) {
+          await db.delete(proxies).where(eq(proxies.id, linkedProxyId));
+        }
       }
     }
   }

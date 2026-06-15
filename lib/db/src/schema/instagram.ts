@@ -11,6 +11,7 @@ export const proxies = sqliteTable("proxies", {
   username: text("username"),
   password: text("password"),
   proxyType: text("proxy_type").default("http"),
+  importLinked: integer("import_linked").default(0),
 });
 
 export const ACCOUNT_STATUSES = [
