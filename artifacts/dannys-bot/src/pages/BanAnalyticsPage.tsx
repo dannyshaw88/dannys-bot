@@ -15,7 +15,7 @@ import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; proxyId?: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface ProxyRow { id: number; host: string | null; port: number | null; proxyHost?: string | null; proxyPort?: number | null; }
-interface AnalyticsEntry { id: number; username: string; proxyHost: string; endpointCount: number; endpointSnapshot: string; bannedAt?: string; flaggedAt?: string; }
+interface AnalyticsEntry { id: number; username: string; proxyHost: string; endpointCount: number; endpointSnapshot: string; bannedAt?: string; flaggedAt?: string; verifyCountLast24h?: number | null; accountAgeDays?: number | null; proxyAccountCount?: number | null; followCountBeforeBan?: number | null; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; }
 interface EpItem { operationName: string; date: string; source?: string | null; }
 interface ProxyRisk { host: string; banCount: number; automatedCount: number; captchaCount: number; lockedCount: number; total: number; accounts: string[]; entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] }; }
 interface ConcurrencyAlert { proxyHost: string; accounts: string[]; times: string[]; category: string; }
@@ -1479,6 +1479,47 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       advice: "Interleave action endpoints with passive ones between every burst. After 3–5 follows, trigger a timeline view or profile lookup before the next follow batch. Configure tools to inject passive calls (view timeline, view story) as natural pauses between action sequences.",
     },
     {
+      id: "new-account-budget", Icon: Clock,
+      title: "New Account Trust Ramp (≤7 Days)",
+      tagline: "Instagram enforces near-zero follow tolerance for accounts under a week old",
+      likelihood: (() => {
+        const newAccountWithFollows = allEntries.filter(e => {
+          const age = e.accountAgeDays;
+          const follows = e.followCountBeforeBan;
+          if (age !== null && age !== undefined && follows !== null && follows !== undefined) {
+            return age <= 7 && follows > 0;
+          }
+          const eps = filterHiker(parseEps(e.endpointSnapshot));
+          const m = computeMetrics(eps, e.flaggedAt ?? e.bannedAt);
+          return (m.cats.follow ?? 0) > 0 && eps.length < 25;
+        }).length;
+        return total > 2 ? Math.round((newAccountWithFollows / total) * 100) : -1;
+      })(),
+      description: "Instagram applies a trust ramp to new accounts — for the first 7–14 days the effective action budget is near zero. An account that has never appeared in any other user's feed, never been followed back, and has zero social graph weight is treated as a potential bot-farm account by default. Any follow operation from a new account without prior passive session history triggers a 'Confirm You Are Human' or 'Suspicious Activity' challenge. The threshold is not a fixed number of allowed follows — it's a trust score that rises over days of organic session activity. Running follow tools before this ramp is complete is the most common cause of the 'confirm_human' ban type.",
+      evidence: (() => {
+        const candidates = allEntries.filter(e => {
+          const age = e.accountAgeDays;
+          const follows = e.followCountBeforeBan;
+          if (age !== null && age !== undefined && follows !== null && follows !== undefined) {
+            return age <= 7 && follows > 0;
+          }
+          return false;
+        });
+        const fromSnapshot = allEntries.filter(e => {
+          const eps = filterHiker(parseEps(e.endpointSnapshot));
+          const m = computeMetrics(eps, e.flaggedAt ?? e.bannedAt);
+          return (m.cats.follow ?? 0) > 0 && eps.length < 25;
+        }).length;
+        if (candidates.length > 0) {
+          return `${candidates.length} of ${total} flagged accounts (${Math.round(candidates.length/total*100)}%) were under 7 days old and had at least 1 follow operation — the highest-risk combination for the "confirm you are human" ban.`;
+        }
+        return total > 2
+          ? `No age data yet (flag more accounts to populate accountAgeDays). Proxy signal: ${fromSnapshot} of ${total} flagged accounts had follow operations with fewer than 25 total API calls — consistent with a new-account cold-start follow.`
+          : "Not enough data yet. Flag more accounts to measure new-account ban patterns.";
+      })(),
+      advice: "Do not run any follow tool on an account that was added less than 7 days ago. For the first week, only run warmup/passive session activity — feed views, profile lookups, story views. Let the trust ramp build before the first follow operation.",
+    },
+    {
       id: "trust-decay", Icon: TrendingUp,
       title: "Account TrustScore Decay Chain",
       tagline: "Automated → Captcha → Ban is a detectable escalation ladder, not independent events",
@@ -1581,10 +1622,41 @@ export function BanAnalyticsPage() {
 
   function handleExport() {
     const levels = getTrustLevels();
-    function enrichEntry(e: AnalyticsEntry) {
-      const id = profileMap.get(e.username);
-      const ti = id !== undefined ? trustMap.get(id) : undefined;
-      return { ...e, trustScore: ti ? { rank: ti.rank, label: ti.label } : null };
+    function makeEnrichFn(entries: AnalyticsEntry[]) {
+      const cross = computeCrossStats(entries, trustMap, profileMap, profileNotesMap);
+      return function enrichEntry(e: AnalyticsEntry) {
+        const id = profileMap.get(e.username);
+        const ti = id !== undefined ? trustMap.get(id) : undefined;
+        const eps = filterHiker(parseEps(e.endpointSnapshot));
+        const ts = e.flaggedAt ?? e.bannedAt ?? "";
+        const m = computeMetrics(eps, ts);
+        const anomaly = cross.n >= 2 ? computeAnomalyScore(m, cross) : null;
+        const topOps = topEps(eps, 10);
+        const computedMetrics = {
+          callRate_perMin: m.callsPerMin > 0 ? m.callsPerMin : null,
+          spanMin: m.spanMin > 0 ? m.spanMin : null,
+          avgInterCallSec: m.avgInterCallSec > 0 ? m.avgInterCallSec : null,
+          minInterCallSec: eps.length > 1 ? m.minInterCallSec : null,
+          timingCoV: m.timingCoV >= 0 ? m.timingCoV : null,
+          timingCoV_label: m.timingCoV < 0 ? null : m.timingCoV < 0.3 ? "ROBOTIC" : m.timingCoV < 0.5 ? "LOW" : m.timingCoV < 1.0 ? "MODERATE" : "HUMAN",
+          shannonEntropy_bits: m.shannonEntropy,
+          uniqueEndpoints: m.uniqueEndpoints,
+          endpointDiversity_pct: m.endpointDiversity * 100,
+          burstWindows: m.burstCount,
+          preActionWarmup: m.preActionWarmup,
+          actionVelocity_perHour: m.actionVelocityPerHour > 0 ? m.actionVelocityPerHour : null,
+          sessionPerAction: m.actionCount > 0 ? m.sessionPerAction : null,
+          authPerAction: m.actionCount > 0 ? m.authPerAction : null,
+          cats: m.cats,
+          anomalyScore: anomaly,
+          top10Endpoints: topOps.map(ep => ({ name: ep.name, label: ep.label ?? ep.name, count: ep.count })),
+        };
+        return {
+          ...e,
+          trustScore: ti ? { rank: ti.rank, label: ti.label } : null,
+          computedMetrics,
+        };
+      };
     }
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -1597,10 +1669,10 @@ export function BanAnalyticsPage() {
         totalFlagged: banEntries.length + automatedEntries.length + captchaEntries.length + lockedEntries.length,
       },
       trustScoreLevels: levels.map((l, i) => ({ rank: i + 1, id: l.id, label: l.label })),
-      banned:    banEntries.map(enrichEntry),
-      automated: automatedEntries.map(enrichEntry),
-      captcha:   captchaEntries.map(enrichEntry),
-      locked:    lockedEntries.map(enrichEntry),
+      banned:    banEntries.map(makeEnrichFn(banEntries)),
+      automated: automatedEntries.map(makeEnrichFn(automatedEntries)),
+      captcha:   captchaEntries.map(makeEnrichFn(captchaEntries)),
+      locked:    lockedEntries.map(makeEnrichFn(lockedEntries)),
       survivors: survivingAccounts.map(p => ({
         username: p.username,
         runningMs: p.runMs,

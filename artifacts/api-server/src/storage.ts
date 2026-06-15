@@ -142,19 +142,19 @@ export interface IStorage {
   deleteApiCreatedAccount(id: number): Promise<void>;
 
   // Ban Analytics
-  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
   getBanAnalytics(): Promise<BannedAccountAnalytics[]>;
 
   // Automated Behaviour Analytics
-  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
   getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]>;
 
   // Captcha Analytics
-  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
   getCaptchaAnalytics(): Promise<CaptchaAnalytics[]>;
 
   // Locked Account Analytics
-  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void>;
+  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
   getLockedAnalytics(): Promise<LockedAccountAnalytics[]>;
 }
 

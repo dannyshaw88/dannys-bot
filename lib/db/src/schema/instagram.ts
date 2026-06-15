@@ -374,6 +374,13 @@ export const bannedAccountsAnalytics = sqliteTable("banned_accounts_analytics", 
   bannedAt: text("banned_at").notNull(),
   endpointCount: integer("endpoint_count").default(0),
   endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
 });
 
 export const insertBannedAccountAnalyticsSchema = createInsertSchema(bannedAccountsAnalytics).omit({ id: true });
@@ -387,6 +394,13 @@ export const automatedBehaviourAnalytics = sqliteTable("automated_behaviour_anal
   flaggedAt: text("flagged_at").notNull(),
   endpointCount: integer("endpoint_count").default(0),
   endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
 });
 
 export type AutomatedBehaviourAnalytics = typeof automatedBehaviourAnalytics.$inferSelect;
@@ -398,6 +412,13 @@ export const captchaAnalytics = sqliteTable("captcha_analytics", {
   flaggedAt: text("flagged_at").notNull(),
   endpointCount: integer("endpoint_count").default(0),
   endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
 });
 
 export type CaptchaAnalytics = typeof captchaAnalytics.$inferSelect;
@@ -409,6 +430,13 @@ export const lockedAccountsAnalytics = sqliteTable("locked_accounts_analytics", 
   flaggedAt: text("flagged_at").notNull(),
   endpointCount: integer("endpoint_count").default(0),
   endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
 });
 
 export type LockedAccountAnalytics = typeof lockedAccountsAnalytics.$inferSelect;

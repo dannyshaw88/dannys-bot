@@ -410,6 +410,35 @@ sqlite.exec(`
   }
 }
 
+// Migrate new context columns onto all 4 analytics tables (existing installs)
+{
+  const analyticsTableMap: Record<string, string> = {
+    banned_accounts_analytics: "banned_accounts_analytics",
+    automated_behaviour_analytics: "automated_behaviour_analytics",
+    captcha_analytics: "captcha_analytics",
+    locked_accounts_analytics: "locked_accounts_analytics",
+  };
+  const newAnalyticsCols = [
+    "verify_count_last_24h INTEGER DEFAULT 0",
+    "account_age_days INTEGER",
+    "proxy_account_count INTEGER DEFAULT 0",
+    "follow_count_before_ban INTEGER DEFAULT 0",
+    "session_to_action_ratio TEXT",
+    "span_hours TEXT",
+    "last_operation_before_ban TEXT",
+  ];
+  for (const table of Object.keys(analyticsTableMap)) {
+    const cols = sqlite.prepare(`pragma table_info(${table})`).all() as { name: string }[];
+    const colSet = new Set(cols.map(c => c.name));
+    for (const colDef of newAnalyticsCols) {
+      const colName = colDef.split(" ")[0];
+      if (!colSet.has(colName)) {
+        try { sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef};`); } catch { /* already exists */ }
+      }
+    }
+  }
+}
+
 // Cap to newest 1,000,000 rows — effectively unlimited for any real-world usage
 // so that exported API call history is never silently discarded on restart.
 // The previous 5000-row global cap was far too low: a single Verify All run on

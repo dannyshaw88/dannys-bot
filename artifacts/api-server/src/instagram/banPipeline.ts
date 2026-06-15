@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { computeAnalyticsContext } from "./analyticsContext";
 
 /**
  * Full ban pipeline — called automatically whenever Instagram confirms an account
@@ -25,11 +26,18 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
   })));
 
   let proxyHost = "";
+  let proxyAccountCount = 0;
   if (profile.proxyId) {
     const proxies = await storage.getProxies().catch(() => []);
     const linked = proxies.find((p: { id: number; host: string }) => p.id === profile.proxyId);
     if (linked) proxyHost = linked.host;
+    const sameProxy = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+    proxyAccountCount = sameProxy.filter((p: { id: number; accountStatus?: string | null }) =>
+      p.id !== profileId && p.accountStatus !== "banned"
+    ).length;
   }
+
+  const ctx = computeAnalyticsContext(calls, profile.notes, proxyAccountCount);
 
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -43,6 +51,7 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
     bannedAt: now.toISOString(),
     endpointCount: calls.length,
     endpointSnapshot: snapshot,
+    ...ctx,
   });
 
   const freshNotes = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";

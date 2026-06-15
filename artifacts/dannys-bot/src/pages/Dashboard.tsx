@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.968",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats: 7 new diagnostic fields are now captured at the moment any account is flagged — account age in days, verify operations in the last 24 hours, number of other accounts on the same proxy, follow count, session-to-action ratio, session time span, and last operation before the flag." },
+      { category: "New", text: "Evasion Stats export: computed metrics (timing CoV, call velocity, Shannon entropy, anomaly score, burst count, top 10 endpoints) are now included per entry in the JSON file so future analysis has all the numbers ready without re-computing them." },
+      { category: "New", text: "Evasion Stats Theories tab: added New Account Trust Ramp theory — tracks the percentage of bans on accounts under 7 days old that had at least one follow operation, the primary pattern behind confirm-you-are-human bans." },
+    ],
+  },
+  {
     version: "1.0.967",
     date: "15 Jun 2026",
     items: [

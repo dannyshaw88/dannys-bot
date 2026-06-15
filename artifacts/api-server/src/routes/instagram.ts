@@ -15,6 +15,7 @@ import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
 import { triggerBanPipeline } from "../instagram/banPipeline";
+import { computeAnalyticsContext } from "../instagram/analyticsContext";
 import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/instagramWebClient";
 import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { IgApiClient } from "instagram-private-api";
@@ -694,6 +695,12 @@ export async function registerInstagramRoutes(
       const calls = allCalls_a.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_a = 0;
+      if (profile.proxyId) {
+        const sp_a = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_a = sp_a.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_a = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_a);
       const now_a = new Date();
       const pad_a = (n: number) => String(n).padStart(2, "0");
       const stamp_a = `Flagged as Automated Behaviour: ${now_a.getUTCFullYear()}-${pad_a(now_a.getUTCMonth()+1)}-${pad_a(now_a.getUTCDate())} ${pad_a(now_a.getUTCHours())}:${pad_a(now_a.getUTCMinutes())}:${pad_a(now_a.getUTCSeconds())} UTC`;
@@ -704,6 +711,7 @@ export async function registerInstagramRoutes(
         flaggedAt: now_a.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
+        ...ctx_a,
       });
       await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected", notes: freshNotes_a ? `${freshNotes_a}\n${stamp_a}` : stamp_a });
       req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
@@ -724,6 +732,12 @@ export async function registerInstagramRoutes(
       const calls = allCalls_c.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_c = 0;
+      if (profile.proxyId) {
+        const sp_c = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_c = sp_c.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_c = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_c);
       const now_c = new Date();
       const pad_c = (n: number) => String(n).padStart(2, "0");
       const stamp_c = `Flagged as Captcha Error: ${now_c.getUTCFullYear()}-${pad_c(now_c.getUTCMonth()+1)}-${pad_c(now_c.getUTCDate())} ${pad_c(now_c.getUTCHours())}:${pad_c(now_c.getUTCMinutes())}:${pad_c(now_c.getUTCSeconds())} UTC`;
@@ -734,6 +748,7 @@ export async function registerInstagramRoutes(
         flaggedAt: now_c.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
+        ...ctx_c,
       });
       await storage.updateProfile(profileId, { accountStatus: "captcha", notes: freshNotes_c ? `${freshNotes_c}\n${stamp_c}` : stamp_c });
       req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
@@ -776,6 +791,12 @@ export async function registerInstagramRoutes(
       const calls = allCalls_l.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
       const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
       const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_l = 0;
+      if (profile.proxyId) {
+        const sp_l = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_l = sp_l.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_l = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_l);
       const now_l = new Date();
       const pad_l = (n: number) => String(n).padStart(2, "0");
       const stamp_l = `Flagged as Locked Account: ${now_l.getUTCFullYear()}-${pad_l(now_l.getUTCMonth()+1)}-${pad_l(now_l.getUTCDate())} ${pad_l(now_l.getUTCHours())}:${pad_l(now_l.getUTCMinutes())}:${pad_l(now_l.getUTCSeconds())} UTC`;
@@ -786,6 +807,7 @@ export async function registerInstagramRoutes(
         flaggedAt: now_l.toISOString(),
         endpointCount: calls.length,
         endpointSnapshot: snapshot,
+        ...ctx_l,
       });
       await storage.updateProfile(profileId, { accountStatus: "locked", notes: freshNotes_l ? `${freshNotes_l}\n${stamp_l}` : stamp_l });
       req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
