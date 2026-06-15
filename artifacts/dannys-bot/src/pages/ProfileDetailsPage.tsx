@@ -1099,7 +1099,7 @@ export function ProfileDetailsPage() {
 
                     {/* Verify Account */}
                     {canVerify && (
-                      <div className="max-w-[280px]">
+                      <div className="space-y-2 max-w-[320px]">
                         {verifyStatus === "ok" ? (
                           <div
                             data-testid="status-logged-in"
@@ -1129,6 +1129,50 @@ export function ProfileDetailsPage() {
                               : "Verify Account"}
                           </Button>
                         )}
+                        {/* Fire Random Endpoints at Login */}
+                        <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`loginRandomEndpointsEnabled-${profile.id}`}
+                              checked={!!(formData.apiLimits as any).loginRandomEndpointsEnabled}
+                              onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsEnabled: e.target.checked } })}
+                              className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                            />
+                            <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Fire Random Endpoints at Login</Label>
+                          </div>
+                          {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
+                            <div className="flex items-center gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={17}
+                                  className="h-7 text-xs w-14"
+                                  value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
+                                  onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={17}
+                                  className="h-7 text-xs w-14"
+                                  value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
+                                  onChange={e => {
+                                    const v = Math.max(1, Number(e.target.value));
+                                    const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
+                                    updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
+                                  }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground pt-5 whitespace-nowrap">endpoints after login</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1373,50 +1417,6 @@ export function ProfileDetailsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
 
-                    {/* Fire Random Endpoints at Login */}
-                    <div className="flex flex-wrap items-center gap-3 pt-1">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`loginRandomEndpointsEnabled-${profile.id}`}
-                          checked={!!(formData.apiLimits as any).loginRandomEndpointsEnabled}
-                          onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsEnabled: e.target.checked } })}
-                          className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
-                        />
-                        <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Fire Random Endpoints at Login</Label>
-                      </div>
-                      {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
-                        <div className="flex items-center gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={17}
-                              className="h-7 text-xs w-14"
-                              value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
-                              onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={17}
-                              className="h-7 text-xs w-14"
-                              value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
-                              onChange={e => {
-                                const v = Math.max(1, Number(e.target.value));
-                                const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
-                                updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
-                              }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-muted-foreground pt-5 whitespace-nowrap">endpoints after login</p>
-                        </div>
-                      )}
-                    </div>
                     </div>
 
                     {/* Proxy Settings */}
