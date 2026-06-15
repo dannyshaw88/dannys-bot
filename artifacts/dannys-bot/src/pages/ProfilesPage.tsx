@@ -28,6 +28,8 @@ import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 import { api } from "@shared/routes";
+import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
 const STATUS_META: Record<AccountStatus, {
@@ -178,23 +180,22 @@ export function ProfilesPage() {
   const verifyingInProgress = useRef(new Set<number>());
   const [verifyingIds, setVerifyingIds] = useState<Set<number>>(new Set());
 
-  const handleVerify = useCallback(async (id: number) => {
-    // Guard using the ref — always reads the live set, never stale.
+  // IP login rate limit warning dialog state — stores display info + confirm callback
+  const [loginWarnState, setLoginWarnState] = useState<{
+    proxyDisplay: string;
+    minutesAgo: number;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // Core verify execution — records a login event then runs the verify POST.
+  const _executeVerify = useCallback(async (id: number, proxyHostVal: string | null, proxyPortVal: number | null) => {
     if (verifyingInProgress.current.has(id)) return;
     verifyingInProgress.current.add(id);
     setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
-    // Cancel any in-flight polling refetches BEFORE the optimistic patch so they
-    // cannot overwrite "verifying" with a stale "pending" value from the server
-    // (the 5 s poll can fire between the click and the POST completing).
+    recordLoginEvent(proxyHostVal, proxyPortVal);
     await queryClient.cancelQueries({ queryKey: [api.profiles.list.path] });
-    // Optimistically patch the local React Query cache so the status badge
-    // changes to "Verifying" immediately — no PATCH request, just a cache write.
-    // The finally block's invalidateQueries will overwrite this with the real
-    // server value once the POST resolves.
     const patchVerifying = (old: any) =>
       Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus: "verifying" } : p) : old;
-    // Target the exact sub-keys the useProfiles/useCreatorProfiles hooks use so
-    // the patch lands in the right cache entries (not a dead key).
     queryClient.setQueryData([api.profiles.list.path, "automation"], patchVerifying);
     queryClient.setQueryData([api.profiles.list.path, "creator"],    patchVerifying);
     queryClient.setQueryData([api.profiles.get.path, id], (old: any) =>
@@ -212,10 +213,33 @@ export function ProfilesPage() {
     } finally {
       verifyingInProgress.current.delete(id);
       setVerifyingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
-      // Always refetch so the UI shows whatever status the server actually set.
       queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
     }
   }, [toast, queryClient]);
+
+  // Guard wrapper — checks IP login rate limit before executing verify.
+  const handleVerify = useCallback((id: number) => {
+    const p = profiles?.find(pr => pr.id === id);
+    const host: string | null = p
+      ? (p.proxyId && proxies ? (proxies.find(x => x.id === p.proxyId)?.host ?? p.proxyHost ?? null) : (p.proxyHost ?? null))
+      : null;
+    const port: number | null = p
+      ? (p.proxyId && proxies ? (proxies.find(x => x.id === p.proxyId)?.port ?? p.proxyPort ?? null) : (p.proxyPort ?? null))
+      : null;
+    if (host) {
+      const lastMs = getMostRecentLoginMs(host, port);
+      if (lastMs !== null) {
+        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
+        setLoginWarnState({
+          proxyDisplay: port ? `${host}:${port}` : host,
+          minutesAgo,
+          onConfirm: () => { setLoginWarnState(null); _executeVerify(id, host, port); },
+        });
+        return;
+      }
+    }
+    _executeVerify(id, host, port);
+  }, [profiles, proxies, _executeVerify]);
 
   const [profColWidths, setProfColWidths] = usePersistentSetting(
     "profiles_col_widths_px",
@@ -2398,6 +2422,16 @@ export function ProfilesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {loginWarnState && (
+        <LoginRateLimitDialog
+          open
+          proxyDisplay={loginWarnState.proxyDisplay}
+          minutesAgo={loginWarnState.minutesAgo}
+          onCancel={() => setLoginWarnState(null)}
+          onContinue={loginWarnState.onConfirm}
+        />
+      )}
     </AppLayout>
   );
 }

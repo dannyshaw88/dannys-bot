@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.966",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "IP Login Rate Limit warning: clicking Verify or Login on an account whose proxy was used for a login within the last 90 minutes now shows a warning dialog with the time elapsed and the safe retry window before you proceed." },
+      { category: "New", text: "Import EQX: the account's Notes section now automatically records a 'Re-imported' timestamp each time you import the file, so the Longest Survivors tab always reflects the true in-use date for re-added accounts." },
+    ],
+  },
+  {
     version: "1.0.965",
     date: "14 Jun 2026",
     items: [

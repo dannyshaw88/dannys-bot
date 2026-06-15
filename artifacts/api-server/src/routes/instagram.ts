@@ -4148,12 +4148,24 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       // credentialsDirty is always reset to false on import: the imported credentials
       // are exactly as they were at export time, so they are not dirty and the account
       // must not show a spurious "Verify" button next to a valid status.
+      // Stamp the import date in the Notes field so the Longest Survivors tab
+      // can track the true "in-use since" date, and so the user can see when
+      // each account was last re-imported.  Format must match parseAllAddedDates:
+      // /(?:Added|Re-added|Re-imported):\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+UTC)/gi
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const importStamp = `Re-imported: ${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
+      const existingNotes = (cleanProfile.notes as string | null | undefined) ?? "";
+      const updatedNotes  = existingNotes ? `${existingNotes}\n${importStamp}` : importStamp;
+
       await storage.updateProfile(created.id, {
         accountStatus: intendedStatus,
         credentialsDirty: false,
+        notes: updatedNotes,
       });
       (created as any).accountStatus = intendedStatus;
       (created as any).credentialsDirty = false;
+      (created as any).notes = updatedNotes;
 
       // Seed the browser cookie file so Chrome starts with the correct device
       // identity (mid, ig_did, sessionid) on its very first launch.

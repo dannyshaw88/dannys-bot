@@ -36,6 +36,8 @@ export function StandaloneBrowserPage() {
         profileId={profileId}
         username={profile.username ?? ""}
         userAgent={profile.userAgentEmbedded ?? ""}
+        proxyHost={profile.proxyHost ?? null}
+        proxyPort={profile.proxyPort ?? null}
       />
     </div>
   );

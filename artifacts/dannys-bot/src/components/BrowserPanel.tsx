@@ -9,6 +9,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
+import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 
 function cleanLoginError(msg: string): string {
   const m = (msg ?? "").toLowerCase();
@@ -44,6 +46,10 @@ interface BrowserPanelProps {
   browserHeight?: number;
   /** Hide the isolation banner and address-bar toolbar (use when embedding inside a phone frame). */
   noToolbar?: boolean;
+  /** Proxy host for this profile — used by the IP login rate limit warning. */
+  proxyHost?: string | null;
+  /** Proxy port for this profile — used together with proxyHost for the rate limit key. */
+  proxyPort?: number | null;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -78,7 +84,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage, browserWidth, browserHeight, noToolbar }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage, browserWidth, browserHeight, noToolbar, proxyHost, proxyPort }: BrowserPanelProps) {
   const bW = browserWidth ?? BROWSER_W;
   const bH = browserHeight ?? BROWSER_H;
   const bWRef = useRef(bW);
@@ -90,6 +96,11 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const esRef = useRef<WebSocket | null>(null);
   const addressFocusedRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const [loginWarnState, setLoginWarnState] = useState<{
+    proxyDisplay: string;
+    minutesAgo: number;
+  } | null>(null);
 
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
@@ -751,16 +762,11 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     }
   };
 
-  const doLogin = () => {
-    if (loginState === "running") {
-      setLoginState("idle");
-      return;
-    }
+  const _doLoginCore = () => {
     setLoginLog([]);
     setLoginState("running");
     setLogTab("login");
     appendLog("Starting auto-login…", "step");
-
     if (IS_ELECTRON) {
       // Electron mode: eb-auto-login returns a synchronous {ok, message} result.
       fetch(`/api/profiles/${profileId}/eb-auto-login`, { method: "POST" })
@@ -788,6 +794,29 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         setTimeout(() => setLoginState("idle"), 4000);
       });
     }
+  };
+
+  const doLogin = () => {
+    if (loginState === "running") {
+      setLoginState("idle");
+      return;
+    }
+    if (proxyHost) {
+      const lastMs = getMostRecentLoginMs(proxyHost, proxyPort);
+      if (lastMs !== null) {
+        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
+        setLoginWarnState({ proxyDisplay: proxyPort ? `${proxyHost}:${proxyPort}` : proxyHost, minutesAgo });
+        return;
+      }
+    }
+    recordLoginEvent(proxyHost, proxyPort);
+    _doLoginCore();
+  };
+
+  const _handleLoginConfirm = () => {
+    setLoginWarnState(null);
+    recordLoginEvent(proxyHost, proxyPort);
+    _doLoginCore();
   };
 
   const lastEntry = loginLog[loginLog.length - 1];
@@ -1428,6 +1457,16 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           </div>
         </DialogContent>
       </Dialog>
+
+      {loginWarnState && (
+        <LoginRateLimitDialog
+          open
+          proxyDisplay={loginWarnState.proxyDisplay}
+          minutesAgo={loginWarnState.minutesAgo}
+          onCancel={() => setLoginWarnState(null)}
+          onContinue={_handleLoginConfirm}
+        />
+      )}
     </div>
   );
 }

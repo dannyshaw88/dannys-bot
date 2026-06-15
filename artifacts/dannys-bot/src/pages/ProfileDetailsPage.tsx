@@ -33,6 +33,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
 import { userAgents } from "@shared/userAgents";
@@ -245,6 +247,12 @@ export function ProfileDetailsPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
+  const [loginWarnState, setLoginWarnState] = useState<{
+    proxyDisplay: string;
+    minutesAgo: number;
+    bypassProxy: boolean;
+    onConfirm: () => void;
+  } | null>(null);
   const [pendingUa, setPendingUa] = useState<UaEntry | null>(null);
   const [uaChangeConfirmOpen, setUaChangeConfirmOpen] = useState(false);
   const [showFingerprintPreview, setShowFingerprintPreview] = useState(false);
@@ -572,8 +580,12 @@ export function ProfileDetailsPage() {
     if ("username" in patch || "password" in patch) setVerifyStatus("idle");
   };
 
-  const handleVerify = async (bypassProxy = false) => {
+  const _executeVerify = async (bypassProxy = false) => {
     setVerifyStatus("pending");
+    // Resolve proxy info for login rate limit tracking
+    const host: string | null = profile?.proxyHost ?? null;
+    const port: number | null = profile?.proxyPort ?? null;
+    recordLoginEvent(host, port);
     const patchList = (old: any) =>
       Array.isArray(old) ? old.map((p: any) => p.id === profileId ? { ...p, accountStatus: "verifying" } : p) : old;
     queryClient.setQueryData(["/api/profiles"], patchList);
@@ -587,7 +599,6 @@ export function ProfileDetailsPage() {
       const res = await fetch(url, { method: "POST" });
       const data = await res.json();
       if (res.status === 429) {
-        // Another verify is already running for this account keep pending state and wait
         toast({ title: "Verification In Progress", description: "Already verifying this account please wait for it to finish." });
         queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
         return;
@@ -606,6 +617,25 @@ export function ProfileDetailsPage() {
     } finally {
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
     }
+  };
+
+  const handleVerify = (bypassProxy = false) => {
+    const host: string | null = profile?.proxyHost ?? null;
+    const port: number | null = profile?.proxyPort ?? null;
+    if (host && !bypassProxy) {
+      const lastMs = getMostRecentLoginMs(host, port);
+      if (lastMs !== null) {
+        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
+        setLoginWarnState({
+          proxyDisplay: port ? `${host}:${port}` : host,
+          minutesAgo,
+          bypassProxy,
+          onConfirm: () => { setLoginWarnState(null); _executeVerify(bypassProxy); },
+        });
+        return;
+      }
+    }
+    _executeVerify(bypassProxy);
   };
 
   const handleResetDeviceIds = async () => {
@@ -1828,6 +1858,16 @@ export function ProfileDetailsPage() {
 
         </div>
       </Tabs.Root>
+
+      {loginWarnState && (
+        <LoginRateLimitDialog
+          open
+          proxyDisplay={loginWarnState.proxyDisplay}
+          minutesAgo={loginWarnState.minutesAgo}
+          onCancel={() => setLoginWarnState(null)}
+          onContinue={loginWarnState.onConfirm}
+        />
+      )}
     </AppLayout>
   );
 }
