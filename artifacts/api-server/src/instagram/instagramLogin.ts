@@ -149,29 +149,39 @@ async function logApiCall(
 // Android session would plausibly make after logging in.  No IDs required.
 // Shuffled and sampled per account so every session has a unique call fingerprint.
 const RANDOM_LOGIN_ENDPOINT_POOL: Array<{ name: string; fn: (ig: IgApiClient) => Promise<void> }> = [
-  { name: "GetDirectInbox",              fn: async (ig) => { await ig.directInbox.request(); } },
-  { name: "GetTimeLineFeedLauncherSync", fn: async (ig) => { await (ig.feed.timeline() as any).request(); } },
-  { name: "LauncherSync",               fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, id: ig.state.uuid, configs: "Config,ComposeConfig,ExploreConfig,FeedbackConfig,Ig4GConfig,IgVideoConfig,LoginConfig,MonetizationConfig,StoryConfig,VideoCallConfig,LWS,TryFlatShareSheet,StickerConfig,LoomConfig,QuickCaptureConfig,ReelConfig" }) }); } },
-  { name: "GetDirectMessages",           fn: async (ig) => { await (ig.directInbox as any).getItems(); } },
-  { name: "AnalyticsLog",               fn: async (ig) => {
+  // ── Real confirmed endpoints (audited against instagram-private-api + instagramWebClient.ts) ──
+  { name: "GetDirectInbox",            fn: async (ig) => { await ig.directInbox.request(); } },
+  // Replaced duplicate timeline call — fetches own account info instead
+  { name: "GetCurrentUser",            fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/accounts/current_user/", method: "GET", qs: { edit: "false" } }); } },
+  { name: "LauncherSync",              fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, id: ig.state.uuid, server_config_retrieval: "1" }) }); } },
+  // Replaced broken .getItems() call — fetches pending (unread) DM requests instead
+  { name: "GetPendingInbox",           fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/direct_v2/pending_inbox/", method: "GET" }); } },
+  { name: "AnalyticsLog",              fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/analytics/log/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, analytics_events: "[]" }) }); } },
-  { name: "AttributionLaunch",          fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/attribution/launch_point/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, launch_point: "cold_start" }) }); } },
-  { name: "BatchFetchWeb",              fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/batch_fetch/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, surfaces_to_fetch: JSON.stringify(["clips_tab", "discover_tab", "shop_tab"]) }) }); } },
-  { name: "ExecuteNotificationsBadge",  fn: async (ig) => {
+  // FIXED: was /attribution/launch_point/ (404) — correct endpoint is /attribution/launch/
+  { name: "AttributionLaunch",         fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/attribution/launch/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid }) }); } },
+  // FIXED: was /batch_fetch/ (404) — correct endpoint is /qp/batch_fetch_web/
+  { name: "BatchFetchWeb",             fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/qp/batch_fetch_web/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, surfaces_to_queries: JSON.stringify({ "5717": {}, "5718": {} }) }) }); } },
+  { name: "ExecuteNotificationsBadge", fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/notifications/badge/", method: "GET" }); } },
-  { name: "GetReelsTray",               fn: async (ig) => { await ig.feed.reelsTray().request(); } },
-  { name: "ViewTimelineStories",        fn: async (ig) => { await ig.feed.timeline().request(); } },
-  { name: "GetDirectInboxV2",           fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/direct_v2/inbox/", method: "GET" }); } },
+  { name: "GetReelsTray",              fn: async (ig) => { await ig.feed.reelsTray().request(); } },
+  // Replaced duplicate timeline call — fetches activity/news feed instead
+  { name: "GetActivityFeed",           fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/news/activities/", method: "GET" }); } },
+  // Replaced duplicate direct_v2/inbox call — fetches home timeline feed instead
+  { name: "GetTimeLineFeed",           fn: async (ig) => { await ig.feed.timeline().request(); } },
   { name: "ViewUserFeed",              fn: async (ig) => {
       await ig.request.send({ url: `/api/v1/feed/user/${ig.state.cookieUserId}/`, method: "GET" }); } },
   { name: "GetLikedMedia",             fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/feed/liked/", method: "GET" }); } },
+  // FIXED: was /feed/saved/media/ (404) — correct endpoint is /feed/saved/
   { name: "GetSavedMedia",             fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/feed/saved/media/", method: "GET" }); } },
+      await ig.request.send({ url: "/api/v1/feed/saved/", method: "GET" }); } },
   { name: "VisitUserProfile",          fn: async (ig) => {
       await ig.request.send({ url: `/api/v1/users/${ig.state.cookieUserId}/info/`, method: "GET" }); } },
   { name: "GetNotificationsActivity",  fn: async (ig) => {
@@ -263,17 +273,28 @@ function extractOperationName(rawUrl: string): string {
     "users/search":                            "SearchUser",
     // Collections / highlights
     "highlights/create_reel":                  "CreateHighlight",
+    // Feed extras
+    "feed/saved":                              "GetSavedMedia",
+    // Batch / analytics / attribution
+    "qp/batch_fetch_web":                      "BatchFetchWeb",
+    "analytics/log":                           "AnalyticsLog",
+    "attribution/launch":                      "AttributionLaunch",
+    // Notifications
+    "notifications/badge":                     "ExecuteNotificationsBadge",
   };
 
   if (EXACT[path]) return EXACT[path];
 
-  // Prefix patterns (paths with dynamic ID segments)
+  // Prefix patterns (paths with dynamic ID segments — more specific first)
   const PREFIX: [string, string][] = [
     ["friendships/create/",        "Follow"],
     ["friendships/destroy/",       "Unfollow"],
     ["friendships/show/",          "GetFriendshipStatus"],
     ["friendships/following/",     "GetFollowing"],
     ["friendships/followers/",     "GetFollowers"],
+    ["feed/user/",                 "ViewUserFeed"],
+    ["feed/saved/",                "GetSavedMedia"],
+    ["highlights/",                "ViewHighlights"],
     ["users/",                     "GetUserProfile"],
     ["media/",                     "GetMediaInfo"],
     ["direct_v2/threads/",         "GetThread"],
@@ -281,6 +302,10 @@ function extractOperationName(rawUrl: string): string {
     ["accounts/",                  "AccountAction"],
     ["launcher/",                  "SendMobileConfig"],
     ["qe/",                        "FetchConfig"],
+    ["qp/",                        "BatchFetchWeb"],
+    ["analytics/",                 "AnalyticsLog"],
+    ["attribution/",               "AttributionLaunch"],
+    ["notifications/",             "ExecuteNotificationsBadge"],
   ];
 
   for (const [prefix, name] of PREFIX) {
