@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.977",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "Ban Analytics: added Session Uniqueness Fingerprint theory card — tracks how many flagged accounts share a /24 subnet, highlighting the risk of identical cold-start call sequences across accounts on the same IP." },
+      { category: "New", text: "Account Settings: added 'Fire Random Endpoints at Login' checkbox with Min/Max fields — when enabled, a random selection of extra API calls is fired after each login to make every session's call fingerprint unique." },
+      { category: "Fix", text: "Test Timing button now shows the full min–max range of per-call delay instead of a single random sample, so the result is always meaningful regardless of how your settings are configured." },
+    ],
+  },
+  {
     version: "1.0.976",
     date: "15 Jun 2026",
     items: [

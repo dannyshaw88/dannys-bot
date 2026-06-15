@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -1462,6 +1462,42 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       advice: "Stagger Verify operations by at least 10 minutes per account per IP. If verifying multiple accounts on the same proxy, do them sequentially with a full human-like pause in between — never run concurrent Verify sessions on the same proxy.",
     },
     {
+      id: "session-uniqueness", Icon: Fingerprint,
+      title: "Session Uniqueness Fingerprint",
+      tagline: "Identical API call sequences across accounts on the same IP or subnet is a bot-cluster signal",
+      likelihood: (() => {
+        if (total < 2) return -1;
+        const sameSubnet = allEntries.filter(e => {
+          if (!e.proxyHost) return false;
+          const subnet = e.proxyHost.split(".").slice(0, 3).join(".");
+          return allEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
+        }).length;
+        return Math.round((sameSubnet / total) * 100);
+      })(),
+      description: "When multiple accounts execute the exact same sequence of API calls — same endpoints, same order — and those sessions originate from the same IP or /24 subnet, Instagram's classifier can fingerprint the bot framework itself rather than any individual account. A human's post-login session is never identical to another human's: different notification counts, different feed items, different stories queued. A fixed cold-start sequence produces a mathematically identical API pattern on every account. At the IP level, one device cannot simultaneously be logged into 5 accounts. At the subnet level, multiple accounts producing identical call sequences within the same session window is a high-confidence cluster signal — not just suspicious per-account behaviour but a detectable batch-processing pattern. This is derived from data patterns — it has not been isolated in a controlled test.",
+      evidence: (() => {
+        if (total < 2) return "Not enough data yet. Flag more accounts to measure subnet co-occurrence.";
+        const sameSubnet = allEntries.filter(e => {
+          if (!e.proxyHost) return false;
+          const subnet = e.proxyHost.split(".").slice(0, 3).join(".");
+          return allEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
+        }).length;
+        const pct = Math.round((sameSubnet / total) * 100);
+        const subnetCounts: Record<string, string[]> = {};
+        for (const e of allEntries) {
+          if (!e.proxyHost) continue;
+          const sn = e.proxyHost.split(".").slice(0, 3).join(".");
+          if (!subnetCounts[sn]) subnetCounts[sn] = [];
+          subnetCounts[sn].push(e.username);
+        }
+        const crowdedSubnets = Object.entries(subnetCounts).filter(([, accs]) => accs.length > 1).sort((a, b) => b[1].length - a[1].length);
+        if (crowdedSubnets.length === 0) return "No subnet co-occurrence detected — each flagged account was on a unique /24 subnet.";
+        const top = crowdedSubnets[0];
+        return `${sameSubnet} of ${total} flagged accounts (${pct}%) share a /24 subnet with at least one other flagged account. Busiest subnet: ${top[0]}.x with ${top[1].length} flagged accounts — identical cold-start sequences on these IPs are indistinguishable from a batch processor.`;
+      })(),
+      advice: "Enable 'Fire Random Endpoints at Login' in Account Settings (1–10 random endpoints per account) so each account's post-login session has a unique call fingerprint. Different accounts will browse different content and diverge from each other's session pattern within the first minute of activity, breaking the identical-sequence correlation.",
+    },
+    {
       id: "login-rate-limit", Icon: Clock,
       title: "IP Login Rate Limit (~1–2 Logins per 90 min)",
       tagline: "Each browser + API login pair counts as 2 logins against a shared per-IP quota",
@@ -1664,6 +1700,7 @@ export function BanAnalyticsPage() {
     }
     const payload = {
       exportedAt: new Date().toISOString(),
+      _analysisNote: "MAKE ASSUMPTIONS FROM DATA ALONE. Never theorise from outside third-party theories or internet knowledge — only the raw data in this file.",
       summary: {
         banned: banEntries.length,
         automated: automatedEntries.length,

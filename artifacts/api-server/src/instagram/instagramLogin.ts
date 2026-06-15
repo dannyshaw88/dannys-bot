@@ -144,6 +144,42 @@ async function logApiCall(
   } catch { /* never crash on logging failure */ }
 }
 
+// ── Random post-login endpoint pool ─────────────────────────────────────────
+// Each entry fires one non-destructive read-only API call that a real Instagram
+// Android session would plausibly make after logging in.  No IDs required.
+// Shuffled and sampled per account so every session has a unique call fingerprint.
+const RANDOM_LOGIN_ENDPOINT_POOL: Array<{ name: string; fn: (ig: IgApiClient) => Promise<void> }> = [
+  { name: "GetDirectInbox",              fn: async (ig) => { await ig.directInbox.request(); } },
+  { name: "GetTimeLineFeedLauncherSync", fn: async (ig) => { await (ig.feed.timeline() as any).request(); } },
+  { name: "LauncherSync",               fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, id: ig.state.uuid, configs: "Config,ComposeConfig,ExploreConfig,FeedbackConfig,Ig4GConfig,IgVideoConfig,LoginConfig,MonetizationConfig,StoryConfig,VideoCallConfig,LWS,TryFlatShareSheet,StickerConfig,LoomConfig,QuickCaptureConfig,ReelConfig" }) }); } },
+  { name: "GetDirectMessages",           fn: async (ig) => { await (ig.directInbox as any).getItems(); } },
+  { name: "AnalyticsLog",               fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/analytics/log/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, analytics_events: "[]" }) }); } },
+  { name: "AttributionLaunch",          fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/attribution/launch_point/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, launch_point: "cold_start" }) }); } },
+  { name: "BatchFetchWeb",              fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/batch_fetch/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, surfaces_to_fetch: JSON.stringify(["clips_tab", "discover_tab", "shop_tab"]) }) }); } },
+  { name: "ExecuteNotificationsBadge",  fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/notifications/badge/", method: "GET" }); } },
+  { name: "GetReelsTray",               fn: async (ig) => { await ig.feed.reelsTray().request(); } },
+  { name: "ViewTimelineStories",        fn: async (ig) => { await ig.feed.timeline().request(); } },
+  { name: "GetDirectInboxV2",           fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/direct_v2/inbox/", method: "GET" }); } },
+  { name: "ViewUserFeed",              fn: async (ig) => {
+      await ig.request.send({ url: `/api/v1/feed/user/${ig.state.cookieUserId}/`, method: "GET" }); } },
+  { name: "GetLikedMedia",             fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/feed/liked/", method: "GET" }); } },
+  { name: "GetSavedMedia",             fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/feed/saved/media/", method: "GET" }); } },
+  { name: "VisitUserProfile",          fn: async (ig) => {
+      await ig.request.send({ url: `/api/v1/users/${ig.state.cookieUserId}/info/`, method: "GET" }); } },
+  { name: "GetNotificationsActivity",  fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/news/inbox/", method: "GET" }); } },
+  { name: "ViewHighlights",            fn: async (ig) => {
+      await ig.request.send({ url: `/api/v1/highlights/${ig.state.cookieUserId}/highlights_tray/`, method: "GET" }); } },
+];
+
 async function buildProxyUrl(profile: Profile): Promise<{ url: string; host: string } | null> {
   // proxyId (Proxy Manager entry) takes priority over inline proxyHost/proxyPort fields.
   if (profile.proxyId) {
@@ -1434,6 +1470,45 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — discover/topical_explore: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
           } else {
             console.error(`[instagramLogin] @${profile.username} — discover/topical_explore failed (non-fatal): ${e?.message}`);
+          }
+        }
+
+        // ── Phase 2h: Random post-login endpoints (session uniqueness) ───────
+        // If the account has loginRandomEndpointsEnabled, pick N endpoints at random
+        // from the pool and fire them with the account's normal API throttle so each
+        // session's call fingerprint diverges from every other account's on the same IP.
+        const apiLimitsRaw = typeof profile.apiLimits === "string"
+          ? JSON.parse(profile.apiLimits)
+          : (profile.apiLimits as any);
+        if (apiLimitsRaw?.loginRandomEndpointsEnabled) {
+          const epMin = Math.max(1, Math.round(apiLimitsRaw.loginRandomEndpointsMin ?? 1));
+          const epMax = Math.max(epMin, Math.round(apiLimitsRaw.loginRandomEndpointsMax ?? 5));
+          const epCount = epMin + Math.floor(Math.random() * (epMax - epMin + 1));
+          // Fisher-Yates shuffle a copy of the pool, then take the first N
+          const pool = [...RANDOM_LOGIN_ENDPOINT_POOL];
+          for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+          }
+          const selected = pool.slice(0, Math.min(epCount, pool.length));
+          console.error(`[instagramLogin] @${profile.username} — firing ${selected.length} random post-login endpoint(s): ${selected.map(e => e.name).join(", ")}`);
+          for (const ep of selected) {
+            await loginApiThrottle(apiLimitsRaw);
+            try {
+              await ep.fn(ig);
+              console.error(`[instagramLogin] @${profile.username} — random:${ep.name} OK`);
+            } catch (e: any) {
+              if (isABDError(e)) {
+                console.error(`[instagramLogin] @${profile.username} — random:${ep.name} feedback_required (ABD) → automated_behaviour_detected`);
+                return abdResult();
+              }
+              if (isLoginRequiredBlock(e)) {
+                coldStartBlockedCount++;
+                console.error(`[instagramLogin] @${profile.username} — random:${ep.name} 403 login_required (ABD signal ${coldStartBlockedCount})`);
+              } else {
+                console.error(`[instagramLogin] @${profile.username} — random:${ep.name} non-fatal: ${e?.message}`);
+              }
+            }
           }
         }
 

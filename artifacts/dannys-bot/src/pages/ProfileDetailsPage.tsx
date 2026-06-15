@@ -470,7 +470,10 @@ export function ProfileDetailsPage() {
           requestsMin: 1,
           requestsMax: 1,
           everySecondsMin: 1,
-          everySecondsMax: 30000
+          everySecondsMax: 30000,
+          loginRandomEndpointsEnabled: false,
+          loginRandomEndpointsMin: 1,
+          loginRandomEndpointsMax: 5,
         },
         // Account details
         accountLabel: profile.accountLabel || "",
@@ -1352,12 +1355,15 @@ export function ProfileDetailsPage() {
                           variant="outline"
                           className="h-7 text-xs px-2 whitespace-nowrap"
                           onClick={() => {
-                            const minMs = formData.apiLimits.everySecondsMin < 1000 ? formData.apiLimits.everySecondsMin * 1000 : formData.apiLimits.everySecondsMin;
-                            const maxMs = formData.apiLimits.everySecondsMax < 1000 ? formData.apiLimits.everySecondsMax * 1000 : formData.apiLimits.everySecondsMax;
-                            const calls = Math.round(formData.apiLimits.requestsMin + Math.random() * Math.max(0, formData.apiLimits.requestsMax - formData.apiLimits.requestsMin));
-                            const windowMs = minMs + Math.random() * Math.max(0, maxMs - minMs);
-                            const perCallMs = windowMs / Math.max(1, calls);
-                            setTimingInfo(`~${(perCallMs / 1000).toFixed(1)}s/call`);
+                            const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+                            const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
+                            const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
+                            const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
+                            const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
+                            const fastestMs = minMs / maxCalls;
+                            const slowestMs = maxMs / minCalls;
+                            const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
+                            setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
                           }}
                         >
                           Test Timing
@@ -1366,6 +1372,51 @@ export function ProfileDetailsPage() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
+
+                    {/* Fire Random Endpoints at Login */}
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`loginRandomEndpointsEnabled-${profile.id}`}
+                          checked={!!(formData.apiLimits as any).loginRandomEndpointsEnabled}
+                          onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsEnabled: e.target.checked } })}
+                          className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                        />
+                        <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Fire Random Endpoints at Login</Label>
+                      </div>
+                      {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
+                        <div className="flex items-center gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={17}
+                              className="h-7 text-xs w-14"
+                              value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
+                              onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={17}
+                              className="h-7 text-xs w-14"
+                              value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
+                              onChange={e => {
+                                const v = Math.max(1, Number(e.target.value));
+                                const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
+                                updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
+                              }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground pt-5 whitespace-nowrap">endpoints after login</p>
+                        </div>
+                      )}
+                    </div>
                     </div>
 
                     {/* Proxy Settings */}
