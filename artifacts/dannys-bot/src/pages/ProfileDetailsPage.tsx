@@ -382,6 +382,7 @@ export function ProfileDetailsPage() {
       label: "API & Performance",
       options: [
         { key: "apiLimits", label: "API Limits & Control", description: "Min/max calls and interval settings" },
+        { key: "loginRandomEndpoints", label: "Fire Random Endpoints at Login", description: "Enabled state and min/max endpoint count — merged into each target's existing API limits without overwriting their rate settings" },
       ],
     },
     {
@@ -439,6 +440,33 @@ export function ProfileDetailsPage() {
       patch.syncIntervalMax = formData.syncIntervalMax;
       patch.syncUseHiker = formData.syncUseHiker;
     }
+
+    // loginRandomEndpoints is stored inside apiLimits JSON.
+    // Copy only the three loginRandom* fields, merging into each target's existing
+    // apiLimits so their rate limit settings are never overwritten.
+    if (expandedKeys.includes("loginRandomEndpoints") && !expandedKeys.includes("apiLimits")) {
+      const srcLimits = formData.apiLimits as any;
+      await Promise.all(targetIds.map(async (id) => {
+        const target = allProfiles?.find(p => p.id === id);
+        const existing = (target?.apiLimits as any) ?? {};
+        const merged = {
+          ...existing,
+          loginRandomEndpointsEnabled: srcLimits.loginRandomEndpointsEnabled ?? false,
+          loginRandomEndpointsMin: srcLimits.loginRandomEndpointsMin ?? 1,
+          loginRandomEndpointsMax: srcLimits.loginRandomEndpointsMax ?? 5,
+        };
+        await fetch(`/api/profiles/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiLimits: merged }),
+          credentials: "include",
+        });
+      }));
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast({ title: "Settings copied", description: `Applied to ${targetIds.length} account${targetIds.length === 1 ? "" : "s"}.` });
+      return;
+    }
+
     const res = await fetch("/api/profiles/bulk-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.978",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "Copy Settings: 'Fire Random Endpoints at Login' is now a standalone copy option — copies only the enabled state and min/max count, merging into each target's existing API limits without touching their rate settings." },
+    ],
+  },
+  {
     version: "1.0.977",
     date: "15 Jun 2026",
     items: [
