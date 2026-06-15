@@ -829,6 +829,56 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Survivor call patterns: live call history for valid surviving accounts ──
+  // Returns each valid account's recent API call snapshot in the same format
+  // as ban entries so the frontend can compute the same metrics and compare.
+  app.get("/api/analytics/survivor-call-patterns", async (req, res) => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      const validProfiles = allProfiles.filter(p => (p.accountStatus ?? "").toLowerCase() === "valid");
+
+      // Parse first "Added:" date from notes (same logic as frontend parseFirstAddedDate)
+      function parseFirstAdded(notes: string | null | undefined): Date | null {
+        if (!notes) return null;
+        const m = notes.match(/Added[^:]*:\s*(\d{4}-\d{2}-\d{2})/);
+        if (!m) return null;
+        const d = new Date(m[1]);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // Filter to accounts with an "Added:" date — same criterion as Survivors tab
+      const survivors = validProfiles
+        .filter(p => parseFirstAdded(p.notes) !== null)
+        .slice(0, 30); // cap at 30
+
+      const now = new Date();
+      const results = await Promise.all(survivors.map(async p => {
+        const firstDate = parseFirstAdded(p.notes);
+        const accountAgeDays = firstDate ? Math.floor((now.getTime() - firstDate.getTime()) / 86400000) : null;
+        const allCalls = await storage.getInstagramApiCallsByProfile(p.id, 2000).catch(() => []);
+        const calls = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+        const snapshot = JSON.stringify(calls.map((c: { operationName: string; date: string; source?: string | null }) => ({
+          operationName: c.operationName,
+          date: c.date,
+          source: c.source ?? null,
+        })));
+        return {
+          profileId: p.id,
+          username: p.username,
+          accountAgeDays,
+          endpointCount: calls.length,
+          endpointSnapshot: snapshot,
+          capturedAt: now.toISOString(),
+        };
+      }));
+
+      res.json(results);
+    } catch (err) {
+      req.log.error({ err }, "[survivor-patterns] error");
+      res.status(500).json({ error: "Failed to fetch survivor call patterns" });
+    }
+  });
+
   // ── Analytics entry deletion ──────────────────────────────────────────────
   app.delete("/api/analytics/ban-patterns/:id", async (req, res) => {
     try {

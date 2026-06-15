@@ -16,6 +16,7 @@ import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; proxyId?: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface ProxyRow { id: number; host: string | null; port: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface AnalyticsEntry { id: number; username: string; proxyHost: string; endpointCount: number; endpointSnapshot: string; bannedAt?: string; flaggedAt?: string; verifyCountLast24h?: number | null; accountAgeDays?: number | null; proxyAccountCount?: number | null; followCountBeforeBan?: number | null; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; }
+interface SurvivorPattern { profileId: number; username: string; accountAgeDays: number | null; endpointCount: number; endpointSnapshot: string; capturedAt: string; }
 interface EpItem { operationName: string; date: string; source?: string | null; }
 interface ProxyRisk { host: string; banCount: number; automatedCount: number; captchaCount: number; lockedCount: number; total: number; accounts: string[]; entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] }; }
 interface ConcurrencyAlert { proxyHost: string; accounts: string[]; times: string[]; category: string; }
@@ -1593,6 +1594,7 @@ export function BanAnalyticsPage() {
   const { data: lockedEntries = [], isLoading: lockedLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/locked-patterns"], queryFn: async () => (await fetch("/api/analytics/locked-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
   const { data: allProfiles = [] } = useQuery<ProfileRow[]>({ queryKey: ["/api/profiles"], queryFn: async () => (await fetch("/api/profiles", { credentials: "include" })).json(), refetchInterval: 60000 });
   const { data: allProxies = [] } = useQuery<ProxyRow[]>({ queryKey: ["/api/proxies"], queryFn: async () => (await fetch("/api/proxies", { credentials: "include" })).json(), refetchInterval: 60000 });
+  const { data: survivorPatterns = [], isLoading: survivorPatternsLoading } = useQuery<SurvivorPattern[]>({ queryKey: ["/api/analytics/survivor-call-patterns"], queryFn: async () => (await fetch("/api/analytics/survivor-call-patterns", { credentials: "include" })).json(), enabled: activeTab === "survivors", refetchInterval: 60000, staleTime: 30000 });
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
   const profileMap   = useMemo(() => new Map<string, number>(allProfiles.map(p => [p.username, p.id])), [allProfiles]);
@@ -1736,55 +1738,162 @@ export function BanAnalyticsPage() {
               ) : activeTab === "survivors" ? (
                 survivingAccounts.length === 0 ? (
                   <div className="border border-border rounded-lg p-10 text-center"><Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" /><p className="text-sm font-medium">No surviving accounts tracked yet</p><p className="text-xs text-muted-foreground mt-1">Valid accounts with an "Added:" timestamp in Notes will appear here.</p></div>
-                ) : (
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                      <Award className="w-4 h-4 text-green-500" />
-                      <span className="text-sm font-semibold">Top Surviving Accounts</span>
-                      <span className="text-xs text-muted-foreground ml-auto">Re-added accounts show timer since most recent add</span>
-                    </div>
-                    <div className="divide-y divide-border">
-                      {survivingAccounts.map((p, i) => {
-                        const reAdded = p.allDates.length > 1;
-                        const ti = trustMap.get(p.id);
-                        const rel = computeReliability(p.notes);
-                        return (
-                          <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold">#{i + 1}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <UsernameLink username={p.username} profileMap={profileMap} />
-                                {ti && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${ti.rank <= 4 ? "bg-red-50 border-red-200 text-red-600" : ti.rank <= 8 ? "bg-orange-50 border-orange-200 text-orange-600" : ti.rank <= 12 ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-green-50 border-green-200 text-green-600"}`}>{ti.label} #{ti.rank}</span>}
-                                {reAdded && <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 border border-blue-300 dark:border-blue-700 font-semibold shrink-0"><RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×{rel.reAddCount >= 2 ? " ⚠" : ""}</span>}
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
-                                <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
-                                {reAdded && <span>Latest: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>}
-                              </div>
-                            </div>
-                            <div className="shrink-0 text-right"><p className="text-base font-bold text-green-600 dark:text-green-400">{formatDuration(p.runMs!)}</p><p className="text-[10px] text-muted-foreground">since last add</p></div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {/* TrustScore distribution for survivors */}
-                    {survivingAccounts.some(a => trustMap.has((a as any).id)) && (() => {
-                      const ranks = survivingAccounts.map(a => trustMap.get((a as any).id)?.rank ?? -1).filter(r => r >= 0);
-                      const tiers = [
-                        { label: "Rank 1–4", min: 1, max: 4, color: "bg-red-400" },
-                        { label: "Rank 5–8", min: 5, max: 8, color: "bg-orange-400" },
-                        { label: "Rank 9–12", min: 9, max: 12, color: "bg-blue-400" },
-                        { label: "Rank 13+", min: 13, max: 99, color: "bg-green-400" },
-                      ].map(t => ({ ...t, count: ranks.filter(r => r >= t.min && r <= t.max).length }));
-                      return (
-                        <div className="border-t border-border px-4 py-3">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1"><Scale className="w-3 h-3" /> Survivor TrustScore Distribution — median rank {median(ranks).toFixed(1)}</p>
-                          <MiniHistogram buckets={tiers} note="Higher rank = more trust leeway from Instagram. These are your safe operating levels." />
+                ) : (() => {
+                  // ── Compute comparison metrics ──────────────────────────────
+                  const allBanAll = [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries];
+                  const banMetrics = allBanAll.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt));
+                  const survMetrics = survivorPatterns.map(p => computeMetrics(filterHiker(parseEps(p.endpointSnapshot)), p.capturedAt));
+
+                  const bWarmup = banMetrics.map(m => m.preActionWarmup).filter(v => v >= 0);
+                  const sWarmup = survMetrics.map(m => m.preActionWarmup).filter(v => v >= 0);
+                  const bRatio  = banMetrics.filter(m => m.actionCount > 0).map(m => m.sessionPerAction);
+                  const sRatio  = survMetrics.filter(m => m.actionCount > 0).map(m => m.sessionPerAction);
+                  const bFollow = banMetrics.map(m => m.cats.follow ?? 0);
+                  const sFollow = survMetrics.map(m => m.cats.follow ?? 0);
+                  const bCoV    = banMetrics.map(m => m.timingCoV).filter(v => v >= 0);
+                  const sCoV    = survMetrics.map(m => m.timingCoV).filter(v => v >= 0);
+                  const bCalls  = banMetrics.map(m => m.uniqueEndpoints);
+                  const sCalls  = survivorPatterns.map(p => p.endpointCount);
+
+                  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+                  const fmt = (v: number | null, dp = 1) => v === null ? "—" : v.toFixed(dp);
+
+                  const hasComparison = banMetrics.length > 0 && survMetrics.length > 0;
+                  const hasPatterns   = survivorPatterns.length > 0;
+
+                  // Pattern map for per-account lookup
+                  const patternByUsername = new Map(survivorPatterns.map(p => [p.username, p]));
+
+                  function CompareRow({ label, banVal, survVal, higherIsBetter }: { label: string; banVal: number | null; survVal: number | null; higherIsBetter: boolean }) {
+                    const bv = banVal ?? 0; const sv = survVal ?? 0;
+                    const survWins = higherIsBetter ? sv > bv * 1.1 : sv < bv * 0.9;
+                    const banWins  = higherIsBetter ? bv > sv * 1.1 : bv < sv * 0.9;
+                    return (
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className="text-muted-foreground w-36 shrink-0">{label}</span>
+                        <span className={`font-mono font-bold w-16 text-right ${banWins ? "text-red-500" : ""}`}>{fmt(banVal, label.includes("ratio") ? 2 : 1)}</span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden relative">
+                          {banVal !== null && survVal !== null && (() => {
+                            const maxV = Math.max(bv, sv, 0.001);
+                            return <>
+                              <div className="absolute top-0 left-0 h-full bg-red-400/60 rounded-full" style={{ width: `${Math.min(bv/maxV*100, 100)}%` }} />
+                              <div className="absolute top-0 left-0 h-full bg-green-400/80 rounded-full" style={{ width: `${Math.min(sv/maxV*100, 100)}%`, opacity: 0.8 }} />
+                            </>;
+                          })()}
                         </div>
-                      );
-                    })()}
-                  </div>
-                )
+                        <span className={`font-mono font-bold w-16 text-left ${survWins ? "text-green-600" : ""}`}>{fmt(survVal, label.includes("ratio") ? 2 : 1)}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {/* ── Comparison Panel ── */}
+                      {hasComparison && (
+                        <div className="border border-border rounded-lg overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-cyan-500" />
+                            <span className="text-sm font-semibold">Survivors vs Flagged — Call Pattern Comparison</span>
+                            <span className="text-xs text-muted-foreground ml-auto">{survMetrics.length} survivors · {banMetrics.length} flagged events</span>
+                          </div>
+                          <div className="px-4 py-3 space-y-2.5">
+                            <div className="flex items-center text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1 gap-2">
+                              <span className="w-36 shrink-0"></span>
+                              <span className="w-16 text-right text-red-500">FLAGGED avg</span>
+                              <div className="flex-1"></div>
+                              <span className="w-16 text-left text-green-600">SURVIVOR avg</span>
+                            </div>
+                            <CompareRow label="Warmup calls" banVal={avg(bWarmup)} survVal={avg(sWarmup)} higherIsBetter={true} />
+                            <CompareRow label="Session/action ratio" banVal={avg(bRatio)} survVal={avg(sRatio)} higherIsBetter={true} />
+                            <CompareRow label="Follow count" banVal={avg(bFollow)} survVal={avg(sFollow)} higherIsBetter={false} />
+                            <CompareRow label="Timing CoV" banVal={avg(bCoV)} survVal={avg(sCoV)} higherIsBetter={true} />
+                            <CompareRow label="Total calls" banVal={avg(bCalls)} survVal={avg(sCalls)} higherIsBetter={false} />
+                            <p className="text-[10px] text-muted-foreground pt-1">Green = survivor advantage. Red = flagged accounts had more. Call patterns are read live from the API call log — they reflect all recent activity, not just at the time of flagging.</p>
+                          </div>
+                        </div>
+                      )}
+                      {!hasComparison && hasPatterns && (
+                        <div className="border border-border rounded-lg px-4 py-3 text-[11px] text-muted-foreground">
+                          No flagged accounts yet — comparison will appear once accounts have been flagged.
+                        </div>
+                      )}
+                      {/* ── Survivor list with call metrics ── */}
+                      <div className="border border-border rounded-lg overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                          <Award className="w-4 h-4 text-green-500" />
+                          <span className="text-sm font-semibold">Surviving Accounts — Live Call Patterns</span>
+                          <span className="text-xs text-muted-foreground ml-auto">Re-added accounts show timer since most recent add{survivorPatternsLoading ? " · loading patterns…" : ""}</span>
+                        </div>
+                        <div className="divide-y divide-border">
+                          {survivingAccounts.map((p, i) => {
+                            const reAdded = p.allDates.length > 1;
+                            const ti = trustMap.get(p.id);
+                            const rel = computeReliability(p.notes);
+                            const sp = patternByUsername.get(p.username);
+                            const sm = sp ? computeMetrics(filterHiker(parseEps(sp.endpointSnapshot)), sp.capturedAt) : null;
+                            const spCovLabel = sm && sm.timingCoV >= 0 ? sm.timingCoV < 0.3 ? "ROBOTIC" : sm.timingCoV < 0.5 ? "LOW" : sm.timingCoV < 1.0 ? "MODERATE" : "HUMAN" : null;
+                            const spCovColor = sm && sm.timingCoV >= 0 ? sm.timingCoV < 0.3 ? "text-red-500" : sm.timingCoV < 0.5 ? "text-amber-500" : "text-green-600" : "text-muted-foreground";
+                            const top3 = sp ? topEps(filterHiker(parseEps(sp.endpointSnapshot)), 3) : [];
+                            return (
+                              <div key={p.id} className="px-4 py-3">
+                                <div className="flex items-start gap-3">
+                                  <span className="text-xs text-muted-foreground w-6 text-right shrink-0 font-bold mt-0.5">#{i + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <UsernameLink username={p.username} profileMap={profileMap} />
+                                      {ti && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${ti.rank <= 4 ? "bg-red-50 border-red-200 text-red-600" : ti.rank <= 8 ? "bg-orange-50 border-orange-200 text-orange-600" : ti.rank <= 12 ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-green-50 border-green-200 text-green-600"}`}>{ti.label} #{ti.rank}</span>}
+                                      {reAdded && <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 border border-blue-300 dark:border-blue-700 font-semibold shrink-0"><RefreshCw className="w-2.5 h-2.5" /> re-added {p.allDates.length - 1}×{rel.reAddCount >= 2 ? " ⚠" : ""}</span>}
+                                      {sp && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">{sp.endpointCount} calls</span>}
+                                      {sp && sp.accountAgeDays !== null && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">age {sp.accountAgeDays}d</span>}
+                                    </div>
+                                    <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
+                                      <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                                      {reAdded && <span>Latest: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>}
+                                    </div>
+                                    {sm && (
+                                      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Warmup calls</span><span className={`font-mono font-semibold ${sm.preActionWarmup >= 5 ? "text-green-600" : sm.preActionWarmup > 0 ? "text-amber-500" : "text-red-500"}`}>{sm.preActionWarmup}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Session/action</span><span className={`font-mono font-semibold ${sm.actionCount > 0 ? sm.sessionPerAction >= 3 ? "text-green-600" : sm.sessionPerAction >= 1 ? "text-amber-500" : "text-red-500" : "text-muted-foreground"}`}>{sm.actionCount > 0 ? sm.sessionPerAction.toFixed(2) : "—"}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Follow ops</span><span className={`font-mono font-semibold ${(sm.cats.follow ?? 0) === 0 ? "text-green-600" : (sm.cats.follow ?? 0) <= 3 ? "text-amber-500" : "text-red-500"}`}>{sm.cats.follow ?? 0}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Timing CoV</span><span className={`font-mono font-semibold ${spCovColor}`}>{sm.timingCoV >= 0 ? `${sm.timingCoV.toFixed(2)} [${spCovLabel}]` : "—"}</span></div>
+                                        {sm.actionVelocityPerHour > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Action velocity</span><span className={`font-mono font-semibold ${sm.actionVelocityPerHour <= 20 ? "text-green-600" : sm.actionVelocityPerHour <= 40 ? "text-amber-500" : "text-red-500"}`}>{sm.actionVelocityPerHour.toFixed(1)}/hr</span></div>}
+                                        {sm.burstCount > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Bursts (≤60s)</span><span className={`font-mono font-semibold ${sm.burstCount === 0 ? "text-green-600" : sm.burstCount <= 2 ? "text-amber-500" : "text-red-500"}`}>{sm.burstCount}</span></div>}
+                                      </div>
+                                    )}
+                                    {top3.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1.5">
+                                        {top3.map(ep => <span key={ep.name} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-mono bg-muted text-muted-foreground">{ep.label ?? ep.name} <span className="opacity-60">×{ep.count}</span></span>)}
+                                      </div>
+                                    )}
+                                    {!sp && survivorPatternsLoading && <p className="text-[10px] text-muted-foreground mt-1 italic">loading call patterns…</p>}
+                                    {!sp && !survivorPatternsLoading && survivorPatterns.length > 0 && <p className="text-[10px] text-muted-foreground mt-1 italic">no recent API calls in log</p>}
+                                  </div>
+                                  <div className="shrink-0 text-right ml-2"><p className="text-base font-bold text-green-600 dark:text-green-400">{formatDuration(p.runMs!)}</p><p className="text-[10px] text-muted-foreground">since last add</p></div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* TrustScore distribution for survivors */}
+                        {survivingAccounts.some(a => trustMap.has((a as any).id)) && (() => {
+                          const ranks = survivingAccounts.map(a => trustMap.get((a as any).id)?.rank ?? -1).filter(r => r >= 0);
+                          const tiers = [
+                            { label: "Rank 1–4", min: 1, max: 4, color: "bg-red-400" },
+                            { label: "Rank 5–8", min: 5, max: 8, color: "bg-orange-400" },
+                            { label: "Rank 9–12", min: 9, max: 12, color: "bg-blue-400" },
+                            { label: "Rank 13+", min: 13, max: 99, color: "bg-green-400" },
+                          ].map(t => ({ ...t, count: ranks.filter(r => r >= t.min && r <= t.max).length }));
+                          return (
+                            <div className="border-t border-border px-4 py-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1"><Scale className="w-3 h-3" /> Survivor TrustScore Distribution — median rank {median(ranks).toFixed(1)}</p>
+                              <MiniHistogram buckets={tiers} note="Higher rank = more trust leeway from Instagram. These are your safe operating levels." />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors" | "theories">]} tabKey={activeTab as Exclude<Tab, "survivors" | "theories">} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
               )}

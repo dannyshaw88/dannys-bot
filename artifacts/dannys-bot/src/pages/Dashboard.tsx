@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.969",
+    date: "15 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats Survivors tab: now shows live call patterns for every surviving account — warmup count, session-to-action ratio, follow count, timing CoV, action velocity, and top 3 endpoints pulled directly from the API call log." },
+      { category: "New", text: "Evasion Stats Survivors tab: comparison panel shows the average warmup calls, session ratio, follow count, timing CoV, and total calls for surviving accounts side by side against the average for flagged accounts, so you can see exactly what the survivors are doing differently." },
+    ],
+  },
+  {
     version: "1.0.968",
     date: "15 Jun 2026",
     items: [
