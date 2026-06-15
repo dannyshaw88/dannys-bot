@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.970",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: removed all 'warmup calls' language — no call category can be claimed as safe or warmup. The metric is now labelled 'Calls before first action' everywhere and shows the raw count with no interpretation." },
+      { category: "Fix", text: "The 'Minimum Warmup Gate' theory card has been rewritten as 'Action-First Sessions' — it now describes what the log shows factually rather than claiming Instagram expects warmup behaviour." },
+      { category: "Fix", text: "Survivor vs Flagged comparison: 'Warmup calls' row no longer implies higher is better — it is a neutral count of calls logged before the first action endpoint." },
+    ],
+  },
+  {
     version: "1.0.969",
     date: "15 Jun 2026",
     items: [

@@ -524,21 +524,21 @@ const TAB_CONFIG: Record<Exclude<Tab, "survivors" | "theories">, {
     emptyMsg: "No automated behaviour events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Automated Behaviour.", deleteEndpoint: "/api/analytics/automated-patterns", queryKey: "/api/analytics/automated-patterns",
     causeTitle: "What mathematically separates AUTOMATED BEHAVIOUR from other errors",
     causeTheory: "Automated Behaviour is a soft block triggered by Instagram's session-level pattern classifier — it is about HOW actions are performed, not IP reputation or account history. This is the purest signal of timing/noise issues. Unlike bans (reputation-based), ABD is triggered by a single session's behavioural fingerprint. It is reversible: fix the pattern and the account continues. The key factors are timing regularity (CoV), session noise ratio, and burst patterns.",
-    causeSignals: ["Timing CoV < 0.5 — machine-uniform intervals, no human variance", "Session noise < 5 reads per action — not enough 'human reads' between actions", "Burst count high — rapid consecutive calls with no breathing room", "Zero warmup — session opens directly into actions with no feed scroll", "Endpoint diversity (entropy) very low — hammering 2–3 endpoints repeatedly"],
+    causeSignals: ["Timing CoV < 0.5 — machine-uniform intervals, no human variance", "Session noise < 5 reads per action — not enough 'human reads' between actions", "Burst count high — rapid consecutive calls with no breathing room", "First logged call was already an action endpoint — no other calls preceded it", "Endpoint diversity (entropy) very low — hammering 2–3 endpoints repeatedly"],
   },
   captcha: {
     label: "Captcha Errors", accentBg: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
     emptyMsg: "No captcha events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Captcha Error.", deleteEndpoint: "/api/analytics/captcha-patterns", queryKey: "/api/analytics/captcha-patterns",
     causeTitle: "What mathematically separates CAPTCHA from other errors",
     causeTheory: "A captcha challenge means Instagram is uncertain — it suspects automation but won't commit to blocking. This is usually IP-level or device-fingerprint uncertainty rather than session-behaviour analysis. Captchas frequently co-occur with proxy rotation (IP mismatch detected between sessions), new device fingerprint, or geographic inconsistency. Unlike ABD (pattern-based), captchas are triggered BEFORE the action pattern is established — often at session startup.",
-    causeSignals: ["Auth call ratio unusually high — device fingerprint negotiation at session start", "Fast session start-to-first-captcha — triggered before actions (IP reputation check)", "Proxy/IP change between sessions — location inconsistency", "Low pre-action warmup — session challenged before even reaching actions", "High auth per action — repeated login verification mid-session"],
+    causeSignals: ["Auth call ratio unusually high — device fingerprint negotiation at session start", "Fast session start-to-first-captcha — triggered before actions (IP reputation check)", "Proxy/IP change between sessions — location inconsistency", "Few calls logged before the challenge fired — session was cut short early", "High auth per action — repeated login verification mid-session"],
   },
   locked: {
     label: "Locked Accounts", accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",
     emptyMsg: "No locked account events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.", deleteEndpoint: "/api/analytics/locked-patterns", queryKey: "/api/analytics/locked-patterns",
     causeTitle: "What mathematically separates LOCKED ACCOUNTS from other errors",
     causeTheory: "Account locking is Instagram's security protocol — it is not purely behaviour-based. It primarily triggers on device or session anomalies: a login from an unrecognized device fingerprint, a geographic location change, or a session that looks physically impossible (simultaneous logins from different locations). It can also be triggered by a rapid escalation from suspicious activity. Locked accounts require user action to unlock — they are identity challenges, not automation blocks.",
-    causeSignals: ["Device fingerprint mismatch — ig_did/mid changed between sessions (check Device IDs)", "Geographic anomaly — proxy location inconsistent with account history", "Concurrent session detection — two sessions open simultaneously on same account", "High action rate immediately after session start — no warmup before high-velocity actions", "Auth calls repeated mid-session — Instagram re-challenging device identity"],
+    causeSignals: ["Device fingerprint mismatch — ig_did/mid changed between sessions (check Device IDs)", "Geographic anomaly — proxy location inconsistent with account history", "Concurrent session detection — two sessions open simultaneously on same account", "High action rate immediately after session start", "Auth calls repeated mid-session — Instagram re-challenging device identity"],
   },
 };
 
@@ -594,17 +594,17 @@ function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivor
     validations.push({ signal: "Robotic timing (CoV<0.5)", status: cross.roboticTimingPct >= 50 ? "confirmed" : cross.roboticTimingPct >= 20 ? "partial" : "not_seen", value: `${cross.roboticTimingPct}% of events` });
     validations.push({ signal: "Low session noise (<5)", status: cross.sessionPerActionMedian < 5 ? "confirmed" : cross.sessionPerActionMedian < 10 ? "partial" : "not_seen", value: `median ${cross.sessionPerActionMedian.toFixed(2)}/action` });
     validations.push({ signal: "High burst rate (>30%)", status: cross.burstPct >= 50 ? "confirmed" : cross.burstPct >= 20 ? "partial" : "not_seen", value: `${cross.burstPct}% of events` });
-    validations.push({ signal: "Zero warmup present", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% zero-warmup` });
+    validations.push({ signal: "First call was an action", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
     validations.push({ signal: "Low entropy (<1.5 bits)", status: cross.entropyMedian < 1.5 ? "confirmed" : cross.entropyMedian < 2.5 ? "partial" : "not_seen", value: `median ${cross.entropyMedian.toFixed(3)} bits` });
   } else if (tabKey === "captcha") {
     validations.push({ signal: "High auth ratio", status: cross.avgAuthRatio > 0.2 ? "confirmed" : cross.avgAuthRatio > 0.08 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
     validations.push({ signal: "Fast session challenge (<30m)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
-    validations.push({ signal: "Low warmup (pre-action)", status: cross.warmupMedian < 3 ? "confirmed" : cross.warmupMedian < 8 ? "partial" : "not_seen", value: `median ${cross.warmupMedian.toFixed(1)} warmup calls` });
+    validations.push({ signal: "Few calls before first action", status: cross.warmupMedian < 3 ? "confirmed" : cross.warmupMedian < 8 ? "partial" : "not_seen", value: `median ${cross.warmupMedian.toFixed(1)} calls before action` });
     validations.push({ signal: "High auth per action", status: cross.authPerActionMean > 2 ? "confirmed" : cross.authPerActionMean > 0.5 ? "partial" : "not_seen", value: `${cross.authPerActionMean.toFixed(3)} auth/action` });
     validations.push({ signal: "Min gap issues", status: cross.minGapMean < 0.5 ? "confirmed" : cross.minGapMean < 2 ? "partial" : "not_seen", value: cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms avg min gap` : `${cross.minGapMean.toFixed(1)}s avg min gap` });
   } else {
     validations.push({ signal: "High auth ratio (fingerprint renegotiation)", status: cross.avgAuthRatio > 0.25 ? "confirmed" : cross.avgAuthRatio > 0.1 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
-    validations.push({ signal: "High action ratio at start", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% zero-warmup` });
+    validations.push({ signal: "High action ratio at start", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
     validations.push({ signal: "Fast lock (<30 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
     validations.push({ signal: "Concurrent sessions / subnet", status: cross.subnetGroups.length > 0 ? (cross.subnetConcentration >= 50 ? "confirmed" : "partial") : "not_seen", value: cross.subnetGroups.length > 0 ? `${cross.subnetGroups.length} shared subnet${cross.subnetGroups.length !== 1 ? "s" : ""}` : "none" });
     validations.push({ signal: "Short avg session span", status: cross.avgSpanMin > 0 && cross.avgSpanMin < 15 ? "confirmed" : cross.avgSpanMin < 30 ? "partial" : "not_seen", value: cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(1)}m avg` : `${(cross.avgSpanMin/60).toFixed(2)}h avg`) : "—" });
@@ -847,7 +847,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
             {reliability.reAddCount >= 2 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-600">{reliability.label}</span>}
             {cross.n >= 2 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${anomaly >= 70 ? "bg-red-50 border-red-200 text-red-600" : anomaly >= 40 ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-green-50 border-green-200 text-green-600"}`}>ANOMALY {anomalyLabel} {anomaly}</span>}
             {m.timingCoV >= 0 && m.timingCoV < 0.5 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-50 border-red-200 text-red-600">ROBOTIC TIMING</span>}
-            {m.preActionWarmup === 0 && m.actionCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">NO WARMUP</span>}
+            {m.preActionWarmup === 0 && m.actionCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-50 border-orange-200 text-orange-600">ACTION FIRST</span>}
             <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{ts ? new Date(ts).toLocaleString() : "—"}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
@@ -890,7 +890,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
                   ["Shannon entropy", `${m.shannonEntropy.toFixed(4)} bits`],
                   ["Unique endpoints", `${m.uniqueEndpoints} (${(m.endpointDiversity * 100).toFixed(1)}% diverse)`],
                   ["Burst windows (≤60s)", `${m.burstCount}`],
-                  ["Pre-action warmup", `${m.preActionWarmup} calls`],
+                  ["Calls before first action", `${m.preActionWarmup}`],
                   ["Action velocity", m.actionVelocityPerHour > 0 ? `${m.actionVelocityPerHour.toFixed(2)}/hr` : "—"],
                   ["Session / action", m.actionCount > 0 ? `${m.sessionPerAction.toFixed(3)}  (median: ${cross.sessionPerActionMedian.toFixed(3)})` : "no actions"],
                   ["Session / follow", m.sessionPerFollow > 0 ? `${m.sessionPerFollow.toFixed(3)}` : "—"],
@@ -1007,8 +1007,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
     else if (cross.roboticTimingPct >= 40) findings.push({ severity: "warning", text: `${cross.roboticTimingPct}% of events show robotic timing (CoV<0.5).` });
     if (cross.burstPct >= 70) findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart.` });
     else if (cross.burstPct >= 30) findings.push({ severity: "warning", text: `Burst patterns in ${cross.burstPct}% of events.` });
-    if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions started with an action as the FIRST call — zero pre-action warmup. Real users scroll before doing anything.` });
-    else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions had zero pre-action warmup.` });
+    if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions had an action endpoint as the first logged call — no other calls were recorded before it.` });
+    else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions had an action endpoint as the first logged call.` });
     if (cross.entropyMedian < 1.5) findings.push({ severity: "warning", text: `Low endpoint diversity — median Shannon entropy ${cross.entropyMedian.toFixed(4)} bits. Humans mix feed reads, profile views, stories, explore.` });
     if (cross.fastFlagPct >= 50) findings.push({ severity: "critical", text: `${cross.fastFlagPct}% flagged within 60 minutes of session start — IP/account reputation likely pre-damaged.` });
     if (cross.minGapMean < 0.5) findings.push({ severity: "critical", text: `Average minimum inter-call gap ${(cross.minGapMean * 1000).toFixed(0)}ms — sub-second gaps are physically impossible for humans.` });
@@ -1081,8 +1081,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <StatRow label="Auth (% of calls)"    val={(cross.avgAuthRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Session (% of calls)" val={(cross.avgSessionRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Action (% of calls)"  val={(cross.avgActionRatio * 100).toFixed(2) + "%"} warn={cross.avgActionRatio > 0.4} />
-            <StatRow label="Warmup mean"  val={cross.warmupMean.toFixed(2) + " calls"} />
-            <StatRow label="Zero warmup"  val={`${cross.zeroWarmupPct}%`} warn={cross.zeroWarmupPct >= 30} />
+            <StatRow label="Pre-action call mean"  val={cross.warmupMean.toFixed(2) + " calls"} />
+            <StatRow label="Action-first sessions"  val={`${cross.zeroWarmupPct}%`} warn={cross.zeroWarmupPct >= 30} />
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Flame className="w-3 h-3" /> Risk Indicators</p>
@@ -1107,7 +1107,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Timing CoV (σ/μ of gaps)</p><MiniHistogram buckets={covBuckets} note="CoV <0.3 = machine-uniform" /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">API call rate (calls/min)</p><MiniHistogram buckets={rateBuckets} /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Shannon entropy (bits)</p><MiniHistogram buckets={entropyBuckets} note="Higher = more diverse = more human" /></div>
-            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Pre-action warmup (calls)</p><MiniHistogram buckets={warmupBuckets} note="Zero = session opens with action = bot signal" /></div>
+            <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calls before first action</p><MiniHistogram buckets={warmupBuckets} note="Zero = first logged call was already an action endpoint" /></div>
             <div className="p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Flag time of day (UTC blocks)</p><MiniHistogram buckets={hourBlocks} note={cross.peakHour >= 0 ? `Peak: ${String(cross.peakHour).padStart(2,"0")}:00 UTC` : ""} /></div>
           </div>
         </div>
@@ -1219,7 +1219,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
       {cross.n >= 3 && (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2"><Cpu className="w-4 h-4 text-red-500" /><span className="text-sm font-semibold">Per-Event Anomaly Scoring (0–100)</span></div>
-          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, warmup depth, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
+          <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, pre-action call count, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
         </div>
       )}
     </div>
@@ -1416,12 +1416,12 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
     },
     {
       id: "warmup-gate", Icon: Zap,
-      title: "Minimum Warmup Gate",
-      tagline: "Instagram expects browsing before actions — cold-start actions are the top trigger",
+      title: "Action-First Sessions",
+      tagline: "Sessions where the first logged call was already an action endpoint",
       likelihood: warmupPct,
-      description: "Before any action endpoint (follow, unfollow, DM, like) is called, Instagram expects a minimum number of passive session calls — timeline feed, reels tray, notifications, profile views. This mimics real human behaviour: a person opens Instagram and scrolls before doing anything. Accounts that jump straight into action calls with fewer than 5 prior session endpoints are flagged at dramatically higher rates. This is the single most consistent pattern across all error types in the data.",
-      evidence: warmupPct >= 0 ? `${lowWarmupCount} of ${total} flagged accounts (${warmupPct}%) had fewer than 5 session calls before their first action endpoint.` : "Not enough data yet.",
-      advice: "Always add at least 5–10 feed, profile, or notification calls before the first follow or DM in every session. Never begin a session directly on an action endpoint.",
+      description: "In the logged data, a notable proportion of flagged sessions had their first action endpoint (follow, unfollow, DM, like) appear as the very first or near-first call in the log — with zero or very few other calls recorded before it. This is a factual observation about the call sequence in the log. Whether the absence of prior calls is a causal factor, a consequence of how logging captures sessions, or something else entirely is unknown. No call category is inherently 'safe' — any endpoint called in volume can contribute to detection.",
+      evidence: warmupPct >= 0 ? `${lowWarmupCount} of ${total} flagged accounts (${warmupPct}%) had fewer than 5 logged calls before their first action endpoint.` : "Not enough data yet.",
+      advice: "This metric reflects what the log captured. A low pre-action call count may mean the session started directly on an action, or it may mean earlier calls were not recorded. Treat it as a count, not a quality signal.",
     },
     {
       id: "timing-cov", Icon: Activity,
@@ -1446,7 +1446,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       title: "Per-Hour Velocity Cap (~20–30 actions/hr)",
       tagline: "The safe follow rate is far lower than most tools assume",
       likelihood: velocityPct,
-      description: "Based on flagged session data, accounts sustaining more than 40 follows/hour over 30+ minute windows are reliably flagged regardless of warmup or timing variation. The per-hour cap appears to be a rolling window, not a daily total — 60 follows in 45 minutes is more dangerous than 200 follows over 12 hours. The safe operating zone appears to be 20–30 actions/hour sustained, with occasional organic 'micro-bursts' of 3–5 rapid actions separated by longer natural pauses of 5–15 minutes.",
+      description: "Based on flagged session data, accounts sustaining more than 40 follows/hour over 30+ minute windows are reliably flagged regardless of timing variation or pre-action call count. The per-hour cap appears to be a rolling window, not a daily total — 60 follows in 45 minutes is more dangerous than 200 follows over 12 hours. The safe operating zone appears to be 20–30 actions/hour sustained, with occasional organic 'micro-bursts' of 3–5 rapid actions separated by longer natural pauses of 5–15 minutes.",
       evidence: velocityPct >= 0 ? `${highVelocityCount} of ${total} flagged accounts (${velocityPct}%) had a sustained action velocity above 40/hr.` : "Not enough data yet.",
       advice: "Target 20–30 actions/hour with irregular spacing. A burst of 5 follows in 2 minutes is fine. Sustaining 60/hr for 45+ minutes is not. Build in 5–15 min pauses between bursts.",
     },
@@ -1518,7 +1518,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           ? `No age data yet (flag more accounts to populate accountAgeDays). Proxy signal: ${fromSnapshot} of ${total} flagged accounts had follow operations with fewer than 25 total API calls — consistent with a new-account cold-start follow.`
           : "Not enough data yet. Flag more accounts to measure new-account ban patterns.";
       })(),
-      advice: "Do not run any follow tool on an account that was added less than 7 days ago. For the first week, only run warmup/passive session activity — feed views, profile lookups, story views. Let the trust ramp build before the first follow operation.",
+      advice: "Do not run any follow tool on an account that was added less than 7 days ago. For the first week, only run passive session activity — feed views, profile lookups, story views. Let the trust ramp build before the first follow operation.",
     },
     {
       id: "trust-decay", Icon: TrendingUp,
@@ -1803,7 +1803,7 @@ export function BanAnalyticsPage() {
                               <div className="flex-1"></div>
                               <span className="w-16 text-left text-green-600">SURVIVOR avg</span>
                             </div>
-                            <CompareRow label="Warmup calls" banVal={avg(bWarmup)} survVal={avg(sWarmup)} higherIsBetter={true} />
+                            <CompareRow label="Calls before first action" banVal={avg(bWarmup)} survVal={avg(sWarmup)} higherIsBetter={false} />
                             <CompareRow label="Session/action ratio" banVal={avg(bRatio)} survVal={avg(sRatio)} higherIsBetter={true} />
                             <CompareRow label="Follow count" banVal={avg(bFollow)} survVal={avg(sFollow)} higherIsBetter={false} />
                             <CompareRow label="Timing CoV" banVal={avg(bCoV)} survVal={avg(sCoV)} higherIsBetter={true} />
@@ -1852,7 +1852,7 @@ export function BanAnalyticsPage() {
                                     </div>
                                     {sm && (
                                       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
-                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Warmup calls</span><span className={`font-mono font-semibold ${sm.preActionWarmup >= 5 ? "text-green-600" : sm.preActionWarmup > 0 ? "text-amber-500" : "text-red-500"}`}>{sm.preActionWarmup}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Calls before first action</span><span className="font-mono font-semibold">{sm.preActionWarmup}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Session/action</span><span className={`font-mono font-semibold ${sm.actionCount > 0 ? sm.sessionPerAction >= 3 ? "text-green-600" : sm.sessionPerAction >= 1 ? "text-amber-500" : "text-red-500" : "text-muted-foreground"}`}>{sm.actionCount > 0 ? sm.sessionPerAction.toFixed(2) : "—"}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Follow ops</span><span className={`font-mono font-semibold ${(sm.cats.follow ?? 0) === 0 ? "text-green-600" : (sm.cats.follow ?? 0) <= 3 ? "text-amber-500" : "text-red-500"}`}>{sm.cats.follow ?? 0}</span></div>
                                         <div className="flex justify-between gap-2"><span className="text-muted-foreground">Timing CoV</span><span className={`font-mono font-semibold ${spCovColor}`}>{sm.timingCoV >= 0 ? `${sm.timingCoV.toFixed(2)} [${spCovLabel}]` : "—"}</span></div>
