@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.972",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: typing just an IP address in the proxy field (without :port) no longer resets the field to 0.0.0.0:8080 when clicking Ping — the existing port is kept automatically." },
+    ],
+  },
+  {
     version: "1.0.971",
     date: "15 Jun 2026",
     items: [

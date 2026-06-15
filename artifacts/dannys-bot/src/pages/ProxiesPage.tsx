@@ -125,10 +125,17 @@ function ProxyRow({
   const saveField = useCallback((field: "hostPort" | "username" | "password" | "type") => {
     let data: Record<string, string | number | null> = {};
     if (field === "hostPort") {
-      const parts = hostPort.split(":");
-      const host = parts.slice(0, -1).join(":").trim();
-      const port = parseInt(parts[parts.length - 1], 10);
-      if (!host || isNaN(port)) {
+      let host: string;
+      let port: number;
+      if (!hostPort.includes(":")) {
+        host = hostPort.trim();
+        port = proxy.port;
+      } else {
+        const parts = hostPort.split(":");
+        host = parts.slice(0, -1).join(":").trim();
+        port = parseInt(parts[parts.length - 1], 10);
+      }
+      if (!host || isNaN(port) || port < 1 || port > 65535) {
         toast({ title: "Invalid format", description: "Use host:port format", variant: "destructive" });
         setHostPort(`${proxy.host}:${proxy.port}`);
         return;
