@@ -1083,7 +1083,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <StatRow label="Auth (% of calls)"    val={(cross.avgAuthRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Session (% of calls)" val={(cross.avgSessionRatio * 100).toFixed(2) + "%"} />
             <StatRow label="Action (% of calls)"  val={(cross.avgActionRatio * 100).toFixed(2) + "%"} warn={cross.avgActionRatio > 0.4} />
-            <StatRow label="Avg calls before follow (mean)"  val={warmupList.length > 0 ? cross.warmupMean.toFixed(1) : "—"} />
+            <StatRow label="Avg calls before follow (mean)"  val={cross.n > 0 ? cross.warmupMean.toFixed(1) : "—"} />
             <StatRow label="Follow sessions with <5 prior calls"  val={`${cross.zeroWarmupPct}%`} />
           </div>
           <div className="p-3 space-y-0.5">

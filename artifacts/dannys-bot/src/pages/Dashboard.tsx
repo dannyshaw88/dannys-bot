@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.975",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Logged Out status pill in account settings now shows the same yellow colour as on the accounts page." },
+      { category: "Fix", text: "Evasion Stats page no longer crashes with 'warmupList is not defined' when opened." },
+    ],
+  },
+  {
     version: "1.0.974",
     date: "15 Jun 2026",
     items: [
