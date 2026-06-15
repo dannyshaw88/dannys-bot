@@ -410,7 +410,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     refetchInterval: 15000,
   });
 
-  const [settings, setSettings] = useState(() => {
+  const [settings, setSettings] = useState<Record<string, any>>(() => {
     const def: Record<string, any> = {
       randomiseTiming: false,
       delayMin: 30,
@@ -514,14 +514,69 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostDisableWhenExhausted: true,
       forceEmulationEnabled: false,
       forceEmulationRandomise: false,
+      reelWatchPercentMin: 0,
+      reelWatchPercentMax: 100,
+      repostMin: 1,
+      repostMax: 3,
     };
-    return { ...def, ...(tool.settings as object || {}) };
+    return { ...def, ...(tool.settings as Record<string, any> || {}) };
   });
 
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localFolderPickerRef = useRef<HTMLInputElement>(null);
   const [localFolderFileCount, setLocalFolderFileCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const def: Record<string, any> = {
+      randomiseTiming: false, delayMin: 30, delayMax: 60,
+      viewTimelineFeedEnabled: true, viewTimelineFeedMin: 3, viewTimelineFeedMax: 8,
+      viewTimelineFeedOrderMin: 5, viewTimelineFeedOrderMax: 10,
+      viewTimelineFeedNotUsedMin: 0, viewTimelineFeedNotUsedMax: 0,
+      humanSessionEnabled: true, humanSessionOrderMin: 0, humanSessionOrderMax: 0,
+      humanSessionNotUsedMin: 0, humanSessionNotUsedMax: 0,
+      notificationsRunChanceMin: 100, notificationsRunChanceMax: 100,
+      ownProfileRunChanceMin: 100, ownProfileRunChanceMax: 100,
+      refreshProfileRunChanceMin: 100, refreshProfileRunChanceMax: 100,
+      settingsActivityRunChanceMin: 100, settingsActivityRunChanceMax: 100,
+      checkTimelineStoriesEnabled: true, checkTimelineStoriesMin: 3, checkTimelineStoriesMax: 8,
+      checkTimelineStoriesOrderMin: 0, checkTimelineStoriesOrderMax: 0,
+      checkTimelineStoriesNotUsedMin: 0, checkTimelineStoriesNotUsedMax: 0,
+      checkDmEnabled: true, checkDmMin: 5, checkDmMax: 15,
+      checkDmOrderMin: 0, checkDmOrderMax: 0, checkDmNotUsedMin: 0, checkDmNotUsedMax: 0,
+      likeTimelinePostsEnabled: false, likeTimelinePostsMin: 2, likeTimelinePostsMax: 5,
+      likeTimelinePostsDelayMin: 3, likeTimelinePostsDelayMax: 8,
+      likeTimelinePostsOrderMin: 0, likeTimelinePostsOrderMax: 0,
+      likeTimelinePostsNotUsedMin: 0, likeTimelinePostsNotUsedMax: 0,
+      saveMediaEnabled: false, saveMediaPercent: 20,
+      likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
+      clickPostPercentMin: 0, clickPostPercentMax: 0,
+      viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
+      viewProfileFeedPercentMin: 0, viewProfileFeedPercentMax: 0,
+      viewProfileFeedCountMin: 3, viewProfileFeedCountMax: 8,
+      viewProfilePostsPercentMin: 0, viewProfilePostsPercentMax: 0,
+      viewProfilePostsCountMin: 1, viewProfilePostsCountMax: 3,
+      followOrderMin: 0, followOrderMax: 0, followSkipMin: 0, followSkipMax: 0,
+      unfollowOrderMin: 0, unfollowOrderMax: 0, unfollowSkipMin: 0, unfollowSkipMax: 0,
+      contactOrderMin: 0, contactOrderMax: 0, contactSkipMin: 0, contactSkipMax: 0,
+      followSuggestedUsersIfEmptyEnabled: false, followSuggestedUsersIfEmptyMin: 1, followSuggestedUsersIfEmptyMax: 3,
+      repostEnabled: false, repostUseHikerApi: false, repostSourceUsername: "",
+      repostDisableUsernameSource: false, repostLocalFolderEnabled: false,
+      repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
+      repostAlterationLevel: "small", repostCaptionText: "",
+      repostImageSettings: {
+        contrast: { enabled: true, min: 5, max: 250 }, brightness: { enabled: true, min: 5, max: 250 },
+        noise: { enabled: true, min: 5, max: 15 }, sharpen: { enabled: true, min: 1.0, max: 2.0 },
+        pixelate: { enabled: true, min: 0.9, max: 2.1 },
+      },
+      repostOrderMin: 0, repostOrderMax: 0, repostNotUsedMin: 0, repostNotUsedMax: 0,
+      repostDisableComments: false, repostDisableAtPostCount: 0, repostDisableWhenExhausted: true,
+      forceEmulationEnabled: false, forceEmulationRandomise: false,
+      reelWatchPercentMin: 0, reelWatchPercentMax: 100,
+      repostMin: 1, repostMax: 3,
+    };
+    setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
+  }, [tool.id]);
 
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }

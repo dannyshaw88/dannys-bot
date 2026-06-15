@@ -1366,18 +1366,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 2e: FetchConfig (qe/sync) ──────────────────────────────
         // Jarvee calls FetchConfig after notifications (step 10 in cold-start).
-        // Minimal form — no experiments field to avoid "400 Invalid experiment"
-        // from the library's outdated LOGIN_EXPERIMENTS list vs our app version.
+        // Send as a bare unsigned POST (no form body) — same pattern used by the
+        // ABD probe above.  Sending a signed form with ANY body fields causes
+        // "400 Invalid experiment" from Instagram's current API regardless of
+        // whether an experiments key is included; the bare POST returns 200 OK.
         try {
           await ig.request.send({
             url: "/api/v1/qe/sync/",
             method: "POST",
-            form: ig.request.sign({
-              id: ig.state.uuid,
-              server_config_retrieval: "1",
-              _csrftoken: ig.state.cookieCsrfToken,
-              _uuid: ig.state.uuid,
-            }),
           });
           console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
         } catch (e: any) {

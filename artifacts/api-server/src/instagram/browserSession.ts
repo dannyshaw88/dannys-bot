@@ -5242,8 +5242,33 @@ async function fillField(page: Page, selector: string, text: string) {
   await page.keyboard.press('a');
   await page.keyboard.up('Control');
   await page.keyboard.press('Backspace');
-  // Type character-by-character — this fires the keyboard events React listens to
-  await page.type(selector, text, { delay: 55 });
+  // Type using Android IME simulation (rawKeyDown key="Unidentified" VK=229 + insertText per char).
+  // This avoids Puppeteer's page.type() which dispatches real Shift+key combos for special
+  // characters like @ (Shift+2) and & (Shift+7). Those Shift modifiers can accidentally trigger
+  // cursor-movement shortcuts inside Instagram's React input (e.g. Shift+Home jumps cursor to
+  // position 0 mid-type), causing the password to be entered in the wrong order.
+  const _delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  let cdpSession: any = null;
+  try {
+    cdpSession = await page.createCDPSession();
+    const IME_DOWN = { type: "rawKeyDown", key: "Unidentified", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 };
+    const IME_UP   = { type: "keyUp",      key: "Unidentified", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 };
+    for (const char of text) {
+      try {
+        await cdpSession.send("Input.dispatchKeyEvent", IME_DOWN);
+        await cdpSession.send("Input.insertText", { text: char });
+        await cdpSession.send("Input.dispatchKeyEvent", IME_UP);
+      } catch {
+        await page.keyboard.type(char, { delay: 0 });
+      }
+      await _delay(55 + Math.random() * 45);
+    }
+  } catch {
+    // CDP unavailable — fall back to page.type (may have cursor issues with special chars)
+    await page.type(selector, text, { delay: 55 });
+  } finally {
+    if (cdpSession) await cdpSession.detach().catch(() => {});
+  }
 }
 
 // Click at real mouse coordinates — same path as a manual canvas click.

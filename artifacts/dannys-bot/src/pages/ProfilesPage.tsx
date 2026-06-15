@@ -187,12 +187,11 @@ export function ProfilesPage() {
     onConfirm: () => void;
   } | null>(null);
 
-  // Core verify execution — records a login event then runs the verify POST.
+  // Core verify execution — records a login event only on success, then runs the verify POST.
   const _executeVerify = useCallback(async (id: number, proxyHostVal: string | null, proxyPortVal: number | null) => {
     if (verifyingInProgress.current.has(id)) return;
     verifyingInProgress.current.add(id);
     setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
-    recordLoginEvent(proxyHostVal, proxyPortVal);
     await queryClient.cancelQueries({ queryKey: [api.profiles.list.path] });
     const patchVerifying = (old: any) =>
       Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus: "verifying" } : p) : old;
@@ -203,6 +202,7 @@ export function ProfilesPage() {
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
+      if (data.ok) recordLoginEvent(proxyHostVal, proxyPortVal);
       toast({
         title: data.ok ? "Verification started" : "Verification Failed",
         description: data.message,

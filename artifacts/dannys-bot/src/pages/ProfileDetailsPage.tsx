@@ -582,10 +582,8 @@ export function ProfileDetailsPage() {
 
   const _executeVerify = async (bypassProxy = false) => {
     setVerifyStatus("pending");
-    // Resolve proxy info for login rate limit tracking
     const host: string | null = profile?.proxyHost ?? null;
     const port: number | null = profile?.proxyPort ?? null;
-    recordLoginEvent(host, port);
     const patchList = (old: any) =>
       Array.isArray(old) ? old.map((p: any) => p.id === profileId ? { ...p, accountStatus: "verifying" } : p) : old;
     queryClient.setQueryData(["/api/profiles"], patchList);
@@ -604,6 +602,9 @@ export function ProfileDetailsPage() {
         return;
       }
       if (data.ok) {
+        // Only record a login event on a successful verify — failed attempts must not
+        // count against the IP rate limit window or future verifies would show a false warning.
+        recordLoginEvent(host, port);
         setVerifyStatus("ok");
         toast({ title: "Credentials Verified", description: data.message });
       } else {

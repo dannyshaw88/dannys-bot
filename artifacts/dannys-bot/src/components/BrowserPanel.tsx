@@ -438,6 +438,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           }
           case "loginDone":
             if (msg.ok) {
+              recordLoginEvent(proxyHost, proxyPort);
               setLoginState("ok");
               appendLog(msg.message || "Done", "ok");
             } else {
@@ -773,6 +774,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         .then(r => r.json())
         .then((data: { ok: boolean; message: string }) => {
           if (data.ok) {
+            recordLoginEvent(proxyHost, proxyPort);
             setLoginState("ok");
             appendLog(data.message || "Login successful", "ok");
           } else {
@@ -809,13 +811,11 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         return;
       }
     }
-    recordLoginEvent(proxyHost, proxyPort);
     _doLoginCore();
   };
 
   const _handleLoginConfirm = () => {
     setLoginWarnState(null);
-    recordLoginEvent(proxyHost, proxyPort);
     _doLoginCore();
   };
 

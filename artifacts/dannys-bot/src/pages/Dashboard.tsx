@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.974",
+    date: "15 Jun 2026",
+    items: [
+      { category: "Fix", text: "Human Session tool: fixed all settings fields not accepting input — settings state now has correct type for dynamic key access, missing defaults for Reel Watch % and Repost Count fields added, and settings re-sync from server on tab re-open." },
+      { category: "Fix", text: "Login rate limit warning no longer fires on failed verification attempts — the IP event is only recorded when verification actually succeeds." },
+      { category: "Fix", text: "Embedded browser password entry no longer scrambles characters — switched to direct value injection bypassing Android IME simulation." },
+      { category: "Fix", text: "FetchConfig (qe/sync) 400 error on verification resolved — request now sends only the required fields without the outdated experiments list." },
+    ],
+  },
+  {
     version: "1.0.973",
     date: "15 Jun 2026",
     items: [
