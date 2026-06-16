@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.995",
+    date: "16 Jun 2026",
+    items: [
+      { category: "UI", text: "Evasion Stats: Endpoint Risk is no longer a standalone tab. It is now a theory card inside each of the four error tabs (Banned, Automated, Captcha, Locked), showing the pre-event endpoint pattern specific to that error type — pre-ban for Banned, pre-captcha for Captcha, etc." },
+      { category: "New", text: "Evasion Stats: each error tab's Theories section now shows a Pre-[ErrorType] Endpoint Risk Pattern card with a likelihood percentage bar, evidence text naming the top 3 endpoints and their account-presence rates, and action advice." },
+    ],
+  },
+  {
     version: "1.0.993",
     date: "16 Jun 2026",
     items: [

@@ -508,8 +508,8 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
 }
 
-type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "endpoint";
-type ErrorTab = Exclude<Tab, "survivors" | "endpoint">;
+type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
+type ErrorTab = Exclude<Tab, "survivors">;
 type InnerTab = "data" | "theories";
 
 const TAB_CONFIG: Record<ErrorTab, {
@@ -1421,6 +1421,29 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
   }).length;
   const lowDivHighFollowPct = total > 2 ? Math.round((lowDivHighFollowCount / total) * 100) : -1;
 
+  // Endpoint Risk theory — pre-[errorType] endpoint presence in last 20 calls
+  const RISK_WINDOW = 20;
+  const endpointRiskData = useMemo(() => {
+    const counts = new Map<string, number>();
+    let valid = 0;
+    for (const entry of primaryEntries) {
+      const eps = filterHiker(parseEps(entry.endpointSnapshot));
+      if (eps.length === 0) continue;
+      valid++;
+      const lastN = eps.slice(-RISK_WINDOW);
+      const seen = new Set(lastN.map(e => e.operationName));
+      for (const name of seen) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const top = Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count, pct: valid > 0 ? Math.round(count / valid * 100) : 0, label: matchLabel(name)?.label ?? null, category: matchLabel(name)?.category ?? "other" }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 8);
+    return { top, valid };
+  }, [primaryEntries]);
+  const errorTypeLabel = forTab === "ban" ? "Ban" : forTab === "automated" ? "Automated Flag" : forTab === "captcha" ? "Captcha" : "Lock";
+  const errorTypeLower = forTab === "ban" ? "ban" : forTab === "automated" ? "automated flag" : forTab === "captcha" ? "captcha challenge" : "account lock";
+  const endpointRiskPct = total > 2 && endpointRiskData.valid > 0 ? (endpointRiskData.top[0]?.pct ?? -1) : -1;
+
   // Login Rate Limit Per IP theory
   // Counts accounts that were flagged with ONLY verify/system-source endpoint calls —
   // no follow, DM, or any tool activity whatsoever.  An account that gets banned
@@ -1651,6 +1674,29 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
       })(),
       advice: "Increase endpoint diversity by mixing in more varied passive calls between follow batches — profile lookups, story views, explore page fetches, notifications. The goal is for each session to call at least 40–50% unique endpoints relative to total call count. Reduce follow density: follows should represent less than 10% of total API calls in any given session window.",
     },
+    {
+      id: "endpoint-risk", Icon: Flame,
+      title: `Pre-${errorTypeLabel} Endpoint Risk Pattern`,
+      tagline: `Which endpoints appear most often in the final ${RISK_WINDOW} calls before each ${errorTypeLower}`,
+      likelihood: endpointRiskPct,
+      description: `What is being theorised is that specific endpoint calls appear disproportionately often in the final ${RISK_WINDOW} calls before a ${forTab} event. Under the Suspicion Budget model, each endpoint carries an implicit per-call risk cost — endpoints concentrated most heavily in pre-${forTab} windows may carry a higher cost than endpoints rarely seen in those windows. This is a correlation from your own dataset only. It does not establish that removing these endpoints would prevent the flag: it is equally possible that these endpoints are universal (present in every session, flagged or not), and the percentage reflects session structure rather than risk causation. The value of this data is in spotting outliers — endpoints that are rare in normal sessions but appear frequently before ${forTab} events are the most interesting candidates for removal or rate-limiting.`,
+      evidence: (() => {
+        if (total <= 2 || endpointRiskData.valid === 0) return "Not enough data yet. Flag more accounts to compute pre-event endpoint patterns.";
+        const top3 = endpointRiskData.top.slice(0, 3);
+        if (top3.length === 0) return "No endpoint snapshot data in current entries.";
+        return `Top endpoints in the final ${RISK_WINDOW} calls across ${endpointRiskData.valid} ${forTab} account${endpointRiskData.valid !== 1 ? "s" : ""}: ${top3.map(e => `${e.label ?? e.name} (${e.pct}% of accounts)`).join(", ")}. The highest-presence endpoint — ${endpointRiskData.top[0]?.label ?? endpointRiskData.top[0]?.name} — appeared in the pre-${forTab} window for ${endpointRiskData.top[0]?.count ?? 0} of ${endpointRiskData.valid} account${endpointRiskData.valid !== 1 ? "s" : ""}. The percentage shown on the bar above is the top endpoint's account presence rate.`;
+      })(),
+      advice: (() => {
+        if (endpointRiskData.valid === 0 || endpointRiskData.top.length === 0) return `Flag more accounts to generate endpoint risk data for this error type.`;
+        const highRisk = endpointRiskData.top.filter(e => e.pct >= 50);
+        const actionEps = endpointRiskData.top.filter(e => e.category === "follow" || e.category === "unfollow" || e.category === "dm" || e.category === "like");
+        if (highRisk.length === 0) return `No endpoint appears in 50%+ of pre-${forTab} windows yet — keep collecting data. The pattern becomes meaningful once you have 5+ events and a clear dominant endpoint.`;
+        if (actionEps.length > 0 && actionEps[0].pct >= highRisk[0]?.pct - 10) {
+          return `Action endpoints (${actionEps.slice(0, 2).map(e => e.label ?? e.name).join(", ")}) dominate the pre-${forTab} window. This is expected — action calls appear right before the flag. Focus instead on non-action endpoints in the list: verify, session, or auth endpoints appearing at high rates may indicate specific call sequences to reduce or stagger.`;
+        }
+        return `${highRisk.slice(0, 2).map(e => e.label ?? e.name).join(" and ")} appear in ${highRisk[0].pct}%+ of pre-${forTab} sessions. If these are not core user-action endpoints, consider removing or staggering them in the session sequence to reduce the suspicion budget consumed before each ${errorTypeLower}.`;
+      })(),
+    },
   ];
 
   return (
@@ -1724,10 +1770,6 @@ export function BanAnalyticsPage() {
   const { data: allProxies = [] } = useQuery<ProxyRow[]>({ queryKey: ["/api/proxies"], queryFn: async () => (await fetch("/api/proxies", { credentials: "include" })).json(), refetchInterval: 60000 });
   const { data: survivorPatterns = [], isLoading: survivorPatternsLoading } = useQuery<SurvivorPattern[]>({ queryKey: ["/api/analytics/survivor-call-patterns"], queryFn: async () => (await fetch("/api/analytics/survivor-call-patterns", { credentials: "include" })).json(), enabled: activeTab === "survivors", refetchInterval: 60000, staleTime: 30000 });
 
-  interface EndpointRiskEntry { operationName: string; totalCount: number; preBanCount: number; preBanAccountCount: number; preBanPresencePct: number; proximityScore: number; avgPositionFromEnd: number | null; compositeRisk: number; dominantSource: string; }
-  interface EndpointRiskResult { endpoints: EndpointRiskEntry[]; totalAccounts: number; windowSize: number; }
-  const { data: endpointRisk, isLoading: endpointRiskLoading } = useQuery<EndpointRiskResult>({ queryKey: ["/api/analytics/endpoint-risk"], queryFn: async () => (await fetch("/api/analytics/endpoint-risk", { credentials: "include" })).json(), enabled: activeTab === "endpoint", staleTime: 60000 });
-
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
   const profileMap   = useMemo(() => new Map<string, number>(allProfiles.map(p => [p.username, p.id])), [allProfiles]);
   const trustMap     = useMemo(() => buildTrustMap(allProfiles), [allProfiles]);
@@ -1749,8 +1791,8 @@ export function BanAnalyticsPage() {
 
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const concurrencyAlerts = useMemo(() => buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
-  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors", "endpoint"];
-  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors", endpoint: "Endpoint Risk" };
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
+  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
   const ERROR_TABS: ErrorTab[] = ["ban", "automated", "captcha", "locked"];
 
   function handleExport() {
@@ -1890,7 +1932,6 @@ export function BanAnalyticsPage() {
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}>
                     {tab === "survivors" && <Award className="w-3 h-3 text-green-500 shrink-0" />}
-                    {tab === "endpoint" && <Flame className="w-3 h-3 text-red-400 shrink-0" />}
                     {TAB_LABELS[tab]}{count >= 0 && <span className="opacity-60">({count})</span>}
                   </button>
                 );
@@ -2080,87 +2121,11 @@ export function BanAnalyticsPage() {
                     </div>
                   );
                 })()
-              ) : activeTab === "endpoint" ? (
-                <div className="space-y-4">
-                  {endpointRiskLoading ? (
-                    <div className="flex items-center gap-2 text-muted-foreground py-10 justify-center">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Computing endpoint risk from ban snapshots…</span>
-                    </div>
-                  ) : !endpointRisk || endpointRisk.totalAccounts === 0 ? (
-                    <div className="border border-border rounded-lg p-10 text-center">
-                      <Flame className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm font-medium">No ban data yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">Endpoint risk requires at least one ban / automated / captcha / locked event with an endpoint snapshot captured.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="border border-border rounded-lg overflow-hidden">
-                        <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
-                          <Flame className="w-4 h-4 text-red-500" />
-                          <span className="text-sm font-semibold">Endpoint Risk Ranking</span>
-                          <span className="text-xs text-muted-foreground ml-1">across {endpointRisk.totalAccounts} flagged account events · last {endpointRisk.windowSize} calls before each event = pre-ban window</span>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-[11px]">
-                            <thead>
-                              <tr className="border-b border-border bg-muted/40">
-                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
-                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Source</th>
-                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Total Calls</th>
-                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Pre-ban %</th>
-                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Avg Pos</th>
-                                <th className="text-center px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Risk</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/40">
-                              {endpointRisk.endpoints.map((ep, i) => {
-                                const risk = ep.preBanPresencePct >= 50 && ep.proximityScore >= 0.3 ? "HIGH"
-                                  : ep.preBanPresencePct >= 20 || ep.proximityScore >= 0.2 ? "MED" : "LOW";
-                                return (
-                                  <tr key={ep.operationName} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                                    <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
-                                    <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[220px] truncate">{ep.operationName}</td>
-                                    <td className="px-3 py-1.5">
-                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ep.dominantSource === "Verify" || ep.dominantSource === "System" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : ep.dominantSource === "Automation" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" : "bg-muted text-muted-foreground"}`}>
-                                        {ep.dominantSource}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.totalCount.toLocaleString()}</td>
-                                    <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: ep.preBanPresencePct >= 50 ? "#dc2626" : ep.preBanPresencePct >= 20 ? "#d97706" : "#6b7280" }}>
-                                      {ep.preBanPresencePct.toFixed(1)}%
-                                    </td>
-                                    <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">
-                                      {ep.avgPositionFromEnd !== null ? `#${Math.round(ep.avgPositionFromEnd + 1)}` : "—"}
-                                    </td>
-                                    <td className="px-3 py-1.5 text-center">
-                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${risk === "HIGH" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : risk === "MED" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
-                                        {risk}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      <div className="border border-border rounded-lg px-4 py-3 text-[11px] text-muted-foreground space-y-1.5">
-                        <p className="font-semibold text-foreground text-xs flex items-center gap-1.5"><Activity className="w-3 h-3" /> How to read this table</p>
-                        <p><strong>Pre-ban %</strong> — percentage of all flagged events where this endpoint appeared in the final {endpointRisk.windowSize} calls. 80% means 8 in 10 accounts were calling this endpoint right before they went down.</p>
-                        <p><strong>Avg Pos</strong> — average rank from end of log (#1 = the very last call before the ban event). A low position means this endpoint fires right before the account dies.</p>
-                        <p><strong>Risk = HIGH</strong> when pre-ban presence ≥50% <em>and</em> proximity score ≥0.3. This is empirical correlation from your own data — not Instagram's internal scoring. Under the budget hypothesis, HIGH-risk endpoints likely carry the largest per-call suspicion weight.</p>
-                        <p className="pt-0.5 border-t border-border/40 text-[10px]">TopicalExplore note: real users rarely open Explore automatically on every cold login. If TopicalExplore scores HIGH here, it is a strong candidate for removal or rate-limiting in the verify sequence.</p>
-                      </div>
-                    </>
-                  )}
-                </div>
               ) : null}
             </div>
           </div>
 
-          {(activeTab === "survivors" || (activeTab !== "endpoint" && innerTabs[activeTab as ErrorTab] === "data")) && proxyRisks.length > 0 && (
+          {(activeTab === "survivors" || innerTabs[activeTab as ErrorTab] === "data") && proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
@@ -2178,7 +2143,7 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
-          {(activeTab === "survivors" || (activeTab !== "endpoint" && innerTabs[activeTab as ErrorTab] === "data")) && concurrencyAlerts.length > 0 && (
+          {(activeTab === "survivors" || innerTabs[activeTab as ErrorTab] === "data") && concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
