@@ -170,9 +170,9 @@ const RANDOM_LOGIN_ENDPOINT_POOL: Array<{ name: string; fn: (ig: IgApiClient) =>
   { name: "ExecuteNotificationsBadge", fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/notifications/badge/", method: "GET" }); } },
   { name: "GetReelsTray",              fn: async (ig) => { await ig.feed.reelsTray().request(); } },
-  // Replaced duplicate timeline call — fetches activity/news feed instead
-  { name: "GetActivityFeed",           fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/news/activities/", method: "GET" }); } },
+  // Replaced duplicate timeline call — fetches account security info (real endpoint used by visitSettingsAndActivity)
+  { name: "GetAccountSecurityInfo",    fn: async (ig) => {
+      await ig.request.send({ url: "/api/v1/accounts/account_security_info/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid }) }); } },
   // Replaced duplicate direct_v2/inbox call — fetches home timeline feed instead
   { name: "GetTimeLineFeed",           fn: async (ig) => { await ig.feed.timeline().request(); } },
   { name: "ViewUserFeed",              fn: async (ig) => {

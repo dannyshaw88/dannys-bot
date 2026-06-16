@@ -18,7 +18,7 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, Monitor, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";

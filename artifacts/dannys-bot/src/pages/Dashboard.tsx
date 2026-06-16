@@ -62,13 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.979",
+    version: "1.0.980",
     date: "16 Jun 2026",
     items: [
-      { category: "Fix", text: "Fire Random Endpoints: fixed 3 endpoints that were returning 404 (AttributionLaunch had a wrong URL, BatchFetchWeb pointed to a non-existent path, GetSavedMedia used a wrong sub-path)." },
-      { category: "Fix", text: "Fire Random Endpoints: fixed GetDirectMessages which would silently crash due to calling a method that does not exist — replaced with GetPendingInbox (fetches unread DM requests)." },
-      { category: "Fix", text: "Fire Random Endpoints: removed 3 duplicate endpoint pairs that were hitting the same Instagram URL twice — replaced with distinct real endpoints (GetCurrentUser, GetActivityFeed, GetTimeLineFeed)." },
-      { category: "Fix", text: "API call log: ViewUserFeed was appearing in the log as a raw numeric user ID (e.g. 23420789809) instead of its name — the URL-to-name mapper now correctly resolves /feed/user/{id}/ to ViewUserFeed." },
+      { category: "Fix", text: "Statistics page no longer crashes with 'Bot is not defined' — missing icon import added." },
+      { category: "Fix", text: "Fire Random Endpoints: replaced GetActivityFeed (returned 404) with GetAccountSecurityInfo, a confirmed real endpoint." },
+      { category: "Fix", text: "Fire Random Endpoints: fixed 3 other endpoints that were returning 404 (AttributionLaunch, BatchFetchWeb, GetSavedMedia had wrong URLs)." },
+      { category: "Fix", text: "Fire Random Endpoints: fixed GetDirectMessages which would crash due to a non-existent method — replaced with GetPendingInbox." },
+      { category: "Fix", text: "Fire Random Endpoints: removed 3 duplicate endpoint pairs (hitting the same URL twice) — replaced with distinct real endpoints." },
+      { category: "Fix", text: "API call log: ViewUserFeed no longer appears as a raw numeric user ID — URL-to-name mapper now correctly maps /feed/user/{id}/ to ViewUserFeed." },
     ],
   },
   {
