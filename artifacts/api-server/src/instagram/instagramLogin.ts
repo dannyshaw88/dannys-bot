@@ -1388,6 +1388,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
         }
 
+        // Tracks how many cold-start calls returned 403 login_required.
+        // Used by Phase 2d and the final ABD check below.
+        let coldStartBlockedCount = 0;
+
         // ── Phase 2d: Random post-login endpoints (session uniqueness) ───────
         // If the account has loginRandomEndpointsEnabled, pick N endpoints at random
         // from the pool and fire them with the account's normal API throttle so each

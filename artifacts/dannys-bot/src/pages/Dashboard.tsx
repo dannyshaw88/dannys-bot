@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.999",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify no longer stalls or fails to mark accounts as valid after the verify sequence was trimmed — a missing internal counter declaration (removed alongside the trimmed phases) was causing a crash at the end of the session check." },
+    ],
+  },
+  {
     version: "1.0.998",
     date: "16 Jun 2026",
     items: [
