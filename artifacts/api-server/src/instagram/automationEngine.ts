@@ -189,6 +189,7 @@ interface ActionSuspension {
 interface ProfileState {
   stop: { stopped: boolean };
   client: InstagramWebClient | null;
+  currentProxyUrl?: string;
   // Follow counters
   dailyCount: number;
   dailyDate: string;
@@ -1663,9 +1664,16 @@ class AutomationEngine {
       return null;
     }
 
-    // Create client once per profile lifecycle
+    // Recreate client if proxy has changed since the client was created
+    if (state.client && state.currentProxyUrl !== proxyUrl) {
+      console.log(`[engine] @${profile.username}: proxy changed (${state.currentProxyUrl} → ${proxyUrl}), recreating client`);
+      state.client = null;
+    }
+
+    // Create client once per profile lifecycle (or after proxy change above)
     if (!state.client) {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
+      state.currentProxyUrl = proxyUrl;
       // Log every API call — no filtering.
       state.client.setLogger((op, durationMs, message) => {
         storage.createInstagramApiCall({

@@ -821,7 +821,7 @@ export function ProfilesPage() {
       if (res.ok) {
         const proxies: any[] = await res.json();
         for (const px of proxies) {
-          proxyMap.set(px.id, { host: px.proxyHost ?? "", port: px.proxyPort ?? null, username: px.proxyUsername ?? null, password: px.proxyPassword ?? null });
+          proxyMap.set(px.id, { host: px.host ?? "", port: px.port ?? null, username: px.username ?? null, password: px.password ?? null });
         }
       }
     } catch { /* non-critical — export continues without resolved proxies */ }
@@ -1172,7 +1172,7 @@ export function ProfilesPage() {
             Add Account
           </Button>
           {addProfilePanelOpen && (
-            <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2 duration-150">
+            <div className="flex items-center gap-2 ml-[5px] animate-in fade-in slide-in-from-left-2 duration-150">
               <input
                 type="text"
                 inputMode="numeric"
@@ -1187,7 +1187,7 @@ export function ProfilesPage() {
                 autoFocus
                 placeholder="1"
                 maxLength={3}
-                className="w-12 h-8 text-sm border-2 border-cyan-400 rounded px-1 bg-cyan-950/30 text-cyan-100 text-center font-bold focus:outline-none focus:border-cyan-300"
+                className="w-12 h-8 text-sm border-2 border-gray-300 rounded px-1 bg-white text-black text-center font-bold focus:outline-none focus:border-gray-400"
               />
               <Button
                 size="sm"

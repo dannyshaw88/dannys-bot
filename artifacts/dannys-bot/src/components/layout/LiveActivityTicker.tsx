@@ -108,13 +108,11 @@ export function LiveActivityTicker() {
     refetchInterval: 2000,
   });
 
+  const isReady = activities !== undefined;
   const latest = activities?.[0];
+  const hasRealActivity = latest && latest.profileId !== 0;
 
-  if (!latest) return null;
-  if (latest.profileId === 0) return null;
-
-  const label = buildLabel(latest, profiles);
-  if (!label) return null;
+  const label = hasRealActivity ? buildLabel(latest!, profiles) : null;
 
   const ERROR_ACTIONS = new Set([
     "follow_blocked",
@@ -122,17 +120,17 @@ export function LiveActivityTicker() {
     "unfollow_blocked",
     "verification_failed",
   ]);
-  const isError = latest && (
-    ERROR_ACTIONS.has(latest.action) ||
-    latest.result === "error" ||
-    latest.result === "blocked"
+  const isError = hasRealActivity && !!(
+    ERROR_ACTIONS.has(latest!.action) ||
+    latest!.result === "error" ||
+    latest!.result === "blocked"
   );
 
   return (
-    <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-start gap-2 w-full overflow-hidden">
+    <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-start gap-2 w-full overflow-hidden shrink-0">
       <Activity className={`w-3 h-3 shrink-0 ${isError ? "text-red-500" : "text-primary"}`} />
       <span className={`text-xs overflow-hidden min-w-0 truncate ${isError ? "text-red-500" : "text-muted-foreground"}`}>
-        {label}
+        {label || (isReady ? "Equinox started — no recent activity" : "Loading…")}
       </span>
     </div>
   );

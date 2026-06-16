@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.001",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Reassigning a proxy to an account now takes effect immediately — the automation engine detects the proxy change and recreates the internal API client on the fly, so you no longer need to reset device IDs to pick up the new proxy." },
+      { category: "Fix", text: "Statistics page Proxy IP column now correctly shows the proxy for accounts linked via the Proxy Manager (previously only accounts with a manually typed proxy host showed a value; all others showed a dash)." },
+      { category: "Improved", text: "Statistics page Proxy IP column header is now clickable to sort accounts by proxy host, the same as other columns." },
+      { category: "Fix", text: "Add Account input box now has a white background and black text so it is clearly readable." },
+      { category: "Fix", text: "Export Profiles CSV now correctly includes the proxy address for accounts linked via the Proxy Manager." },
+      { category: "Fix", text: "Top activity bar no longer collapses or disappears on startup — it is always visible and shows 'Equinox started — no recent activity' until the first automation event arrives." },
+    ],
+  },
+  {
     version: "1.1.000",
     date: "16 Jun 2026",
     items: [

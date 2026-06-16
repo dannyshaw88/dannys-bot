@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useProxies } from "@/hooks/use-proxies";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -102,6 +103,7 @@ function ProfileStatsRow({
   statColOrder,
   colWidths,
   statsData,
+  proxies,
   onOpenBrowser,
   onNavigateToProfile,
 }: {
@@ -109,6 +111,7 @@ function ProfileStatsRow({
   visibleCols: Record<ColKey, boolean>;
   statColOrder: ColKey[];
   colWidths: Record<ColKey | "account", number>;
+  proxies?: any[];
   statsData: any[];
   onOpenBrowser: () => void;
   onNavigateToProfile: () => void;
@@ -177,7 +180,10 @@ function ProfileStatsRow({
           );
         }
         if (key === "proxy_ip") {
-          const host = (profile as any).proxyHost as string | null | undefined;
+          const host: string | null | undefined =
+            (profile as any).proxyHost ||
+            proxies?.find((px: any) => px.id === profile.proxyId)?.host ||
+            null;
           return (
             <td key="proxy_ip" style={{ width: colWidths.proxy_ip }} className="px-4 py-3 text-center">
               {host
@@ -222,6 +228,7 @@ export function StatsPage() {
   useScrollRestore("stats");
   const { data: rawProfiles, isLoading } = useProfiles();
   const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate), [rawProfiles]);
+  const { data: proxies } = useProxies();
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
 
@@ -306,15 +313,15 @@ export function StatsPage() {
     setCollapsedGroups(next);
   };
 
-  const [sortKey, setSortKey] = useState<StatKey | "account" | null>(() => {
+  const [sortKey, setSortKey] = useState<StatKey | "account" | "proxy_ip" | null>(() => {
     const v = localStorage.getItem("stats:sortKey");
-    return v ? (v as StatKey | "account") : null;
+    return v ? (v as StatKey | "account" | "proxy_ip") : null;
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     localStorage.getItem("stats:sortDir") === "desc" ? "desc" : "asc"
   );
 
-  const cycleSort = (key: StatKey | "account") => {
+  const cycleSort = (key: StatKey | "account" | "proxy_ip") => {
     if (sortKey !== key) {
       setSortKey(key); setSortDir("asc");
       localStorage.setItem("stats:sortKey", key);
@@ -357,6 +364,13 @@ export function StatsPage() {
         const sa = (a.accountLabel || a.username || "").toLowerCase();
         const sb = (b.accountLabel || b.username || "").toLowerCase();
         return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+      }
+      if (sortKey === "proxy_ip") {
+        const resolveHost = (p: Profile): string =>
+          (p as any).proxyHost || proxies?.find((px: any) => px.id === p.proxyId)?.host || "";
+        const ha = resolveHost(a).toLowerCase();
+        const hb = resolveHost(b).toLowerCase();
+        return sortDir === "asc" ? ha.localeCompare(hb) : hb.localeCompare(ha);
       }
       const va = getStatById(a.id, sortKey, today);
       const vb = getStatById(b.id, sortKey, today);
@@ -416,7 +430,7 @@ export function StatsPage() {
     }),
   ];
 
-  const sortIcon = (key: StatKey | "account") => {
+  const sortIcon = (key: StatKey | "account" | "proxy_ip") => {
     if (sortKey !== key) return <span className="text-[9px] opacity-30 ml-0.5">⇅</span>;
     return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
@@ -726,10 +740,11 @@ export function StatsPage() {
                           thContent = <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
                         } else if (key === "proxy_ip") {
                           thContent = (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground/60">
+                            <button onClick={() => cycleSort("proxy_ip")} className={`inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-muted-foreground/60 ${sortKey === "proxy_ip" ? "opacity-100" : "opacity-60"}`}>
                               <Globe className="w-3 h-3" />
                               <span className="text-[10px] uppercase tracking-wide">Proxy IP</span>
-                            </span>
+                              {sortIcon("proxy_ip")}
+                            </button>
                           );
                         } else {
                           const st = ALL_STAT_TYPES.find(s => s.key === key)!;
@@ -826,6 +841,7 @@ export function StatsPage() {
                                 statColOrder={statColOrder}
                                 colWidths={colWidths}
                                 statsData={statsMap.get(profile.id) ?? []}
+                                proxies={proxies}
                                 {...makeRowProps(profile)}
                               />
                             ))}
@@ -841,6 +857,7 @@ export function StatsPage() {
                           statColOrder={statColOrder}
                           colWidths={colWidths}
                           statsData={statsMap.get(profile.id) ?? []}
+                          proxies={proxies}
                           {...makeRowProps(profile)}
                         />
                       ))
