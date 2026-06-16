@@ -158,8 +158,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       } catch {}
 
       // Restore settings selection + derive which parent options should be expanded
+      // Uses sessionStorage so selections reset when the app/tab is restarted.
       try {
-        const raw = localStorage.getItem(storageSettingsKey(title));
+        const raw = sessionStorage.getItem(storageSettingsKey(title));
         if (raw) {
           const keys: string[] = JSON.parse(raw);
           const restoredSel = new Set(keys);
@@ -205,7 +206,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       if (!hasEverBeenOpenRef.current) return;
       try {
         localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targetsRef.current]));
-        localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));
+        sessionStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));
         localStorage.setItem(storageSortKey(title), JSON.stringify({ by: sortByRef.current, dir: sortDirRef.current }));
       } catch {}
     }

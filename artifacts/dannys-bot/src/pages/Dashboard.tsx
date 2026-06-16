@@ -106,6 +106,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.990",
+    date: "16 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Settings: 'endpoints after login' checkbox label shortened and Min/Max fields moved inline on the same row — no more stacked labels above the inputs." },
+      { category: "UI", text: "Account Settings: Chance of Making a Post and its Min%/Max% fields now sit on one single row instead of expanding onto a separate line." },
+      { category: "New", text: "Copy Settings: Chance of Making a Post added as a separate copyable option under API & Performance." },
+      { category: "Fix", text: "Copy Settings: selected settings checkboxes now reset to unchecked on every app restart (target accounts still remembered between opens)." },
+    ],
+  },
+  {
     version: "1.0.989",
     date: "16 Jun 2026",
     items: [
