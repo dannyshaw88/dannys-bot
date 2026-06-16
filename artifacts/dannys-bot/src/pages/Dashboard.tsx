@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.983",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts page: clicking the Verify button next to an account name no longer accidentally ticks that account's checkbox." },
+      { category: "Fix", text: "Embedded browser login: pressing Tab after filling the password now flushes all keystrokes before the login button is clicked, preventing the last character from landing in the wrong position." },
+      { category: "Fix", text: "Bulk Verify (Actions → Verify Selected): now uses the same logic as the individual Verify button — accounts that get a sessionid cookie even after a redirect or challenge now correctly proceed to the mobile API check instead of being marked as failed." },
+      { category: "UI", text: "Evasion Stats: Theories moved inside each error tab (Banned, Automated, Captcha, Locked) as a dedicated sub-tab. Each theory's progress bar now shows the likelihood computed from that specific error type's accounts only, not combined across all error types." },
+    ],
+  },
+  {
     version: "1.0.982",
     date: "16 Jun 2026",
     items: [

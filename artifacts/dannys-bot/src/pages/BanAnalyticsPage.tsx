@@ -508,9 +508,10 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
 }
 
-type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "theories";
+type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
+type InnerTab = "data" | "theories";
 
-const TAB_CONFIG: Record<Exclude<Tab, "survivors" | "theories">, {
+const TAB_CONFIG: Record<Exclude<Tab, "survivors">, {
   label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string;
   causeTitle: string; causeTheory: string; causeSignals: string[];
 }> = {
@@ -580,7 +581,7 @@ function StatRow({ label, val, warn }: { label: string; val: string; warn?: bool
 }
 
 // ── Causation Panel (per-tab theory + data validation) ─────────────────────
-function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors" | "theories">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">] }) {
+function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">] }) {
   const [expanded, setExpanded] = useState(false);
 
   // Validate theory signals against actual data
@@ -665,7 +666,7 @@ function TrustScorePanel({ entries, survivingAccounts, trustMap, profileMap, tab
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>;
   profileMap: Map<string, number>;
-  tabKey: Exclude<Tab, "survivors" | "theories">;
+  tabKey: Exclude<Tab, "survivors">;
 }) {
   const flaggedTrusts = entries.map(e => trustMap.get(profileMap.get(e.username) ?? -1)).filter(Boolean) as TrustInfo[];
   const survivorTrusts = survivingAccounts.map(a => trustMap.get(profileMap.get(a.username) ?? -1)).filter(Boolean) as TrustInfo[];
@@ -802,7 +803,7 @@ function ReliabilityPanel({ entries, profileNotesMap }: { entries: AnalyticsEntr
 
 // ── Per-entry card ────────────────────────────────────────────────────────────
 function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
-  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">]; cross: CrossStats;
+  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats;
   profileMap: Map<string, number>; trustMap: Map<number, TrustInfo>; reliability: Reliability;
 }) {
   const [open, setOpen] = useState(false);
@@ -951,7 +952,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
 
 // ── Pattern Intelligence ──────────────────────────────────────────────────────
 function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap, profileNotesMap, profileMap }: {
-  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors" | "theories">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">];
+  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
 }) {
@@ -1230,8 +1231,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
 
 // ── Tab content ───────────────────────────────────────────────────────────────
 function EntryList({ entries, cfg, tabKey, profileMap, trustMap, profileNotesMap, survivingAccounts }: {
-  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors" | "theories">];
-  tabKey: Exclude<Tab, "survivors" | "theories">; profileMap: Map<string, number>;
+  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
+  tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>;
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
 }) {
@@ -1316,38 +1317,56 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
 }
 
 // ── Theories Tab ──────────────────────────────────────────────────────────────
-function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntries }: {
+function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, captchaEntries, lockedEntries }: {
+  forTab: Exclude<Tab, "survivors">;
+  primaryEntries: AnalyticsEntry[];
   banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
   captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
 }) {
-  const allEntries = useMemo(() => [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries], [banEntries, automatedEntries, captchaEntries, lockedEntries]);
-  const total = allEntries.length;
-  const allMetrics = useMemo(() => allEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [allEntries]);
+  const total = primaryEntries.length;
+  const primaryMetrics = useMemo(() => primaryEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [primaryEntries]);
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
 
   const hotProxyHosts = useMemo(() => new Set(proxyRisks.filter(pr => pr.total >= 2).map(pr => pr.host)), [proxyRisks]);
-  const onHotProxy = allEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
+  const onHotProxy = primaryEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
   const ipTrustPct = total > 2 ? Math.round((onHotProxy / total) * 100) : -1;
 
-  const lowWarmupCount = allMetrics.filter(m => m.preActionWarmup >= 0 && m.preActionWarmup < 5).length;
+  const lowWarmupCount = primaryMetrics.filter(m => m.preActionWarmup >= 0 && m.preActionWarmup < 5).length;
   const warmupPct = total > 2 ? Math.round((lowWarmupCount / total) * 100) : -1;
 
-  const roboticCount = allMetrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
+  const roboticCount = primaryMetrics.filter(m => m.timingCoV >= 0 && m.timingCoV < 0.5).length;
   const roboticPct = total > 2 ? Math.round((roboticCount / total) * 100) : -1;
 
-  const highAuthCount = allMetrics.filter(m => m.authPerAction > 0.3).length;
+  const highAuthCount = primaryMetrics.filter(m => m.authPerAction > 0.3).length;
   const authPct = total > 2 ? Math.round((highAuthCount / total) * 100) : -1;
 
-  const highVelocityCount = allMetrics.filter(m => m.actionVelocityPerHour > 40).length;
+  const highVelocityCount = primaryMetrics.filter(m => m.actionVelocityPerHour > 40).length;
   const velocityPct = total > 2 ? Math.round((highVelocityCount / total) * 100) : -1;
 
   const banUsernames = useMemo(() => new Set(banEntries.map(e => e.username)), [banEntries]);
-  const autoThenBanCount = automatedEntries.filter(e => banUsernames.has(e.username)).length;
-  const decayPct = automatedEntries.length > 2 ? Math.round((autoThenBanCount / automatedEntries.length) * 100) : -1;
+  const autoUsernames = useMemo(() => new Set(automatedEntries.map(e => e.username)), [automatedEntries]);
+
+  // Trust Decay Chain — cross-tab percentage, computed relative to primaryEntries
+  const decayCount = forTab === "ban"
+    ? primaryEntries.filter(e => autoUsernames.has(e.username)).length   // banned accounts that also had an automated flag
+    : forTab === "automated"
+      ? primaryEntries.filter(e => banUsernames.has(e.username)).length  // automated accounts that later escalated to ban
+      : forTab === "captcha"
+        ? primaryEntries.filter(e => banUsernames.has(e.username) || autoUsernames.has(e.username)).length // captcha accounts that escalated further
+        : primaryEntries.filter(e => banUsernames.has(e.username) || autoUsernames.has(e.username)).length; // locked accounts that also appear in other error types
+  const decayPct = total > 2 ? Math.round((decayCount / total) * 100) : -1;
+
+  const decayEvidenceText = forTab === "ban"
+    ? `${decayCount} of ${total} banned accounts (${decayPct >= 0 ? decayPct + "%" : "n/a"}) also have an Automated Behaviour flag in your history — consistent with an escalation chain.`
+    : forTab === "automated"
+      ? `${decayCount} of ${total} automated-flag accounts (${decayPct >= 0 ? decayPct + "%" : "n/a"}) later escalated to a full ban — consistent with an escalation ladder.`
+      : forTab === "captcha"
+        ? `${decayCount} of ${total} captcha accounts (${decayPct >= 0 ? decayPct + "%" : "n/a"}) also appear in the Automated or Banned lists — showing escalation beyond captcha.`
+        : `${decayCount} of ${total} locked accounts (${decayPct >= 0 ? decayPct + "%" : "n/a"}) also appear in Automated or Banned lists — showing escalation beyond a lock.`;
 
   const verifyClusterData = useMemo(() => {
     const WINDOW_MS = 30 * 60 * 1000;
-    const noToolEntries = allEntries.filter(e => {
+    const noToolEntries = primaryEntries.filter(e => {
       const eps = filterHiker(parseEps(e.endpointSnapshot));
       return eps.length > 0 && eps.every(ep => { const s = (ep.source ?? "").toLowerCase(); return s === "verify" || s === "eb" || s === ""; });
     });
@@ -1374,14 +1393,14 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       }
     }
     return clusteredAccounts;
-  }, [allEntries]);
+  }, [primaryEntries]);
   const verifyClusterPct = total > 2 ? Math.round((verifyClusterData / total) * 100) : -1;
 
   // Login Rate Limit Per IP theory
   // Counts accounts that were flagged with ONLY verify/system-source endpoint calls —
   // no follow, DM, or any tool activity whatsoever.  An account that gets banned
   // purely from login events is direct evidence of an IP-level login rate budget.
-  const loginRateLimitCount = allEntries.filter(e => {
+  const loginRateLimitCount = primaryEntries.filter(e => {
     const eps = filterHiker(parseEps(e.endpointSnapshot));
     if (eps.length === 0) return false;
     return eps.every(ep => {
@@ -1392,16 +1411,19 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
   const loginRateLimitPct = total > 2 ? Math.round((loginRateLimitCount / total) * 100) : -1;
 
   function LikelihoodBar({ pct }: { pct: number }) {
-    if (pct < 0) return <span className="text-xs text-muted-foreground italic">— no data yet (need 3+ events)</span>;
+    if (pct < 0) return <span className="text-xs text-muted-foreground italic">— need 3+ events to compute</span>;
     const color = pct >= 70 ? "bg-red-500" : pct >= 45 ? "bg-orange-400" : pct >= 25 ? "bg-yellow-400" : "bg-blue-400";
     const labelStr = pct >= 70 ? "HIGH" : pct >= 45 ? "MODERATE" : pct >= 25 ? "PLAUSIBLE" : "LOW";
     const textColor = pct >= 70 ? "text-red-500" : pct >= 45 ? "text-orange-500" : pct >= 25 ? "text-yellow-500" : "text-blue-400";
     return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+            <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`text-[10px] font-bold w-24 text-right shrink-0 ${textColor}`}>{labelStr} · {pct}%</span>
         </div>
-        <span className={`text-[10px] font-bold w-24 text-right shrink-0 ${textColor}`}>{labelStr} · {pct}%</span>
+        <p className="text-[10px] text-muted-foreground">{pct}% of your {total} account{total !== 1 ? "s" : ""} in this error type match this pattern</p>
       </div>
     );
   }
@@ -1467,24 +1489,24 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       tagline: "Identical API call sequences across accounts on the same IP or subnet is a bot-cluster signal",
       likelihood: (() => {
         if (total < 2) return -1;
-        const sameSubnet = allEntries.filter(e => {
+        const sameSubnet = primaryEntries.filter(e => {
           if (!e.proxyHost) return false;
           const subnet = e.proxyHost.split(".").slice(0, 3).join(".");
-          return allEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
+          return primaryEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
         }).length;
         return Math.round((sameSubnet / total) * 100);
       })(),
       description: "When multiple accounts execute the exact same sequence of API calls — same endpoints, same order — and those sessions originate from the same IP or /24 subnet, Instagram's classifier can fingerprint the bot framework itself rather than any individual account. A human's post-login session is never identical to another human's: different notification counts, different feed items, different stories queued. A fixed cold-start sequence produces a mathematically identical API pattern on every account. At the IP level, one device cannot simultaneously be logged into 5 accounts. At the subnet level, multiple accounts producing identical call sequences within the same session window is a high-confidence cluster signal — not just suspicious per-account behaviour but a detectable batch-processing pattern. This is derived from data patterns — it has not been isolated in a controlled test.",
       evidence: (() => {
         if (total < 2) return "Not enough data yet. Flag more accounts to measure subnet co-occurrence.";
-        const sameSubnet = allEntries.filter(e => {
+        const sameSubnet = primaryEntries.filter(e => {
           if (!e.proxyHost) return false;
           const subnet = e.proxyHost.split(".").slice(0, 3).join(".");
-          return allEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
+          return primaryEntries.some(o => o.id !== e.id && o.proxyHost?.startsWith(subnet + "."));
         }).length;
         const pct = Math.round((sameSubnet / total) * 100);
         const subnetCounts: Record<string, string[]> = {};
-        for (const e of allEntries) {
+        for (const e of primaryEntries) {
           if (!e.proxyHost) continue;
           const sn = e.proxyHost.split(".").slice(0, 3).join(".");
           if (!subnetCounts[sn]) subnetCounts[sn] = [];
@@ -1522,7 +1544,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       title: "New Account Trust Ramp (≤7 Days)",
       tagline: "Instagram enforces near-zero follow tolerance for accounts under a week old",
       likelihood: (() => {
-        const newAccountWithFollows = allEntries.filter(e => {
+        const newAccountWithFollows = primaryEntries.filter(e => {
           const age = e.accountAgeDays;
           const follows = e.followCountBeforeBan;
           if (age !== null && age !== undefined && follows !== null && follows !== undefined) {
@@ -1536,7 +1558,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       })(),
       description: "Instagram applies a trust ramp to new accounts — for the first 7–14 days the effective action budget is near zero. An account that has never appeared in any other user's feed, never been followed back, and has zero social graph weight is treated as a potential bot-farm account by default. Any follow operation from a new account without prior passive session history triggers a 'Confirm You Are Human' or 'Suspicious Activity' challenge. The threshold is not a fixed number of allowed follows — it's a trust score that rises over days of organic session activity. Running follow tools before this ramp is complete is the most common cause of the 'confirm_human' ban type.",
       evidence: (() => {
-        const candidates = allEntries.filter(e => {
+        const candidates = primaryEntries.filter(e => {
           const age = e.accountAgeDays;
           const follows = e.followCountBeforeBan;
           if (age !== null && age !== undefined && follows !== null && follows !== undefined) {
@@ -1544,7 +1566,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           }
           return false;
         });
-        const fromSnapshot = allEntries.filter(e => {
+        const fromSnapshot = primaryEntries.filter(e => {
           const eps = filterHiker(parseEps(e.endpointSnapshot));
           const m = computeMetrics(eps, e.flaggedAt ?? e.bannedAt);
           return (m.cats.follow ?? 0) > 0 && eps.length < 25;
@@ -1564,7 +1586,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
       tagline: "Automated → Captcha → Ban is a detectable escalation ladder, not independent events",
       likelihood: decayPct,
       description: "Instagram doesn't jump straight to banning — it escalates through progressively severe interventions. Each intervention permanently lowers the account's effective action threshold for all future sessions. An account that previously received an Automated Behaviour block is in a higher-scrutiny bucket forever — its safe daily action limit is now lower than a clean account. Once on the escalation ladder, the threshold never fully resets. The practical implication: a flagged account that resumes at full speed will hit the next escalation level much faster than a clean one.",
-      evidence: decayPct >= 0 ? `${autoThenBanCount} of ${automatedEntries.length} accounts with Automated flags also appear in the Ban list (${decayPct}%), consistent with an escalation chain rather than independent events.` : automatedEntries.length <= 2 ? "Not enough automated entries yet to measure escalation overlap." : "No overlap between Automated and Banned accounts detected yet.",
+      evidence: decayPct >= 0 ? decayEvidenceText : total <= 2 ? "Not enough data yet to measure escalation overlap." : "No escalation overlap detected yet.",
       advice: "After any Automated flag, permanently reduce that account's action limits to 40–60% of your normal limits. The account's threshold has been lowered — treat it as a degraded asset.",
     },
   ];
@@ -1575,7 +1597,7 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
         <div className="border border-border rounded-lg p-10 text-center">
           <FlaskConical className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm font-medium">No data yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Flag accounts across the Banned, Automated, Captcha, and Locked tabs to populate theory likelihood counters.</p>
+          <p className="text-xs text-muted-foreground mt-1">Flag accounts on the Data tab to populate theory likelihood counters.</p>
         </div>
       )}
       <div className="border border-border rounded-lg overflow-hidden">
@@ -1583,10 +1605,10 @@ function TheoriesTab({ banEntries, automatedEntries, captchaEntries, lockedEntri
           <FlaskConical className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <span className="text-sm font-semibold">Detection Theories</span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Each theory's likelihood is computed live from your flagged account data. The more accounts you mark, the more accurate these percentages become. Theories are not mutually exclusive — multiple can be active simultaneously.</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Each theory's progress bar shows what percentage of <strong>this error type's</strong> accounts match the pattern. The more accounts you flag on the Data tab, the more accurate these percentages become. Theories are not mutually exclusive — multiple can be active simultaneously.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {total > 0 && <span className="text-[10px] text-muted-foreground pt-0.5">based on {total} events</span>}
+            {total > 0 && <span className="text-[10px] text-muted-foreground pt-0.5">based on {total} accounts</span>}
           </div>
         </div>
         <div className="divide-y divide-border">
@@ -1623,6 +1645,7 @@ export function BanAnalyticsPage() {
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>("ban");
+  const [innerTabs, setInnerTabs] = useState<Record<Exclude<Tab, "survivors">, InnerTab>>({ ban: "data", automated: "data", captcha: "data", locked: "data" });
   const [showAllProxy, setShowAllProxy] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
@@ -1655,10 +1678,9 @@ export function BanAnalyticsPage() {
 
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const concurrencyAlerts = useMemo(() => buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
-  const activeEntries = activeTab === "ban" ? banEntries : activeTab === "automated" ? automatedEntries : activeTab === "captcha" ? captchaEntries : activeTab === "locked" ? lockedEntries : banEntries;
-
-  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors", "theories"];
-  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors", theories: "Theories" };
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
+  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
+  const ERROR_TABS: Exclude<Tab, "survivors">[] = ["ban", "automated", "captcha", "locked"];
 
   function handleExport() {
     const levels = getTrustLevels();
@@ -1765,15 +1787,36 @@ export function BanAnalyticsPage() {
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}>
                     {tab === "survivors" && <Award className="w-3 h-3 text-green-500 shrink-0" />}
-                    {tab === "theories" && <FlaskConical className="w-3 h-3 text-violet-500 shrink-0" />}
                     {TAB_LABELS[tab]}{count >= 0 && <span className="opacity-60">({count})</span>}
                   </button>
                 );
               })}
             </div>
             <div className="p-4">
-              {activeTab === "theories" ? (
-                <TheoriesTab banEntries={banEntries} automatedEntries={automatedEntries} captchaEntries={captchaEntries} lockedEntries={lockedEntries} />
+              {ERROR_TABS.includes(activeTab as Exclude<Tab, "survivors">) ? (
+                (() => {
+                  const errTab = activeTab as Exclude<Tab, "survivors">;
+                  const primaryEntries = errTab === "ban" ? banEntries : errTab === "automated" ? automatedEntries : errTab === "captcha" ? captchaEntries : lockedEntries;
+                  const currentInner = innerTabs[errTab];
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1 p-0.5 bg-muted/40 rounded-md w-fit">
+                        {(["data", "theories"] as InnerTab[]).map(it => (
+                          <button key={it} onClick={() => setInnerTabs(prev => ({ ...prev, [errTab]: it }))}
+                            className={`px-3 py-1 text-xs font-semibold rounded transition-colors flex items-center gap-1.5 ${currentInner === it ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                            {it === "theories" && <FlaskConical className="w-3 h-3 text-violet-500" />}
+                            {it === "data" ? "Data" : "Theories"}
+                          </button>
+                        ))}
+                      </div>
+                      {currentInner === "data" ? (
+                        <EntryList entries={primaryEntries} cfg={TAB_CONFIG[errTab]} tabKey={errTab} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
+                      ) : (
+                        <TheoriesTab forTab={errTab} primaryEntries={primaryEntries} banEntries={banEntries} automatedEntries={automatedEntries} captchaEntries={captchaEntries} lockedEntries={lockedEntries} />
+                      )}
+                    </div>
+                  );
+                })()
               ) : activeTab === "survivors" ? (
                 survivingAccounts.length === 0 ? (
                   <div className="border border-border rounded-lg p-10 text-center"><Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" /><p className="text-sm font-medium">No surviving accounts tracked yet</p><p className="text-xs text-muted-foreground mt-1">Valid accounts with an "Added:" timestamp in Notes will appear here.</p></div>
@@ -1933,13 +1976,11 @@ export function BanAnalyticsPage() {
                     </div>
                   );
                 })()
-              ) : (
-                <EntryList entries={activeEntries} cfg={TAB_CONFIG[activeTab as Exclude<Tab, "survivors" | "theories">]} tabKey={activeTab as Exclude<Tab, "survivors" | "theories">} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
               )}
             </div>
           </div>
 
-          {activeTab !== "theories" && proxyRisks.length > 0 && (
+          {proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
@@ -1957,7 +1998,7 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
-          {activeTab !== "theories" && concurrencyAlerts.length > 0 && (
+          {concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
