@@ -1119,6 +1119,21 @@ if (process.platform === "win32") {
   app.setAppUserModelId("Equinox");
 }
 
+// ── Single-instance lock ──────────────────────────────────────────────────────
+// Only one copy of Equinox may run per user account at a time. If a second
+// launch is attempted, the existing window is focused and the new process exits.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on("second-instance", () => {
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
+
 // ── WebRTC IP-leak prevention (Electron global) ───────────────────────────────
 // These Chrome command-line switches apply to every Chromium renderer in this
 // Electron process — including all EB BrowserWindows and BrowserViews.

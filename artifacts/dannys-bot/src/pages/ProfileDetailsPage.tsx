@@ -1177,58 +1177,53 @@ export function ProfileDetailsPage() {
                             </Button>
                           )}
                         </div>
-                        {/* Fire Random Endpoints at Login — next to verify button */}
-                        <div className="flex flex-col gap-2">
-                          {/* Row 1: checkbox + label + Min/Max inline */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id={`loginRandomEndpointsEnabled-${profile.id}`}
-                                checked={!!(formData.apiLimits as any).loginRandomEndpointsEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
-                              />
-                              <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">endpoints after login</Label>
-                            </div>
-                            {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</span>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={17}
-                                  className="h-7 text-xs w-14"
-                                  value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
-                                  onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
-                                />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</span>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={17}
-                                  className="h-7 text-xs w-14"
-                                  value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
-                                  onChange={e => {
-                                    const v = Math.max(1, Number(e.target.value));
-                                    const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
-                                    updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
-                                  }}
-                                />
-                              </div>
-                            )}
+                        {/* Fire Unique Endpoints on Login — all controls on one row */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`loginRandomEndpointsEnabled-${profile.id}`}
+                              checked={!!(formData.apiLimits as any).loginRandomEndpointsEnabled}
+                              onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsEnabled: e.target.checked } })}
+                              className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                            />
+                            <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Fire Unique Endpoints on Login</Label>
                           </div>
-                          {/* Row 2: Chance of Making a Post — all on one line */}
                           {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <input
-                                type="checkbox"
-                                id={`loginMakePostChanceEnabled-${profile.id}`}
-                                checked={!!(formData.apiLimits as any).loginMakePostChanceEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                            <>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={17}
+                                className="h-7 text-xs w-14"
+                                value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
                               />
-                              <Label htmlFor={`loginMakePostChanceEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Chance of Making a Post</Label>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={17}
+                                className="h-7 text-xs w-14"
+                                value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
+                                onChange={e => {
+                                  const v = Math.max(1, Number(e.target.value));
+                                  const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
+                                  updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
+                                }}
+                              />
+                              <span className="text-border/60 select-none">·</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  id={`loginMakePostChanceEnabled-${profile.id}`}
+                                  checked={!!(formData.apiLimits as any).loginMakePostChanceEnabled}
+                                  onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceEnabled: e.target.checked } })}
+                                  className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                                />
+                                <Label htmlFor={`loginMakePostChanceEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Chance of Making a Post</Label>
+                              </div>
                               {(formData.apiLimits as any).loginMakePostChanceEnabled && (
                                 <>
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min %</span>
@@ -1253,10 +1248,10 @@ export function ProfileDetailsPage() {
                                       updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceMax: Math.max(min, v) } });
                                     }}
                                   />
-                                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">chance per verify</p>
+                                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">per verify</p>
                                 </>
                               )}
-                            </div>
+                            </>
                           )}
                         </div>
                       </div>

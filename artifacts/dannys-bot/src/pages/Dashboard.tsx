@@ -419,6 +419,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.992",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Statistics page: fixed crash caused by missing Globe icon import — page now loads correctly." },
+      { category: "Fix", text: "Single instance: opening Equinox a second time now focuses the existing window instead of launching a second copy." },
+      { category: "Fix", text: "Account Settings: 'endpoints after login' label renamed to 'Fire Unique Endpoints on Login'." },
+      { category: "Fix", text: "Account Settings: 'Chance of Making a Post' is now on the same row as 'Fire Unique Endpoints on Login' — nothing stacked below." },
+    ],
+  },
+  {
     version: "1.0.991",
     date: "16 Jun 2026",
     items: [
