@@ -402,6 +402,10 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(profiles).where(eq(profiles.proxyId, proxyId));
   }
 
+  async getProfilesByProxyHost(host: string): Promise<Profile[]> {
+    return await db.select().from(profiles).where(eq(profiles.proxyHost, host));
+  }
+
   async getResumingProfiles(): Promise<Profile[]> {
     return await db.select().from(profiles).where(
       and(eq(profiles.accountStatus, "stopped"), isNotNull(profiles.resumingUntil))

@@ -1787,8 +1787,8 @@ export function BanAnalyticsPage() {
       };
     }
     const payload = {
-      exportedAt: new Date().toISOString(),
       _analysisNote: "MAKE ASSUMPTIONS FROM DATA ALONE. Never theorise from outside third-party theories or internet knowledge — only the raw data in this file.",
+      exportedAt: new Date().toISOString(),
       summary: {
         banned: banEntries.length,
         automated: automatedEntries.length,
@@ -1804,11 +1804,36 @@ export function BanAnalyticsPage() {
       locked:    lockedEntries.map(makeEnrichFn(lockedEntries)),
       survivors: survivingAccounts.map(p => ({
         username: p.username,
+        proxyHost: p.proxyHost ?? null,
         runningMs: p.runMs,
         trustScore: (() => { const id = profileMap.get(p.username); const ti = id !== undefined ? trustMap.get(id) : undefined; return ti ? { rank: ti.rank, label: ti.label } : null; })(),
       })),
       proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),
       concurrencyAlerts: concurrencyAlerts,
+      verifyTimeline: (() => {
+        const allEntries = [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries];
+        const byProxyDay = new Map<string, { proxy: string; date: string; accounts: { username: string; timestamp: string }[] }>();
+        for (const e of allEntries) {
+          if (!e.proxyHost || !e.endpointSnapshot) continue;
+          let eps: Array<{ operationName: string; date: string; source?: string | null }> = [];
+          try { eps = JSON.parse(e.endpointSnapshot); } catch { continue; }
+          for (const ep of eps) {
+            if (ep.source !== "Verify" && ep.source !== "System") continue;
+            if (ep.operationName !== "VerifyAccount") continue;
+            const day = ep.date ? ep.date.slice(0, 10) : null;
+            if (!day) continue;
+            const key = `${e.proxyHost}||${day}`;
+            if (!byProxyDay.has(key)) byProxyDay.set(key, { proxy: e.proxyHost, date: day, accounts: [] });
+            const entry = byProxyDay.get(key)!;
+            if (!entry.accounts.some(a => a.username === e.username)) {
+              entry.accounts.push({ username: e.username, timestamp: ep.date });
+            }
+          }
+        }
+        return Array.from(byProxyDay.values())
+          .sort((a, b) => a.proxy.localeCompare(b.proxy) || a.date.localeCompare(b.date))
+          .map(v => ({ proxy: v.proxy, date: v.date, verifyCount: v.accounts.length, accounts: v.accounts }));
+      })(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url  = URL.createObjectURL(blob);

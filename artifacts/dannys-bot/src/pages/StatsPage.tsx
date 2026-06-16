@@ -410,7 +410,9 @@ export function StatsPage() {
       if (k === "status") return ["status", "Status"] as [string, string];
       if (k === "open_eb") return ["open_eb", "Open EB"] as [string, string];
       if (k === "trustscore") return ["trustscore", "TrustScore"] as [string, string];
-      return [k, ALL_STAT_TYPES.find(s => s.key === k)!.label] as [string, string];
+      if (k === "proxy_ip") return ["proxy_ip", "Proxy IP"] as [string, string];
+      const found = ALL_STAT_TYPES.find(s => s.key === k);
+      return [k, found ? found.label : k] as [string, string];
     }),
   ];
 

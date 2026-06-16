@@ -419,6 +419,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.991",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Statistics page: no longer crashes when the Proxy IP column is present in the column order." },
+      { category: "Fix", text: "Evasion Stats export: verify count per account now correctly counts successful verifies (browser + API both confirmed) instead of counting individual API calls within a verify session." },
+      { category: "Fix", text: "Evasion Stats export: added verify timeline section showing how many accounts verified through each proxy per day." },
+      { category: "Fix", text: "Proxy pause on ban: accounts using a direct proxy host (without a proxy ID) are now correctly paused when a sibling account is banned on the same proxy." },
+    ],
+  },
+  {
     version: "1.0.948",
     date: "14 Jun 2026",
     items: [

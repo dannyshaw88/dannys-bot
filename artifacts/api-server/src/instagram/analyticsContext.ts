@@ -35,16 +35,22 @@ const ACTION_OPS = new Set([
 ]);
 
 export function computeAnalyticsContext(
-  calls: Array<{ operationName: string; date: string; source?: string | null }>,
+  calls: Array<{ operationName: string; date: string; source?: string | null; message?: string | null }>,
   notes: string | null | undefined,
   proxyAccountCount: number,
 ): AnalyticsContext {
   const now = new Date();
   const last24hCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-  const verifyCountLast24h = calls.filter(
-    c => VERIFY_OPS.has(c.operationName) && c.date >= last24hCutoff,
+  // Count successful verifies only: each verify attempt logs one "Initiating" VerifyAccount entry
+  // (always), and a second "✗ Failed" entry only on failure. Successful = Initiating - Failed.
+  const verifyInitiating = calls.filter(
+    c => c.operationName === "VerifyAccount" && c.date >= last24hCutoff && (c.message?.includes("Initiating") ?? false),
   ).length;
+  const verifyFailed = calls.filter(
+    c => c.operationName === "VerifyAccount" && c.date >= last24hCutoff && (c.message?.includes("✗") ?? false),
+  ).length;
+  const verifyCountLast24h = Math.max(0, verifyInitiating - verifyFailed);
 
   let accountAgeDays: number | null = null;
   const notesStr = notes ?? "";

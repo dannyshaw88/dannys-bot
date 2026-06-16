@@ -25,13 +25,18 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
     source: c.source ?? null,
   })));
 
-  let proxyHost = "";
+  let proxyHost = (profile as any).proxyHost ?? "";
   let proxyAccountCount = 0;
   if (profile.proxyId) {
     const proxies = await storage.getProxies().catch(() => []);
     const linked = proxies.find((p: { id: number; host: string }) => p.id === profile.proxyId);
     if (linked) proxyHost = linked.host;
     const sameProxy = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+    proxyAccountCount = sameProxy.filter((p: { id: number; accountStatus?: string | null }) =>
+      p.id !== profileId && p.accountStatus !== "banned"
+    ).length;
+  } else if (proxyHost) {
+    const sameProxy = await storage.getProfilesByProxyHost(proxyHost).catch(() => []);
     proxyAccountCount = sameProxy.filter((p: { id: number; accountStatus?: string | null }) =>
       p.id !== profileId && p.accountStatus !== "banned"
     ).length;
@@ -62,10 +67,14 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
 
   console.log(`[ban-pipeline] @${profile.username} (id=${profileId}) — ${calls.length} calls snapshotted, status=banned [source=${source}]`);
 
-  if (!profile.proxyId) return;
+  if (!profile.proxyId && !proxyHost) return;
 
   const now90 = new Date(now.getTime() + 90 * 60 * 1000).toISOString();
-  const sameProxy = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+  const sameProxy = profile.proxyId
+    ? await storage.getProfilesByProxyId(profile.proxyId).catch(() => [])
+    : await storage.getProfilesByProxyHost(proxyHost).catch(() => []);
+  console.log(`[ban-pipeline] @${profile.username} — found ${sameProxy.length} sibling(s) on proxy ${proxyHost || profile.proxyId}`);
+  let pausedCount = 0;
   for (const sibling of sameProxy) {
     if (sibling.id === profileId || sibling.accountStatus === "banned" || !!sibling.resumingUntil) continue;
     await storage.updateProfile(sibling.id, {
@@ -74,5 +83,7 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
       resumingPrevStatus: sibling.accountStatus,
     });
     console.log(`[ban-pipeline] Paused @${sibling.username} (proxy taint) — resumes at ${now90}`);
+    pausedCount++;
   }
+  console.log(`[ban-pipeline] Proxy taint complete — paused ${pausedCount} account(s) on proxy ${proxyHost || profile.proxyId}`);
 }
