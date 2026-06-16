@@ -508,10 +508,11 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
   return <button onClick={() => navigate(`/profiles/${id}`)} className="font-semibold hover:text-cyan-400 hover:underline underline-offset-2 transition-colors cursor-pointer">@{username}</button>;
 }
 
-type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
+type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors" | "endpoint";
+type ErrorTab = Exclude<Tab, "survivors" | "endpoint">;
 type InnerTab = "data" | "theories";
 
-const TAB_CONFIG: Record<Exclude<Tab, "survivors">, {
+const TAB_CONFIG: Record<ErrorTab, {
   label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string;
   causeTitle: string; causeTheory: string; causeSignals: string[];
 }> = {
@@ -581,7 +582,7 @@ function StatRow({ label, val, warn }: { label: string; val: string; warn?: bool
 }
 
 // ── Causation Panel (per-tab theory + data validation) ─────────────────────
-function CausationPanel({ tabKey, cross, cfg }: { tabKey: Exclude<Tab, "survivors">; cross: CrossStats; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">] }) {
+function CausationPanel({ tabKey, cross, cfg }: { tabKey: ErrorTab; cross: CrossStats; cfg: typeof TAB_CONFIG[ErrorTab] }) {
   const [expanded, setExpanded] = useState(false);
 
   // Validate theory signals against actual data
@@ -666,7 +667,7 @@ function TrustScorePanel({ entries, survivingAccounts, trustMap, profileMap, tab
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>;
   profileMap: Map<string, number>;
-  tabKey: Exclude<Tab, "survivors">;
+  tabKey: ErrorTab;
 }) {
   const flaggedTrusts = entries.map(e => trustMap.get(profileMap.get(e.username) ?? -1)).filter(Boolean) as TrustInfo[];
   const survivorTrusts = survivingAccounts.map(a => trustMap.get(profileMap.get(a.username) ?? -1)).filter(Boolean) as TrustInfo[];
@@ -803,7 +804,7 @@ function ReliabilityPanel({ entries, profileNotesMap }: { entries: AnalyticsEntr
 
 // ── Per-entry card ────────────────────────────────────────────────────────────
 function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
-  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">]; cross: CrossStats;
+  entry: AnalyticsEntry; cfg: typeof TAB_CONFIG[ErrorTab]; cross: CrossStats;
   profileMap: Map<string, number>; trustMap: Map<number, TrustInfo>; reliability: Reliability;
 }) {
   const [open, setOpen] = useState(false);
@@ -952,7 +953,7 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
 
 // ── Pattern Intelligence ──────────────────────────────────────────────────────
 function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap, profileNotesMap, profileMap }: {
-  entries: AnalyticsEntry[]; tabKey: Exclude<Tab, "survivors">; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
+  entries: AnalyticsEntry[]; tabKey: ErrorTab; cfg: typeof TAB_CONFIG[ErrorTab];
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>; profileMap: Map<string, number>;
 }) {
@@ -1231,8 +1232,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
 
 // ── Tab content ───────────────────────────────────────────────────────────────
 function EntryList({ entries, cfg, tabKey, profileMap, trustMap, profileNotesMap, survivingAccounts }: {
-  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[Exclude<Tab, "survivors">];
-  tabKey: Exclude<Tab, "survivors">; profileMap: Map<string, number>;
+  entries: AnalyticsEntry[]; cfg: typeof TAB_CONFIG[ErrorTab];
+  tabKey: ErrorTab; profileMap: Map<string, number>;
   trustMap: Map<number, TrustInfo>; profileNotesMap: Map<string, string | null>;
   survivingAccounts: Array<{ username: string; runMs: number | null }>;
 }) {
@@ -1318,7 +1319,7 @@ function ProxyRankRow({ pr, i, profileMap }: { pr: ProxyRisk; i: number; profile
 
 // ── Theories Tab ──────────────────────────────────────────────────────────────
 function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, captchaEntries, lockedEntries }: {
-  forTab: Exclude<Tab, "survivors">;
+  forTab: ErrorTab;
   primaryEntries: AnalyticsEntry[];
   banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
   captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
@@ -1711,7 +1712,7 @@ export function BanAnalyticsPage() {
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>("ban");
-  const [innerTabs, setInnerTabs] = useState<Record<Exclude<Tab, "survivors">, InnerTab>>({ ban: "data", automated: "data", captcha: "data", locked: "data" });
+  const [innerTabs, setInnerTabs] = useState<Record<ErrorTab, InnerTab>>({ ban: "data", automated: "data", captcha: "data", locked: "data" });
   const [showAllProxy, setShowAllProxy] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
@@ -1722,6 +1723,10 @@ export function BanAnalyticsPage() {
   const { data: allProfiles = [] } = useQuery<ProfileRow[]>({ queryKey: ["/api/profiles"], queryFn: async () => (await fetch("/api/profiles", { credentials: "include" })).json(), refetchInterval: 60000 });
   const { data: allProxies = [] } = useQuery<ProxyRow[]>({ queryKey: ["/api/proxies"], queryFn: async () => (await fetch("/api/proxies", { credentials: "include" })).json(), refetchInterval: 60000 });
   const { data: survivorPatterns = [], isLoading: survivorPatternsLoading } = useQuery<SurvivorPattern[]>({ queryKey: ["/api/analytics/survivor-call-patterns"], queryFn: async () => (await fetch("/api/analytics/survivor-call-patterns", { credentials: "include" })).json(), enabled: activeTab === "survivors", refetchInterval: 60000, staleTime: 30000 });
+
+  interface EndpointRiskEntry { operationName: string; totalCount: number; preBanCount: number; preBanAccountCount: number; preBanPresencePct: number; proximityScore: number; avgPositionFromEnd: number | null; compositeRisk: number; dominantSource: string; }
+  interface EndpointRiskResult { endpoints: EndpointRiskEntry[]; totalAccounts: number; windowSize: number; }
+  const { data: endpointRisk, isLoading: endpointRiskLoading } = useQuery<EndpointRiskResult>({ queryKey: ["/api/analytics/endpoint-risk"], queryFn: async () => (await fetch("/api/analytics/endpoint-risk", { credentials: "include" })).json(), enabled: activeTab === "endpoint", staleTime: 60000 });
 
   const isLoading = banLoading || autoLoading || captchaLoading || lockedLoading;
   const profileMap   = useMemo(() => new Map<string, number>(allProfiles.map(p => [p.username, p.id])), [allProfiles]);
@@ -1744,9 +1749,9 @@ export function BanAnalyticsPage() {
 
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
   const concurrencyAlerts = useMemo(() => buildConcurrencyAlerts(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
-  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors"];
-  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
-  const ERROR_TABS: Exclude<Tab, "survivors">[] = ["ban", "automated", "captcha", "locked"];
+  const TABS: Tab[] = ["ban", "automated", "captcha", "locked", "survivors", "endpoint"];
+  const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors", endpoint: "Endpoint Risk" };
+  const ERROR_TABS: ErrorTab[] = ["ban", "automated", "captcha", "locked"];
 
   function handleExport() {
     const levels = getTrustLevels();
@@ -1788,6 +1793,13 @@ export function BanAnalyticsPage() {
     }
     const payload = {
       _analysisNote: "MAKE ASSUMPTIONS FROM DATA ALONE. Never theorise from outside third-party theories or internet knowledge — only the raw data in this file.",
+      _fieldNotes: {
+        trustScore: "USER-ASSIGNED label — this is the operator's own estimate of the account's trust level on Instagram, not a score computed or returned by Instagram. null = no label assigned yet (account was banned before the user labelled it, or simply not labelled). NOOB = user's guess that the account is brand new / low trust. Do NOT treat trustScore as a signal from Instagram's systems.",
+        proxyHost: "The proxy IP associated with the account at the time of the ban event. Empty string means the proxy was not recorded in the evasion log for this account — it does NOT mean the account ran without a proxy. All accounts require a proxy to run.",
+        spanHours: "Time in hours between the FIRST and LAST logged endpoint call for this account. Only accounts that have endpoint snapshot data will have a spanHours value. null means endpoint history was not captured.",
+        runningMs: "For survivor accounts: milliseconds since the account was first registered in the software. This is a wall-clock duration, not a measure of active API usage. An account can have a high runningMs without ever having made a mobile API call.",
+        anomalyScore: "Computed from the endpoint timing and diversity of the account's logged API calls. Lower = more human-like. This is calculated from the app's own heuristics, not from Instagram."
+      },
       exportedAt: new Date().toISOString(),
       summary: {
         banned: banEntries.length,
@@ -1878,15 +1890,16 @@ export function BanAnalyticsPage() {
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={`flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === tab ? "bg-muted text-foreground border-b-2 border-cyan-500" : "text-muted-foreground hover:text-foreground"}`}>
                     {tab === "survivors" && <Award className="w-3 h-3 text-green-500 shrink-0" />}
+                    {tab === "endpoint" && <Flame className="w-3 h-3 text-red-400 shrink-0" />}
                     {TAB_LABELS[tab]}{count >= 0 && <span className="opacity-60">({count})</span>}
                   </button>
                 );
               })}
             </div>
             <div className="p-4">
-              {ERROR_TABS.includes(activeTab as Exclude<Tab, "survivors">) ? (
+              {ERROR_TABS.includes(activeTab as ErrorTab) ? (
                 (() => {
-                  const errTab = activeTab as Exclude<Tab, "survivors">;
+                  const errTab = activeTab as ErrorTab;
                   const primaryEntries = errTab === "ban" ? banEntries : errTab === "automated" ? automatedEntries : errTab === "captcha" ? captchaEntries : lockedEntries;
                   const currentInner = innerTabs[errTab];
                   return (
@@ -2067,11 +2080,87 @@ export function BanAnalyticsPage() {
                     </div>
                   );
                 })()
+              ) : activeTab === "endpoint" ? (
+                <div className="space-y-4">
+                  {endpointRiskLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground py-10 justify-center">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Computing endpoint risk from ban snapshots…</span>
+                    </div>
+                  ) : !endpointRisk || endpointRisk.totalAccounts === 0 ? (
+                    <div className="border border-border rounded-lg p-10 text-center">
+                      <Flame className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm font-medium">No ban data yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">Endpoint risk requires at least one ban / automated / captcha / locked event with an endpoint snapshot captured.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="border border-border rounded-lg overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
+                          <Flame className="w-4 h-4 text-red-500" />
+                          <span className="text-sm font-semibold">Endpoint Risk Ranking</span>
+                          <span className="text-xs text-muted-foreground ml-1">across {endpointRisk.totalAccounts} flagged account events · last {endpointRisk.windowSize} calls before each event = pre-ban window</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="border-b border-border bg-muted/40">
+                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
+                                <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Source</th>
+                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Total Calls</th>
+                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Pre-ban %</th>
+                                <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Avg Pos</th>
+                                <th className="text-center px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide">Risk</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/40">
+                              {endpointRisk.endpoints.map((ep, i) => {
+                                const risk = ep.preBanPresencePct >= 50 && ep.proximityScore >= 0.3 ? "HIGH"
+                                  : ep.preBanPresencePct >= 20 || ep.proximityScore >= 0.2 ? "MED" : "LOW";
+                                return (
+                                  <tr key={ep.operationName} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                                    <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
+                                    <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[220px] truncate">{ep.operationName}</td>
+                                    <td className="px-3 py-1.5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${ep.dominantSource === "Verify" || ep.dominantSource === "System" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : ep.dominantSource === "Automation" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" : "bg-muted text-muted-foreground"}`}>
+                                        {ep.dominantSource}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.totalCount.toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: ep.preBanPresencePct >= 50 ? "#dc2626" : ep.preBanPresencePct >= 20 ? "#d97706" : "#6b7280" }}>
+                                      {ep.preBanPresencePct.toFixed(1)}%
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">
+                                      {ep.avgPositionFromEnd !== null ? `#${Math.round(ep.avgPositionFromEnd + 1)}` : "—"}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-center">
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${risk === "HIGH" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : risk === "MED" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                                        {risk}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div className="border border-border rounded-lg px-4 py-3 text-[11px] text-muted-foreground space-y-1.5">
+                        <p className="font-semibold text-foreground text-xs flex items-center gap-1.5"><Activity className="w-3 h-3" /> How to read this table</p>
+                        <p><strong>Pre-ban %</strong> — percentage of all flagged events where this endpoint appeared in the final {endpointRisk.windowSize} calls. 80% means 8 in 10 accounts were calling this endpoint right before they went down.</p>
+                        <p><strong>Avg Pos</strong> — average rank from end of log (#1 = the very last call before the ban event). A low position means this endpoint fires right before the account dies.</p>
+                        <p><strong>Risk = HIGH</strong> when pre-ban presence ≥50% <em>and</em> proximity score ≥0.3. This is empirical correlation from your own data — not Instagram's internal scoring. Under the budget hypothesis, HIGH-risk endpoints likely carry the largest per-call suspicion weight.</p>
+                        <p className="pt-0.5 border-t border-border/40 text-[10px]">TopicalExplore note: real users rarely open Explore automatically on every cold login. If TopicalExplore scores HIGH here, it is a strong candidate for removal or rate-limiting in the verify sequence.</p>
+                      </div>
+                    </>
+                  )}
+                </div>
               ) : null}
             </div>
           </div>
 
-          {(activeTab === "survivors" || innerTabs[activeTab as Exclude<Tab, "survivors">] === "data") && proxyRisks.length > 0 && (
+          {(activeTab === "survivors" || (activeTab !== "endpoint" && innerTabs[activeTab as ErrorTab] === "data")) && proxyRisks.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <Shield className="w-4 h-4 text-cyan-500" />
@@ -2089,7 +2178,7 @@ export function BanAnalyticsPage() {
             </div>
           )}
 
-          {(activeTab === "survivors" || innerTabs[activeTab as Exclude<Tab, "survivors">] === "data") && concurrencyAlerts.length > 0 && (
+          {(activeTab === "survivors" || (activeTab !== "endpoint" && innerTabs[activeTab as ErrorTab] === "data")) && concurrencyAlerts.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />

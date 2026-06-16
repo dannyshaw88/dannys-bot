@@ -840,6 +840,92 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Endpoint Risk Analysis: which endpoints correlate most with bans ────────
+  // For each account's endpointSnapshot, the last WINDOW calls = "pre-ban window".
+  // Pre-ban presence % = how many accounts had this endpoint in their pre-ban window.
+  // Proximity score = pre-ban appearances / total appearances (0–1, higher = disproportionately near ban).
+  // Composite risk = (proximity × 0.5 + presence × 0.5) × log(1+totalCalls) — prevents rare no-op endpoints scoring artificially high.
+  app.get("/api/analytics/endpoint-risk", async (req, res) => {
+    try {
+      const [bans, automated, captcha, locked] = await Promise.all([
+        storage.getBanAnalytics(),
+        storage.getAutomatedBehaviourAnalytics(),
+        storage.getCaptchaAnalytics(),
+        storage.getLockedAnalytics(),
+      ]);
+      const allRecords: { endpointSnapshot: string }[] = [...bans, ...automated, ...captcha, ...locked];
+      const totalAccounts = allRecords.length;
+
+      if (totalAccounts === 0) {
+        res.json({ endpoints: [], totalAccounts: 0, windowSize: 20 });
+        return;
+      }
+
+      const WINDOW = 20;
+      const preBanCount: Record<string, number>          = {};
+      const totalCount: Record<string, number>           = {};
+      const preBanAccountSet: Record<string, Set<number>> = {};
+      const sourceTally: Record<string, Record<string, number>> = {};
+      const posSum: Record<string, number>               = {};
+      const posCnt: Record<string, number>               = {};
+
+      for (let ai = 0; ai < allRecords.length; ai++) {
+        const snap = allRecords[ai].endpointSnapshot;
+        if (!snap) continue;
+        let calls: Array<{ operationName: string; source?: string | null }>;
+        try { calls = JSON.parse(snap); } catch { continue; }
+        if (!Array.isArray(calls) || calls.length === 0) continue;
+        calls = calls.filter(c => c.source !== "HikerAPI");
+
+        for (const c of calls) {
+          const op = c.operationName; if (!op) continue;
+          totalCount[op] = (totalCount[op] ?? 0) + 1;
+          if (!sourceTally[op]) sourceTally[op] = {};
+          const src = c.source ?? "unknown";
+          sourceTally[op][src] = (sourceTally[op][src] ?? 0) + 1;
+        }
+
+        const window = calls.slice(0, WINDOW);
+        for (let pos = 0; pos < window.length; pos++) {
+          const op = window[pos].operationName; if (!op) continue;
+          preBanCount[op] = (preBanCount[op] ?? 0) + 1;
+          if (!preBanAccountSet[op]) preBanAccountSet[op] = new Set();
+          preBanAccountSet[op].add(ai);
+          posSum[op] = (posSum[op] ?? 0) + pos;
+          posCnt[op] = (posCnt[op] ?? 0) + 1;
+        }
+      }
+
+      const endpoints = Object.keys(totalCount).map(op => {
+        const total    = totalCount[op];
+        const preBan   = preBanCount[op] ?? 0;
+        const acctHits = preBanAccountSet[op]?.size ?? 0;
+        const avgPos   = posCnt[op] > 0 ? posSum[op] / posCnt[op] : null;
+        const proximity         = total > 0 ? preBan / total : 0;
+        const preBanPresencePct = (acctHits / totalAccounts) * 100;
+        const srcs = sourceTally[op] ?? {};
+        const dominantSource = Object.entries(srcs).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+        const compositeRisk  = (proximity * 0.5 + (acctHits / totalAccounts) * 0.5) * Math.log(1 + total);
+        return {
+          operationName: op,
+          totalCount: total,
+          preBanCount: preBan,
+          preBanAccountCount: acctHits,
+          preBanPresencePct: Math.round(preBanPresencePct * 10) / 10,
+          proximityScore: Math.round(proximity * 1000) / 1000,
+          avgPositionFromEnd: avgPos !== null ? Math.round(avgPos * 10) / 10 : null,
+          compositeRisk: Math.round(compositeRisk * 1000) / 1000,
+          dominantSource,
+        };
+      }).sort((a, b) => b.compositeRisk - a.compositeRisk);
+
+      res.json({ endpoints, totalAccounts, windowSize: WINDOW });
+    } catch (err) {
+      req.log.error({ err }, "[endpoint-risk] error");
+      res.status(500).json({ error: "Failed to compute endpoint risk" });
+    }
+  });
+
   // ── Survivor call patterns: live call history for valid surviving accounts ──
   // Returns each valid account's recent API call snapshot in the same format
   // as ban entries so the frontend can compute the same metrics and compare.

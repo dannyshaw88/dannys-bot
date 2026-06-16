@@ -65,6 +65,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.993",
     date: "16 Jun 2026",
     items: [
+      { category: "New", text: "Evasion Stats: new Endpoint Risk tab — data-driven table showing which API endpoints appear most in the final 20 calls before each ban/automated/captcha/locked event. Ranked by pre-ban presence %, with HIGH/MED/LOW risk labels and a TopicalExplore callout." },
       { category: "New", text: "Account Manager: new Verify Health column (turn on via Manage Columns) shows CLEAN (green) when an account's verify used only the core 10 ops, or +N (amber) when extra operations were triggered beyond the baseline." },
     ],
   },
