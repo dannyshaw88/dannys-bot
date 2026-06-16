@@ -62,6 +62,33 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.982",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Sidebar: 'EVASION' label no longer hyphen-breaks across two lines — the word now always renders as one." },
+      { category: "UI", text: "Human Session Tool: all sub-tool group boxes (Emulation, Follow, Unfollow, Contact) now display at 50% width instead of full page width." },
+      { category: "UI", text: "Human Session Tool: 'Scheduled for:' now shows the time first then the date (e.g. 14:30:00, 16 Jun)." },
+      { category: "New", text: "Open Instagram Calls: Fire Chance % min/max inputs added — set to 10–15% to fire these calls only that fraction of the time the Human Session runs." },
+      { category: "UI", text: "Make a Post (Repost): tool renamed to 'Make a Post'." },
+      { category: "UI", text: "Make a Post: 'Posted Posts' button moved to the title row alongside the tool name." },
+      { category: "UI", text: "Make a Post: Post Caption Text section moved to directly below the title row." },
+      { category: "UI", text: "Make a Post: caption placeholder text updated to 'Type a caption or use a token'." },
+      { category: "UI", text: "Make a Post: 'Disable this source' checkbox moved to sit next to the source label instead of being right-aligned; source settings now fully collapse when disabled." },
+      { category: "UI", text: "Make a Post: 'Run Repost Now' button removed." },
+    ],
+  },
+  {
+    version: "1.0.981",
+    date: "16 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Settings: Proxy Settings section moved to directly below the Verify button — easier to fill in before verifying." },
+      { category: "UI", text: "Account Settings: Fire Random Endpoints at Login checkbox now sits to the right of the Verify button instead of below it." },
+      { category: "UI", text: "Tab bar: new METRICS button added (between BROWSER and COPY SETTINGS) — opens the Stats page Metrics tab pre-selected to that account." },
+      { category: "UI", text: "Tab bar: inactive tab text is now a brighter cyan for better readability." },
+      { category: "UI", text: "Human Session Tool: 'Exec Order' renamed to 'Order %' — inputs now capped at 0–100 to make priority percentage-based." },
+    ],
+  },
+  {
     version: "1.0.980",
     date: "16 Jun 2026",
     items: [

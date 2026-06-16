@@ -2240,14 +2240,21 @@ class AutomationEngine {
 
     // ── Force Emulation — always runs FIRST if enabled ───────────────────────
     if (!!s.forceEmulationEnabled) {
-      client.setApiCallSource("Human Session Emulation");
-      try {
-        await client.runForceEmulation(s.forceEmulationRandomise === true);
-        console.log(`[engine] @${profile.username}: 📱 force emulation calls complete`);
-        this.logAction(profile.id, tool.id, "force_emulation", "", "", "", "ok", "Force emulation API calls fired");
-      } catch (e: any) {
-        if (await checkSessionErr(e, "force_emulation")) return;
-        console.warn(`[engine] @${profile.username}: force emulation error: ${e?.message}`);
+      const feChanceMin = Math.min(100, Math.max(0, Number((s as any).forceEmulationChanceMin ?? 100)));
+      const feChanceMax = Math.min(100, Math.max(feChanceMin, Number((s as any).forceEmulationChanceMax ?? 100)));
+      const feChance = feChanceMin + Math.random() * (feChanceMax - feChanceMin);
+      if (Math.random() * 100 < feChance) {
+        client.setApiCallSource("Human Session Emulation");
+        try {
+          await client.runForceEmulation(s.forceEmulationRandomise === true);
+          console.log(`[engine] @${profile.username}: 📱 force emulation calls complete`);
+          this.logAction(profile.id, tool.id, "force_emulation", "", "", "", "ok", "Force emulation API calls fired");
+        } catch (e: any) {
+          if (await checkSessionErr(e, "force_emulation")) return;
+          console.warn(`[engine] @${profile.username}: force emulation error: ${e?.message}`);
+        }
+      } else {
+        console.log(`[engine] @${profile.username}: 📱 force emulation skipped (chance roll: ${feChance.toFixed(1)}%)`);
       }
     }
 

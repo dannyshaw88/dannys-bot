@@ -642,7 +642,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     if (!lastAction && !(engineStatus?.nextHumanSessionAt)) return null;
     const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "d MMM, HH:mm:ss"), executing: false };
+    return { label: format(new Date(nextAt), "HH:mm:ss, d MMM"), executing: false };
   })();
 
   return (
@@ -692,7 +692,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       </div>
 
       {/* ── EMULATION GROUP ──────────────────────────────────────────── */}
-      <div className="mt-[25px]">
+      <div className="mt-[25px] max-w-[50%]">
         <div className="border border-border rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400">
             <Zap className="w-5 h-5 text-white shrink-0" />
@@ -721,6 +721,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <label htmlFor="forceEmulationRandomise" className="text-sm cursor-pointer select-none">Randomise order</label>
                 </div>
               </div>
+              <div className={`flex items-center gap-2 mt-2 transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Fire Chance %</span>
+                <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  value={(settings as any).forceEmulationChanceMin ?? 100}
+                  onChange={(e) => setSettings({ ...settings, forceEmulationChanceMin: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  value={(settings as any).forceEmulationChanceMax ?? 100}
+                  onChange={(e) => setSettings({ ...settings, forceEmulationChanceMax: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                />
+                <span className="text-[10px] text-muted-foreground">% of executions</span>
+              </div>
               <p className="text-[11px] text-muted-foreground mt-1">
                 Fires Instagram app-open API calls at the start of every session, before any other action runs.
               </p>
@@ -728,7 +741,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── View Timeline Feed ── */}
             <div className="px-4 py-3 space-y-1.5">
-              {/* ROW 1: [✓] View Timeline Feed | Posts Min/Max | If 0 Posts→Follow Suggested | Reel View%  ——  Exec Order / Skip Chance on right */}
+              {/* ROW 1: [✓] View Timeline Feed | Posts Min/Max | If 0 Posts→Follow Suggested | Reel View%  ——  Order % / Skip Chance on right */}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-wrap">
                   <input type="checkbox" id="viewTimelineFeedEnabled"
@@ -784,13 +797,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedOrderMin ?? 0}
                       onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedOrderMax ?? 0}
                       onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
@@ -948,13 +961,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMin ?? 0}
                       onChange={(e) => setSettings({ ...settings, humanSessionOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMax ?? 0}
                       onChange={(e) => setSettings({ ...settings, humanSessionOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
@@ -1007,13 +1020,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesOrderMin ?? 0}
                       onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesOrderMax ?? 0}
                       onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
@@ -1063,13 +1076,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.checkDmOrderMin ?? 0}
                       onChange={(e) => setSettings({ ...settings, checkDmOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.checkDmOrderMax ?? 0}
                       onChange={(e) => setSettings({ ...settings, checkDmOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
@@ -1090,7 +1103,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
 
-            {/* ── Repost ── */}
+            {/* ── Make a Post ── */}
             <div className="px-4 py-3 space-y-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1101,18 +1114,29 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <label htmlFor="repostEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
                     <Repeat2 className="w-4 h-4 text-green-500" />
-                    Repost
+                    Make a Post
                   </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+                    onClick={() => setShowReposted(v => !v)}
+                  >
+                    <Repeat2 className="w-3.5 h-3.5 text-green-500" />
+                    Posted Posts
+                    <span className="text-[10px] text-muted-foreground ml-0.5">({repostedPostsList?.length ?? '…'})</span>
+                    {showReposted ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+                  </Button>
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.repostOrderMin ?? 0}
                       onChange={(e) => setSettings({ ...settings, repostOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                       value={settings.repostOrderMax ?? 0}
                       onChange={(e) => setSettings({ ...settings, repostOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
@@ -1132,25 +1156,211 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
 
+              {/* Posted Posts table */}
+              {showReposted && (
+                <div className="border border-border rounded-lg overflow-hidden animate-in fade-in duration-200">
+                  <div className="overflow-x-auto max-h-72">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Date / Time</th>
+                          <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Source Account</th>
+                          <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Source Post</th>
+                          <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">My Repost</th>
+                          <th className="px-4 py-2.5 font-bold bg-muted/30 w-full">Caption (preview)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {repostedPostsLoading ? (
+                          Array.from({ length: 4 }).map((_, i) => (
+                            <tr key={i} className="animate-pulse">
+                              <td colSpan={5} className="px-4 py-3 bg-muted/10 h-10" />
+                            </tr>
+                          ))
+                        ) : !repostedPostsList || repostedPostsList.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                              <Repeat2 className="w-6 h-6 mx-auto mb-2 text-muted-foreground/30" />
+                              <p className="text-xs font-medium">No posts yet</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          repostedPostsList.map(rp => (
+                            <tr key={rp.id} className="hover:bg-accent/5 transition-colors">
+                              <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground text-xs font-mono">
+                                <span className="flex items-center gap-1.5">
+                                  <Clock className="w-3 h-3 shrink-0" />
+                                  {format(new Date(rp.repostedAt), "MMM d, HH:mm:ss")}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap font-medium text-foreground">
+                                <button
+                                  onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${rp.sourceUsername}/`)}
+                                  className="flex items-center gap-1 text-primary hover:underline group text-xs"
+                                >
+                                  @{rp.sourceUsername}
+                                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
+                                {rp.shortcode ? (
+                                  <button
+                                    onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${rp.shortcode}/`)}
+                                    className="flex items-center gap-1 text-primary hover:underline group"
+                                  >
+                                    <ImageIcon className="w-3 h-3" />
+                                    {rp.shortcode}
+                                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
+                                ) : (
+                                  <span className="text-muted-foreground/40"> </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
+                                {(rp as any).postedShortcode ? (
+                                  <button
+                                    onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${(rp as any).postedShortcode}/`)}
+                                    className="flex items-center gap-1 text-primary hover:underline group"
+                                  >
+                                    <ImageIcon className="w-3 h-3" />
+                                    {(rp as any).postedShortcode}
+                                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
+                                ) : (
+                                  <span className="text-muted-foreground/40"> </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[240px]">
+                                <span className="line-clamp-2">{rp.caption || " "}</span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
         <div className={`space-y-3 ${!settings.repostEnabled ? 'hidden' : ''}`}>
-          {/* Source 1: @username */}
-          <div className="border border-border/60 rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <AtSign className="w-3.5 h-3.5 text-muted-foreground" /> Source: Instagram Account
-              </Label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  id="repostDisableUsernameSource"
-                  checked={!!settings.repostDisableUsernameSource}
-                  onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                />
-                <label htmlFor="repostDisableUsernameSource" className="text-[11px] text-muted-foreground cursor-pointer select-none">Disable this source</label>
+          {/* ── Post Caption Text ──────────────────────────────────── */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  onClick={() => {
+                    const t = (settings as any).repostCaptionText ?? "";
+                    let depth = 0;
+                    let err: string | null = null;
+                    for (const ch of t) {
+                      if (ch === "{") depth++;
+                      else if (ch === "}") { depth--; if (depth < 0) { err = "Unexpected }"; break; } }
+                    }
+                    if (!err && depth !== 0) err = `${depth} unclosed {`;
+                    setSpinSyntaxMsg(err ?? "✓ Syntax OK");
+                    setSpinPreview(null);
+                  }}
+                >
+                  Check Spin Syntax
+                </button>
+                <button
+                  type="button"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  onClick={() => {
+                    let result = (settings as any).repostCaptionText ?? "";
+                    let i = 0;
+                    while (result.includes("{") && i++ < 100) {
+                      const prev = result;
+                      result = result.replace(/\{([^{}]+)\}/g, (_: string, g: string) => {
+                        const opts = g.split("|");
+                        return opts[Math.floor(Math.random() * opts.length)];
+                      });
+                      if (prev === result) break;
+                    }
+                    setSpinPreview(result);
+                    setSpinSyntaxMsg(null);
+                  }}
+                >
+                  Spin Text
+                </button>
               </div>
             </div>
-            <div className={`flex flex-wrap items-end gap-4 transition-opacity ${settings.repostDisableUsernameSource ? 'opacity-40 pointer-events-none' : ''}`}>
+
+            <p className="text-[10px] text-muted-foreground/70">
+              You can use multi-level spin syntax for the caption. Leave blank to use the original post's caption.
+            </p>
+
+            <Textarea
+              className="text-xs font-mono resize-none h-24 leading-relaxed"
+              placeholder="Type a caption or use a token"
+              value={(settings as any).repostCaptionText ?? ""}
+              onChange={(e) => {
+                setSettings({ ...settings, repostCaptionText: e.target.value } as any);
+                setSpinPreview(null);
+                setSpinSyntaxMsg(null);
+              }}
+            />
+
+            {/* Token chips */}
+            <div className="flex flex-wrap gap-1">
+              {[
+                "[ORIGINALPOSTCAPTION]",
+                "[ORIGINALPOSTHASHTAGS]",
+                "[ORIGINALPOSTCAPTION NO HASHTAGS]",
+                "@USERNAME",
+                "@CURRENTUSERNAME",
+                "[POSTURL]",
+              ].map((tok) => (
+                <button
+                  key={tok}
+                  type="button"
+                  title={`Click to insert ${tok}`}
+                  className="h-5 px-1.5 text-[9px] font-mono rounded bg-muted/60 border border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors"
+                  onClick={() => {
+                    const cur = (settings as any).repostCaptionText ?? "";
+                    setSettings({ ...settings, repostCaptionText: cur ? `${cur}\n${tok}` : tok } as any);
+                    setSpinPreview(null);
+                    setSpinSyntaxMsg(null);
+                  }}
+                >
+                  {tok}
+                </button>
+              ))}
+            </div>
+
+            {spinSyntaxMsg && (
+              <p className={`text-[10px] px-2 py-1 rounded border ${spinSyntaxMsg.startsWith("✓") ? "text-green-600 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800" : "text-destructive border-destructive/30 bg-destructive/5"}`}>
+                {spinSyntaxMsg}
+              </p>
+            )}
+            {spinPreview !== null && (
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground/70">Spin preview</Label>
+                <p className="text-[10px] text-muted-foreground border border-border/50 rounded px-2 py-1.5 bg-muted/20 whitespace-pre-wrap break-all leading-relaxed">{spinPreview || <em>(empty)</em>}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Source 1: @username */}
+          <div className="border border-border/60 rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="repostDisableUsernameSource"
+                checked={!!settings.repostDisableUsernameSource}
+                onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer"
+              />
+              <label htmlFor="repostDisableUsernameSource" className="text-[11px] text-muted-foreground cursor-pointer select-none">Disable this source</label>
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5 ml-1">
+                <AtSign className="w-3.5 h-3.5 text-muted-foreground" /> Source: Instagram Account
+              </Label>
+            </div>
+            {!settings.repostDisableUsernameSource && (<>
+            <div className={`flex flex-wrap items-end gap-4`}>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
               <div className="relative max-w-[220px]">
@@ -1247,6 +1457,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 Auto-disable when no more unique posts are found from the source account
               </label>
             </div>
+            </>)}
           </div>{/* end Source 1 border */}
 
           {/* Source 2: Local PC Folder */}
@@ -1340,108 +1551,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </label>
           </div>
 
-          {/* ── Post Caption Text ──────────────────────────────────── */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-                  onClick={() => {
-                    const t = (settings as any).repostCaptionText ?? "";
-                    let depth = 0;
-                    let err: string | null = null;
-                    for (const ch of t) {
-                      if (ch === "{") depth++;
-                      else if (ch === "}") { depth--; if (depth < 0) { err = "Unexpected }"; break; } }
-                    }
-                    if (!err && depth !== 0) err = `${depth} unclosed {`;
-                    setSpinSyntaxMsg(err ?? "✓ Syntax OK");
-                    setSpinPreview(null);
-                  }}
-                >
-                  Check Spin Syntax
-                </button>
-                <button
-                  type="button"
-                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-                  onClick={() => {
-                    let result = (settings as any).repostCaptionText ?? "";
-                    let i = 0;
-                    while (result.includes("{") && i++ < 100) {
-                      const prev = result;
-                      result = result.replace(/\{([^{}]+)\}/g, (_: string, g: string) => {
-                        const opts = g.split("|");
-                        return opts[Math.floor(Math.random() * opts.length)];
-                      });
-                      if (prev === result) break;
-                    }
-                    setSpinPreview(result);
-                    setSpinSyntaxMsg(null);
-                  }}
-                >
-                  Spin Text
-                </button>
-              </div>
-            </div>
-
-            <p className="text-[10px] text-muted-foreground/70">
-              You can use multi-level spin syntax for the caption. Leave blank to use the original post's caption.
-            </p>
-
-            <Textarea
-              className="text-xs font-mono resize-none h-24 leading-relaxed"
-              placeholder={"[ORIGINALPOSTCAPTION]\n\nor mix spin syntax:\n{Great post|Amazing|Love this} {by @USERNAME|from @USERNAME}"}
-              value={(settings as any).repostCaptionText ?? ""}
-              onChange={(e) => {
-                setSettings({ ...settings, repostCaptionText: e.target.value } as any);
-                setSpinPreview(null);
-                setSpinSyntaxMsg(null);
-              }}
-            />
-
-            {/* Token chips */}
-            <div className="flex flex-wrap gap-1">
-              {[
-                "[ORIGINALPOSTCAPTION]",
-                "[ORIGINALPOSTHASHTAGS]",
-                "[ORIGINALPOSTCAPTION NO HASHTAGS]",
-                "@USERNAME",
-                "@CURRENTUSERNAME",
-                "[POSTURL]",
-              ].map((tok) => (
-                <button
-                  key={tok}
-                  type="button"
-                  title={`Click to insert ${tok}`}
-                  className="h-5 px-1.5 text-[9px] font-mono rounded bg-muted/60 border border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors"
-                  onClick={() => {
-                    const cur = (settings as any).repostCaptionText ?? "";
-                    setSettings({ ...settings, repostCaptionText: cur ? `${cur}\n${tok}` : tok } as any);
-                    setSpinPreview(null);
-                    setSpinSyntaxMsg(null);
-                  }}
-                >
-                  {tok}
-                </button>
-              ))}
-            </div>
-
-            {/* Spin preview / syntax result */}
-            {spinSyntaxMsg && (
-              <p className={`text-[10px] px-2 py-1 rounded border ${spinSyntaxMsg.startsWith("✓") ? "text-green-600 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800" : "text-destructive border-destructive/30 bg-destructive/5"}`}>
-                {spinSyntaxMsg}
-              </p>
-            )}
-            {spinPreview !== null && (
-              <div className="space-y-0.5">
-                <Label className="text-[10px] text-muted-foreground/70">Spin preview</Label>
-                <p className="text-[10px] text-muted-foreground border border-border/50 rounded px-2 py-1.5 bg-muted/20 whitespace-pre-wrap break-all leading-relaxed">{spinPreview || <em>(empty)</em>}</p>
-              </div>
-            )}
-          </div>
-
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             During each session, picks the latest unreposted post from the source account and reposts it.
             <br />
@@ -1459,135 +1568,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
           )}
 
-          {/* Manual trigger */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-green-300 text-green-700 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
-              disabled={repostingNow || !settings.repostEnabled || !String((settings as any).repostSourceUsername ?? "").trim()}
-              onClick={async () => {
-                setRepostingNow(true);
-                try {
-                  const res = await fetch(`/api/profiles/${tool.profileId}/run-repost-now`, { method: "POST" });
-                  const data = await res.json() as { ok: boolean; message: string };
-                  toast({
-                    title: data.ok ? "Repost queued" : "Repost failed",
-                    description: data.message,
-                    variant: data.ok ? "default" : "destructive",
-                  });
-                } catch (e: any) {
-                  toast({ title: "Error", description: e?.message ?? "Unknown error", variant: "destructive" });
-                } finally {
-                  setRepostingNow(false);
-                }
-              }}
-            >
-              {repostingNow ? (
-                <><span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />Reposting…</>
-              ) : (
-                <><Repeat2 className="w-3.5 h-3.5 shrink-0" />Run Repost Now</>
-              )}
-            </Button>
-            <span className="text-[10px] text-muted-foreground">Bypass skip chance &amp; timer posts 1 now</span>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1.5 text-xs h-7 px-2.5"
-            onClick={() => setShowReposted(v => !v)}
-          >
-            <Repeat2 className="w-3.5 h-3.5 text-green-500" />
-            Reposted Posts
-            <span className="text-[10px] text-muted-foreground ml-0.5">({repostedPostsList?.length ?? '…'})</span>
-            {showReposted ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
-          </Button>
-
-          {showReposted && (
-            <div className="border border-border rounded-lg overflow-hidden animate-in fade-in duration-200">
-              <div className="overflow-x-auto max-h-72">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Date / Time</th>
-                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Source Account</th>
-                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Source Post</th>
-                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">My Repost</th>
-                      <th className="px-4 py-2.5 font-bold bg-muted/30 w-full">Caption (preview)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {repostedPostsLoading ? (
-                      Array.from({ length: 4 }).map((_, i) => (
-                        <tr key={i} className="animate-pulse">
-                          <td colSpan={5} className="px-4 py-3 bg-muted/10 h-10" />
-                        </tr>
-                      ))
-                    ) : !repostedPostsList || repostedPostsList.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                          <Repeat2 className="w-6 h-6 mx-auto mb-2 text-muted-foreground/30" />
-                          <p className="text-xs font-medium">No posts reposted yet</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      repostedPostsList.map(rp => (
-                        <tr key={rp.id} className="hover:bg-accent/5 transition-colors">
-                          <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground text-xs font-mono">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 shrink-0" />
-                              {format(new Date(rp.repostedAt), "MMM d, HH:mm:ss")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap font-medium text-foreground">
-                            <button
-                              onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${rp.sourceUsername}/`)}
-                              className="flex items-center gap-1 text-primary hover:underline group text-xs"
-                            >
-                              @{rp.sourceUsername}
-                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                          </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
-                            {rp.shortcode ? (
-                              <button
-                                onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${rp.shortcode}/`)}
-                                className="flex items-center gap-1 text-primary hover:underline group"
-                              >
-                                <ImageIcon className="w-3 h-3" />
-                                {rp.shortcode}
-                                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </button>
-                            ) : (
-                              <span className="text-muted-foreground/40"> </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
-                            {(rp as any).postedShortcode ? (
-                              <button
-                                onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${(rp as any).postedShortcode}/`)}
-                                className="flex items-center gap-1 text-green-500 hover:underline group"
-                              >
-                                <ImageIcon className="w-3 h-3" />
-                                {(rp as any).postedShortcode}
-                                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </button>
-                            ) : (
-                              <span className="text-muted-foreground/40"> </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[240px]">
-                            <span className="line-clamp-2">{rp.caption || " "}</span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1597,7 +1577,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Follow Tool (embedded) ────────────────────────────── */}
       {followTool && (
-        <div className="mt-[25px]">
+        <div className="mt-[25px] max-w-[50%]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
               <div className="flex items-center gap-2">
@@ -1616,13 +1596,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).followOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).followOrderMax ?? 0}
                     onChange={(e) => setSettings({ ...settings, followOrderMax: Number(e.target.value) } as any)}
                   />
@@ -1650,7 +1630,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
       {unfollowTool && (
-        <div className="mt-[25px]">
+        <div className="mt-[25px] max-w-[50%]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
               <div className="flex items-center gap-2">
@@ -1669,13 +1649,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowOrderMax ?? 0}
                     onChange={(e) => setSettings({ ...settings, unfollowOrderMax: Number(e.target.value) } as any)}
                   />
@@ -1703,7 +1683,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Contact Tool (embedded) ───────────────────────────── */}
       {contactTool && (
-        <div className="mt-[25px]">
+        <div className="mt-[25px] max-w-[50%]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
               <div className="flex items-center gap-2">
@@ -1722,13 +1702,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <span className="text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).contactOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
                   />
                   <span className="text-[10px] text-white">–</span>
-                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).contactOrderMax ?? 0}
                     onChange={(e) => setSettings({ ...settings, contactOrderMax: Number(e.target.value) } as any)}
                   />

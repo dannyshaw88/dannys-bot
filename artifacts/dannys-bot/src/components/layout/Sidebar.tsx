@@ -144,7 +144,7 @@ export function Sidebar() {
                   className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
                   style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
-                <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground">
+                <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
                   {item.shortLabel}
                 </span>
               </button>
