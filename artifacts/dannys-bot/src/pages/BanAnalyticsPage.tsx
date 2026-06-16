@@ -1976,7 +1976,7 @@ export function BanAnalyticsPage() {
                     </div>
                   );
                 })()
-              )}
+              ) : null}
             </div>
           </div>
 

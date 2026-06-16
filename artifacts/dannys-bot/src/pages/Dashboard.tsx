@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.984",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: build error in the Survivors tab fixed — the page now compiles and loads correctly." },
+    ],
+  },
+  {
     version: "1.0.983",
     date: "16 Jun 2026",
     items: [
