@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint, Smartphone,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -1520,7 +1520,7 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         }).length;
         return Math.round((sameSubnet / total) * 100);
       })(),
-      description: "What is being theorised is that when multiple accounts originating from the same IP or /24 subnet execute sessions with structurally identical API call sequences, Instagram's classifier can identify the bot framework itself rather than any individual account. A human's post-login session is never identical to another human's because notification counts, feed items, and stories queued differ. A fixed cold-start sequence produces a mathematically identical API pattern on every account. At the subnet level, multiple accounts producing identical call sequences within the same session window is consistent with batch-processing behaviour that organic users do not produce. This is inferred from data patterns and has not been isolated in a controlled test.",
+      description: "What is being theorised is that when multiple accounts originating from the same IP or /24 subnet execute sessions with structurally identical API call sequences, Instagram's classifier can identify the bot framework itself rather than any individual account. A human's post-login session is never identical to another human's because notification counts, feed items, and stories queued differ. A fixed cold-start sequence produces a mathematically identical API pattern on every account. At the subnet level, multiple accounts producing identical call sequences within the same session window is consistent with batch-processing behaviour that organic users do not produce. IMPORTANT OBSERVATION FROM DATASET: accounts that fired diverse randomised endpoints (endpoint diversity 72-82%, human-level CoV 1.6-1.7) were still banned within minutes on proxies that already had 4-5 accounts flagged. This directly challenges the theory as a primary causal factor — diversifying the session fingerprint did not prevent the ban when the proxy was already saturated. This suggests that either (a) session uniqueness is only a secondary factor that matters only when the proxy is clean, (b) the proxy budget is the dominant variable and session uniqueness makes no difference once the IP is hot, or (c) another factor such as user agent, account age, or device fingerprint is the actual root cause that this theory does not address.",
       evidence: (() => {
         if (total < 2) return "Not enough data yet. Flag more accounts to measure subnet co-occurrence.";
         const sameSubnet = primaryEntries.filter(e => {
@@ -1539,9 +1539,9 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         const crowdedSubnets = Object.entries(subnetCounts).filter(([, accs]) => accs.length > 1).sort((a, b) => b[1].length - a[1].length);
         if (crowdedSubnets.length === 0) return "No subnet co-occurrence detected — each flagged account was on a unique /24 subnet.";
         const top = crowdedSubnets[0];
-        return `${sameSubnet} of ${total} flagged accounts (${pct}%) share a /24 subnet with at least one other flagged account. Busiest subnet: ${top[0]}.x with ${top[1].length} flagged accounts — identical cold-start sequences on these IPs are indistinguishable from a batch processor.`;
+        return `${sameSubnet} of ${total} flagged accounts (${pct}%) share a /24 subnet with at least one other flagged account. Busiest subnet: ${top[0]}.x with ${top[1].length} flagged accounts. NOTE: recent data shows accounts with highly diverse session fingerprints (CoV > 1.6, diversity > 70%) still being banned on proxies with 4-5 flagged accounts already on them — suggesting subnet co-occurrence may be a proxy-budget signal more than a session-fingerprint signal.`;
       })(),
-      advice: "Enable 'Fire Random Endpoints at Login' in Account Settings (1–10 random endpoints per account) so each account's post-login session has a unique call fingerprint. Different accounts will browse different content and diverge from each other's session pattern within the first minute of activity, breaking the identical-sequence correlation.",
+      advice: "The data now contains counter-evidence: accounts with fully randomised, highly diverse session fingerprints were still banned when the proxy already had 4-5 flagged accounts. This suggests session uniqueness alone is not sufficient when the proxy budget is exhausted. The primary action from this data is proxy rotation — move to a fresh IP before adding more accounts — not session diversification. Session diversification may still reduce risk on a clean proxy but cannot overcome a hot one.",
     },
     {
       id: "login-rate-limit", Icon: Clock,
@@ -1649,6 +1649,15 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
           : `No accounts matching low diversity (<25%) + high follow ratio (>10%) found in current data. This pattern is most visible in Automated Behaviour accounts — check that tab if you are on a different error type.`;
       })(),
       advice: "Increase endpoint diversity by mixing in more varied passive calls between follow batches — profile lookups, story views, explore page fetches, notifications. The goal is for each session to call at least 40–50% unique endpoints relative to total call count. Reduce follow density: follows should represent less than 10% of total API calls in any given session window.",
+    },
+    {
+      id: "user-agent-device", Icon: Smartphone,
+      title: "User Agent Device Mismatch or Implausible Specs",
+      tagline: "An old, fake, or inconsistent device string in every API request is a detectable fingerprint",
+      likelihood: -1,
+      description: "What is being theorised is that Instagram's mobile API client sends a User-Agent header with every request that encodes the device model, Android version, Instagram app version, screen dimensions, and RAM. If this string is from an old app version that Instagram has revoked or discontinued, the server may reject or flag the session at the protocol layer before any action pattern is even evaluated. If the device model in the User-Agent claims impossible hardware specs for that model (e.g. a budget entry-level phone claiming 12GB RAM), the mismatch is detectable because Instagram's server has a lookup table of real device specifications. If multiple accounts on the same IP send identical User-Agent strings, that is also a cluster signal because organic users each have their own physical device with a unique model, app version, and build. This theory cannot be computed from current ban log data because user agent strings are not captured in ban entries.",
+      evidence: "Cannot be computed from current data. User agent strings are not captured in the ban log entries. To test this theory you would need to compare the user agent strings of flagged accounts against surviving accounts and check whether flagged accounts share identical strings, use revoked app versions, or claim device specs inconsistent with their stated device model.",
+      advice: "Each account should use a user agent string that corresponds to a real, currently-supported Android device with plausible specs for that model. The app version in the user agent should be a recent Instagram version that has not been revoked. Avoid assigning the same user agent string to multiple accounts on the same IP — if two accounts claim to be the same physical device model with the same exact build string, that is a cluster signal at the IP level.",
     },
   ];
 

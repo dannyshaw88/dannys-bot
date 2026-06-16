@@ -106,6 +106,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.988",
+    date: "16 Jun 2026",
+    items: [
+      { category: "New", text: "Statistics page: Proxy IP column added — shows the proxy host assigned to each account, visible by default and toggleable/reorderable like all other columns." },
+      { category: "New", text: "Evasion Stats Theories: added User Agent Device Mismatch theory — covers old app versions, impossible device specs, and identical user agent strings shared across multiple accounts on the same IP." },
+      { category: "Content", text: "Evasion Stats: Session Uniqueness Fingerprint theory updated with counter-evidence from latest dataset — accounts with highly diverse randomised session fingerprints (CoV 1.6-1.7, diversity 72-82%) were still banned within minutes on proxies with 4-5 flagged accounts already present, challenging session diversification as a primary prevention measure." },
+    ],
+  },
+  {
     version: "1.0.987",
     date: "16 Jun 2026",
     items: [

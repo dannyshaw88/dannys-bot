@@ -25,7 +25,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
-type ColKey = StatKey | "open_eb" | "trustscore" | "status";
+type ColKey = StatKey | "open_eb" | "trustscore" | "status" | "proxy_ip";
 
 const STATUS_DISPLAY: Record<string, { label: string; pill: string }> = {
   pending:              { label: "Pending",         pill: "bg-slate-50 text-slate-600 border-slate-200" },
@@ -85,16 +85,16 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
 ];
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
-  account: 160, status: 120, open_eb: 80, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
+  account: 160, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
   status: true, follow: true, unfollow: true, dm: true, like: true,
-  comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true,
+  comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true, proxy_ip: true,
 };
 
-const DEFAULT_STAT_COL_ORDER: ColKey[] = ["status", "open_eb", "trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
+const DEFAULT_STAT_COL_ORDER: ColKey[] = ["status", "open_eb", "trustscore", "proxy_ip", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
 
 function ProfileStatsRow({
   profile,
@@ -173,6 +173,17 @@ function ProfileStatsRow({
           return (
             <td key="trustscore" style={{ width: colWidths.trustscore, textAlign: "center" }} className="px-4 py-3 align-middle">
               <TrustScoreBadge profileId={profile.id} />
+            </td>
+          );
+        }
+        if (key === "proxy_ip") {
+          const host = (profile as any).proxyHost as string | null | undefined;
+          return (
+            <td key="proxy_ip" style={{ width: colWidths.proxy_ip }} className="px-4 py-3 text-center">
+              {host
+                ? <span className="font-mono text-[11px] text-muted-foreground">{host}</span>
+                : <span className="text-muted-foreground/30 text-[11px]">—</span>
+              }
             </td>
           );
         }
@@ -617,6 +628,7 @@ export function StatsPage() {
                             if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
                             else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
                             else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
+                            else if (key === "proxy_ip") { icon = <Globe className="w-3.5 h-3.5" />; label = "Proxy IP"; color = "text-muted-foreground"; }
                             else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
                             return (
                               <div key={key} className="flex items-center gap-1.5 select-none">
@@ -710,6 +722,13 @@ export function StatsPage() {
                           );
                         } else if (key === "trustscore") {
                           thContent = <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
+                        } else if (key === "proxy_ip") {
+                          thContent = (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground/60">
+                              <Globe className="w-3 h-3" />
+                              <span className="text-[10px] uppercase tracking-wide">Proxy IP</span>
+                            </span>
+                          );
                         } else {
                           const st = ALL_STAT_TYPES.find(s => s.key === key)!;
                           thContent = (
