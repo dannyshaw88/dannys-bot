@@ -1736,6 +1736,54 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
               </div>
               <LikelihoodBar pct={likelihood} />
               <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
+              {id === "endpoint-risk" && endpointRiskData.top.length > 0 && (
+                <div className="border border-border rounded-md overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                    <Flame className="w-3 h-3 text-red-500 shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Pre-{errorTypeLabel} Endpoint Ranking — last {RISK_WINDOW} calls · {endpointRiskData.valid} account{endpointRiskData.valid !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-border/60">
+                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide w-6">#</th>
+                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
+                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
+                        <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Accounts</th>
+                        <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Pre-{forTab} %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {endpointRiskData.top.map((ep, i) => {
+                        const riskColor = ep.pct >= 50 ? "#dc2626" : ep.pct >= 25 ? "#d97706" : "#6b7280";
+                        const catMeta = CAT_META[ep.category] ?? CAT_META["other"];
+                        return (
+                          <tr key={ep.name} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                            <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
+                            <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[180px] truncate" title={ep.name}>
+                              {ep.label ?? ep.name}
+                            </td>
+                            <td className="px-3 py-1.5 hidden sm:table-cell">
+                              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-muted text-muted-foreground`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${catMeta.color}`} />
+                                {catMeta.label}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.count}</td>
+                            <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: riskColor }}>
+                              {ep.pct}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="px-3 py-1.5 border-t border-border/40 bg-muted/20">
+                    <p className="text-[10px] text-muted-foreground"><strong>Pre-{forTab} %</strong> — share of {endpointRiskData.valid} accounts where this endpoint appeared in their final {RISK_WINDOW} calls before the {errorTypeLower}. Higher = more correlated with this error type.</p>
+                  </div>
+                </div>
+              )}
               <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
                 <p className="text-[11px]">{evidence}</p>

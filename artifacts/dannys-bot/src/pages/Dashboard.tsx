@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.996",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Fix", text: "Evasion Stats: the ranked endpoint table is now visible directly inside the Pre-[ErrorType] Endpoint Risk Pattern theory card on each error tab — showing each endpoint, its category, account count, and pre-event percentage." },
+    ],
+  },
+  {
     version: "1.0.995",
     date: "16 Jun 2026",
     items: [
