@@ -907,7 +907,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-cyan-500 border-transparent hover:border-border",
+                      : "text-[#1AD2F2] border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -919,20 +919,27 @@ export function ProfileDetailsPage() {
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
                 <button
                   onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Monitor className="w-3.5 h-3.5 shrink-0" />
                   BROWSER
                 </button>
+                <Link
+                  href="/stats?tab=metrics"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                >
+                  <Activity className="w-3.5 h-3.5 shrink-0" />
+                  METRICS
+                </Link>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-cyan-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);
@@ -1125,40 +1132,43 @@ export function ProfileDetailsPage() {
                       <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>
                     </div>
 
-                    {/* Verify Account */}
+                    {/* Verify Account + Fire Random Endpoints — same row */}
                     {canVerify && (
-                      <div className="space-y-2 max-w-[320px]">
-                        {verifyStatus === "ok" ? (
-                          <div
-                            data-testid="status-logged-in"
-                            className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            Logged In
-                          </div>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant={verifyStatus === "fail" ? "outline" : "default"}
-                            className={`w-full h-9 gap-2 transition-all ${
-                              verifyStatus === "fail"
-                                ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
-                                : "bg-sky-400 hover:bg-sky-500 text-white border-0"
-                            }`}
-                            onClick={() => handleVerify(false)}
-                            disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
-                            data-testid="button-verify-credentials"
-                          >
-                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
-                            {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
-                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
-                              : verifyStatus === "fail" ? "Retry Verification"
-                              : "Verify Account"}
-                          </Button>
-                        )}
-                        {/* Fire Random Endpoints at Login */}
-                        <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        {/* Verify button */}
+                        <div className="w-[200px] shrink-0">
+                          {verifyStatus === "ok" ? (
+                            <div
+                              data-testid="status-logged-in"
+                              className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              Logged In
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant={verifyStatus === "fail" ? "outline" : "default"}
+                              className={`w-full h-9 gap-2 transition-all ${
+                                verifyStatus === "fail"
+                                  ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                  : "bg-sky-400 hover:bg-sky-500 text-white border-0"
+                              }`}
+                              onClick={() => handleVerify(false)}
+                              disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
+                              data-testid="button-verify-credentials"
+                            >
+                              {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
+                              {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
+                              {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
+                              {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
+                                : verifyStatus === "fail" ? "Retry Verification"
+                                : "Verify Account"}
+                            </Button>
+                          )}
+                        </div>
+                        {/* Fire Random Endpoints at Login — next to verify button */}
+                        <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
@@ -1203,6 +1213,108 @@ export function ProfileDetailsPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Proxy Settings — below Verify row */}
+                    <div className="space-y-3 pt-3 border-t border-border mt-3">
+                      <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
+                      {(() => {
+                        const linked = proxies?.find(p => p.id === profile.proxyId);
+                        if (linked) {
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Input
+                                  value={linkedHostPort}
+                                  onChange={e => setLinkedHostPort(e.target.value)}
+                                  onBlur={() => saveLinkedField("hostPort")}
+                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                  className="text-sm h-8 w-48 shrink-0"
+                                  placeholder="host:port"
+                                />
+                                <Input
+                                  value={linkedUsername}
+                                  onChange={e => setLinkedUsername(e.target.value)}
+                                  onBlur={() => saveLinkedField("username")}
+                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                  placeholder="username"
+                                  className="text-sm h-8 w-32 shrink-0"
+                                />
+                                <Input
+                                  value={linkedPassword}
+                                  onChange={e => setLinkedPassword(e.target.value)}
+                                  onBlur={() => saveLinkedField("password")}
+                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                  placeholder="password"
+                                  className="text-sm h-8 w-32 shrink-0"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
+                                  onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
+                                >
+                                  <X className="w-3.5 h-3.5 mr-1" /> Unassign
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground">Managed by Proxy Manager changes update the shared proxy.</p>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Input
+                                value={formData.proxyHost && formData.proxyPort ? `${formData.proxyHost}:${formData.proxyPort}` : formData.proxyHost || ""}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  const lastColon = val.lastIndexOf(":");
+                                  if (lastColon !== -1) {
+                                    updateField({ proxyHost: val.slice(0, lastColon), proxyPort: val.slice(lastColon + 1) });
+                                  } else {
+                                    updateField({ proxyHost: val, proxyPort: "" });
+                                  }
+                                }}
+                                onBlur={saveManualProxyField}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                placeholder="host:port"
+                                className="text-sm h-8 w-48 shrink-0 font-mono"
+                              />
+                              <Input
+                                value={formData.proxyUsername}
+                                onChange={e => updateField({ proxyUsername: e.target.value })}
+                                onBlur={saveManualProxyField}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                placeholder="username"
+                                className="text-sm h-8 w-32 shrink-0"
+                              />
+                              <Input
+                                value={formData.proxyPassword}
+                                onChange={e => updateField({ proxyPassword: e.target.value })}
+                                onBlur={saveManualProxyField}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                placeholder="password"
+                                className="text-sm h-8 w-32 shrink-0"
+                              />
+                            </div>
+                            {proxies && proxies.length > 0 && (
+                              <select
+                                className="h-7 w-full max-w-sm rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                                value=""
+                                onChange={e => {
+                                  if (e.target.value) updateProfileMutation.mutate({ id: profileId, proxyId: Number(e.target.value) });
+                                }}
+                              >
+                                <option value="">+ Assign to proxy from Proxy Manager…</option>
+                                {proxies.map(p => (
+                                  <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
@@ -1400,9 +1512,9 @@ export function ProfileDetailsPage() {
                     </AlertDialog>
                   </div>
 
-                  <div className="flex gap-6 pt-4 border-t border-border mt-4 items-start">
+                  <div className="pt-4 border-t border-border mt-4">
                     {/* API Limits & Control */}
-                    <div className="space-y-3 flex-1 min-w-0">
+                    <div className="space-y-3">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                     <div className="flex flex-wrap gap-2 items-end">
                       <div className="space-y-1">
@@ -1446,111 +1558,7 @@ export function ProfileDetailsPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
 
                     </div>
-
-                    {/* Proxy Settings */}
-                    <div className="space-y-3 flex-1 min-w-0 pl-6 border-l border-border">
-                    <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
-
-                    {(() => {
-                      const linked = proxies?.find(p => p.id === profile.proxyId);
-                      if (linked) {
-                        return (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Input
-                                value={linkedHostPort}
-                                onChange={e => setLinkedHostPort(e.target.value)}
-                                onBlur={() => saveLinkedField("hostPort")}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                className="text-sm h-8 w-48 shrink-0"
-                                placeholder="host:port"
-                              />
-                              <Input
-                                value={linkedUsername}
-                                onChange={e => setLinkedUsername(e.target.value)}
-                                onBlur={() => saveLinkedField("username")}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                placeholder="username"
-                                className="text-sm h-8 w-32 shrink-0"
-                              />
-                              <Input
-                                value={linkedPassword}
-                                onChange={e => setLinkedPassword(e.target.value)}
-                                onBlur={() => saveLinkedField("password")}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                placeholder="password"
-                                className="text-sm h-8 w-32 shrink-0"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
-                                onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
-                              >
-                                <X className="w-3.5 h-3.5 mr-1" /> Unassign
-                              </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">Managed by Proxy Manager changes update the shared proxy.</p>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Input
-                              value={formData.proxyHost && formData.proxyPort ? `${formData.proxyHost}:${formData.proxyPort}` : formData.proxyHost || ""}
-                              onChange={e => {
-                                const val = e.target.value;
-                                const lastColon = val.lastIndexOf(":");
-                                if (lastColon !== -1) {
-                                  updateField({ proxyHost: val.slice(0, lastColon), proxyPort: val.slice(lastColon + 1) });
-                                } else {
-                                  updateField({ proxyHost: val, proxyPort: "" });
-                                }
-                              }}
-                              onBlur={saveManualProxyField}
-                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                              placeholder="host:port"
-                              className="text-sm h-8 w-48 shrink-0 font-mono"
-                            />
-                            <Input
-                              value={formData.proxyUsername}
-                              onChange={e => updateField({ proxyUsername: e.target.value })}
-                              onBlur={saveManualProxyField}
-                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                              placeholder="username"
-                              className="text-sm h-8 w-32 shrink-0"
-                            />
-                            <Input
-                              value={formData.proxyPassword}
-                              onChange={e => updateField({ proxyPassword: e.target.value })}
-                              onBlur={saveManualProxyField}
-                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                              placeholder="password"
-                              className="text-sm h-8 w-32 shrink-0"
-                            />
-                          </div>
-                          {proxies && proxies.length > 0 && (
-                            <select
-                              className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-                              value=""
-                              onChange={e => {
-                                if (e.target.value) updateProfileMutation.mutate({ id: profileId, proxyId: Number(e.target.value) });
-                              }}
-                            >
-                              <option value="">+ Assign to proxy from Proxy Manager…</option>
-                              {proxies.map(p => (
-                                <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                  </div>{/* end Proxy Settings */}
-                  </div>{/* end flex row */}
+                  </div>
 
                   {/* ── Active Timer ── */}
                   <div className="space-y-4 pt-4 border-t border-border mt-4">

@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.985",
+    date: "16 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Settings: tab labels (ACCOUNT SETTINGS, HUMAN SESSION TOOL, SESSION LOG, DASH, BROWSER, COPY SETTINGS) updated to brighter cyan." },
+      { category: "New", text: "Account Settings: new METRICS button added between BROWSER and COPY SETTINGS — takes you directly to the Metrics page." },
+      { category: "UI", text: "Account Settings: Verify Account button and Fire Random Endpoints at Login are now on the same row." },
+      { category: "UI", text: "Account Settings: Proxy Settings moved below the Verify button row instead of alongside API Limits." },
+      { category: "Fix", text: "Human Session Tool: each tool group is now correctly full width again — only the cyan title bar is capped at 50% width." },
+    ],
+  },
+  {
     version: "1.0.984",
     date: "16 Jun 2026",
     items: [

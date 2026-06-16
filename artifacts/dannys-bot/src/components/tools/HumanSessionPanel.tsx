@@ -692,9 +692,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       </div>
 
       {/* ── EMULATION GROUP ──────────────────────────────────────────── */}
-      <div className="mt-[25px] max-w-[50%]">
+      <div className="mt-[25px]">
         <div className="border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400">
+          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400 max-w-[50%]">
             <Zap className="w-5 h-5 text-white shrink-0" />
             <h4 className="font-bold text-[17px] text-white">Emulation</h4>
           </div>
@@ -1577,9 +1577,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Follow Tool (embedded) ────────────────────────────── */}
       {followTool && (
-        <div className="mt-[25px] max-w-[50%]">
+        <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
+            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4 max-w-[50%]">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-8 h-8 text-white shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0 text-white">Follow Tool</h4>
@@ -1630,9 +1630,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
       {unfollowTool && (
-        <div className="mt-[25px] max-w-[50%]">
+        <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
+            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4 max-w-[50%]">
               <div className="flex items-center gap-2">
                 <UserMinus className="w-8 h-8 text-white shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0 text-white">Unfollow Tool</h4>
@@ -1683,9 +1683,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Contact Tool (embedded) ───────────────────────────── */}
       {contactTool && (
-        <div className="mt-[25px] max-w-[50%]">
+        <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4">
+            <div className="flex items-center justify-between px-4 py-3 bg-cyan-500 border-b border-cyan-400 gap-4 max-w-[50%]">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-8 h-8 text-white shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0 text-white">Contact Tool</h4>
