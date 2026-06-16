@@ -1933,9 +1933,8 @@ export async function openEbWindow(opts: {
     await ses.setProxy(cfg);
     _ebCrashLog(profileId, "STEP-5: proxy set (first pass)");
   } else {
-    _ebCrashLog(profileId, "STEP-4: no proxy — using direct://");
-    await ses.setProxy({ proxyRules: "direct://" });
-    _ebCrashLog(profileId, "STEP-5: direct proxy set");
+    _ebCrashLog(profileId, `STEP-4: BLOCKED — no proxy assigned for @${username} (profileId=${profileId})`);
+    throw new Error(`[IP-LEAK BLOCKED] Embedded browser for @${username} has no proxy assigned. Assign a proxy to this account before opening the browser.`);
   }
 
   // ── WebRTC IP-leak prevention (session level) ────────────────────────────

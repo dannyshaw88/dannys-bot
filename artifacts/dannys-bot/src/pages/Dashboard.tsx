@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.000",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Security", text: "Accounts without a proxy can no longer open the embedded browser or make any API call — the block is now enforced at every layer (route, WebSocket upgrade, and inside the browser engine itself) so there is no path that can reach Instagram using your home IP." },
+    ],
+  },
+  {
     version: "1.0.999",
     date: "16 Jun 2026",
     items: [
