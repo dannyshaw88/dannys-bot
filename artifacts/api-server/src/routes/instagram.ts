@@ -424,6 +424,14 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
+  // Returns the set of unique Verify-source operation names seen per profile.
+  // Used by ProfilesPage to show clean vs extended verify health indicator.
+  // Clean = ≤10 unique ops (core sequence only), Extended = >10.
+  app.get("/api/profiles/verify-health", async (_req, res) => {
+    const data = await storage.getVerifyOpsByProfile();
+    res.json(data);
+  });
+
   app.post("/api/profiles/:id/move-to-accounts", async (req, res) => {
     const id = Number(req.params.id);
     const updated = await storage.updateProfile(id, { creatorMode: false });

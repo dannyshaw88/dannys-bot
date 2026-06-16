@@ -69,6 +69,7 @@ export interface IStorage {
   getInstagramApiCallCount(profileId: number): Promise<number>;
   getApiEndpointCounts(profileId: number, todayPrefix: string): Promise<{ operationName: string; todayCount: number; totalCount: number }[]>;
   getLastValidApiCallByProfile(): Promise<Record<number, string>>;
+  getVerifyOpsByProfile(): Promise<Record<number, string[]>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
 
@@ -394,6 +395,28 @@ export class DatabaseStorage implements IStorage {
     const result: Record<number, string> = {};
     for (const row of rows) {
       if (row.lastDate) result[row.profileId] = row.lastDate;
+    }
+    return result;
+  }
+
+  async getVerifyOpsByProfile(): Promise<Record<number, string[]>> {
+    const rows = await db
+      .select({
+        profileId: instagramApiCalls.profileId,
+        operationName: instagramApiCalls.operationName,
+      })
+      .from(instagramApiCalls)
+      .where(eq(instagramApiCalls.source, "Verify"))
+      .orderBy(desc(instagramApiCalls.id));
+
+    const seen: Record<number, Set<string>> = {};
+    for (const row of rows) {
+      if (!seen[row.profileId]) seen[row.profileId] = new Set();
+      seen[row.profileId].add(row.operationName);
+    }
+    const result: Record<number, string[]> = {};
+    for (const [pid, ops] of Object.entries(seen)) {
+      result[Number(pid)] = Array.from(ops);
     }
     return result;
   }

@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.993",
+    date: "16 Jun 2026",
+    items: [
+      { category: "New", text: "Account Manager: new Verify Health column (turn on via Manage Columns) shows CLEAN (green) when an account's verify used only the core 10 ops, or +N (amber) when extra operations were triggered beyond the baseline." },
+    ],
+  },
+  {
     version: "1.0.985",
     date: "16 Jun 2026",
     items: [

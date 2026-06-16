@@ -118,11 +118,11 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -291,6 +291,20 @@ export function ProfilesPage() {
     };
     fetchLastApiCalls();
     const t = setInterval(fetchLastApiCalls, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // ── Verify health per profile (unique Verify-source ops seen) ────────────
+  const [verifyHealthMap, setVerifyHealthMap] = useState<Record<number, string[]>>({});
+  useEffect(() => {
+    const fetchVerifyHealth = async () => {
+      try {
+        const r = await fetch("/api/profiles/verify-health");
+        if (r.ok) setVerifyHealthMap(await r.json());
+      } catch { /* ignore */ }
+    };
+    fetchVerifyHealth();
+    const t = setInterval(fetchVerifyHealth, 120_000);
     return () => clearInterval(t);
   }, []);
 
@@ -1306,6 +1320,7 @@ export function ProfilesPage() {
                 </button>
               );
               if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
+              if (key === "verifyhealth") return <div key={key} {...dragProps} style={{ width: profColWidths.verifyhealth }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>VERIFY</div>;
               return null;
             })}
             <div className="flex-1" />
@@ -1534,6 +1549,28 @@ export function ProfilesPage() {
                               {isFixing ? "…" : "Fix"}
                             </button>
                           )}
+                        </div>
+                      );
+                    }
+                    if (key === "verifyhealth") {
+                      const ops = verifyHealthMap[profile.id];
+                      if (!ops || ops.length === 0) {
+                        return (
+                          <div key={key} style={{ width: profColWidths.verifyhealth }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()}>
+                            <span className="text-[11px] text-muted-foreground/40">—</span>
+                          </div>
+                        );
+                      }
+                      const count = ops.length;
+                      const isClean = count <= 10;
+                      const tooltip = isClean
+                        ? `Clean verify — ${count} op${count === 1 ? "" : "s"} (core only)\n${ops.join(", ")}`
+                        : `Extended verify — ${count} ops (${count - 10} beyond core)\n${ops.join(", ")}`;
+                      return (
+                        <div key={key} style={{ width: profColWidths.verifyhealth }} className="shrink-0 flex items-center justify-center gap-1" onMouseDown={e => e.stopPropagation()} title={tooltip}>
+                          <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${isClean ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                            {isClean ? "CLEAN" : `+${count - 10}`}
+                          </span>
                         </div>
                       );
                     }
