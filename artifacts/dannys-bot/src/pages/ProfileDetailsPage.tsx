@@ -904,7 +904,7 @@ export function ProfileDetailsPage() {
                   key={value}
                   onClick={() => navigate(`/profiles/${profileId}?tab=${value}`)}
                   className={[
-                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
+                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
                       : "text-[#1AD2F2] border-transparent hover:border-border",
@@ -919,27 +919,27 @@ export function ProfileDetailsPage() {
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
                 <button
                   onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Monitor className="w-3.5 h-3.5 shrink-0" />
                   BROWSER
                 </button>
                 <Link
                   href={`/stats?profileId=${profileId}&tab=metrics`}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Activity className="w-3.5 h-3.5 shrink-0" />
                   METRICS
                 </Link>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);
@@ -1180,34 +1180,80 @@ export function ProfileDetailsPage() {
                             <Label htmlFor={`loginRandomEndpointsEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Fire Random Endpoints at Login</Label>
                           </div>
                           {(formData.apiLimits as any).loginRandomEndpointsEnabled && (
-                            <div className="flex items-center gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={17}
-                                  className="h-7 text-xs w-14"
-                                  value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
-                                  onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
-                                />
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={17}
+                                    className="h-7 text-xs w-14"
+                                    value={(formData.apiLimits as any).loginRandomEndpointsMin ?? 1}
+                                    onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMin: Math.max(1, Number(e.target.value)) } })}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={17}
+                                    className="h-7 text-xs w-14"
+                                    value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
+                                    onChange={e => {
+                                      const v = Math.max(1, Number(e.target.value));
+                                      const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
+                                      updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
+                                    }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-muted-foreground self-center whitespace-nowrap">endpoints after login</p>
                               </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={17}
-                                  className="h-7 text-xs w-14"
-                                  value={(formData.apiLimits as any).loginRandomEndpointsMax ?? 5}
-                                  onChange={e => {
-                                    const v = Math.max(1, Number(e.target.value));
-                                    const min = (formData.apiLimits as any).loginRandomEndpointsMin ?? 1;
-                                    updateField({ apiLimits: { ...formData.apiLimits, loginRandomEndpointsMax: Math.max(min, v) } });
-                                  }}
-                                />
+                              {/* Chance of Making a Post */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`loginMakePostChanceEnabled-${profile.id}`}
+                                    checked={!!(formData.apiLimits as any).loginMakePostChanceEnabled}
+                                    onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceEnabled: e.target.checked } })}
+                                    className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                                  />
+                                  <Label htmlFor={`loginMakePostChanceEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Chance of Making a Post</Label>
+                                </div>
+                                {(formData.apiLimits as any).loginMakePostChanceEnabled && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min %</Label>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        className="h-7 text-xs w-14"
+                                        value={(formData.apiLimits as any).loginMakePostChanceMin ?? 5}
+                                        onChange={e => updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceMin: Math.max(0, Math.min(100, Number(e.target.value))) } })}
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max %</Label>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        className="h-7 text-xs w-14"
+                                        value={(formData.apiLimits as any).loginMakePostChanceMax ?? 10}
+                                        onChange={e => {
+                                          const v = Math.max(0, Math.min(100, Number(e.target.value)));
+                                          const min = (formData.apiLimits as any).loginMakePostChanceMin ?? 5;
+                                          updateField({ apiLimits: { ...formData.apiLimits, loginMakePostChanceMax: Math.max(min, v) } });
+                                        }}
+                                      />
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground self-center whitespace-nowrap">chance per verify (uses Human Session Make a Post settings, random order)</p>
+                                  </div>
+                                )}
                               </div>
-                              <p className="text-[10px] text-muted-foreground pt-5 whitespace-nowrap">endpoints after login</p>
                             </div>
                           )}
                         </div>

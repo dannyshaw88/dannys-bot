@@ -844,7 +844,7 @@ export function StatsPage() {
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Select account…" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[calc(25*2.25rem)] overflow-y-auto">
                   {[...(profiles ?? [])].sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")).map(p => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       {p.accountLabel || p.username}

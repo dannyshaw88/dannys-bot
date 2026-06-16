@@ -106,6 +106,21 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.987",
+    date: "16 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Settings: all tab labels (Account Settings, Human Session Tool, Session Log, Dash, Browser, Metrics, Copy Settings) are now bold." },
+      { category: "UI", text: "Account Settings: Fire Random Endpoints at Login — Min/Max fields are now vertically centred in their row." },
+      { category: "New", text: "Account Settings: added Chance of Making a Post option (Min % / Max % fields) inside Fire Random Endpoints at Login. When the chance is hit during a verify, it uses the Human Session Make a Post settings and inserts the action at a random position among the endpoint calls." },
+      { category: "UI", text: "Metrics page: account name dropdown is now scrollable with a max height of 25 rows so large account lists are easier to navigate." },
+      { category: "UI", text: "Evasion Stats: Data / Theories toggle tabs are now 50% larger for better visibility." },
+      { category: "UI", text: "Evasion Stats: Proxy Risk Ranking and Concurrent Usage Alerts are now hidden when the Theories inner tab is active — they only appear in the Data view." },
+      { category: "UI", text: "Evasion Stats: removed double-hyphen separators from all cause signal descriptions — text now reads as plain sentences." },
+      { category: "Content", text: "Evasion Stats Theories: all theory descriptions now open with 'What is being theorised is...' framing to make clear these are data-derived hypotheses, not confirmed facts." },
+      { category: "Content", text: "Evasion Stats Theories: all recommended actions now reference only patterns observable in the flagged dataset, removing any advice derived from external third-party testing." },
+    ],
+  },
+  {
     version: "1.0.986",
     date: "16 Jun 2026",
     items: [
