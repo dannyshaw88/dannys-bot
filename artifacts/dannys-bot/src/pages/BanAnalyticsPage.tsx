@@ -1226,6 +1226,71 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
           <div className="p-4 text-[11px] text-muted-foreground leading-relaxed">Z-score against group median across 8 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, avg calls before each follow, session span, min inter-call gap. Scores shown on each event card below. High score = deviates most from the others.</div>
         </div>
       )}
+
+      {/* Pre-event Endpoint Risk Ranking */}
+      {(() => {
+        const RISK_WINDOW = 20;
+        const counts = new Map<string, number>();
+        let valid = 0;
+        for (const entry of entries) {
+          const eps = filterHiker(parseEps(entry.endpointSnapshot));
+          if (eps.length === 0) continue;
+          valid++;
+          const lastN = eps.slice(-RISK_WINDOW);
+          const seen = new Set(lastN.map((e: any) => e.operationName));
+          for (const name of seen) counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+        const top = Array.from(counts.entries())
+          .map(([name, count]) => ({ name, count, pct: valid > 0 ? Math.round(count / valid * 100) : 0, label: matchLabel(name)?.label ?? null, category: matchLabel(name)?.category ?? "other" }))
+          .sort((a, b) => b.pct - a.pct)
+          .slice(0, 15);
+        if (valid < 1 || top.length === 0) return null;
+        const errorTypeLower = tabKey === "ban" ? "ban" : tabKey === "automated" ? "automated flag" : tabKey === "captcha" ? "captcha challenge" : "account lock";
+        const errorTypeLabel = tabKey === "ban" ? "Ban" : tabKey === "automated" ? "Automated Flag" : tabKey === "captcha" ? "Captcha" : "Lock";
+        return (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+              <Flame className="w-4 h-4 text-red-500" />
+              <span className="text-sm font-semibold">Pre-{errorTypeLabel} Endpoint Risk Ranking</span>
+              <span className="text-xs text-muted-foreground ml-auto">last {RISK_WINDOW} calls · {valid} account{valid !== 1 ? "s" : ""}</span>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-border/60 bg-muted/30">
+                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide w-6">#</th>
+                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
+                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
+                  <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Accounts</th>
+                  <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Pre-{errorTypeLabel} %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {top.map((ep, i) => {
+                  const riskColor = ep.pct >= 50 ? "#dc2626" : ep.pct >= 25 ? "#d97706" : "#6b7280";
+                  const catMeta = CAT_META[ep.category] ?? CAT_META["other"];
+                  return (
+                    <tr key={ep.name} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                      <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
+                      <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[180px] truncate" title={ep.name}>{ep.label ?? ep.name}</td>
+                      <td className="px-3 py-1.5 hidden sm:table-cell">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-muted text-muted-foreground">
+                          <span className={`w-1.5 h-1.5 rounded-full ${catMeta.color}`} />
+                          {catMeta.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.count}</td>
+                      <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: riskColor }}>{ep.pct}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="px-3 py-1.5 border-t border-border/40 bg-muted/20">
+              <p className="text-[10px] text-muted-foreground"><strong>Pre-{errorTypeLabel} %</strong> — share of {valid} accounts where this endpoint appeared in their final {RISK_WINDOW} calls before the {errorTypeLower}. Higher = more correlated. Red ≥50%, amber ≥25%.</p>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1736,54 +1801,6 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
               </div>
               <LikelihoodBar pct={likelihood} />
               <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
-              {id === "endpoint-risk" && endpointRiskData.top.length > 0 && (
-                <div className="border border-border rounded-md overflow-hidden">
-                  <div className="px-3 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
-                    <Flame className="w-3 h-3 text-red-500 shrink-0" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                      Pre-{errorTypeLabel} Endpoint Ranking — last {RISK_WINDOW} calls · {endpointRiskData.valid} account{endpointRiskData.valid !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="border-b border-border/60">
-                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide w-6">#</th>
-                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
-                        <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
-                        <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Accounts</th>
-                        <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Pre-{forTab} %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40">
-                      {endpointRiskData.top.map((ep, i) => {
-                        const riskColor = ep.pct >= 50 ? "#dc2626" : ep.pct >= 25 ? "#d97706" : "#6b7280";
-                        const catMeta = CAT_META[ep.category] ?? CAT_META["other"];
-                        return (
-                          <tr key={ep.name} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                            <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
-                            <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[180px] truncate" title={ep.name}>
-                              {ep.label ?? ep.name}
-                            </td>
-                            <td className="px-3 py-1.5 hidden sm:table-cell">
-                              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-muted text-muted-foreground`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${catMeta.color}`} />
-                                {catMeta.label}
-                              </span>
-                            </td>
-                            <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.count}</td>
-                            <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: riskColor }}>
-                              {ep.pct}%
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="px-3 py-1.5 border-t border-border/40 bg-muted/20">
-                    <p className="text-[10px] text-muted-foreground"><strong>Pre-{forTab} %</strong> — share of {endpointRiskData.valid} accounts where this endpoint appeared in their final {RISK_WINDOW} calls before the {errorTypeLower}. Higher = more correlated with this error type.</p>
-                  </div>
-                </div>
-              )}
               <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
                 <p className="text-[11px]">{evidence}</p>
