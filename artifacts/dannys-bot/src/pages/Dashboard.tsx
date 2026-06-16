@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.998",
+    date: "16 Jun 2026",
+    items: [
+      { category: "Optimisation", text: "Verify sequence now uses a minimal suspicion-budget footprint: GetTimelineFeed, GetReelsTray, ExecuteNotificationsBadge, and TopicalExplore have been removed from the verify call chain. Only lightweight config probes remain (FetchConfig, GetBanyan) — no content reads burned on login." },
+    ],
+  },
+  {
     version: "1.0.997",
     date: "16 Jun 2026",
     items: [
