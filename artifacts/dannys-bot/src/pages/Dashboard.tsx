@@ -106,6 +106,17 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.986",
+    date: "16 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats Theories: added Session-to-Action Ratio theory — tracks two failure modes: over-camouflaged accounts (too many passive calls, almost no actions) and raw-spam accounts (all actions, no passive calls), which each trigger independent Instagram classifiers." },
+      { category: "New", text: "Evasion Stats Theories: added Low Endpoint Diversity + High Follow Ratio theory — tracks accounts that repeated a small set of endpoints heavily while making a large fraction of them follow actions, the distinguishing pattern behind automated-behaviour detection." },
+      { category: "Improvement", text: "Evasion Stats Theories: all theory cards now auto-sort from highest to lowest likelihood percentage as your data grows — most confirmed theories rise to the top automatically." },
+      { category: "Fix", text: "Account Settings METRICS button now opens the Metrics page pre-selected to that specific account instead of always defaulting to the first account in the list." },
+      { category: "Fix", text: "Stats page Metrics tab account dropdown is now sorted alphabetically." },
+    ],
+  },
+  {
     version: "1.0.981",
     date: "16 Jun 2026",
     items: [

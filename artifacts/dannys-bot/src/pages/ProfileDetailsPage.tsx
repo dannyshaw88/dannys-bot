@@ -932,7 +932,7 @@ export function ProfileDetailsPage() {
                   BROWSER
                 </button>
                 <Link
-                  href="/stats?tab=metrics"
+                  href={`/stats?profileId=${profileId}&tab=metrics`}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Activity className="w-3.5 h-3.5 shrink-0" />

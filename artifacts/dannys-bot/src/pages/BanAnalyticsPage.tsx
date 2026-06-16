@@ -1396,6 +1396,30 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
   }, [primaryEntries]);
   const verifyClusterPct = total > 2 ? Math.round((verifyClusterData / total) * 100) : -1;
 
+  // Theory 2: Session-to-Action Ratio extremes (two distinct failure modes)
+  const highSarCount = primaryEntries.filter(e => {
+    const r = parseFloat(e.sessionToActionRatio ?? "");
+    return !isNaN(r) && r > 30;
+  }).length;
+  const lowSarWithActionsCount = primaryEntries.filter((e, i) => {
+    const r = parseFloat(e.sessionToActionRatio ?? "");
+    return !isNaN(r) && r < 1 && (primaryMetrics[i]?.actionCount ?? 0) > 0;
+  }).length;
+  const sarPct = total > 2
+    ? forTab === "locked"
+      ? Math.round((lowSarWithActionsCount / total) * 100)
+      : Math.round((highSarCount / total) * 100)
+    : -1;
+
+  // Theory 5: Low endpoint diversity + high follow ratio
+  const lowDivHighFollowCount = primaryEntries.filter((_, i) => {
+    const m = primaryMetrics[i];
+    if (!m) return false;
+    const followRatio = m.totalCalls > 0 ? m.cats.follow / m.totalCalls : 0;
+    return m.endpointDiversity < 0.25 && followRatio > 0.10;
+  }).length;
+  const lowDivHighFollowPct = total > 2 ? Math.round((lowDivHighFollowCount / total) * 100) : -1;
+
   // Login Rate Limit Per IP theory
   // Counts accounts that were flagged with ONLY verify/system-source endpoint calls —
   // no follow, DM, or any tool activity whatsoever.  An account that gets banned
@@ -1589,6 +1613,43 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
       evidence: decayPct >= 0 ? decayEvidenceText : total <= 2 ? "Not enough data yet to measure escalation overlap." : "No escalation overlap detected yet.",
       advice: "After any Automated flag, permanently reduce that account's action limits to 40–60% of your normal limits. The account's threshold has been lowered — treat it as a degraded asset.",
     },
+    {
+      id: "session-action-ratio", Icon: Scale,
+      title: "Session-to-Action Ratio: Two Failure Modes",
+      tagline: "Both extremes trigger detection — too few passive calls (raw spam) and too many (inactive lurker)",
+      likelihood: sarPct,
+      description: `Instagram appears to run two independent classifiers on the session-to-action ratio — the ratio of passive session calls (feed views, story views, timeline reads) to action calls (follows, DMs, likes). ${forTab === "locked" ? "Accounts flagged for Locking tend to have ratios near zero: all actions and almost no passive session calls. This produces a session that looks like a raw spam bot — every call is an action, nothing is organic browsing." : "Accounts flagged for banning can show the opposite extreme: extremely high ratios (50–200+) where the account makes dozens of passive calls for every single action. An account that runs 60 feed views for every 1 follow looks like an inactive account with artificially inflated session noise — a different but equally detectable pattern."} Neither extreme matches a real human session. Humans naturally fall in the 8–25 reads-per-action range: not spamming actions, but not drowning out every action in hundreds of passive calls. The two failure modes mean the safe zone is a band in the middle, not a single end of the spectrum. This is derived from observed data patterns and has not been isolated in a controlled test.`,
+      evidence: (() => {
+        if (total <= 2) return "Not enough data yet. Flag more accounts to compute session-to-action ratios.";
+        const withData = primaryEntries.filter(e => e.sessionToActionRatio !== null && e.sessionToActionRatio !== undefined && !isNaN(parseFloat(e.sessionToActionRatio ?? ""))).length;
+        if (withData === 0) return "No session-to-action ratio data in current entries — ratios are captured for newly flagged accounts going forward.";
+        if (forTab === "locked") {
+          return lowSarWithActionsCount > 0
+            ? `${lowSarWithActionsCount} of ${total} locked accounts (${Math.round(lowSarWithActionsCount / total * 100)}%) had a session-to-action ratio below 1 while having action calls recorded — near-zero passive noise with all-action sessions (raw spam pattern).`
+            : `No locked accounts with a ratio below 1 and action calls found in current data (${withData}/${total} entries have ratio data).`;
+        }
+        return highSarCount > 0
+          ? `${highSarCount} of ${total} ${forTab} accounts (${Math.round(highSarCount / total * 100)}%) had a session-to-action ratio above 30 — over-camouflaged sessions with disproportionately few real actions buried in passive calls.`
+          : `No accounts with a ratio above 30 found in current data (${withData}/${total} entries have ratio data). This pattern may be more visible with more flagged accounts.`;
+      })(),
+      advice: forTab === "locked"
+        ? "For locked accounts: add passive session calls (feed views, story views, profile lookups) between action bursts. A ratio of at least 3–5 passive calls per action reduces the raw-spam signal significantly."
+        : "Keep session-to-action ratios in the 8–25 range. Below 3 looks like raw spam; above 50 looks like an inactive account with artificial noise injection. Both are detectable. Balance genuine passive browsing with actions — don't over-pad.",
+    },
+    {
+      id: "low-diversity-action", Icon: Layers,
+      title: "Low Endpoint Diversity + High Follow Ratio",
+      tagline: "Repeating a small set of endpoints heavily — especially follows — triggers Automated Behaviour detection",
+      likelihood: lowDivHighFollowPct,
+      description: "Automated Behaviour detection does not appear to fire primarily on timing regularity (CoV) — accounts flagged for automated behaviour in this dataset had human-level CoV scores (2.66–4.68). Instead, the distinguishing signal appears to be a combination of two factors: low endpoint diversity (calling fewer than 25% of unique endpoints relative to total calls — the same endpoints over and over) combined with a high follow ratio (follow calls making up more than 10% of all API calls). A session where 80% of calls are the same 3–4 endpoints, and those endpoints are heavily weighted toward follows, produces a statistically monotone pattern that is impossible to explain as organic human behaviour. Humans naturally scatter calls across a wide variety of endpoints — different profile lookups, different feed types, story checks, notifications, DMs. An account that only calls a small set of endpoints, and keeps hammering follows among them, looks like a dedicated follow-bot running on a small fixed endpoint set. This is derived from the automated-behaviour accounts in the current dataset and has not been isolated in a controlled test.",
+      evidence: (() => {
+        if (total <= 2) return "Not enough data yet. Flag more accounts to measure endpoint diversity and follow ratios.";
+        return lowDivHighFollowCount > 0
+          ? `${lowDivHighFollowCount} of ${total} ${forTab} accounts (${Math.round(lowDivHighFollowCount / total * 100)}%) had endpoint diversity below 25% and follow calls making up more than 10% of all API calls — the combined low-diversity + action-heavy pattern associated with automated-behaviour detection.`
+          : `No accounts matching low diversity (<25%) + high follow ratio (>10%) found in current data. This pattern is most visible in Automated Behaviour accounts — check that tab if you are on a different error type.`;
+      })(),
+      advice: "Increase endpoint diversity by mixing in more varied passive calls between follow batches — profile lookups, story views, explore page fetches, notifications. The goal is for each session to call at least 40–50% unique endpoints relative to total call count. Reduce follow density: follows should represent less than 10% of total API calls in any given session window.",
+    },
   ];
 
   return (
@@ -1612,7 +1673,12 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
           </div>
         </div>
         <div className="divide-y divide-border">
-          {theories.map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => (
+          {[...theories].sort((a, b) => {
+            if (a.likelihood < 0 && b.likelihood < 0) return 0;
+            if (a.likelihood < 0) return 1;
+            if (b.likelihood < 0) return -1;
+            return b.likelihood - a.likelihood;
+          }).map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => (
             <div key={id} className="p-4 space-y-2.5">
               <div className="flex items-start gap-2">
                 <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
