@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint, Smartphone,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -1649,15 +1649,6 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
           : `No accounts matching low diversity (<25%) + high follow ratio (>10%) found in current data. This pattern is most visible in Automated Behaviour accounts — check that tab if you are on a different error type.`;
       })(),
       advice: "Increase endpoint diversity by mixing in more varied passive calls between follow batches — profile lookups, story views, explore page fetches, notifications. The goal is for each session to call at least 40–50% unique endpoints relative to total call count. Reduce follow density: follows should represent less than 10% of total API calls in any given session window.",
-    },
-    {
-      id: "user-agent-device", Icon: Smartphone,
-      title: "User Agent Device Mismatch or Implausible Specs",
-      tagline: "An old, fake, or inconsistent device string in every API request is a detectable fingerprint",
-      likelihood: -1,
-      description: "What is being theorised is that Instagram's mobile API client sends a User-Agent header with every request that encodes the device model, Android version, Instagram app version, screen dimensions, and RAM. If this string is from an old app version that Instagram has revoked or discontinued, the server may reject or flag the session at the protocol layer before any action pattern is even evaluated. If the device model in the User-Agent claims impossible hardware specs for that model (e.g. a budget entry-level phone claiming 12GB RAM), the mismatch is detectable because Instagram's server has a lookup table of real device specifications. If multiple accounts on the same IP send identical User-Agent strings, that is also a cluster signal because organic users each have their own physical device with a unique model, app version, and build. This theory cannot be computed from current ban log data because user agent strings are not captured in ban entries.",
-      evidence: "Cannot be computed from current data. User agent strings are not captured in the ban log entries. To test this theory you would need to compare the user agent strings of flagged accounts against surviving accounts and check whether flagged accounts share identical strings, use revoked app versions, or claim device specs inconsistent with their stated device model.",
-      advice: "Each account should use a user agent string that corresponds to a real, currently-supported Android device with plausible specs for that model. The app version in the user agent should be a recent Instagram version that has not been revoked. Avoid assigning the same user agent string to multiple accounts on the same IP — if two accounts claim to be the same physical device model with the same exact build string, that is a cluster signal at the IP level.",
     },
   ];
 
