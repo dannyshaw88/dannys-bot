@@ -1025,20 +1025,36 @@ async function createWindow() {
   });
 
   ipcMain.handle("open-csv-temp", async (_e, { content, filename }: { content: string; filename: string }) => {
-    const fsSync = await import("fs");
-    const { shell } = await import("electron");
-    // Write to Downloads so the file is in a known, permanent location
-    const downloadsDir = app.getPath("downloads");
-    const destPath = path.join(downloadsDir, filename);
-    appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0} destPath=${destPath}`);
+    appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0}`);
     try {
-      fsSync.writeFileSync(destPath, content, "utf8");
-      appendToMainLog(`[export-api-calls] CSV written to Downloads — revealing in Explorer`);
-      // showItemInFolder opens File Explorer with the file highlighted — always appears
-      // in front on Windows regardless of which app has focus, so the user can't miss it.
-      shell.showItemInFolder(destPath);
-      appendToMainLog(`[export-api-calls] shell.showItemInFolder called`);
-      return { filePath: destPath };
+      // Show a parentless Save dialog so it always appears on top of the Electron window.
+      // No parent argument = Windows treats it as a top-level dialog, never behind the app.
+      const defaultPath = path.join(app.getPath("downloads"), filename);
+      const result = await dialog.showSaveDialog({
+        title: "Save API Calls CSV",
+        defaultPath,
+        filters: [
+          { name: "CSV Files", extensions: ["csv"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      appendToMainLog(`[export-api-calls] save dialog result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
+      if (result.canceled || !result.filePath) {
+        appendToMainLog(`[export-api-calls] user canceled save dialog`);
+        return { saved: false };
+      }
+      fs.writeFileSync(result.filePath, content, "utf8");
+      appendToMainLog(`[export-api-calls] CSV written to ${result.filePath}`);
+      // Show a modal confirmation — this is impossible to miss.
+      await dialog.showMessageBox({
+        type: "info",
+        title: "Export Complete",
+        message: "API Calls exported successfully.",
+        detail: `Saved to:\n${result.filePath}`,
+        buttons: ["OK"],
+      });
+      appendToMainLog(`[export-api-calls] confirmation dialog dismissed`);
+      return { saved: true, filePath: result.filePath };
     } catch (e: any) {
       appendToMainLog(`[export-api-calls] open-csv-temp THREW: ${e?.stack ?? e?.message ?? String(e)}`);
       throw e;
@@ -1088,19 +1104,13 @@ async function createWindow() {
     }
   });
 
-  // Step 1 of the new two-phase EQX export flow: ask where to save BEFORE fetching data.
+  // Step 1 of the two-phase EQX export flow: ask where to save BEFORE fetching data.
   ipcMain.handle("pick-eqx-folder", async () => {
     appendToMainLog(`[export-eqx] pick-eqx-folder IPC received`);
     try {
-      // Focus + show the main window first so the folder picker opens on the same
-      // monitor as the app (Windows places parentless dialogs on the primary monitor,
-      // which may not be the monitor the user is looking at).
-      if (win && !win.isDestroyed()) {
-        win.show();
-        win.focus();
-        await new Promise<void>(r => setTimeout(r, 80));
-      }
-      const result = await dialog.showOpenDialog(win!, {
+      // Parentless dialog (no win argument) = Windows always opens it as a top-level
+      // window, never behind the Electron app — same fix as the CSV save dialog.
+      const result = await dialog.showOpenDialog({
         title: "Choose folder to save EQX files",
         properties: ["openDirectory", "createDirectory"],
       });
@@ -1124,6 +1134,16 @@ async function createWindow() {
         appendToMainLog(`[export-eqx] wrote ${filename} (${buffer.length} bytes) → ${destPath}`);
       }
       appendToMainLog(`[export-eqx] write-eqx-files complete — ${files.length} file(s) written`);
+      // Show a modal confirmation so the user always sees where the files went.
+      const fileList = files.map(f => `  • ${f.filename}`).join("\n");
+      await dialog.showMessageBox({
+        type: "info",
+        title: "EQX Export Complete",
+        message: `${files.length} file(s) saved to folder:`,
+        detail: `${folder}\n\n${fileList}`,
+        buttons: ["OK"],
+      });
+      appendToMainLog(`[export-eqx] write-eqx-files confirmation dialog dismissed`);
       return { count: files.length };
     } catch (err: any) {
       appendToMainLog(`[export-eqx] write-eqx-files THREW: ${err?.stack ?? err?.message ?? String(err)}`);

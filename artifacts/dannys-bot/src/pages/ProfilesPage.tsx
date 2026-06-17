@@ -1909,7 +1909,9 @@ export function ProfilesPage() {
                     const eApi2 = (window as any).electronAPI;
                     if (eApi2?.openCsvTemp) {
                       const result = await eApi2.openCsvTemp({ content: text, filename });
-                      toast({ title: "API Calls Exported", description: result?.filePath ? `Opened: ${result.filePath}` : "Opened in your spreadsheet app." });
+                      if (result?.saved !== false) {
+                        toast({ title: "API Calls Exported", description: result?.filePath ? `Saved to: ${result.filePath}` : "Export complete." });
+                      }
                     } else {
                       const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
                       const a = document.createElement("a");
