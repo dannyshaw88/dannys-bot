@@ -15,12 +15,17 @@ import { session as electronSession } from "electron";
 // These handlers write directly to the log file so crashes in openEbWindow and
 // other main-process code appear in logs.log alongside the server output.
 let _mainLogPath = "";
+let _serverDebugLogPath = "";
 
 function appendToMainLog(msg: string): void {
   const line = `[${new Date().toISOString()}] [MAIN] ${msg}\n`;
   try { process.stderr.write(line); } catch {}
   if (_mainLogPath) {
     try { fs.appendFileSync(_mainLogPath, line); } catch {}
+  }
+  // Also tee to equinox-debug.log so IPC logs appear in the same file the user shares
+  if (_serverDebugLogPath) {
+    try { fs.appendFileSync(_serverDebugLogPath, line); } catch {}
   }
 }
 
@@ -936,6 +941,7 @@ async function createWindow() {
 
   // Wire crash capture to the log file so main-process errors appear in logs.log
   _mainLogPath = logPath;
+  _serverDebugLogPath = path.join(getUserDataPath(), "equinox-debug.log");
   setEbLogPath(logPath);
   appendToMainLog(`app ready — v${app.getVersion()} pid=${process.pid}`);
 
@@ -1019,18 +1025,20 @@ async function createWindow() {
   });
 
   ipcMain.handle("open-csv-temp", async (_e, { content, filename }: { content: string; filename: string }) => {
-    const os = await import("os");
     const fsSync = await import("fs");
     const { shell } = await import("electron");
-    const tmpPath = path.join(os.tmpdir(), filename);
-    appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0} tmpPath=${tmpPath}`);
+    // Write to Downloads so the file is in a known, permanent location
+    const downloadsDir = app.getPath("downloads");
+    const destPath = path.join(downloadsDir, filename);
+    appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0} destPath=${destPath}`);
     try {
-      fsSync.writeFileSync(tmpPath, content, "utf8");
-      appendToMainLog(`[export-api-calls] CSV written to temp — opening in default app`);
-      const err = await shell.openPath(tmpPath);
-      if (err) appendToMainLog(`[export-api-calls] shell.openPath returned error: ${err}`);
-      else appendToMainLog(`[export-api-calls] shell.openPath succeeded`);
-      return { filePath: tmpPath };
+      fsSync.writeFileSync(destPath, content, "utf8");
+      appendToMainLog(`[export-api-calls] CSV written to Downloads — revealing in Explorer`);
+      // showItemInFolder opens File Explorer with the file highlighted — always appears
+      // in front on Windows regardless of which app has focus, so the user can't miss it.
+      shell.showItemInFolder(destPath);
+      appendToMainLog(`[export-api-calls] shell.showItemInFolder called`);
+      return { filePath: destPath };
     } catch (e: any) {
       appendToMainLog(`[export-api-calls] open-csv-temp THREW: ${e?.stack ?? e?.message ?? String(e)}`);
       throw e;
@@ -1084,8 +1092,15 @@ async function createWindow() {
   ipcMain.handle("pick-eqx-folder", async () => {
     appendToMainLog(`[export-eqx] pick-eqx-folder IPC received`);
     try {
-      // No parent window — opens as a top-level dialog so it always appears in front
-      const result = await dialog.showOpenDialog({
+      // Focus + show the main window first so the folder picker opens on the same
+      // monitor as the app (Windows places parentless dialogs on the primary monitor,
+      // which may not be the monitor the user is looking at).
+      if (win && !win.isDestroyed()) {
+        win.show();
+        win.focus();
+        await new Promise<void>(r => setTimeout(r, 80));
+      }
+      const result = await dialog.showOpenDialog(win!, {
         title: "Choose folder to save EQX files",
         properties: ["openDirectory", "createDirectory"],
       });

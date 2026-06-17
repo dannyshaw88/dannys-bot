@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.018",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: the CSV is now saved to your Downloads folder and File Explorer opens with the file highlighted — no app has to be installed and nothing can open behind another window." },
+      { category: "Fix", text: "Export EQX File: the app now brings itself to the front before showing the folder picker, so the dialog always appears on the same monitor as the app." },
+      { category: "Fix", text: "All IPC-side export log entries now appear in the same equinox-debug.log file for easier diagnosis." },
+    ],
+  },
+  {
     version: "1.1.017",
     date: "17 Jun 2026",
     items: [
