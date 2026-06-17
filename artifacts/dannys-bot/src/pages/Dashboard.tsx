@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.014",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Evasion Stats: banned accounts are now split into three sub-populations — Never Ran (0 follows, banned at Verify), First Follow (1–9 follows, early ban), and Long Runners (10+ follows, sustained sessions). Select a group to see stats computed only for that population — averages are now meaningful instead of mixing three very different account types together." },
+    ],
+  },
+  {
     version: "1.1.013",
     date: "17 Jun 2026",
     items: [

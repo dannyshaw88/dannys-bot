@@ -501,6 +501,28 @@ function formatDuration(ms: number): string {
   return h >= 1 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function getFollowCount(entry: AnalyticsEntry): number {
+  if (entry.followCountBeforeBan !== null && entry.followCountBeforeBan !== undefined) {
+    return entry.followCountBeforeBan;
+  }
+  const eps = filterHiker(parseEps(entry.endpointSnapshot));
+  const m = computeMetrics(eps, entry.flaggedAt ?? entry.bannedAt);
+  return m.cats.follow ?? 0;
+}
+
+function groupByFollowCount(entries: AnalyticsEntry[]) {
+  const neverRan: AnalyticsEntry[] = [];
+  const firstFollow: AnalyticsEntry[] = [];
+  const longRunner: AnalyticsEntry[] = [];
+  for (const e of entries) {
+    const n = getFollowCount(e);
+    if (n === 0) neverRan.push(e);
+    else if (n <= 9) firstFollow.push(e);
+    else longRunner.push(e);
+  }
+  return { neverRan, firstFollow, longRunner };
+}
+
 function UsernameLink({ username, profileMap }: { username: string; profileMap: Map<string, number> }) {
   const [, navigate] = useLocation();
   const id = profileMap.get(username);
@@ -511,6 +533,7 @@ function UsernameLink({ username, profileMap }: { username: string; profileMap: 
 type Tab = "ban" | "automated" | "captcha" | "locked" | "survivors";
 type ErrorTab = Exclude<Tab, "survivors">;
 type InnerTab = "data" | "theories";
+type GroupFilter = "all" | "never-ran" | "first-follow" | "long-runner";
 
 const TAB_CONFIG: Record<ErrorTab, {
   label: string; accentBg: string; emptyMsg: string; flagMsg: string; deleteEndpoint: string; queryKey: string;
@@ -1883,6 +1906,7 @@ export function BanAnalyticsPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("ban");
   const [innerTabs, setInnerTabs] = useState<Record<ErrorTab, InnerTab>>({ ban: "data", automated: "data", captcha: "data", locked: "data" });
+  const [groupFilters, setGroupFilters] = useState<Record<ErrorTab, GroupFilter>>({ ban: "all", automated: "all", captcha: "all", locked: "all" });
   const [showAllProxy, setShowAllProxy] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
@@ -2124,18 +2148,89 @@ export function BanAnalyticsPage() {
                   const currentInner = innerTabs[errTab];
                   return (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-md w-fit">
-                        {(["data", "theories"] as InnerTab[]).map(it => (
-                          <button key={it} onClick={() => setInnerTabs(prev => ({ ...prev, [errTab]: it }))}
-                            className={`px-4 py-1.5 text-sm font-semibold rounded transition-colors flex items-center gap-1.5 ${currentInner === it ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                            {it === "theories" && <FlaskConical className="w-3.5 h-3.5 text-violet-500" />}
-                            {it === "data" ? "Data" : "Theories"}
-                          </button>
-                        ))}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-md w-fit">
+                          {(["data", "theories"] as InnerTab[]).map(it => (
+                            <button key={it} onClick={() => setInnerTabs(prev => ({ ...prev, [errTab]: it }))}
+                              className={`px-4 py-1.5 text-sm font-semibold rounded transition-colors flex items-center gap-1.5 ${currentInner === it ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                              {it === "theories" && <FlaskConical className="w-3.5 h-3.5 text-violet-500" />}
+                              {it === "data" ? "Data" : "Theories"}
+                            </button>
+                          ))}
+                        </div>
+                        {currentInner === "data" && (() => {
+                          const { neverRan, firstFollow, longRunner } = groupByFollowCount(primaryEntries);
+                          const groupCfg: Array<{ key: GroupFilter; label: string; count: number; title: string }> = [
+                            { key: "all",          label: "All",          count: primaryEntries.length, title: "All flagged accounts (averages may be misleading — groups are very different)" },
+                            { key: "never-ran",    label: "Never Ran",    count: neverRan.length,       title: "0 follows — banned during Verify before any tool ran" },
+                            { key: "first-follow", label: "First Follow", count: firstFollow.length,    title: "1–9 follows — banned very early in first run" },
+                            { key: "long-runner",  label: "Long Runners", count: longRunner.length,     title: "10+ follows — ran for extended time before ban" },
+                          ];
+                          return (
+                            <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-md w-fit">
+                              {groupCfg.map(g => (
+                                <button key={g.key} onClick={() => setGroupFilters(prev => ({ ...prev, [errTab]: g.key }))}
+                                  title={g.title}
+                                  className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${groupFilters[errTab] === g.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                                  {g.label} <span className="opacity-60">({g.count})</span>
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
-                      {currentInner === "data" ? (
-                        <EntryList entries={primaryEntries} cfg={TAB_CONFIG[errTab]} tabKey={errTab} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
-                      ) : (
+                      {currentInner === "data" ? (() => {
+                        const { neverRan, firstFollow, longRunner } = groupByFollowCount(primaryEntries);
+                        const currentGroup = groupFilters[errTab];
+                        const filteredEntries = currentGroup === "never-ran" ? neverRan
+                          : currentGroup === "first-follow" ? firstFollow
+                          : currentGroup === "long-runner" ? longRunner
+                          : primaryEntries;
+                        return (
+                          <>
+                            {currentGroup === "all" && primaryEntries.length > 0 && (
+                              <div className="border border-border rounded-lg overflow-hidden">
+                                <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                                  <Layers className="w-4 h-4 text-cyan-500" />
+                                  <span className="text-sm font-semibold">Sub-Population Breakdown</span>
+                                  <span className="text-xs text-muted-foreground ml-auto">click a group to compute stats for that population only</span>
+                                </div>
+                                <div className="grid grid-cols-3 divide-x divide-border">
+                                  {[
+                                    { key: "never-ran" as GroupFilter,    label: "Never Ran",    count: neverRan.length,    desc: "0 follows — banned at Verify",       dot: "bg-slate-400",  color: "text-slate-500" },
+                                    { key: "first-follow" as GroupFilter, label: "First Follow", count: firstFollow.length, desc: "1–9 follows — early first-run ban",   dot: "bg-amber-400",  color: "text-amber-600" },
+                                    { key: "long-runner" as GroupFilter,  label: "Long Runners", count: longRunner.length,  desc: "10+ follows — ran for extended time", dot: "bg-cyan-400",   color: "text-cyan-600"  },
+                                  ].map(g => (
+                                    <button key={g.key} onClick={() => setGroupFilters(prev => ({ ...prev, [errTab]: g.key }))}
+                                      className="p-4 text-left hover:bg-muted/30 transition-colors">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${g.dot}`} />
+                                        <span className={`text-[10px] font-bold uppercase tracking-wide ${g.color}`}>{g.label}</span>
+                                      </div>
+                                      <p className="text-2xl font-bold">{g.count}</p>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">{g.desc}</p>
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/10 border-t border-amber-200 dark:border-amber-800 text-[10px] text-amber-700 dark:text-amber-300">
+                                  <strong>Viewing all {primaryEntries.length} accounts together.</strong> These three groups have very different session profiles — averaging them together makes the stats misleading. Click a group above to see accurate stats for that population only.
+                                </div>
+                              </div>
+                            )}
+                            {currentGroup !== "all" && (
+                              <div className={`px-3 py-2 rounded-md text-[11px] flex items-center gap-2 ${currentGroup === "never-ran" ? "bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300" : currentGroup === "first-follow" ? "bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300" : "bg-cyan-50 dark:bg-cyan-900/10 border border-cyan-200 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300"}`}>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${currentGroup === "never-ran" ? "bg-slate-400" : currentGroup === "first-follow" ? "bg-amber-400" : "bg-cyan-400"}`} />
+                                <span>
+                                  {currentGroup === "never-ran" && <><strong>Never Ran</strong> — 0 follows. Banned during Verify before any automation tool ran. Stats reflect IP/login-rate risk, not session behaviour.</>}
+                                  {currentGroup === "first-follow" && <><strong>First Follow</strong> — 1–9 follows. Banned very early in first run. Stats reflect cold-start and new-account policies.</>}
+                                  {currentGroup === "long-runner" && <><strong>Long Runners</strong> — 10+ follows. Ran for extended time before ban. Stats reflect sustained session patterns and rate limits.</>}
+                                </span>
+                              </div>
+                            )}
+                            <EntryList entries={filteredEntries} cfg={TAB_CONFIG[errTab]} tabKey={errTab} profileMap={profileMap} trustMap={trustMap} profileNotesMap={profileNotesMap} survivingAccounts={survivingAccounts} />
+                          </>
+                        );
+                      })() : (
                         <TheoriesTab forTab={errTab} primaryEntries={primaryEntries} banEntries={banEntries} automatedEntries={automatedEntries} captchaEntries={captchaEntries} lockedEntries={lockedEntries} />
                       )}
                     </div>
