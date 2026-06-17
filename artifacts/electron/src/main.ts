@@ -1028,37 +1028,63 @@ async function createWindow() {
   });
 
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {
-    const fsSync = await import("fs");
-    const result = await dialog.showSaveDialog(win!, {
-      title: "Save CSV",
-      defaultPath: path.join(app.getPath("downloads"), filename),
-      filters: [
-        { name: "CSV Files", extensions: ["csv"] },
-        { name: "All Files", extensions: ["*"] },
-      ],
-    });
-    if (result.canceled || !result.filePath) return { saved: false };
-    fsSync.writeFileSync(result.filePath, content, "utf8");
-    return { saved: true, filePath: result.filePath };
+    appendToMainLog(`[export-api-calls] save-csv-dialog IPC received — filename=${filename} contentLength=${content?.length ?? 0}`);
+    try {
+      const fsSync = await import("fs");
+      const defaultPath = path.join(app.getPath("downloads"), filename);
+      appendToMainLog(`[export-api-calls] showing save dialog — defaultPath=${defaultPath}`);
+      const result = await dialog.showSaveDialog(win!, {
+        title: "Save CSV",
+        defaultPath,
+        filters: [
+          { name: "CSV Files", extensions: ["csv"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      appendToMainLog(`[export-api-calls] save dialog result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
+      if (result.canceled || !result.filePath) return { saved: false };
+      fsSync.writeFileSync(result.filePath, content, "utf8");
+      appendToMainLog(`[export-api-calls] CSV written to disk — path=${result.filePath}`);
+      return { saved: true, filePath: result.filePath };
+    } catch (err: any) {
+      appendToMainLog(`[export-api-calls] save-csv-dialog THREW: ${err?.stack ?? err?.message ?? String(err)}`);
+      throw err;
+    }
   });
 
   // Step 1 of the new two-phase EQX export flow: ask where to save BEFORE fetching data.
   ipcMain.handle("pick-eqx-folder", async () => {
-    const result = await dialog.showOpenDialog(win!, {
-      title: "Choose folder to save EQX files",
-      properties: ["openDirectory", "createDirectory"],
-    });
-    if (result.canceled || !result.filePaths.length) return { canceled: true };
-    return { canceled: false, folder: result.filePaths[0] };
+    appendToMainLog(`[export-eqx] pick-eqx-folder IPC received`);
+    try {
+      const result = await dialog.showOpenDialog(win!, {
+        title: "Choose folder to save EQX files",
+        properties: ["openDirectory", "createDirectory"],
+      });
+      appendToMainLog(`[export-eqx] pick-eqx-folder dialog result — canceled=${result.canceled} folder=${result.filePaths[0] ?? "none"}`);
+      if (result.canceled || !result.filePaths.length) return { canceled: true };
+      return { canceled: false, folder: result.filePaths[0] };
+    } catch (err: any) {
+      appendToMainLog(`[export-eqx] pick-eqx-folder THREW: ${err?.stack ?? err?.message ?? String(err)}`);
+      throw err;
+    }
   });
 
   // Step 2: write the already-fetched files into the chosen folder.
   ipcMain.handle("write-eqx-files", async (_e, { folder, files }: { folder: string; files: Array<{ filename: string; data: string }> }) => {
-    for (const { filename, data } of files) {
-      const buffer = Buffer.from(data, "base64");
-      fs.writeFileSync(path.join(folder, filename), buffer);
+    appendToMainLog(`[export-eqx] write-eqx-files IPC received — folder=${folder} fileCount=${files?.length ?? 0}`);
+    try {
+      for (const { filename, data } of files) {
+        const destPath = path.join(folder, filename);
+        const buffer = Buffer.from(data, "base64");
+        fs.writeFileSync(destPath, buffer);
+        appendToMainLog(`[export-eqx] wrote ${filename} (${buffer.length} bytes) → ${destPath}`);
+      }
+      appendToMainLog(`[export-eqx] write-eqx-files complete — ${files.length} file(s) written`);
+      return { count: files.length };
+    } catch (err: any) {
+      appendToMainLog(`[export-eqx] write-eqx-files THREW: ${err?.stack ?? err?.message ?? String(err)}`);
+      throw err;
     }
-    return { count: files.length };
   });
 
   // Legacy handler kept for backward compatibility (single call, shows dialog internally).

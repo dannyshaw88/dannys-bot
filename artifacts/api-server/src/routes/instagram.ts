@@ -2270,14 +2270,19 @@ export async function registerInstagramRoutes(
   });
 
   app.get("/api/logs/export", async (req, res) => {
+    req.log.info({ query: req.query }, "[export-api-calls] route hit");
     try {
+      req.log.info("[export-api-calls] fetching profiles and proxies");
       const [allProfiles, allProxies] = await Promise.all([
         storage.getProfiles(),
         storage.getProxies(),
       ]);
+      req.log.info({ profileCount: allProfiles.length, proxyCount: allProxies.length }, "[export-api-calls] profiles/proxies loaded");
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
       const proxyMap = new Map(allProxies.map(p => [p.id, p]));
+      req.log.info("[export-api-calls] calling storage.getInstagramApiCalls(100000)");
       const allApiCalls = await storage.getInstagramApiCalls(100000);
+      req.log.info({ totalApiCalls: allApiCalls.length }, "[export-api-calls] api calls loaded");
 
       // Filter to only the requested profile IDs when provided (comma-separated)
       const rawIds = (req.query as any).profileIds ?? "";
@@ -2319,6 +2324,7 @@ export async function registerInstagramRoutes(
           }
           return c;
         });
+      req.log.info({ filteredCount: apiCalls.length, requestedIds }, "[export-api-calls] filtered api calls ready");
 
       const headers = [
         "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
@@ -2350,11 +2356,13 @@ export async function registerInstagramRoutes(
         return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
 
+      req.log.info("[export-api-calls] fetching global settings for timezone");
       const settings = await storage.getGlobalSettings();
       const useLocal = settings.useLocalTime === "true";
       // ?tz= is JS getTimezoneOffset() — minutes WEST of UTC (negative for UTC+)
       const browserTzMins = useLocal ? parseInt((req.query as any).tz ?? "0", 10) : 0;
       const offsetMins = -browserTzMins; // convert to minutes EAST (positive = UTC+)
+      req.log.info({ useLocal, browserTzMins, offsetMins }, "[export-api-calls] timezone resolved, building CSV rows");
 
       const csvRows = apiCalls.map((call: any) => {
         const profile = profileMap.get(call.profileId);
@@ -2406,13 +2414,16 @@ export async function registerInstagramRoutes(
       const file = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")]);
 
       const filename = `api_calls_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
+      req.log.info({ filename, rowCount: csvRows.length, fileSizeBytes: file.length }, "[export-api-calls] CSV built — sending response");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
       res.send(file);
+      req.log.info("[export-api-calls] response sent OK");
     } catch (err) {
+      req.log.error({ err }, "[export-api-calls] route threw — this is why Export API Calls failed");
       console.error("[export-api-calls] route threw:", err);
       res.status(500).json({ message: "Export failed", detail: String(err) });
     }
@@ -4089,8 +4100,13 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
 
   // ── Build a single profile's EQX payload ────────────────────────────────
   async function buildEqxPayload(id: number, trustScoreId?: string): Promise<{ encrypted: Buffer; safeUsername: string } | null> {
+    console.log(`[export-eqx] buildEqxPayload called — id=${id} trustScoreId=${trustScoreId ?? "none"}`);
     const profile = await storage.getProfile(id);
-    if (!profile) return null;
+    if (!profile) {
+      console.log(`[export-eqx] profile id=${id} not found in DB`);
+      return null;
+    }
+    console.log(`[export-eqx] profile found: @${profile.username} — fetching tools/followedUsers/stats/apiCalls/preStatusHits`);
     const [allTools, followedUsers, statsData, apiCallsData, preStatusChangeHitsData] = await Promise.all([
       storage.getToolsByProfile(id),
       storage.getFollowedUsersByProfile(id, 100000),
@@ -4098,6 +4114,7 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       storage.getInstagramApiCallsByProfile(id, 2000),
       storage.getPreStatusChangeHitsByProfile(id),
     ]);
+    console.log(`[export-eqx] data loaded — tools=${allTools.length} followedUsers=${followedUsers.length} stats=${statsData.length} apiCalls=${apiCallsData.length} preStatusHits=${preStatusChangeHitsData.length}`);
     const toolsWithSources = await Promise.all(
       allTools.map(async t => ({
         type: t.type,
@@ -4112,6 +4129,7 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
         })),
       }))
     );
+    console.log(`[export-eqx] toolsWithSources resolved — count=${toolsWithSources.length}`);
     const { id: _id, ...profileData } = profile;
 
     // Resolve proxy details when profile uses Proxy Manager (proxyId set)
@@ -4174,46 +4192,74 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
         occurredAt: h.occurredAt,
       })),
     };
-    const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
+    console.log(`[export-eqx] building JSON payload — approx keys: ${Object.keys(payload).join(", ")}`);
+    let jsonStr: string;
+    try {
+      jsonStr = JSON.stringify(payload);
+    } catch (jsonErr: any) {
+      console.log(`[export-eqx] JSON.stringify FAILED for id=${id}: ${jsonErr?.message ?? jsonErr}`);
+      throw jsonErr;
+    }
+    console.log(`[export-eqx] JSON payload size=${jsonStr.length} bytes — encrypting`);
+    const encrypted = eqxEncrypt(Buffer.from(jsonStr, "utf8"));
+    console.log(`[export-eqx] encrypted size=${encrypted.length} bytes — buildEqxPayload done for @${profile.username}`);
     const safeUsername = (profile.username || "account").replace(/[^a-zA-Z0-9_-]/g, "_");
     return { encrypted, safeUsername };
   }
 
   // ── Bulk EQX export → single ZIP download (one save dialog) ─────────────
   app.get("/api/profiles/export-eqx-bulk", async (req, res) => {
+    req.log.info({ query: req.query }, "[export-eqx-bulk] route hit");
     try {
       const raw = String(req.query.ids ?? "");
       const ids = raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
       if (ids.length === 0) return res.status(400).json({ error: "No valid ids provided" });
+      req.log.info({ ids }, "[export-eqx-bulk] building payloads for ids");
 
-      const results = await Promise.all(ids.map(id => buildEqxPayload(id, undefined).catch(() => null)));
+      const results = await Promise.all(ids.map(id => buildEqxPayload(id, undefined).catch((err) => {
+        req.log.error({ err, id }, "[export-eqx-bulk] buildEqxPayload threw for id");
+        return null;
+      })));
       const files: Array<{ name: string; data: Buffer }> = [];
       for (const r of results) {
         if (r) files.push({ name: `${r.safeUsername}.eqx`, data: r.encrypted });
       }
       if (files.length === 0) return res.status(404).json({ error: "No profiles found for given ids" });
+      req.log.info({ fileCount: files.length }, "[export-eqx-bulk] all payloads built — zipping");
 
       const zip = buildStoredZip(files);
+      req.log.info({ zipSize: zip.length }, "[export-eqx-bulk] zip built — sending response");
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="equinox-accounts.zip"`);
       res.send(zip);
     } catch (e: any) {
-      req.log.error({ err: e }, "export-eqx-bulk failed");
+      req.log.error({ err: e }, "[export-eqx-bulk] route threw — this is why Export EQX (bulk) failed");
       return res.status(500).json({ error: e?.message });
     }
   });
 
   app.get("/api/profiles/:id/export-eqx", async (req, res) => {
+    req.log.info({ id: req.params.id, query: req.query }, "[export-eqx] route hit");
     try {
       const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        req.log.error({ rawId: req.params.id }, "[export-eqx] invalid profile id — NaN");
+        return res.status(400).json({ error: "Invalid profile id" });
+      }
       const trustScoreId = req.query.trustScoreId ? String(req.query.trustScoreId) : undefined;
+      req.log.info({ id, trustScoreId }, "[export-eqx] calling buildEqxPayload");
       const result = await buildEqxPayload(id, trustScoreId);
-      if (!result) return res.status(404).json({ error: "Profile not found" });
+      if (!result) {
+        req.log.error({ id }, "[export-eqx] buildEqxPayload returned null — profile not found");
+        return res.status(404).json({ error: "Profile not found" });
+      }
 
       const { encrypted, safeUsername } = result;
+      req.log.info({ id, safeUsername, encryptedSize: encrypted.length }, "[export-eqx] payload ready — sending response");
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", `attachment; filename="${safeUsername}.eqx"`);
       res.send(encrypted);
+      req.log.info({ id, safeUsername }, "[export-eqx] response sent OK");
       const profile = await storage.getProfile(id);
       const pos   = req.query.pos   ? parseInt(String(req.query.pos),   10) : null;
       const total = req.query.total ? parseInt(String(req.query.total), 10) : null;
@@ -4230,7 +4276,7 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
         timestamp: new Date().toISOString(),
       }).catch(() => {});
     } catch (e: any) {
-      req.log.error({ err: e }, "export-eqx failed");
+      req.log.error({ err: e }, "[export-eqx] route threw — this is why Export EQX File failed");
       return res.status(500).json({ error: e?.message });
     }
   });

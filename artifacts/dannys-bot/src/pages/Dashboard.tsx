@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.015",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Debug", text: "Export API Calls and Export EQX File: detailed step-by-step log entries are now written to Settings > Server Log for every export attempt — if either export fails, the exact failure point and error message will appear in the log so it can be diagnosed." },
+    ],
+  },
+  {
     version: "1.1.014",
     date: "17 Jun 2026",
     items: [
