@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.006",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: a toast now appears the moment the save dialog opens so you know to look for a file picker window — previously it opened silently and looked like nothing happened." },
+      { category: "Fix", text: "Export API Calls: if you close the save dialog without saving, a toast now says 'Export cancelled' instead of doing nothing." },
+      { category: "Fix", text: "Export EQX File: a toast now appears when the folder picker opens, and cancelling now shows 'Export cancelled' instead of silently stopping." },
+    ],
+  },
+  {
     version: "1.1.005",
     date: "17 Jun 2026",
     items: [

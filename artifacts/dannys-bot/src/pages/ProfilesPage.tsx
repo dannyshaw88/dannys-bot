@@ -1908,9 +1908,12 @@ export function ProfilesPage() {
                     const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
                     const eApi2 = (window as any).electronAPI;
                     if (eApi2?.saveCsvDialog) {
+                      toast({ title: "Save dialog opened", description: "Choose where to save the CSV file." });
                       const result = await eApi2.saveCsvDialog({ content: text, filename });
                       if (result?.saved) {
                         toast({ title: "API Calls Exported", description: `Saved to: ${result.filePath}` });
+                      } else {
+                        toast({ title: "Export cancelled" });
                       }
                     } else {
                       const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
@@ -1955,8 +1958,9 @@ export function ProfilesPage() {
                   try {
                     if (eApi?.pickEqxFolder) {
                       // Electron path (two-phase): ask where to save FIRST, then fetch and write.
+                      toast({ title: "Folder picker opened", description: "Choose a folder to save EQX files." });
                       const pick = await eApi.pickEqxFolder();
-                      if (pick.canceled) return;
+                      if (pick.canceled) { toast({ title: "Export cancelled" }); return; }
                       const folder: string = pick.folder;
 
                       const files: Array<{ filename: string; data: string }> = [];
