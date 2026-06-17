@@ -1024,7 +1024,11 @@ async function createWindow() {
   setupBackupHandlers();
   initAutoBackup(serverPort).catch(() => {});
 
-  if (app.isPackaged) setupAutoUpdater();
+  if (app.isPackaged) {
+    try { setupAutoUpdater(); } catch (e) {
+      appendToMainLog(`[auto-updater] setup failed (non-fatal): ${(e as Error)?.message ?? String(e)}`);
+    }
+  }
 
   ipcMain.handle("open-log", async () => {
     const { shell } = await import("electron");

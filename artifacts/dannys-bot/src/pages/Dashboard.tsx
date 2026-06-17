@@ -62,10 +62,11 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.1.021",
+    version: "1.1.22",
     date: "17 Jun 2026",
     items: [
-      { category: "Fix", text: "Server crash on startup fixed — express.json() was incorrectly referenced inside the route file where express is not a runtime import." },
+      { category: "Fix", text: "Export API Calls and Export EQX now work — the auto-updater was crashing silently on startup (invalid version string) before the IPC handlers could register, making every export fail with 'no handler'." },
+      { category: "Fix", text: "Auto-updater setup errors are now caught and logged instead of aborting app startup." },
     ],
   },
   {
