@@ -243,6 +243,24 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.004",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings → API Controls: after copying, the target account's settings page now immediately shows the new values — previously the per-account cache was not invalidated so you had to restart the app to see the change." },
+      { category: "Fix", text: "Copy Settings: if the copy fails for any reason, a red error toast now appears with the reason — previously the dialog silently reset with no feedback." },
+      { category: "Fix", text: "Copy Settings server: any error during the bulk write is now logged to the server log and the error detail is returned in the response so the toast can show it." },
+    ],
+  },
+  {
+    version: "1.1.003",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: fixed a crash where any field containing a non-string value (e.g. a numeric message code) caused the CSV escape function to throw — all fields are now safely cast to string before escaping." },
+      { category: "Fix", text: "Export API Calls: the server now logs the actual error to the server log file when the export fails, making it diagnosable from Settings > Server Log." },
+      { category: "Fix", text: "API call history prune: fixed wrong SQL column name in the per-profile partition — was using the JavaScript property name instead of the database column name, so the prune silently did nothing every 50 inserts." },
+    ],
+  },
+  {
     version: "1.1.002",
     date: "17 Jun 2026",
     items: [

@@ -626,8 +626,13 @@ export async function registerInstagramRoutes(
     if (Object.keys(safePatch).length === 0) {
       return res.status(400).json({ message: "No valid fields in patch" });
     }
-    await Promise.all((ids as number[]).map(id => storage.updateProfile(id, safePatch)));
-    res.json({ ok: true, updated: ids.length });
+    try {
+      await Promise.all((ids as number[]).map(id => storage.updateProfile(id, safePatch)));
+      res.json({ ok: true, updated: ids.length });
+    } catch (err) {
+      console.error("[bulk-update] updateProfile threw:", err);
+      res.status(500).json({ message: "Failed to save settings to one or more accounts", detail: String(err) });
+    }
   });
 
   app.patch("/api/profiles/:id", handleProfileUpdate);
@@ -2340,7 +2345,10 @@ export async function registerInstagramRoutes(
       const resolveSource = (source: string): string =>
         source === "HikerAPI" ? "HikerAPI" : "Equinox";
 
-      const esc = (v: string) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+      const esc = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
 
       const settings = await storage.getGlobalSettings();
       const useLocal = settings.useLocalTime === "true";
@@ -2405,7 +2413,8 @@ export async function registerInstagramRoutes(
       res.setHeader("Expires", "0");
       res.send(file);
     } catch (err) {
-      res.status(500).json({ message: "Export failed" });
+      console.error("[export-api-calls] route threw:", err);
+      res.status(500).json({ message: "Export failed", detail: String(err) });
     }
   });
 

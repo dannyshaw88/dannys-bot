@@ -8,6 +8,7 @@ import {
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@shared/schema";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
+import { useToast } from "@/hooks/use-toast";
 
 export interface CopySubOption {
   key: string;
@@ -90,6 +91,7 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 }
 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
+  const { toast } = useToast();
   const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
   const [settingsSearch, setSettingsSearch] = useState("");
@@ -358,8 +360,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       await onCopy([...targets], expandToSettingKeys(optionGroups, selected));
       setStatus("done");
       setTimeout(() => { setStatus("idle"); onOpenChange(false); }, 1200);
-    } catch {
+    } catch (err) {
       setStatus("idle");
+      toast({
+        title: "Copy failed",
+        description: err instanceof Error ? err.message : "Could not apply settings to target accounts.",
+        variant: "destructive",
+      });
     }
   };
 

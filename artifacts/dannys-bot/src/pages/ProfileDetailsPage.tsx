@@ -473,7 +473,15 @@ export function ProfileDetailsPage() {
         });
       }));
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      targetIds.forEach(id => {
+        queryClient.invalidateQueries({ queryKey: ["/api/profiles/:id", id] });
+      });
       toast({ title: "Settings copied", description: `Applied to ${targetIds.length} account${targetIds.length === 1 ? "" : "s"}.` });
+      return;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      toast({ title: "Nothing to copy", description: "No settings were selected.", variant: "destructive" });
       return;
     }
 
@@ -483,8 +491,20 @@ export function ProfileDetailsPage() {
       body: JSON.stringify({ ids: targetIds, patch }),
       credentials: "include",
     });
-    if (!res.ok) throw new Error("Bulk update failed");
+    if (!res.ok) {
+      let detail = "Bulk update failed";
+      try { const j = await res.clone().json(); if (j?.message) detail = j.message; } catch { /* ignore */ }
+      throw new Error(detail);
+    }
+    // Invalidate both the list queries AND each target's individual profile cache.
+    // The list uses key ["/api/profiles", "automation"|"creator"] — a ["/api/profiles"]
+    // prefix invalidation covers both. The individual profile page uses
+    // ["/api/profiles/:id", id] — a different prefix, so it must be invalidated separately;
+    // without this, navigating to a target account after copying shows stale settings.
     queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    targetIds.forEach(id => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles/:id", id] });
+    });
     toast({ title: "Settings copied", description: `Applied to ${targetIds.length} account${targetIds.length === 1 ? "" : "s"}.` });
   };
 
