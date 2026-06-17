@@ -1523,6 +1523,32 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
   }).length;
   const loginRateLimitPct = total > 2 ? Math.round((loginRateLimitCount / total) * 100) : -1;
 
+  // Theory: Overall API call rate too high (>0.15 calls/min)
+  // Survivor baseline: emilee 0.099/min, francoise 0.058/min. Banned median: 0.3–9/min.
+  const highCallRateCount = primaryEntries.filter((_, i) => {
+    const m = primaryMetrics[i];
+    return m && m.callsPerMin > 0.15;
+  }).length;
+  const highCallRatePct = total > 2 ? Math.round((highCallRateCount / total) * 100) : -1;
+
+  // Theory: Passive-call density before first follow below survivor threshold
+  // Survivor baseline: 100–185 total session ops before first follow (preActionWarmup).
+  // Banned accounts: median 0–5. Threshold 50 = halfway point.
+  const belowSurvivorWarmupCount = primaryEntries.filter((_, i) => {
+    const m = primaryMetrics[i];
+    return m && m.cats.follow > 0 && (m.preActionWarmup ?? 0) < 50;
+  }).length;
+  const belowSurvivorWarmupPct = total > 2 ? Math.round((belowSurvivorWarmupCount / total) * 100) : -1;
+
+  // Theory: Continuous session pattern (no burst-idle gaps)
+  // Survivor baseline: active only 3.9h out of 69.9h (94% idle). avgInterCallSec ~600s (1 call/10min).
+  // Flagging: callsPerMin > 0.2 with span > 20min = account called too often without long idle gaps.
+  const continuousSessionCount = primaryEntries.filter((_, i) => {
+    const m = primaryMetrics[i];
+    return m && m.callsPerMin > 0.2 && m.spanMin > 20;
+  }).length;
+  const continuousSessionPct = total > 2 ? Math.round((continuousSessionCount / total) * 100) : -1;
+
   function LikelihoodBar({ pct }: { pct: number }) {
     if (pct < 0) return <span className="text-xs text-muted-foreground italic">— need 3+ events to compute</span>;
     const color = pct >= 70 ? "bg-red-500" : pct >= 45 ? "bg-orange-400" : pct >= 25 ? "bg-yellow-400" : "bg-blue-400";
@@ -1761,6 +1787,39 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         }
         return `${highRisk.slice(0, 2).map(e => e.label ?? e.name).join(" and ")} appear in ${highRisk[0].pct}%+ of pre-${forTab} sessions. If these are not core user-action endpoints, consider removing or staggering them in the session sequence to reduce the suspicion budget consumed before each ${errorTypeLower}.`;
       })(),
+    },
+    {
+      id: "total-call-rate", Icon: Sigma,
+      title: "Total API Call Rate Too High (>0.15 calls/min)",
+      tagline: "Calling the API faster than 1 call per 7 seconds puts you well above the survivor ceiling",
+      likelihood: highCallRatePct,
+      description: "What is being theorised is that the overall rate at which an account makes ANY API call — passive or active — is an independent risk signal, separate from how many follows happen per hour. Survivor data from this dataset shows two accounts that remained unflagged had total call rates of 0.058–0.099 calls per minute (one call every 10–17 seconds on average). Banned accounts on the same proxies ran at 0.3–9 calls per minute. The pattern held across every proxy in the dataset: on every single IP, the account that lasted longest had a lower total call rate than the median account on that IP. This is about ALL calls, not just follows — the passive calls (feed views, story reads) also count toward this rate. The threshold of 0.15/min is the midpoint between the survivor ceiling (0.1/min) and the lowest banned-account rate (0.3/min).",
+      evidence: highCallRatePct >= 0
+        ? `${highCallRateCount} of ${total} flagged accounts (${highCallRatePct}%) had a total API call rate above 0.15 calls/min. The survivor accounts in this dataset ran at 0.058–0.099/min. Banned accounts on the same IPs ran at 0.3–9/min — 3 to 90× faster than the survivors.`
+        : "Not enough data yet. Flag more accounts to measure call rate distribution.",
+      advice: "Keep total call rate below 0.10 calls/min (one call every 10 seconds or slower). This applies to ALL calls including passive ones — slowing down feed views and story reads counts just as much as slowing down follows. The goal is an overall rhythm that averages one call every 10–15 seconds or slower across the entire session window.",
+    },
+    {
+      id: "survivor-warmup-level", Icon: Target,
+      title: "Below Survivor Warmup Threshold (<50 passive ops before first follow)",
+      tagline: "Surviving accounts accumulated 100–185 passive calls before their first follow; most banned accounts had 0–5",
+      likelihood: belowSurvivorWarmupPct,
+      description: "What is being theorised is that a new account needs to build a session history of passive calls before Instagram will accept follow actions from it without flagging. The data from this dataset: both surviving accounts had accumulated over 100 passive session operations before their first follow call fired (emilee: 114 ops, francoise: 185 ops). The median pre-follow warmup across all banned accounts on the same proxies was 0 — meaning most banned accounts followed with no prior session history at all. This is a stronger finding than the existing Follow Call Density theory (which measures average warmup across all follows): this specifically measures the initial cold-start — how many calls happened before the account ever touched a follow for the first time. A threshold of 50 is used here as the halfway point between the typical banned-account level (0–5) and the survivor level (100–185).",
+      evidence: belowSurvivorWarmupPct >= 0
+        ? `${belowSurvivorWarmupCount} of ${total} flagged accounts with follow activity (${belowSurvivorWarmupPct}%) had fewer than 50 passive ops logged before their first follow. Survivor accounts in this dataset accumulated 114–185 ops before their first follow. The gap between 0 and 100+ ops is the clearest behavioural separator between banned and surviving accounts found in this dataset.`
+        : "Not enough data yet. Flag more accounts with follow activity to measure pre-first-follow warmup.",
+      advice: "Run 100–200 ViewTimelineFeedSeen calls before the first follow fires on any new account. ViewTimelineFeedSeen is the safest passive call — it made up 56% of survivor activity in this dataset. The account should spend at least one full session doing nothing but browsing the feed before any follow tool is activated.",
+    },
+    {
+      id: "burst-idle-rhythm", Icon: Star,
+      title: "No Burst-Idle Session Rhythm",
+      tagline: "Surviving accounts were active for short bursts then idle for hours — not running continuously",
+      likelihood: continuousSessionPct,
+      description: "What is being theorised is that organic Instagram sessions are short bursts of activity separated by multi-hour idle periods, and that continuous-session patterns (calling the API at a steady rate for extended periods) are detectable as non-human. The data from this dataset: the surviving account (emilee) had 416 total calls over 70 hours, but only 3.9 hours of actual activity — 94% of the time was idle. She had 35 separate gaps of over 30 minutes between calls, with the longest being 18 hours. Banned accounts ran at call rates of 0.2–9/min sustained over their session spans — a continuous pattern that never produces multi-hour gaps. A human checks Instagram for a few minutes, leaves, comes back hours later. They do not maintain a steady 1-call-every-few-seconds rhythm for extended periods.",
+      evidence: continuousSessionPct >= 0
+        ? `${continuousSessionCount} of ${total} flagged accounts (${continuousSessionPct}%) had a call rate above 0.2/min sustained over a span of more than 20 minutes — consistent with continuous calling rather than burst-idle. The survivor in this dataset ran at 0.099/min overall but was truly idle for 94% of her 70-hour span, active only in short bursts before going silent for hours.`
+        : "Not enough data yet. Flag more accounts with multi-minute session spans to measure burst-idle rhythm.",
+      advice: "Structure sessions as short bursts (2–5 minutes of activity) followed by long idle gaps (2–8 hours). The engine should not call the API at a steady rate for 30+ continuous minutes. Schedule runs to mimic human check-in patterns: brief active window, then off for hours. This means lower daily call totals but a session shape that matches organic usage.",
     },
   ];
 

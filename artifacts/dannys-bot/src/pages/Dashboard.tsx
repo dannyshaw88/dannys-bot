@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.009",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Evasion Stats: added three new detection theory cards — Total API Call Rate Too High, Below Survivor Warmup Threshold, and No Burst-Idle Session Rhythm — derived from cross-proxy survivor analysis." },
+    ],
+  },
+  {
     version: "1.1.008",
     date: "17 Jun 2026",
     items: [
