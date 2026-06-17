@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.016",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: removed the save dialog entirely — the CSV is now written to a temp file and opened directly in Excel (or your default spreadsheet app) with no dialog to dismiss and no dialog that can open behind the main window." },
+      { category: "Fix", text: "Export EQX File: removed the folder picker dialog — EQX files are now written directly to your Downloads folder with no dialog. A toast confirms exactly how many files were saved and the folder path." },
+    ],
+  },
+  {
     version: "1.1.015",
     date: "17 Jun 2026",
     items: [

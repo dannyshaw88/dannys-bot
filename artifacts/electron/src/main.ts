@@ -1023,8 +1023,36 @@ async function createWindow() {
     const fsSync = await import("fs");
     const { shell } = await import("electron");
     const tmpPath = path.join(os.tmpdir(), filename);
-    fsSync.writeFileSync(tmpPath, content, "utf8");
-    await shell.openPath(tmpPath);
+    appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0} tmpPath=${tmpPath}`);
+    try {
+      fsSync.writeFileSync(tmpPath, content, "utf8");
+      appendToMainLog(`[export-api-calls] CSV written to temp — opening in default app`);
+      const err = await shell.openPath(tmpPath);
+      if (err) appendToMainLog(`[export-api-calls] shell.openPath returned error: ${err}`);
+      else appendToMainLog(`[export-api-calls] shell.openPath succeeded`);
+      return { filePath: tmpPath };
+    } catch (e: any) {
+      appendToMainLog(`[export-api-calls] open-csv-temp THREW: ${e?.stack ?? e?.message ?? String(e)}`);
+      throw e;
+    }
+  });
+
+  ipcMain.handle("write-eqx-downloads", async (_e, files: Array<{ filename: string; data: string }>) => {
+    const downloadsDir = app.getPath("downloads");
+    appendToMainLog(`[export-eqx] write-eqx-downloads IPC received — fileCount=${files?.length ?? 0} downloadsDir=${downloadsDir}`);
+    try {
+      for (const { filename, data } of files) {
+        const destPath = path.join(downloadsDir, filename);
+        const buffer = Buffer.from(data, "base64");
+        fs.writeFileSync(destPath, buffer);
+        appendToMainLog(`[export-eqx] wrote ${filename} (${buffer.length} bytes) → ${destPath}`);
+      }
+      appendToMainLog(`[export-eqx] write-eqx-downloads complete — ${files.length} file(s) written to ${downloadsDir}`);
+      return { count: files.length, folder: downloadsDir };
+    } catch (e: any) {
+      appendToMainLog(`[export-eqx] write-eqx-downloads THREW: ${e?.stack ?? e?.message ?? String(e)}`);
+      throw e;
+    }
   });
 
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {

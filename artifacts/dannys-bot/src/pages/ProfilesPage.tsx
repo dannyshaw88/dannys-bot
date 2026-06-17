@@ -1907,14 +1907,9 @@ export function ProfilesPage() {
                     const text = await res.text();
                     const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
                     const eApi2 = (window as any).electronAPI;
-                    if (eApi2?.saveCsvDialog) {
-                      toast({ title: "Save dialog opened", description: "Choose where to save the CSV file." });
-                      const result = await eApi2.saveCsvDialog({ content: text, filename });
-                      if (result?.saved) {
-                        toast({ title: "API Calls Exported", description: `Saved to: ${result.filePath}` });
-                      } else {
-                        toast({ title: "Export cancelled" });
-                      }
+                    if (eApi2?.openCsvTemp) {
+                      const result = await eApi2.openCsvTemp({ content: text, filename });
+                      toast({ title: "API Calls Exported", description: result?.filePath ? `Opened: ${result.filePath}` : "Opened in your spreadsheet app." });
                     } else {
                       const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
                       const a = document.createElement("a");
@@ -1956,13 +1951,8 @@ export function ProfilesPage() {
                   setExportingEqx(true);
 
                   try {
-                    if (eApi?.pickEqxFolder) {
-                      // Electron path (two-phase): ask where to save FIRST, then fetch and write.
-                      toast({ title: "Folder picker opened", description: "Choose a folder to save EQX files." });
-                      const pick = await eApi.pickEqxFolder();
-                      if (pick.canceled) { toast({ title: "Export cancelled" }); return; }
-                      const folder: string = pick.folder;
-
+                    if (eApi?.writeEqxToDownloads) {
+                      // Electron path: fetch all files, then write directly to Downloads — no dialog.
                       const files: Array<{ filename: string; data: string }> = [];
                       const fetchErrors: string[] = [];
                       const exportTotal = selectedProfileIds.length;
@@ -1993,8 +1983,8 @@ export function ProfilesPage() {
                         toast({ title: `${fetchErrors.length} account(s) failed`, description: fetchErrors.join(", "), variant: "destructive" });
                       }
                       if (files.length === 0) return;
-                      const writeResult = await eApi.writeEqxFiles({ folder, files });
-                      toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${folder}` });
+                      const writeResult = await eApi.writeEqxToDownloads(files);
+                      toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${writeResult.folder}` });
                     } else {
                       // Browser/web fallback: individual downloads
                       let successCount = 0;
