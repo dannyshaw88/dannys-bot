@@ -1951,8 +1951,13 @@ export function ProfilesPage() {
                   setExportingEqx(true);
 
                   try {
-                    if (eApi?.writeEqxToDownloads) {
-                      // Electron path: fetch all files, then write directly to Downloads — no dialog.
+                    if (eApi?.pickEqxFolder) {
+                      // Electron path (two-phase): pick folder first, then fetch and write.
+                      // The folder picker opens as a top-level dialog (no parent) so it always appears in front.
+                      const pick = await eApi.pickEqxFolder();
+                      if (pick.canceled) { toast({ title: "Export cancelled" }); return; }
+                      const folder: string = pick.folder;
+
                       const files: Array<{ filename: string; data: string }> = [];
                       const fetchErrors: string[] = [];
                       const exportTotal = selectedProfileIds.length;
@@ -1983,8 +1988,8 @@ export function ProfilesPage() {
                         toast({ title: `${fetchErrors.length} account(s) failed`, description: fetchErrors.join(", "), variant: "destructive" });
                       }
                       if (files.length === 0) return;
-                      const writeResult = await eApi.writeEqxToDownloads(files);
-                      toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${writeResult.folder}` });
+                      const writeResult = await eApi.writeEqxFiles({ folder, files });
+                      toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${folder}` });
                     } else {
                       // Browser/web fallback: individual downloads
                       let successCount = 0;

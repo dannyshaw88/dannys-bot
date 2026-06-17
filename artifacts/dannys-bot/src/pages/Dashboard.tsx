@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.017",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export EQX File: the folder picker dialog now opens as a top-level window (no longer a child of the main window) so it always appears in front and cannot be hidden behind the app." },
+    ],
+  },
+  {
     version: "1.1.016",
     date: "17 Jun 2026",
     items: [

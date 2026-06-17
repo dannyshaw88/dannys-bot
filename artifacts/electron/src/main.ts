@@ -1084,7 +1084,8 @@ async function createWindow() {
   ipcMain.handle("pick-eqx-folder", async () => {
     appendToMainLog(`[export-eqx] pick-eqx-folder IPC received`);
     try {
-      const result = await dialog.showOpenDialog(win!, {
+      // No parent window — opens as a top-level dialog so it always appears in front
+      const result = await dialog.showOpenDialog({
         title: "Choose folder to save EQX files",
         properties: ["openDirectory", "createDirectory"],
       });
