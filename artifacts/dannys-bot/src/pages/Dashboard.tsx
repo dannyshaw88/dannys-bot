@@ -62,6 +62,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.008",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Statistics: the two pie charts on the Metrics tab now show a full endpoint breakdown (ViewTimelineFeedSeen, FollowedUser, GetDirectMessages, etc.) instead of just the 6 direct action types — every API call the account makes is now visible." },
+      { category: "Fix", text: "Human Session — Repost: removed the yellow warning banner that appeared when skip chance was set to 100%." },
+    ],
+  },
+  {
+    version: "1.1.007",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: removed the Save dialog entirely — the CSV now opens directly in your default spreadsheet app the same way Export Profiles does, with no dialog to dismiss." },
+      { category: "Fix", text: "Export EQX File: removed the folder picker dialog — EQX files are now written directly to your Downloads folder with no dialog. A toast confirms how many files were saved and where." },
+    ],
+  },
+  {
     version: "1.1.006",
     date: "17 Jun 2026",
     items: [

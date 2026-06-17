@@ -85,6 +85,38 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "human_session", label: "Human Session", icon: <Fingerprint className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_sessions", pieColor: "#06b6d4" },
 ];
 
+const ENDPOINT_COLORS: Record<string, string> = {
+  ViewTimelineFeedSeen:      "#3b82f6",
+  FollowedUser:              "#10b981",
+  UnfollowUser:              "#ef4444",
+  GetDirectMessages:         "#8b5cf6",
+  GetDirectMessageThread:    "#a78bfa",
+  ViewTimelineStories:       "#f97316",
+  LikeMedia:                 "#f43f5e",
+  ViewFeedPost:              "#06b6d4",
+  VisitUserProfile:          "#0ea5e9",
+  ViewUserFeed:              "#14b8a6",
+  SaveMedia:                 "#84cc16",
+  FetchConfig:               "#64748b",
+  GetKeyedTokens:            "#94a3b8",
+  ViewStories:               "#f59e0b",
+  TopicalExplore:            "#ec4899",
+  Banyan:                    "#6366f1",
+  ExecuteNotificationsBadge: "#a3e635",
+  GetReelsTray:              "#fb923c",
+  GetTimeLineFeed:           "#38bdf8",
+  GetAccountFamily:          "#34d399",
+  SendMobileConfig:          "#c084fc",
+  VerifyAccount:             "#fbbf24",
+  ViewHighlights:            "#f472b6",
+  CommentMedia:              "#22d3ee",
+  PostMedia:                 "#4ade80",
+};
+const EP_FALLBACK = ["#3b82f6","#10b981","#f43f5e","#f97316","#8b5cf6","#06b6d4","#84cc16","#ec4899","#14b8a6","#6366f1","#fbbf24","#0ea5e9"];
+function epColor(name: string, idx: number): string {
+  return ENDPOINT_COLORS[name] ?? EP_FALLBACK[idx % EP_FALLBACK.length];
+}
+
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
   account: 160, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
@@ -534,30 +566,21 @@ export function StatsPage() {
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
 
-  // Only actions go in the pie chart (non-tool stat keys)
   const actionStatTypes = ALL_STAT_TYPES.filter(st => !st.isTool);
 
-  const pieData = useMemo(() => {
-    return actionStatTypes
-      .map(st => ({
-        name: st.label,
-        value: getStat(st.key, today),
-        color: st.pieColor,
-      }))
-      .filter(d => d.value > 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metricsStats, today]);
+  const pieData = useMemo(() =>
+    endpointCountsData
+      .map((ep, idx) => ({ name: ep.operationName, value: ep.todayCount, color: epColor(ep.operationName, idx) }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value),
+  [endpointCountsData]);
 
-  const lifetimePieData = useMemo(() => {
-    return actionStatTypes
-      .map(st => ({
-        name: st.label,
-        value: getStat(st.key, "lifetime"),
-        color: st.pieColor,
-      }))
-      .filter(d => d.value > 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metricsStats]);
+  const lifetimePieData = useMemo(() =>
+    endpointCountsData
+      .map((ep, idx) => ({ name: ep.operationName, value: ep.totalCount, color: epColor(ep.operationName, idx) }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value),
+  [endpointCountsData]);
 
   const totalToday = useMemo(() =>
     actionStatTypes.reduce((sum, st) => sum + getStat(st.key, today), 0),
@@ -909,7 +932,7 @@ export function StatsPage() {
                     <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <BarChart2 className="w-4 h-4 text-primary" />
-                        Today's Actions Breakdown
+                        Today's Endpoint Breakdown
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
@@ -933,7 +956,7 @@ export function StatsPage() {
                     <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
                         <BarChart2 className="w-4 h-4 text-primary" />
-                        Lifetime Actions Breakdown
+                        Lifetime Endpoint Breakdown
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">

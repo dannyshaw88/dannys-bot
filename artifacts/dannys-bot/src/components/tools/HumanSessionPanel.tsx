@@ -1557,16 +1557,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
           </p>
 
-          {/* Warning: skip chance is 100 repost will never run automatically */}
-          {(Number((settings as any).repostNotUsedMin ?? 0) >= 100 || Number((settings as any).repostNotUsedMax ?? 0) >= 100) && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
-              <span className="text-amber-500 text-sm shrink-0">⚠️</span>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                <strong>Skip chance is 100% repost will never run automatically.</strong><br />
-                Set <em>Skip chance %</em> min and max to <strong>0</strong> so repost always runs each session.
-              </p>
-            </div>
-          )}
 
         </div>
       </div>
