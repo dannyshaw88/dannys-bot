@@ -219,7 +219,7 @@ function ProfileStatsRow({
           return (
             <td key="proxy_ip" style={{ width: colWidths.proxy_ip }} className="px-4 py-3 text-center">
               {host
-                ? <span className="font-mono text-[11px] text-muted-foreground">{host}</span>
+                ? <span className="font-mono text-[11px] text-foreground">{host}</span>
                 : <span className="text-muted-foreground/30 text-[11px]">—</span>
               }
             </td>
@@ -760,7 +760,7 @@ export function StatsPage() {
                             </span>
                           );
                         } else if (key === "trustscore") {
-                          thContent = <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
+                          thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
                         } else if (key === "proxy_ip") {
                           thContent = (
                             <button onClick={() => cycleSort("proxy_ip")} className={`inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-muted-foreground/60 ${sortKey === "proxy_ip" ? "opacity-100" : "opacity-60"}`}>
@@ -939,15 +939,32 @@ export function StatsPage() {
                       {pieData.length === 0 ? (
                         <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No actions recorded today</div>
                       ) : (
-                        <ResponsiveContainer width="100%" height={220}>
-                          <PieChart>
-                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
-                              {pieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                            </Pie>
-                            <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                            <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
-                          </PieChart>
-                        </ResponsiveContainer>
+                        <div className="flex gap-3 items-center">
+                          <div className="flex-1 min-w-0 max-h-[220px] overflow-y-auto space-y-0.5 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
+                            {(() => {
+                              const total = pieData.reduce((s, d) => s + d.value, 0);
+                              return pieData.map((entry, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-1.5 py-0.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                                    <span className="text-[10px] text-muted-foreground truncate">{entry.name}</span>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-foreground shrink-0 tabular-nums">{total > 0 ? (entry.value / total * 100).toFixed(1) : "0.0"}%</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          <div className="shrink-0 w-[180px]">
+                            <ResponsiveContainer width="100%" height={220}>
+                              <PieChart>
+                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                                  {pieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+                                </Pie>
+                                <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -963,15 +980,32 @@ export function StatsPage() {
                       {lifetimePieData.length === 0 ? (
                         <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No lifetime actions recorded</div>
                       ) : (
-                        <ResponsiveContainer width="100%" height={220}>
-                          <PieChart>
-                            <Pie data={lifetimePieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
-                              {lifetimePieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                            </Pie>
-                            <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                            <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
-                          </PieChart>
-                        </ResponsiveContainer>
+                        <div className="flex gap-3 items-center">
+                          <div className="flex-1 min-w-0 max-h-[220px] overflow-y-auto space-y-0.5 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
+                            {(() => {
+                              const total = lifetimePieData.reduce((s, d) => s + d.value, 0);
+                              return lifetimePieData.map((entry, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-1.5 py-0.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                                    <span className="text-[10px] text-muted-foreground truncate">{entry.name}</span>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-foreground shrink-0 tabular-nums">{total > 0 ? (entry.value / total * 100).toFixed(1) : "0.0"}%</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          <div className="shrink-0 w-[180px]">
+                            <ResponsiveContainer width="100%" height={220}>
+                              <PieChart>
+                                <Pie data={lifetimePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                                  {lifetimePieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+                                </Pie>
+                                <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
                       )}
                     </CardContent>
                   </Card>

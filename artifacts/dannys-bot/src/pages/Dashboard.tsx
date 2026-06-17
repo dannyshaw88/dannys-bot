@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.24",
+    date: "17 Jun 2026",
+    items: [
+      { category: "UI", text: "Ghost Browser: Skip Warmup checkbox moved inline with the Scheduler title — ticking it collapses all warm-up sections." },
+      { category: "UI", text: "Account Settings: removed redundant helper text labels throughout." },
+      { category: "UI", text: "Account Settings: Proxy Settings and API Limits & Control now sit side by side on the same row with a divider between them." },
+      { category: "UI", text: "Account Settings tabs are darker cyan." },
+      { category: "UI", text: "Statistics: TrustScore column header now centred; Proxy IP cell text is now visible (dark)." },
+      { category: "UI", text: "Metrics: endpoint pie charts replaced the legend with a scrollable list showing all endpoints and their percentage share." },
+    ],
+  },
+  {
     version: "1.1.23",
     date: "17 Jun 2026",
     items: [

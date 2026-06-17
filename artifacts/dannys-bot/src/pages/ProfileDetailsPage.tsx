@@ -937,7 +937,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-[#1AD2F2] border-transparent hover:border-border",
+                      : "text-[#0891B2] border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -949,27 +949,27 @@ export function ProfileDetailsPage() {
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#0891B2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
                 <button
                   onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#0891B2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Monitor className="w-3.5 h-3.5 shrink-0" />
                   BROWSER
                 </button>
                 <Link
                   href={`/stats?profileId=${profileId}&tab=metrics`}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#0891B2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Activity className="w-3.5 h-3.5 shrink-0" />
                   METRICS
                 </Link>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1AD2F2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#0891B2] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);
@@ -1009,7 +1009,6 @@ export function ProfileDetailsPage() {
                 onChange={val => updateField({ tags: val })}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
           </div>
 
           {/* Account Label */}
@@ -1159,7 +1158,6 @@ export function ProfileDetailsPage() {
                         })()}
                         {totpError && <span className="text-xs text-destructive">{totpError}</span>}
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>
                     </div>
 
                     {/* Verify Account + Fire Random Endpoints — same row */}
@@ -1277,106 +1275,153 @@ export function ProfileDetailsPage() {
                       </div>
                     )}
 
-                    {/* Proxy Settings — below Verify row */}
-                    <div className="space-y-3 pt-3 border-t border-border mt-3">
-                      <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
-                      {(() => {
-                        const linked = proxies?.find(p => p.id === profile.proxyId);
-                        if (linked) {
-                          return (
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Input
-                                  value={linkedHostPort}
-                                  onChange={e => setLinkedHostPort(e.target.value)}
-                                  onBlur={() => saveLinkedField("hostPort")}
-                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                  className="text-sm h-8 w-48 shrink-0"
-                                  placeholder="host:port"
-                                />
-                                <Input
-                                  value={linkedUsername}
-                                  onChange={e => setLinkedUsername(e.target.value)}
-                                  onBlur={() => saveLinkedField("username")}
-                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                  placeholder="username"
-                                  className="text-sm h-8 w-32 shrink-0"
-                                />
-                                <Input
-                                  value={linkedPassword}
-                                  onChange={e => setLinkedPassword(e.target.value)}
-                                  onBlur={() => saveLinkedField("password")}
-                                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                  placeholder="password"
-                                  className="text-sm h-8 w-32 shrink-0"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
-                                  onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
-                                >
-                                  <X className="w-3.5 h-3.5 mr-1" /> Unassign
-                                </Button>
+                    {/* Proxy Settings + API Controls — same row */}
+                    <div className="pt-3 border-t border-border mt-3">
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
+                          {(() => {
+                            const linked = proxies?.find(p => p.id === profile.proxyId);
+                            if (linked) {
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Input
+                                      value={linkedHostPort}
+                                      onChange={e => setLinkedHostPort(e.target.value)}
+                                      onBlur={() => saveLinkedField("hostPort")}
+                                      onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                      className="text-sm h-8 w-48 shrink-0"
+                                      placeholder="host:port"
+                                    />
+                                    <Input
+                                      value={linkedUsername}
+                                      onChange={e => setLinkedUsername(e.target.value)}
+                                      onBlur={() => saveLinkedField("username")}
+                                      onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                      placeholder="username"
+                                      className="text-sm h-8 w-32 shrink-0"
+                                    />
+                                    <Input
+                                      value={linkedPassword}
+                                      onChange={e => setLinkedPassword(e.target.value)}
+                                      onBlur={() => saveLinkedField("password")}
+                                      onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                      placeholder="password"
+                                      className="text-sm h-8 w-32 shrink-0"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
+                                      onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
+                                    >
+                                      <X className="w-3.5 h-3.5 mr-1" /> Unassign
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Input
+                                    value={formData.proxyHost && formData.proxyPort ? `${formData.proxyHost}:${formData.proxyPort}` : formData.proxyHost || ""}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      const lastColon = val.lastIndexOf(":");
+                                      if (lastColon !== -1) {
+                                        updateField({ proxyHost: val.slice(0, lastColon), proxyPort: val.slice(lastColon + 1) });
+                                      } else {
+                                        updateField({ proxyHost: val, proxyPort: "" });
+                                      }
+                                    }}
+                                    onBlur={saveManualProxyField}
+                                    onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                    placeholder="host:port"
+                                    className="text-sm h-8 w-48 shrink-0 font-mono"
+                                  />
+                                  <Input
+                                    value={formData.proxyUsername}
+                                    onChange={e => updateField({ proxyUsername: e.target.value })}
+                                    onBlur={saveManualProxyField}
+                                    onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                    placeholder="username"
+                                    className="text-sm h-8 w-32 shrink-0"
+                                  />
+                                  <Input
+                                    value={formData.proxyPassword}
+                                    onChange={e => updateField({ proxyPassword: e.target.value })}
+                                    onBlur={saveManualProxyField}
+                                    onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                    placeholder="password"
+                                    className="text-sm h-8 w-32 shrink-0"
+                                  />
+                                </div>
+                                {proxies && proxies.length > 0 && (
+                                  <select
+                                    className="h-7 w-full max-w-sm rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                                    value=""
+                                    onChange={e => {
+                                      if (e.target.value) updateProfileMutation.mutate({ id: profileId, proxyId: Number(e.target.value) });
+                                    }}
+                                  >
+                                    <option value="">+ Assign to proxy from Proxy Manager…</option>
+                                    {proxies.map(p => (
+                                      <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>
+                                    ))}
+                                  </select>
+                                )}
                               </div>
-                              <p className="text-xs text-muted-foreground">Managed by Proxy Manager changes update the shared proxy.</p>
+                            );
+                          })()}
+                        </div>
+                        <div className="w-px bg-border self-stretch shrink-0" />
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
+                          <div className="flex flex-wrap gap-2 items-end">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
+                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
                             </div>
-                          );
-                        }
-                        return (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Input
-                                value={formData.proxyHost && formData.proxyPort ? `${formData.proxyHost}:${formData.proxyPort}` : formData.proxyHost || ""}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  const lastColon = val.lastIndexOf(":");
-                                  if (lastColon !== -1) {
-                                    updateField({ proxyHost: val.slice(0, lastColon), proxyPort: val.slice(lastColon + 1) });
-                                  } else {
-                                    updateField({ proxyHost: val, proxyPort: "" });
-                                  }
-                                }}
-                                onBlur={saveManualProxyField}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                placeholder="host:port"
-                                className="text-sm h-8 w-48 shrink-0 font-mono"
-                              />
-                              <Input
-                                value={formData.proxyUsername}
-                                onChange={e => updateField({ proxyUsername: e.target.value })}
-                                onBlur={saveManualProxyField}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                placeholder="username"
-                                className="text-sm h-8 w-32 shrink-0"
-                              />
-                              <Input
-                                value={formData.proxyPassword}
-                                onChange={e => updateField({ proxyPassword: e.target.value })}
-                                onBlur={saveManualProxyField}
-                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                placeholder="password"
-                                className="text-sm h-8 w-32 shrink-0"
-                              />
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
+                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.requestsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, requestsMax: min} }); }} />
                             </div>
-                            {proxies && proxies.length > 0 && (
-                              <select
-                                className="h-7 w-full max-w-sm rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-                                value=""
-                                onChange={e => {
-                                  if (e.target.value) updateProfileMutation.mutate({ id: profileId, proxyId: Number(e.target.value) });
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
+                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
+                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.everySecondsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: min} }); }} />
+                            </div>
+                            <div className="flex items-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs px-2 whitespace-nowrap"
+                                onClick={() => {
+                                  const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+                                  const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
+                                  const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
+                                  const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
+                                  const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
+                                  const fastestMs = minMs / maxCalls;
+                                  const slowestMs = maxMs / minCalls;
+                                  const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
+                                  setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
                                 }}
                               >
-                                <option value="">+ Assign to proxy from Proxy Manager…</option>
-                                {proxies.map(p => (
-                                  <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>
-                                ))}
-                              </select>
-                            )}
+                                Test Timing
+                              </Button>
+                              {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap pb-1">{timingInfo}</span>}
+                            </div>
                           </div>
-                        );
-                      })()}
+                          <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1413,7 +1458,6 @@ export function ProfileDetailsPage() {
                       );
                       return (
                         <div className="space-y-2">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Computed Device Identity (what Instagram sees)</p>
                           <div className="flex flex-wrap gap-1.5">
                             <Chip icon={Smartphone}  label="Device"  value={fp.device}                                              iconCls="text-indigo-500" />
                             <Chip icon={Monitor}     label="Screen"  value={`${fp.sw}×${fp.sh} @${fp.dpr}x`}                       iconCls="text-slate-500"  />
@@ -1575,53 +1619,6 @@ export function ProfileDetailsPage() {
                     </AlertDialog>
                   </div>
 
-                  <div className="pt-4 border-t border-border mt-4">
-                    {/* API Limits & Control */}
-                    <div className="space-y-3">
-                    <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
-                    <div className="flex flex-wrap gap-2 items-end">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.requestsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, requestsMax: min} }); }} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.everySecondsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: min} }); }} />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs px-2 whitespace-nowrap"
-                          onClick={() => {
-                            const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-                            const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
-                            const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
-                            const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
-                            const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
-                            const fastestMs = minMs / maxCalls;
-                            const slowestMs = maxMs / minCalls;
-                            const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
-                            setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
-                          }}
-                        >
-                          Test Timing
-                        </Button>
-                        {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap pb-1">{timingInfo}</span>}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
-
-                    </div>
-                  </div>
 
                   {/* ── Active Timer ── */}
                   <div className="space-y-4 pt-4 border-t border-border mt-4">
@@ -1817,7 +1814,6 @@ export function ProfileDetailsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Paste Chrome cookies. Must include <code className="font-mono">sessionid</code>. Writes to DB and browser cookie file automatically. Run Verify Credentials after.</p>
                 </div>
               </CardContent>
             </Card>

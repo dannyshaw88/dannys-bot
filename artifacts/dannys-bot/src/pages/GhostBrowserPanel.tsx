@@ -1117,6 +1117,15 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             <div className="flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Scheduler</p>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none ml-auto">
+                <input
+                  type="checkbox"
+                  checked={skipWarmup}
+                  onChange={e => setSkipWarmup(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500 shrink-0"
+                />
+                <span className="text-[10px] font-medium text-muted-foreground">Skip Warmup</span>
+              </label>
             </div>
             <div className="flex gap-4 flex-wrap items-center">
               <XYField label="Run Every (minutes)" min={runEveryMin} max={runEveryMax} onMin={setRunEveryMin} onMax={setRunEveryMax} />
@@ -1124,6 +1133,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           </div>
 
+          {!skipWarmup && (
+            <>
           {/* ── ROW 2: Website warm-up URL list ── */}
           <div className="desktop-card p-2.5 space-y-1.5">
             <div className="flex items-center gap-1.5">
@@ -1162,17 +1173,10 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <XYField label="Videos to Watch" min={youtubeVideosMin} max={youtubeVideosMax} onMin={setYoutubeVideosMin} onMax={setYoutubeVideosMax} />
               <XYField label="Minutes per Video" min={youtubeWatchMin} max={youtubeWatchMax} onMin={setYoutubeWatchMin} onMax={setYoutubeWatchMax} />
               <XYField label="Skip YouTube %" min={skipYoutubePercentMin} max={skipYoutubePercentMax} onMin={setSkipYoutubePercentMin} onMax={setSkipYoutubePercentMax} />
-              <label className="flex items-center gap-1.5 cursor-pointer select-none self-center">
-                <input
-                  type="checkbox"
-                  checked={skipWarmup}
-                  onChange={e => setSkipWarmup(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-cyan-500 shrink-0"
-                />
-                <span className="text-[10px] font-medium text-muted-foreground">Skip Warmup</span>
-              </label>
             </div>
           </div>
+            </>
+          )}
 
           {/* ── ROW 4: Username | Password | DOB | Bio Spin ── */}
           <div className="desktop-card p-2.5">
