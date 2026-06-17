@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.005",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls now shows a Save As dialog so you can choose exactly where the CSV is saved — previously it silently failed on systems where no default CSV application was registered, showing 'Export failed' with no way to diagnose it." },
+      { category: "Fix", text: "Export API Calls now shows a spinner while the data is being fetched, and reports the exact error message if the server returns a failure instead of just 'Export failed'." },
+      { category: "Fix", text: "Export EQX File: the entire export flow is now wrapped in error handling — any failure (folder picker error, network error, file write error) now shows a clear error toast instead of silently doing nothing." },
+      { category: "Fix", text: "Export EQX File: individual account fetch failures now include the server error detail in the toast message so you can see exactly which accounts failed and why." },
+      { category: "Fix", text: "Export EQX File: the button now shows a spinner while the export is in progress and is disabled to prevent double-clicks." },
+    ],
+  },
+  {
     version: "1.1.001",
     date: "16 Jun 2026",
     items: [

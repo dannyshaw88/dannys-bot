@@ -1860,8 +1860,17 @@ export function BanAnalyticsPage() {
   const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
   const ERROR_TABS: ErrorTab[] = ["ban", "automated", "captcha", "locked"];
 
-  function handleExport() {
+  async function handleExport() {
     const levels = getTrustLevels();
+
+    // Fetch live survivor endpoint data so survivors have full metrics in the export
+    let survivorPatternData: SurvivorPattern[] = [];
+    try {
+      const resp = await fetch("/api/analytics/survivor-call-patterns", { credentials: "include" });
+      if (resp.ok) survivorPatternData = await resp.json();
+    } catch { /* non-fatal — survivors will export without endpoint data */ }
+    const survivorPatternMap = new Map<string, SurvivorPattern>(survivorPatternData.map(sp => [sp.username, sp]));
+
     function makeEnrichFn(entries: AnalyticsEntry[]) {
       const cross = computeCrossStats(entries, trustMap, profileMap, profileNotesMap);
       return function enrichEntry(e: AnalyticsEntry) {
@@ -1921,12 +1930,58 @@ export function BanAnalyticsPage() {
       automated: automatedEntries.map(makeEnrichFn(automatedEntries)),
       captcha:   captchaEntries.map(makeEnrichFn(captchaEntries)),
       locked:    lockedEntries.map(makeEnrichFn(lockedEntries)),
-      survivors: survivingAccounts.map(p => ({
-        username: p.username,
-        proxyHost: p.proxyHost ?? null,
-        runningMs: p.runMs,
-        trustScore: (() => { const id = profileMap.get(p.username); const ti = id !== undefined ? trustMap.get(id) : undefined; return ti ? { rank: ti.rank, label: ti.label } : null; })(),
-      })),
+      survivors: survivingAccounts.map(p => {
+        const id = profileMap.get(p.username);
+        const ti = id !== undefined ? trustMap.get(id) : undefined;
+        const sp = survivorPatternMap.get(p.username);
+
+        let computedMetrics = null;
+        let endpointCount: number | null = null;
+        let endpointSnapshot: string | null = null;
+        let spanHours: number | null = null;
+        let accountAgeDays: number | null = null;
+
+        if (sp) {
+          endpointCount = sp.endpointCount;
+          endpointSnapshot = sp.endpointSnapshot;
+          accountAgeDays = sp.accountAgeDays;
+          const eps = filterHiker(parseEps(sp.endpointSnapshot));
+          const m = computeMetrics(eps, sp.capturedAt);
+          const topOps = topEps(eps, 10);
+          spanHours = m.spanMin > 0 ? +(m.spanMin / 60).toFixed(4) : null;
+          computedMetrics = {
+            callRate_perMin: m.callsPerMin > 0 ? m.callsPerMin : null,
+            spanMin: m.spanMin > 0 ? m.spanMin : null,
+            avgInterCallSec: m.avgInterCallSec > 0 ? m.avgInterCallSec : null,
+            minInterCallSec: eps.length > 1 ? m.minInterCallSec : null,
+            timingCoV: m.timingCoV >= 0 ? m.timingCoV : null,
+            timingCoV_label: m.timingCoV < 0 ? null : m.timingCoV < 0.3 ? "ROBOTIC" : m.timingCoV < 0.5 ? "LOW" : m.timingCoV < 1.0 ? "MODERATE" : "HUMAN",
+            shannonEntropy_bits: m.shannonEntropy,
+            uniqueEndpoints: m.uniqueEndpoints,
+            endpointDiversity_pct: m.endpointDiversity * 100,
+            burstWindows: m.burstCount,
+            preActionWarmup: m.preActionWarmup,
+            actionVelocity_perHour: m.actionVelocityPerHour > 0 ? m.actionVelocityPerHour : null,
+            sessionPerAction: m.actionCount > 0 ? m.sessionPerAction : null,
+            authPerAction: m.actionCount > 0 ? m.authPerAction : null,
+            cats: m.cats,
+            anomalyScore: null,
+            top10Endpoints: topOps.map(ep => ({ name: ep.name, label: ep.label ?? ep.name, count: ep.count })),
+          };
+        }
+
+        return {
+          username: p.username,
+          proxyHost: p.proxyHost ?? null,
+          runningMs: p.runMs,
+          accountAgeDays,
+          endpointCount,
+          endpointSnapshot,
+          spanHours,
+          trustScore: ti ? { rank: ti.rank, label: ti.label } : null,
+          computedMetrics,
+        };
+      }),
       proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),
       concurrencyAlerts: concurrencyAlerts,
       verifyTimeline: (() => {

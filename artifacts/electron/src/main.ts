@@ -1024,8 +1024,22 @@ async function createWindow() {
     const { shell } = await import("electron");
     const tmpPath = path.join(os.tmpdir(), filename);
     fsSync.writeFileSync(tmpPath, content, "utf8");
-    const err = await shell.openPath(tmpPath);
-    if (err) throw new Error(err);
+    await shell.openPath(tmpPath);
+  });
+
+  ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {
+    const fsSync = await import("fs");
+    const result = await dialog.showSaveDialog(win!, {
+      title: "Save CSV",
+      defaultPath: path.join(app.getPath("downloads"), filename),
+      filters: [
+        { name: "CSV Files", extensions: ["csv"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+    fsSync.writeFileSync(result.filePath, content, "utf8");
+    return { saved: true, filePath: result.filePath };
   });
 
   // Step 1 of the new two-phase EQX export flow: ask where to save BEFORE fetching data.

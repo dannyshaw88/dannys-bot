@@ -366,6 +366,8 @@ export function ProfilesPage() {
   const [tsSubOpen, setTsSubOpen] = useState(false);
   const [tsVersion, setTsVersion] = useState(0);
   const [eqxImporting, setEqxImporting] = useState(false);
+  const [exportingApiCalls, setExportingApiCalls] = useState(false);
+  const [exportingEqx, setExportingEqx] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
   const [jarveeImporting, setJarveeImporting] = useState(false);
   const jarveeImportRef = useRef<HTMLInputElement>(null);
@@ -1890,17 +1892,26 @@ export function ProfilesPage() {
               <button
                 onClick={async () => {
                   setActionsOpen(false);
+                  setExportingApiCalls(true);
                   try {
                     const tz = new Date().getTimezoneOffset();
                     const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
                     const url = `/api/logs/export?${ids ? `profileIds=${ids}&` : ""}tz=${tz}`;
                     const res = await fetch(url, { credentials: "include" });
-                    if (!res.ok) { toast({ title: "Export failed", description: "Could not fetch API call history.", variant: "destructive" }); return; }
+                    if (!res.ok) {
+                      let detail = "Could not fetch API call history.";
+                      try { const j = await res.json(); detail = j.detail ?? j.message ?? detail; } catch {}
+                      toast({ title: "Export failed", description: detail, variant: "destructive" });
+                      return;
+                    }
                     const text = await res.text();
                     const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
                     const eApi2 = (window as any).electronAPI;
-                    if (eApi2?.openCsvTemp) {
-                      await eApi2.openCsvTemp({ content: text, filename });
+                    if (eApi2?.saveCsvDialog) {
+                      const result = await eApi2.saveCsvDialog({ content: text, filename });
+                      if (result?.saved) {
+                        toast({ title: "API Calls Exported", description: `Saved to: ${result.filePath}` });
+                      }
                     } else {
                       const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
                       const a = document.createElement("a");
@@ -1908,12 +1919,18 @@ export function ProfilesPage() {
                       a.download = filename;
                       document.body.appendChild(a); a.click(); document.body.removeChild(a);
                       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                      toast({ title: "API Calls Exported", description: `${filename} downloaded.` });
                     }
-                  } catch { toast({ title: "Export failed", variant: "destructive" }); }
+                  } catch (err: any) {
+                    toast({ title: "Export failed", description: String(err?.message ?? err ?? "Unknown error"), variant: "destructive" });
+                  } finally {
+                    setExportingApiCalls(false);
+                  }
                 }}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+                disabled={exportingApiCalls}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+                {exportingApiCalls ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
@@ -1933,71 +1950,83 @@ export function ProfilesPage() {
                   }
 
                   const eApi = (window as any).electronAPI;
+                  setExportingEqx(true);
 
-                  if (eApi?.pickEqxFolder) {
-                    // Electron path (two-phase): ask where to save FIRST, then fetch and write.
-                    const pick = await eApi.pickEqxFolder();
-                    if (pick.canceled) return;
-                    const folder: string = pick.folder;
+                  try {
+                    if (eApi?.pickEqxFolder) {
+                      // Electron path (two-phase): ask where to save FIRST, then fetch and write.
+                      const pick = await eApi.pickEqxFolder();
+                      if (pick.canceled) return;
+                      const folder: string = pick.folder;
 
-                    const files: Array<{ filename: string; data: string }> = [];
-                    const fetchErrors: string[] = [];
-                    const exportTotal = selectedProfileIds.length;
-                    for (let ei = 0; ei < selectedProfileIds.length; ei++) {
-                      const id = selectedProfileIds[ei];
-                      const profile = profiles?.find(p => p.id === id);
-                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                      try {
-                        const tsId = localStorage.getItem(`trustscore_v2_${id}`);
-                        const params = new URLSearchParams({ pos: String(ei + 1), total: String(exportTotal) });
-                        if (tsId) params.set("trustScoreId", tsId);
-                        const exportUrl = `/api/profiles/${id}/export-eqx?${params.toString()}`;
-                        const res = await fetch(exportUrl, { credentials: "include" });
-                        if (!res.ok) { fetchErrors.push(safeUsername); continue; }
-                        const arrayBuf = await res.arrayBuffer();
-                        const bytes = new Uint8Array(arrayBuf);
-                        let binary = "";
-                        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-                        files.push({ filename: `${safeUsername}.eqx`, data: btoa(binary) });
-                      } catch { fetchErrors.push(safeUsername); }
+                      const files: Array<{ filename: string; data: string }> = [];
+                      const fetchErrors: string[] = [];
+                      const exportTotal = selectedProfileIds.length;
+                      for (let ei = 0; ei < selectedProfileIds.length; ei++) {
+                        const id = selectedProfileIds[ei];
+                        const profile = profiles?.find(p => p.id === id);
+                        const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                        try {
+                          const tsId = localStorage.getItem(`trustscore_v2_${id}`);
+                          const params = new URLSearchParams({ pos: String(ei + 1), total: String(exportTotal) });
+                          if (tsId) params.set("trustScoreId", tsId);
+                          const exportUrl = `/api/profiles/${id}/export-eqx?${params.toString()}`;
+                          const res = await fetch(exportUrl, { credentials: "include" });
+                          if (!res.ok) {
+                            let errDetail = "";
+                            try { const j = await res.json(); errDetail = j.error ?? ""; } catch {}
+                            fetchErrors.push(safeUsername + (errDetail ? ` (${errDetail})` : ""));
+                            continue;
+                          }
+                          const arrayBuf = await res.arrayBuffer();
+                          const bytes = new Uint8Array(arrayBuf);
+                          let binary = "";
+                          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                          files.push({ filename: `${safeUsername}.eqx`, data: btoa(binary) });
+                        } catch (e: any) { fetchErrors.push(`${safeUsername} (${e?.message ?? "network error"})`); }
+                      }
+                      if (fetchErrors.length > 0) {
+                        toast({ title: `${fetchErrors.length} account(s) failed`, description: fetchErrors.join(", "), variant: "destructive" });
+                      }
+                      if (files.length === 0) return;
+                      const writeResult = await eApi.writeEqxFiles({ folder, files });
+                      toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${folder}` });
+                    } else {
+                      // Browser/web fallback: individual downloads
+                      let successCount = 0;
+                      const fallbackTotal = selectedProfileIds.length;
+                      for (let ei2 = 0; ei2 < selectedProfileIds.length; ei2++) {
+                        const id = selectedProfileIds[ei2];
+                        const profile = profiles?.find(p => p.id === id);
+                        const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                        try {
+                          const tsId2 = localStorage.getItem(`trustscore_v2_${id}`);
+                          const p2 = new URLSearchParams({ pos: String(ei2 + 1), total: String(fallbackTotal) });
+                          if (tsId2) p2.set("trustScoreId", tsId2);
+                          const exportUrl2 = `/api/profiles/${id}/export-eqx?${p2.toString()}`;
+                          const res = await fetch(exportUrl2, { credentials: "include" });
+                          if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
+                          const blob = await res.blob();
+                          const objectUrl = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                          setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                          successCount++;
+                        } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                      }
+                      if (successCount > 0) toast({ title: "EQX Export Complete", description: `${successCount} account(s) exported` });
                     }
-                    if (fetchErrors.length > 0) {
-                      toast({ title: "Export failed", description: `Could not fetch: ${fetchErrors.join(", ")}`, variant: "destructive" });
-                    }
-                    if (files.length === 0) return;
-                    const writeResult = await eApi.writeEqxFiles({ folder, files });
-                    toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${folder}` });
-                  } else {
-                    // Browser/web fallback: individual downloads
-                    let successCount = 0;
-                    const fallbackTotal = selectedProfileIds.length;
-                    for (let ei2 = 0; ei2 < selectedProfileIds.length; ei2++) {
-                      const id = selectedProfileIds[ei2];
-                      const profile = profiles?.find(p => p.id === id);
-                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                      try {
-                        const tsId2 = localStorage.getItem(`trustscore_v2_${id}`);
-                        const p2 = new URLSearchParams({ pos: String(ei2 + 1), total: String(fallbackTotal) });
-                        if (tsId2) p2.set("trustScoreId", tsId2);
-                        const exportUrl2 = `/api/profiles/${id}/export-eqx?${p2.toString()}`;
-                        const res = await fetch(exportUrl2, { credentials: "include" });
-                        if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
-                        const blob = await res.blob();
-                        const objectUrl = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = objectUrl; a.download = `${safeUsername}.eqx`;
-                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                        successCount++;
-                      } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
-                    }
-                    if (successCount > 1) toast({ title: "EQX Export Complete", description: `${successCount} accounts exported` });
+                  } catch (err: any) {
+                    toast({ title: "EQX Export failed", description: String(err?.message ?? err ?? "Unknown error"), variant: "destructive" });
+                  } finally {
+                    setExportingEqx(false);
                   }
                 }}
-                disabled={selectedProfileIds.length === 0}
+                disabled={selectedProfileIds.length === 0 || exportingEqx}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <FileDown className="w-4 h-4 shrink-0 text-primary" />
+                {exportingEqx ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <FileDown className="w-4 h-4 shrink-0 text-primary" />}
                 Export EQX File{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button

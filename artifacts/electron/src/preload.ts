@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   clearSignupBrowserCache: () => ipcRenderer.invoke("clear-signup-browser-cache"),
   openCsvTemp: (args: { content: string; filename: string }) =>
     ipcRenderer.invoke("open-csv-temp", args),
+  saveCsvDialog: (args: { content: string; filename: string }) =>
+    ipcRenderer.invoke("save-csv-dialog", args),
   pickEqxFolder: () =>
     ipcRenderer.invoke("pick-eqx-folder"),
   writeEqxFiles: (args: { folder: string; files: Array<{ filename: string; data: string }> }) =>
