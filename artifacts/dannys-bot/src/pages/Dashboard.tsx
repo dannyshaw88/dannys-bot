@@ -62,6 +62,33 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.013",
+    date: "17 Jun 2026",
+    items: [
+      { category: "UI", text: "Dashboard: page indicator is now a clickable dropdown — click it to jump directly to any page. Shows 'First (most recent)' and 'Last (oldest)' at the extremes, numbered pages in between. The dropdown shows 3 rows and scrolls." },
+      { category: "UI", text: "Session Log (per account): same page-jump dropdown added — click the current page number to jump straight to any page." },
+    ],
+  },
+  {
+    version: "1.1.012",
+    date: "17 Jun 2026",
+    items: [
+      { category: "UI", text: "Metrics tab: replaced the chaotic endpoint legend below the pie charts with a clean scrollable list on the left showing the top 10 endpoints with their percentage of the total." },
+      { category: "UI", text: "Account Settings tab buttons (ACCOUNT SETTINGS, HUMAN SESSION TOOL, SESSION LOG, DASH, BROWSER, METRICS, COPY SETTINGS) are now a slightly darker cyan so they are clearly readable on a white background." },
+      { category: "UI", text: "Human Session Tool: ORDER % and SKIP CHANCE % fields are now right-aligned in all sections." },
+      { category: "UI", text: "Follow Tool, Unfollow Tool, and Contact Tool headers: ORDER % and SKIP CHANCE % fields are now right-aligned to match the Human Session Tool." },
+    ],
+  },
+  {
+    version: "1.1.011",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export EQX File: the folder picker dialog now opens as a standalone window instead of a child of the main window — on Windows, child dialogs can get stuck behind the main window making it look like nothing happened." },
+      { category: "Fix", text: "Export API Calls: the CSV is now saved to a temp file and opened directly in Excel (or your default CSV app) with no save dialog needed." },
+      { category: "Fix", text: "Both export actions now write detailed log entries to Settings > Server Log so any failure will show an exact error message instead of silently doing nothing." },
+    ],
+  },
+  {
     version: "1.1.009",
     date: "17 Jun 2026",
     items: [
@@ -6838,7 +6865,8 @@ export function Dashboard() {
     if (globalSettings?.logMaxRows != null) logMaxRowsRef.current = globalSettings.logMaxRows;
   }, [globalSettings]);
   const [feedPage, setFeedPage] = useState(0);
-  useEffect(() => { setFeedPage(0); }, [apiLogSearch, selectedProfileId, showOnlyErrors, clearedAt]);
+  const [feedJumpOpen, setFeedJumpOpen] = useState(false);
+  useEffect(() => { setFeedPage(0); setFeedJumpOpen(false); }, [apiLogSearch, selectedProfileId, showOnlyErrors, clearedAt]);
 
   const fetchFeed = useCallback(async (isInitial = false) => {
     try {
@@ -7395,27 +7423,56 @@ export function Dashboard() {
                   ? "No rows"
                   : `${(feedPage * 50 + 1).toLocaleString()}–${Math.min((feedPage + 1) * 50, displayFeed.length).toLocaleString()} of ${displayFeed.length.toLocaleString()}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
               </span>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setFeedPage(p => Math.max(0, p - 1))}
-                  disabled={feedPage === 0 || displayFeed.length === 0}
-                  className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <span className="text-xs text-muted-foreground tabular-nums px-1">
-                  {displayFeed.length === 0 ? "—" : `${feedPage + 1} / ${Math.max(1, Math.ceil(displayFeed.length / 50))}`}
-                </span>
-                <button
-                  onClick={() => setFeedPage(p => Math.min(Math.max(0, Math.ceil(displayFeed.length / 50) - 1), p + 1))}
-                  disabled={feedPage >= Math.ceil(displayFeed.length / 50) - 1 || displayFeed.length === 0}
-                  className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Next page"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {(() => {
+                const totalFeedPages = Math.max(1, Math.ceil(displayFeed.length / 50));
+                return (
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => setFeedPage(p => Math.max(0, p - 1))}
+                      disabled={feedPage === 0 || displayFeed.length === 0}
+                      className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Previous page"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setFeedJumpOpen(v => !v)}
+                        disabled={displayFeed.length === 0}
+                        className="flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums px-1 py-0.5 rounded hover:bg-accent/30 hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Jump to page"
+                      >
+                        {displayFeed.length === 0 ? "—" : feedPage === 0 ? "First" : feedPage === totalFeedPages - 1 ? "Last" : feedPage + 1}
+                        <ChevronDown className="w-3 h-3 opacity-60" />
+                      </button>
+                      {feedJumpOpen && displayFeed.length > 0 && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setFeedJumpOpen(false)} />
+                          <div className="absolute bottom-full mb-1 right-0 z-50 bg-popover border border-border rounded shadow-md overflow-y-auto min-w-[10rem]" style={{ maxHeight: "6rem" }}>
+                            {Array.from({ length: totalFeedPages }, (_, i) => (
+                              <button
+                                key={i}
+                                onClick={() => { setFeedPage(i); setFeedJumpOpen(false); }}
+                                className={`block w-full text-left px-3 py-1.5 text-xs whitespace-nowrap hover:bg-accent/30 transition-colors ${feedPage === i ? "font-semibold text-primary" : "text-foreground"}`}
+                              >
+                                {i === 0 ? "First (most recent)" : i === totalFeedPages - 1 ? "Last (oldest)" : i + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setFeedPage(p => Math.min(Math.max(0, Math.ceil(displayFeed.length / 50) - 1), p + 1))}
+                      disabled={feedPage >= Math.ceil(displayFeed.length / 50) - 1 || displayFeed.length === 0}
+                      className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Next page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
             <button
               onClick={exportCsv}

@@ -5,7 +5,7 @@ import {
   Activity, Clock, ExternalLink, Hash, Users, Image,
   Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward,
   AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { type Tool, type Profile, type SessionAction } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -40,6 +40,7 @@ const SESSION_LOG_PAGE_SIZE = 50;
 export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
   const { navigateTo } = useBrowserWindows();
   const [page, setPage] = useState(0);
+  const [jumpOpen, setJumpOpen] = useState(false);
 
   const { data: sessionActionsList, isLoading: sessionActionsLoading } = useQuery<SessionAction[]>({
     queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
@@ -171,9 +172,32 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-xs text-muted-foreground tabular-nums px-1">
-                {`${page + 1} / ${totalPages}`}
-              </span>
+              <div className="relative">
+                <button
+                  onClick={() => setJumpOpen(v => !v)}
+                  className="flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums px-1 py-0.5 rounded hover:bg-accent/30 hover:text-foreground transition-colors"
+                  title="Jump to page"
+                >
+                  {page === 0 ? "First" : page === totalPages - 1 ? "Last" : page + 1}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+                {jumpOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setJumpOpen(false)} />
+                    <div className="absolute bottom-full mb-1 right-0 z-50 bg-popover border border-border rounded shadow-md overflow-y-auto min-w-[10rem]" style={{ maxHeight: "6rem" }}>
+                      {Array.from({ length: totalPages }, (_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => { setPage(i); setJumpOpen(false); }}
+                          className={`block w-full text-left px-3 py-1.5 text-xs whitespace-nowrap hover:bg-accent/30 transition-colors ${page === i ? "font-semibold text-primary" : "text-foreground"}`}
+                        >
+                          {i === 0 ? "First (most recent)" : i === totalPages - 1 ? `Last (oldest)` : i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
