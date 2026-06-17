@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.25",
+    date: "17 Jun 2026",
+    items: [
+      { category: "UI", text: "Human Session: removed em dash from Click on Post% label, removed vertical left border from the cascade section." },
+      { category: "UI", text: "Human Session: VIEW PROFILE% and VIEW PROFILE'S FEED% labels now appear after their Min/Max fields." },
+      { category: "UI", text: "Account Settings: removed several helper description texts to keep the page clean." },
+      { category: "UI", text: "Account Settings: API Limits field labels moved below their inputs and centred. Test Timing button is now inline on the same row." },
+      { category: "UI", text: "Account Settings: Backup Codes field reduced to 1 row. Notes field reduced by 1 row." },
+      { category: "UI", text: "Account Settings: API User Agent and Embedded Browser Agent fields now auto-size their width to the selected agent string length." },
+    ],
+  },
+  {
     version: "1.1.24",
     date: "17 Jun 2026",
     items: [

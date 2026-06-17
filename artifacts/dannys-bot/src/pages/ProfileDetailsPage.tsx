@@ -1059,7 +1059,6 @@ export function ProfileDetailsPage() {
                 onChange={e => updateField({ accountLabel: e.target.value })}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">A display label for quick identification use any format you like.</p>
           </div>
 
           <div>
@@ -1094,7 +1093,7 @@ export function ProfileDetailsPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Input
                           className="max-w-[370px]"
-                          placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
+                          placeholder=""
                           value={formData.twoFASecretKey}
                           onChange={e => { updateField({ twoFASecretKey: e.target.value }); setTotpCode(null); setTotpError(null); }}
                           data-testid="input-2fa-secret"
@@ -1380,46 +1379,43 @@ export function ProfileDetailsPage() {
                         <div className="w-px bg-border self-stretch shrink-0" />
                         <div className="flex-1 min-w-0 space-y-3">
                           <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
-                          <div className="flex flex-wrap gap-2 items-end">
+                          <div className="flex flex-wrap gap-2 items-start">
                             <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
                               <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
                               <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.requestsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, requestsMax: min} }); }} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
                               <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
                               <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.everySecondsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: min} }); }} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
-                            <div className="flex items-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs px-2 whitespace-nowrap"
-                                onClick={() => {
-                                  const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-                                  const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
-                                  const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
-                                  const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
-                                  const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
-                                  const fastestMs = minMs / maxCalls;
-                                  const slowestMs = maxMs / minCalls;
-                                  const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
-                                  setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
-                                }}
-                              >
-                                Test Timing
-                              </Button>
-                              {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap pb-1">{timingInfo}</span>}
-                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs px-2 whitespace-nowrap"
+                              onClick={() => {
+                                const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+                                const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
+                                const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
+                                const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
+                                const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
+                                const fastestMs = minMs / maxCalls;
+                                const slowestMs = maxMs / minCalls;
+                                const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
+                                setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
+                              }}
+                            >
+                              Test Timing
+                            </Button>
+                            {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap mt-1.5">{timingInfo}</span>}
                           </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
                         </div>
                       </div>
                     </div>
@@ -1493,7 +1489,8 @@ export function ProfileDetailsPage() {
                         <span className="ml-2 text-[9px] font-normal text-muted-foreground/60 normal-case tracking-normal">(auto-matched when picking a device)</span>
                       </label>
                       <input
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        style={{ width: `${Math.max(22, (formData.userAgentEmbedded || "Browser-like User Agent...").length + 6)}ch` }}
                         value={formData.userAgentEmbedded}
                         onChange={e => updateField({ userAgentEmbedded: e.target.value })}
                         placeholder="Browser-like User Agent..."
@@ -1771,7 +1768,8 @@ export function ProfileDetailsPage() {
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Backup Codes</Label>
                   <textarea
-                    className="flex min-h-[90px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none font-mono"
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none font-mono"
+                    rows={1}
                     placeholder="One code per line…"
                     value={formData.backupCodes}
                     onChange={e => updateField({ backupCodes: e.target.value })}
@@ -1861,11 +1859,6 @@ export function ProfileDetailsPage() {
                       data-testid="input-email-val-port"
                     />
                   </div>
-                </div>
-                <div className="pt-3 border-t border-border">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Used to automatically confirm Instagram emails via POP3 access.
-                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -1972,8 +1965,8 @@ export function ProfileDetailsPage() {
             <textarea
               className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               placeholder="Any notes about this account…"
-              rows={5}
-              style={{ maxHeight: "calc(5 * 1.5rem + 1rem)", overflowY: "auto" }}
+              rows={4}
+              style={{ maxHeight: "calc(4 * 1.5rem + 1rem)", overflowY: "auto" }}
               value={formData.notes}
               onChange={e => updateField({ notes: e.target.value })}
               data-testid="input-notes"

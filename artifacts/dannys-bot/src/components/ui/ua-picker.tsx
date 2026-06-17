@@ -76,12 +76,15 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
   const isKnown = !!value && userAgents.some(ua => ua.api === value);
   const currentLabel = value || "Pick a device…";
 
+  const btnWidth = `${Math.max(18, currentLabel.length + 6)}ch`;
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative inline-block">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        style={{ width: btnWidth }}
+        className="flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <span className="flex items-center gap-2 min-w-0 overflow-hidden">
           <Smartphone className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
@@ -91,7 +94,7 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-lg">
+        <div className="absolute left-0 z-50 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-lg" style={{ minWidth: btnWidth, width: 'max-content', maxWidth: '90vw' }}>
           <div className="p-2 border-b border-border">
             <input
               autoFocus

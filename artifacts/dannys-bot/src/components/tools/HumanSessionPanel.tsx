@@ -870,17 +870,17 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               {/* ROW 3: Click on Post% */}
               <div className={`flex items-center gap-1.5 pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post% — chance to open a post from the feed</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post% chance to open a post from the feed</span>
               </div>
         {/* ── Click Post → Visit Profile → View Feed → View Posts cascade ── */}
         {!!settings.viewTimelineFeedEnabled && (
-          <div className="border-l-2 border-muted ml-1 pl-3 space-y-2 pt-1">
+          <div className="space-y-2 pt-1">
 
             {/* Visit Profile % — shown when click% is set */}
             {(settings.clickPostPercentMax ?? 0) > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE%</span>
                 {pctInputs("viewPostProfilePercentMin", "viewPostProfilePercentMax")}
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE%</span>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO VISIT THE POST AUTHOR'S PROFILE</span>
               </div>
             )}
@@ -888,8 +888,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             {/* View Profile's Feed % + View Timeline Posts — on same row */}
             {(settings.clickPostPercentMax ?? 0) > 0 && (settings.viewPostProfilePercentMax ?? 0) > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE'S FEED%</span>
                 {pctInputs("viewProfileFeedPercentMin", "viewProfileFeedPercentMax")}
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE'S FEED%</span>
                 {(settings.viewProfileFeedPercentMax ?? 0) > 0 && (
                   <>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL</span>
