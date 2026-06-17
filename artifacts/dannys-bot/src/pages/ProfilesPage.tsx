@@ -1906,13 +1906,24 @@ export function ProfilesPage() {
                     }
                     const text = await res.text();
                     const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    const rlog = (m: string) => fetch("/api/ipc-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: `[RENDERER] export-api-calls: ${m}` }) }).catch(() => {});
                     const eApi2 = (window as any).electronAPI;
+                    await rlog(`electronAPI type=${typeof eApi2} openCsvTemp type=${typeof eApi2?.openCsvTemp}`);
                     if (eApi2?.openCsvTemp) {
-                      const result = await eApi2.openCsvTemp({ content: text, filename });
+                      await rlog("calling openCsvTemp IPC...");
+                      let result: any;
+                      try {
+                        result = await eApi2.openCsvTemp({ content: text, filename });
+                        await rlog(`openCsvTemp returned: saved=${result?.saved} filePath=${result?.filePath ?? "none"}`);
+                      } catch (ipcErr: any) {
+                        await rlog(`openCsvTemp THREW: ${ipcErr?.message ?? String(ipcErr)}`);
+                        throw ipcErr;
+                      }
                       if (result?.saved !== false) {
                         toast({ title: "API Calls Exported", description: result?.filePath ? `Saved to: ${result.filePath}` : "Export complete." });
                       }
                     } else {
+                      await rlog("electronAPI.openCsvTemp not available — using browser download fallback");
                       const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(blob);
@@ -1922,6 +1933,7 @@ export function ProfilesPage() {
                       toast({ title: "API Calls Exported", description: `${filename} downloaded.` });
                     }
                   } catch (err: any) {
+                    fetch("/api/ipc-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: `[RENDERER] export-api-calls OUTER CATCH: ${err?.message ?? String(err)}` }) }).catch(() => {});
                     toast({ title: "Export failed", description: String(err?.message ?? err ?? "Unknown error"), variant: "destructive" });
                   } finally {
                     setExportingApiCalls(false);

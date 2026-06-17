@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.020",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export logging now routes through the server so all IPC activity appears in equinox-debug.log — the Windows file-locking issue that was silently swallowing every [MAIN] log entry is resolved." },
+      { category: "Fix", text: "Export API Calls: renderer now logs whether window.electronAPI is available and what happens at each step, so the exact failure point is visible in the log." },
+    ],
+  },
+  {
     version: "1.1.019",
     date: "17 Jun 2026",
     items: [

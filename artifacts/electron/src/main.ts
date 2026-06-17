@@ -18,14 +18,26 @@ let _mainLogPath = "";
 let _serverDebugLogPath = "";
 
 function appendToMainLog(msg: string): void {
-  const line = `[${new Date().toISOString()}] [MAIN] ${msg}\n`;
-  try { process.stderr.write(line); } catch {}
+  const line = `[${new Date().toISOString()}] [MAIN] ${msg}`;
+  try { process.stderr.write(line + "\n"); } catch {}
   if (_mainLogPath) {
-    try { fs.appendFileSync(_mainLogPath, line); } catch {}
+    try { fs.appendFileSync(_mainLogPath, line + "\n"); } catch {}
   }
-  // Also tee to equinox-debug.log so IPC logs appear in the same file the user shares
-  if (_serverDebugLogPath) {
-    try { fs.appendFileSync(_serverDebugLogPath, line); } catch {}
+  // Route through the server's /api/ipc-log so the line appears in
+  // equinox-debug.log — direct appendFileSync is silently swallowed on
+  // Windows because the server process holds the file descriptor open.
+  if (serverPort) {
+    try {
+      const body = JSON.stringify({ message: line });
+      const req = (require("http") as typeof import("http")).request(
+        { hostname: "127.0.0.1", port: serverPort, path: "/api/ipc-log", method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+        () => {},
+      );
+      req.on("error", () => {});
+      req.write(body);
+      req.end();
+    } catch {}
   }
 }
 
