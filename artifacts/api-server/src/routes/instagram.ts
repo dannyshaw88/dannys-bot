@@ -237,7 +237,7 @@ export async function registerInstagramRoutes(
   // lines go through the server's already-open file descriptor and appear in
   // equinox-debug.log (fs.appendFileSync from another process is silently
   // swallowed on Windows when the server holds the fd open).
-  app.post("/api/ipc-log", express.json({ limit: "64kb" }), (req, res) => {
+  app.post("/api/ipc-log", (req, res) => {
     const msg = String(req.body?.message ?? "").trim();
     if (msg) console.log(msg);
     res.json({ ok: true });
