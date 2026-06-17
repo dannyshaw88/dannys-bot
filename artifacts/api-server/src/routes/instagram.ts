@@ -2352,8 +2352,8 @@ export async function registerInstagramRoutes(
         const profile = profileMap.get(call.profileId);
         const username = profile?.username ?? String(call.profileId);
 
-        const utcMs = new Date(call.date).getTime();
-        const localMs = utcMs + offsetMins * 60 * 1000;
+        const rawDate = call.date ? new Date(call.date).getTime() : Date.now();
+        const localMs = (isNaN(rawDate) ? Date.now() : rawDate) + offsetMins * 60 * 1000;
         const localDate = new Date(localMs);
         // Date without timezone suffix — just the local time the user requested
         const date = localDate.toLocaleString("en-US", {

@@ -1104,6 +1104,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       } else {
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
 
+        // ── API limits — read ONCE here so loginApiThrottle can be called before
+        // every single cold-start call (Phase 0 through Phase 2d).  The user's
+        // "x calls every y seconds" API Control setting must govern ALL verify calls,
+        // not just the Phase 2d random pool.
+        const apiLimitsRaw = typeof profile.apiLimits === "string"
+          ? (() => { try { return JSON.parse(profile.apiLimits as string); } catch { return null; } })()
+          : (profile.apiLimits as any) ?? null;
+
         // ── Full Jarvee cold-start sequence ────────────────────────────────
         //
         // Phase 0 — Pre-auth calls with CLEAN cookie jar (no session loaded yet)
@@ -1116,11 +1124,16 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         //   Only after the pre-auth calls does Jarvee inject the sessionid.
         //
         // Phase 2 — Authenticated session validation
-        //   GetAccountFamily → cold_start timeline → reels_tray → notifications
-        //   → qe/sync → banyan → discover.  Checkpoint errors here are genuine.
+        //   GetAccountFamily (fixed first) → ABD probe (fixed second)
+        //   → FetchConfig + Banyan in SHUFFLED order → random pool (Phase 2d)
+        //   Checkpoint errors here are genuine.
+        //
+        // loginApiThrottle is called before every Phase 0b+ and Phase 2 call so the
+        // account's API Control delay setting governs the entire sequence.
 
         // ── Phase 0a: GetTokenResult (/api/v1/accounts/tokens/keyed/) ─────
         // First call in Jarvee's session-restore sequence — no cookies needed.
+        // No throttle before the very first call (nothing to space from).
         try {
           await ig.request.send({
             url: "/api/v1/accounts/tokens/keyed/",
@@ -1137,6 +1150,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // Hard cap at 20 s: this is a large config download that can take 90+ seconds
         // on high-latency proxies, starving the session probe (users/{id}/info) of time.
         // It is non-fatal so we race it against a timeout and move on either way.
+        await loginApiThrottle(apiLimitsRaw);
         await Promise.race([
           ig.launcher.preLoginSync()
             .then(() => console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`))
@@ -1149,6 +1163,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────
         // Jarvee calls GetTokenResult a second time right after launcher/sync.
+        await loginApiThrottle(apiLimitsRaw);
         try {
           await ig.request.send({
             url: "/api/v1/accounts/tokens/keyed/",
@@ -1251,6 +1266,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // endpoint doesn't apply for this account type.  This distinction matters
         // for ABD detection below: if the session was only inconclusive-confirmed
         // and cold-start endpoints return 403, that is session expiry, not ABD.
+        await loginApiThrottle(apiLimitsRaw);
         let sessionConfirmed = false;
         let sessionPositivelyConfirmed = false;
         try {
@@ -1303,6 +1319,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // This mirrors what probeAndDismissABD() uses in InstagramWebClient.
         // Check both the return body (200 with feedback_required) and thrown error
         // body (400 with feedback_required).
+        await loginApiThrottle(apiLimitsRaw);
         try {
           const abdProbeBody: any = await ig.request.send({
             url:    "/api/v1/qe/sync/",
@@ -1345,47 +1362,60 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           return sc === 403 && (igMsg === "login_required" || errMsg.includes("login_required"));
         };
 
-        // ── Phase 2b: FetchConfig (qe/sync) ──────────────────────────────
-        // Lightweight config probe — no content read, minimal budget cost.
-        // Returns 400 "Invalid experiment" from Instagram's current API (non-fatal).
-        // Kept for Jarvee sequence matching and ABD detection.
-        try {
-          await ig.request.send({
-            url: "/api/v1/qe/sync/",
-            method: "POST",
-          });
-          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
-        } catch (e: any) {
-          if (isABDError(e)) {
-            console.error(`[instagramLogin] @${profile.username} — qe/sync: feedback_required (ABD) → automated_behaviour_detected`);
-            return abdResult();
-          }
-          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
-        }
-
-        // ── Phase 2c: GetBanyan (banyan/banyan) ───────────────────────────
-        // Lightweight metadata probe — no content read, minimal budget cost.
-        try {
-          await ig.request.send({
-            url: "/api/v1/banyan/banyan/",
-            method: "POST",
-            form: ig.request.sign({
-              _csrftoken: ig.state.cookieCsrfToken,
-              _uid: userId,
-              _uuid: ig.state.uuid,
-              surfaces_to_queries: JSON.stringify([
-                { surface: "interstitial_link_loading" },
-                { surface: "interstitial_link_prefetch" },
-              ]),
-            }),
-          });
-          console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
-        } catch (e: any) {
-          if (isABDError(e)) {
-            console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
-            return abdResult();
-          }
-          console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
+        // ── Phase 2b + 2c: FetchConfig (qe/sync) + GetBanyan (banyan/banyan) ──
+        // Executed in SHUFFLED order each verify so the call sequence differs
+        // between accounts and sessions — removes the fixed pattern fingerprint.
+        // Each is throttled independently using the account's API Control setting.
+        const phase2bc: Array<() => Promise<VerifyResult | null>> = [
+          // FetchConfig — lightweight config probe, ABD-detectable
+          async () => {
+            await loginApiThrottle(apiLimitsRaw);
+            try {
+              await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
+              console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
+            } catch (e: any) {
+              if (isABDError(e)) {
+                console.error(`[instagramLogin] @${profile.username} — qe/sync: feedback_required (ABD) → automated_behaviour_detected`);
+                return abdResult();
+              }
+              console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
+            }
+            return null;
+          },
+          // GetBanyan — lightweight metadata probe, ABD-detectable
+          async () => {
+            await loginApiThrottle(apiLimitsRaw);
+            try {
+              await ig.request.send({
+                url: "/api/v1/banyan/banyan/",
+                method: "POST",
+                form: ig.request.sign({
+                  _csrftoken: ig.state.cookieCsrfToken,
+                  _uid: userId,
+                  _uuid: ig.state.uuid,
+                  surfaces_to_queries: JSON.stringify([
+                    { surface: "interstitial_link_loading" },
+                    { surface: "interstitial_link_prefetch" },
+                  ]),
+                }),
+              });
+              console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
+            } catch (e: any) {
+              if (isABDError(e)) {
+                console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
+                return abdResult();
+              }
+              console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
+            }
+            return null;
+          },
+        ];
+        // Fisher-Yates shuffle so FetchConfig and Banyan fire in a different order
+        // each session — prevents a fixed 2-call fingerprint after the ABD probe.
+        if (Math.random() < 0.5) [phase2bc[0], phase2bc[1]] = [phase2bc[1], phase2bc[0]];
+        for (const step of phase2bc) {
+          const earlyExit = await step();
+          if (earlyExit) return earlyExit;
         }
 
         // Tracks how many cold-start calls returned 403 login_required.
@@ -1396,9 +1426,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // If the account has loginRandomEndpointsEnabled, pick N endpoints at random
         // from the pool and fire them with the account's normal API throttle so each
         // session's call fingerprint diverges from every other account's on the same IP.
-        const apiLimitsRaw = typeof profile.apiLimits === "string"
-          ? JSON.parse(profile.apiLimits)
-          : (profile.apiLimits as any);
+        // apiLimitsRaw was extracted before Phase 0 — reuse it here.
         if (apiLimitsRaw?.loginRandomEndpointsEnabled) {
           const epMin = Math.max(1, Math.round(apiLimitsRaw.loginRandomEndpointsMin ?? 1));
           const epMax = Math.max(epMin, Math.round(apiLimitsRaw.loginRandomEndpointsMax ?? 5));

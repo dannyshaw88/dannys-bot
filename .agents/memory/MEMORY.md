@@ -1,0 +1,2 @@
+- [Ban dataset interpretation rules](ban-analysis-corrections.md) — timestamp clustering = Danny manually marking, SLOW = user label, re-added = prior ban history, not server sweeps
+- [Verify bootstrap timing & call-order bugs](verify-bootstrap-bugs.md) — core verify fires with NO delay between calls (loginApiThrottle only in Phase 2d); call order is always fixed/identical

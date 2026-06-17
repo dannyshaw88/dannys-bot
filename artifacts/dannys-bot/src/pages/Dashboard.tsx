@@ -243,6 +243,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.002",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify sequence now respects your API Control delay setting for every single call — previously the delay only applied to the random endpoint pool (Phase 2d), so tokens/keyed, launcher/sync, get_account_family, ABD probe, FetchConfig, and Banyan all fired at raw network speed with no spacing." },
+      { category: "Fix", text: "Verify call order is now partially randomised — FetchConfig and Banyan fire in a random order each session instead of always FetchConfig-then-Banyan, reducing the identical session fingerprint across accounts on the same proxy." },
+      { category: "Fix", text: "Export API Calls: date field is now null-safe — rows with a missing or malformed date no longer crash the export." },
+    ],
+  },
+  {
     version: "1.0.977",
     date: "15 Jun 2026",
     items: [
