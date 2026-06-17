@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.23",
+    date: "17 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls now opens the CSV instantly in your default spreadsheet app — no save dialog." },
+      { category: "Fix", text: "Export EQX no longer shows a confirmation popup after saving." },
+    ],
+  },
+  {
     version: "1.1.22",
     date: "17 Jun 2026",
     items: [

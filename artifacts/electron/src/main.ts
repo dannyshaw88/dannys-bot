@@ -1043,34 +1043,14 @@ async function createWindow() {
   ipcMain.handle("open-csv-temp", async (_e, { content, filename }: { content: string; filename: string }) => {
     appendToMainLog(`[export-api-calls] open-csv-temp IPC received — filename=${filename} contentLength=${content?.length ?? 0}`);
     try {
-      // Show a parentless Save dialog so it always appears on top of the Electron window.
-      // No parent argument = Windows treats it as a top-level dialog, never behind the app.
-      const defaultPath = path.join(app.getPath("downloads"), filename);
-      const result = await dialog.showSaveDialog({
-        title: "Save API Calls CSV",
-        defaultPath,
-        filters: [
-          { name: "CSV Files", extensions: ["csv"] },
-          { name: "All Files", extensions: ["*"] },
-        ],
-      });
-      appendToMainLog(`[export-api-calls] save dialog result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
-      if (result.canceled || !result.filePath) {
-        appendToMainLog(`[export-api-calls] user canceled save dialog`);
-        return { saved: false };
-      }
-      fs.writeFileSync(result.filePath, content, "utf8");
-      appendToMainLog(`[export-api-calls] CSV written to ${result.filePath}`);
-      // Show a modal confirmation — this is impossible to miss.
-      await dialog.showMessageBox({
-        type: "info",
-        title: "Export Complete",
-        message: "API Calls exported successfully.",
-        detail: `Saved to:\n${result.filePath}`,
-        buttons: ["OK"],
-      });
-      appendToMainLog(`[export-api-calls] confirmation dialog dismissed`);
-      return { saved: true, filePath: result.filePath };
+      const os = await import("os");
+      const tmpPath = path.join(os.tmpdir(), filename);
+      fs.writeFileSync(tmpPath, content, "utf8");
+      appendToMainLog(`[export-api-calls] CSV written to temp — ${tmpPath}`);
+      const { shell } = await import("electron");
+      const err = await shell.openPath(tmpPath);
+      if (err) appendToMainLog(`[export-api-calls] shell.openPath error: ${err}`);
+      return { opened: true, filePath: tmpPath };
     } catch (e: any) {
       appendToMainLog(`[export-api-calls] open-csv-temp THREW: ${e?.stack ?? e?.message ?? String(e)}`);
       throw e;
@@ -1150,16 +1130,6 @@ async function createWindow() {
         appendToMainLog(`[export-eqx] wrote ${filename} (${buffer.length} bytes) → ${destPath}`);
       }
       appendToMainLog(`[export-eqx] write-eqx-files complete — ${files.length} file(s) written`);
-      // Show a modal confirmation so the user always sees where the files went.
-      const fileList = files.map(f => `  • ${f.filename}`).join("\n");
-      await dialog.showMessageBox({
-        type: "info",
-        title: "EQX Export Complete",
-        message: `${files.length} file(s) saved to folder:`,
-        detail: `${folder}\n\n${fileList}`,
-        buttons: ["OK"],
-      });
-      appendToMainLog(`[export-eqx] write-eqx-files confirmation dialog dismissed`);
       return { count: files.length };
     } catch (err: any) {
       appendToMainLog(`[export-eqx] write-eqx-files THREW: ${err?.stack ?? err?.message ?? String(err)}`);
