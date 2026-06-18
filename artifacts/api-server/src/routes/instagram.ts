@@ -1416,6 +1416,7 @@ export async function registerInstagramRoutes(
       userAgent:     profile.userAgentEmbedded ?? null,
       apiUA:         profile.userAgentApi      ?? null,
       ebFingerprint: profile.ebFingerprint     ?? null,
+      useHomeIp:     !!(profile as any).useHomeIp,
     });
   });
 

@@ -818,6 +818,7 @@ function setupBackupHandlers() {
         let userAgent: string | undefined;
         let apiUA: string | undefined;
         let ebFingerprint: any | undefined;
+        let useHomeIp = false;
         try {
           // Single call to /eb-proxy — the API server resolves proxyId → proxy
           // fields using resolveProxyConfig(), the same path used by eb-auto-login.
@@ -829,11 +830,14 @@ function setupBackupHandlers() {
             proxy         = data.proxy         || undefined;
             userAgent     = data.userAgent     || undefined;
             apiUA         = data.apiUA         || undefined;
+            useHomeIp     = !!data.useHomeIp;
             ebFingerprint = data.ebFingerprint
               ? (typeof data.ebFingerprint === "string" ? JSON.parse(data.ebFingerprint) : data.ebFingerprint)
               : undefined;
             if (proxy) {
               console.log(`[EB] Profile ${profileId}: proxy resolved → ${proxy.host}:${proxy.port}`);
+            } else if (useHomeIp) {
+              console.log(`[EB] Profile ${profileId}: useHomeIp=true — running DIRECT (home broadband)`);
             }
             if (!userAgent) {
               console.warn(`[EB] Profile ${profileId}: userAgentEmbedded is missing — EB will open with Electron default UA. Instagram may challenge the session.`);
@@ -849,6 +853,7 @@ function setupBackupHandlers() {
           profileId,
           username: username || String(profileId),
           proxy,
+          useHomeIp,
           userAgent,
           apiUA,
           ebFingerprint,

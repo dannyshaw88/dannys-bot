@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.34",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Fix", text: "Use Home IP accounts can now open the embedded browser — the IPC handler now reads the Home IP flag from the account and passes it to the browser engine so the direct connection path is taken instead of throwing a 'no proxy assigned' error." },
+    ],
+  },
+  {
     version: "1.1.33",
     date: "18 Jun 2026",
     items: [
