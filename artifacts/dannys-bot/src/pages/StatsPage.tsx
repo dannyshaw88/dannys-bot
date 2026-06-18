@@ -234,14 +234,18 @@ function ProfileStatsRow({
         return (
           <td key={key} style={{ width: colWidths[key] }} className="px-4 py-3 text-center">
             {key === "human_session" ? (
-              <div className="flex items-center justify-center">
+              <div className="flex items-center justify-start gap-1.5 pl-2">
                 {tool && (
                   <Switch
                     checked={tool.enabled}
                     onCheckedChange={(val) => handleToggle(tool, val)}
-                    className="scale-75 origin-center"
+                    className="scale-75 origin-center shrink-0"
                   />
                 )}
+                <div className="flex items-baseline gap-0.5 text-[12px]">
+                  <span className="font-bold tabular-nums text-foreground">{todayCount}</span>
+                  <span className="text-muted-foreground text-[11px]">/{lifetime}</span>
+                </div>
               </div>
             ) : (
               <div className="flex items-baseline justify-center gap-1 text-[13px]">

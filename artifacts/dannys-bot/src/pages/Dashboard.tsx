@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.28",
+    date: "18 Jun 2026",
+    items: [
+      { category: "UI", text: "Statistics: Human Session column now shows the toggle left-aligned with today's session count and lifetime total directly beside it (e.g. toggle 5/50)." },
+    ],
+  },
+  {
     version: "1.1.27",
     date: "18 Jun 2026",
     items: [
