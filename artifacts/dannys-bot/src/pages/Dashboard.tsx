@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.36",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool: GetSuggestedUsers now always fires before the very first follow of every session, matching the real app's behaviour. The checkbox now controls mid-session re-injection only — enable it and set a percentage to have it fire again randomly between follows." },
+      { category: "Fix", text: "API bootstrap (tokens/keyed → launcher/sync → user.info → qe/sync) is now cached for the session lifetime instead of re-running on every task cycle, eliminating duplicate bootstrap calls in the API log." },
+      { category: "Fix", text: "Group icon hover preview now shows the full image at up to 240×240 px instead of being cropped to a tiny 64×64 thumbnail." },
+    ],
+  },
+  {
     version: "1.1.35",
     date: "18 Jun 2026",
     items: [

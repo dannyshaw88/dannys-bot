@@ -1617,7 +1617,7 @@ export function ProfilesPage() {
                             </button>
                             {groupIcons[groupKey] && (
                               <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
-                                <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-cover shadow-lg border border-border" />
+                                <img src={groupIcons[groupKey]} alt="" className="max-w-[240px] max-h-[240px] w-auto h-auto rounded-md object-contain shadow-lg border border-border bg-background" />
                               </div>
                             )}
                           </div>

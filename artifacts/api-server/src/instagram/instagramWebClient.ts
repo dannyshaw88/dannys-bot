@@ -354,6 +354,13 @@ export class InstagramWebClient {
   // verification challenge.
   private igApiCookies?: string;
 
+  // Cached result of _buildWarmedIgClient() — keyed by the sessionid portion of
+  // igApiCookies so it is invalidated when the session changes (re-verify).
+  // Avoids re-running the full Phase 0 + Phase 2 bootstrap (tokens/keyed →
+  // launcher/sync → tokens/keyed → user.info → qe/sync) on every task cycle.
+  private _warmedIgClientCache: { ig: IgApiClient; ownUserId: string } | null = null;
+  private _warmedIgClientCookieKey = "";
+
   // API throttle — enforces the per-profile "x calls every y seconds" limit.
   // Computed as a per-call delay = everySeconds / requestsCount, so all calls
   // are evenly spaced rather than firing in an instant burst.
@@ -416,7 +423,21 @@ export class InstagramWebClient {
   setDeviceInfo(igDeviceState?: string | null, userAgentApi?: string | null, igApiCookies?: string | null) {
     this.igDeviceState = igDeviceState ?? undefined;
     this.userAgentApi  = userAgentApi  ?? undefined;
-    this.igApiCookies  = igApiCookies  ?? undefined;
+    const newCookies   = igApiCookies  ?? undefined;
+
+    // Invalidate the warmed IgApiClient cache whenever igApiCookies changes
+    // (e.g. after a re-verify). The cache key is the sessionid portion so minor
+    // cookie order differences don't cause unnecessary re-bootstraps.
+    const newCookieKey = newCookies?.split(";").find(s => s.trim().toLowerCase().startsWith("sessionid="))?.trim() ?? "";
+    if (newCookieKey !== this._warmedIgClientCookieKey) {
+      if (this._warmedIgClientCache) {
+        console.log(`[webClient:${this.profileId}] setDeviceInfo: igApiCookies changed — invalidating warmed IgApiClient cache`);
+      }
+      this._warmedIgClientCache   = null;
+      this._warmedIgClientCookieKey = newCookieKey;
+    }
+
+    this.igApiCookies = newCookies;
     // Eagerly seed stable device IDs from stored state so every code path
     // (mobileBootstrap, restoreFromAuth, postLogin extraction) reuses the same
     // values rather than generating fresh random IDs on each session start.
@@ -1521,6 +1542,16 @@ export class InstagramWebClient {
   private async _buildWarmedIgClient(): Promise<{ ig: IgApiClient; ownUserId: string } | null> {
     if (!this.igApiCookies) return null;
 
+    // ── Cache hit — return the already-warmed client ──────────────────────────
+    // The full Phase 0 + Phase 2 bootstrap (tokens/keyed → launcher/sync →
+    // tokens/keyed → user.info → qe/sync) only needs to run once per session.
+    // The cache is keyed on the sessionid cookie and is invalidated by
+    // setDeviceInfo() whenever igApiCookies changes (e.g. after re-verify).
+    if (this._warmedIgClientCache) {
+      console.log(`[webClient:${this.profileId}] _buildWarmedIgClient: returning cached warmed client (bootstrap skipped)`);
+      return this._warmedIgClientCache;
+    }
+
     // ── Device setup ──────────────────────────────────────────────────────────
     const ig = newIgClient();
     // Patch ig.request.send so the per-profile rate limit is enforced on every
@@ -1634,7 +1665,11 @@ export class InstagramWebClient {
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: qe/sync (non-fatal): ${e?.message}`); }
 
-    return { ig, ownUserId };
+    // Store in cache so subsequent calls within the same session skip the bootstrap.
+    // Invalidated by setDeviceInfo() when igApiCookies changes (re-verify).
+    this._warmedIgClientCache = { ig, ownUserId };
+    console.log(`[webClient:${this.profileId}] _buildWarmedIgClient: bootstrap complete — result cached for this session`);
+    return this._warmedIgClientCache;
   }
 
   // Read the DM inbox via a fully warmed IgApiClient (Jarvee cold-start sequence).

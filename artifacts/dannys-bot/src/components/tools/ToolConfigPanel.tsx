@@ -970,7 +970,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                     <div className="w-px h-5 bg-border/50 shrink-0" />
                     <div className="flex items-center gap-1.5 shrink-0">
                       <input type="checkbox" id="injectSuggestedEnabled" checked={!!(settings as any).injectSuggestedEnabled} onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                      <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Inject Suggested Users</label>
+                      <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0" title="GetSuggestedUsers always fires before the first follow every session. Enable this to also re-inject it mid-session at the set % chance per follow.">Inject Suggested Users (Re-inject %)</label>
                       <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                         <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSuggestedMin ?? 1} onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMax ?? 100) } as any)} />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>

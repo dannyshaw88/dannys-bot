@@ -3215,6 +3215,19 @@ class AutomationEngine {
     if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
       engineLog("INFO", `@${profile.username}: browse-before-follow scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
 
+    // GetSuggestedUsers always fires before the very first follow of every session.
+    // This is unconditional — the real app always loads the suggested-users panel
+    // when the user opens the Follow tab.  The checkbox + % control mid-session
+    // re-injection (follows 2+), not this initial call.
+    if (candidates.length > 0) {
+      try {
+        await client.getSuggestedUsers();
+        engineLog("INFO", `@${profile.username}: GetSuggestedUsers fired before first follow (always-on)`);
+      } catch (e: any) {
+        engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.message ?? e}`);
+      }
+    }
+
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
     // Simulates the user searching in the search bar before following — adds natural API signal.
