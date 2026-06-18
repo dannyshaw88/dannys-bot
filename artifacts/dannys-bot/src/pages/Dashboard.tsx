@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.32",
+    date: "18 Jun 2026",
+    items: [
+      { category: "UI", text: "Human Session copy dialog cleaned up: Human Tools Delay moved into General, Open Instagram Calls moved into Emulation." },
+      { category: "UI", text: "Follow/Unfollow/Contact tool Start/Stop and Execution Order options now live inside their own tool section in the copy dialog." },
+      { category: "UI", text: "Randomise timing tooltip shortened to fit on one line. Removed double-dash separators in tool labels." },
+    ],
+  },
+  {
     version: "1.1.31",
     date: "18 Jun 2026",
     items: [

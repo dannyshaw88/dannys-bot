@@ -56,41 +56,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the session delay window so they don't all fire simultaneously" },
-    ]},
-    { label: "Timing", options: [
+      { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's start across the delay window" },
       { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
         { key: "hs_delayRange", label: "Session delay range", settingKeys: ["delayMin","delayMax"] },
       ]},
     ]},
-    { label: "Open Instagram Calls", options: [
+    { label: "Emulation", options: [
       { key: "hs_forceEmulation", label: "Open Instagram Calls", description: "Fires Instagram app-open API calls at the start of every session, before any other action runs", subOptions: [
         { key: "fe_enabled",   label: "Enabled",          settingKeys: ["forceEmulationEnabled"] },
         { key: "fe_randomise", label: "Randomise order",  settingKeys: ["forceEmulationRandomise"] },
       ]},
-    ]},
-    { label: "Embedded Tool States", options: [
-      { key: "hs_followEnabled",      label: "Follow Tool — Start / Stop",             description: "Copy the Follow Tool enabled checkbox to other profiles" },
-      { key: "hs_unfollowEnabled",    label: "Unfollow Tool — Start / Stop",           description: "Copy the Unfollow Tool enabled checkbox to other profiles" },
-      { key: "hs_cnfEnabled",         label: "Contact New Followers — Start / Stop",   description: "Copy the Contact New Followers enabled checkbox" },
-      { key: "hs_autoReplyEnabled",   label: "Auto Reply — Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
-      { key: "hs_contactUsersEnabled",label: "Contact Users Sending — Start / Stop",   description: "Copy the Contact Users Sending enabled checkbox" },
-    ]},
-    { label: "Embedded Tool Execution Order", options: [
-      { key: "hs_followOrder", label: "Follow Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Follow Tool", subOptions: [
-        { key: "fo_orderRange", label: "Execution order", settingKeys: ["followOrderMin","followOrderMax"] },
-        { key: "fo_skipRange",  label: "Skip chance %",   settingKeys: ["followSkipMin","followSkipMax"] },
-      ]},
-      { key: "hs_unfollowOrder", label: "Unfollow Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Unfollow Tool", subOptions: [
-        { key: "ufo_orderRange", label: "Execution order", settingKeys: ["unfollowOrderMin","unfollowOrderMax"] },
-        { key: "ufo_skipRange",  label: "Skip chance %",   settingKeys: ["unfollowSkipMin","unfollowSkipMax"] },
-      ]},
-      { key: "hs_contactOrder", label: "Contact Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Contact Tool", subOptions: [
-        { key: "co_orderRange", label: "Execution order", settingKeys: ["contactOrderMin","contactOrderMax"] },
-        { key: "co_skipRange",  label: "Skip chance %",   settingKeys: ["contactSkipMin","contactSkipMax"] },
-      ]},
-    ]},
-    { label: "Emulation", options: [
       { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed + inline liking", subOptions: [
         { key: "vtf_enabled",    label: "Enabled",                                       settingKeys: ["viewTimelineFeedEnabled"] },
         { key: "vtf_count",      label: "Posts per session",                 settingKeys: ["viewTimelineFeedMin","viewTimelineFeedMax"] },
@@ -140,6 +115,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
     ]},
     { label: "Follow Tool Settings", options: [
+      { key: "hs_followEnabled", label: "Follow Tool Start / Stop", description: "Copy the Follow Tool enabled checkbox to other profiles" },
+      { key: "hs_followOrder", label: "Follow Tool Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Follow Tool", subOptions: [
+        { key: "fo_orderRange", label: "Execution order", settingKeys: ["followOrderMin","followOrderMax"] },
+        { key: "fo_skipRange",  label: "Skip chance %",   settingKeys: ["followSkipMin","followSkipMax"] },
+      ]},
       { key: "hs_followTiming", label: "Timing", description: "Delays between each follow action", subOptions: [
         { key: "hf_delayAfterFollow", label: "Delay after each follow", settingKeys: ["follow:delayAfterFollowMin","follow:delayAfterFollowMax"] },
       ]},
@@ -196,6 +176,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       { key: "hs_clearFollowSources", label: "Clear Sources First", description: "Remove all existing sources from destination follow tools before copying" },
     ]},
     { label: "Unfollow Tool Settings", options: [
+      { key: "hs_unfollowEnabled", label: "Unfollow Tool Start / Stop", description: "Copy the Unfollow Tool enabled checkbox to other profiles" },
+      { key: "hs_unfollowOrder", label: "Unfollow Tool Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Unfollow Tool", subOptions: [
+        { key: "ufo_orderRange", label: "Execution order", settingKeys: ["unfollowOrderMin","unfollowOrderMax"] },
+        { key: "ufo_skipRange",  label: "Skip chance %",   settingKeys: ["unfollowSkipMin","unfollowSkipMax"] },
+      ]},
       { key: "hs_unfollowSettings", label: "Settings", description: "Unfollow timing, limits and age filters", subOptions: [
         { key: "uf_h_age",   label: "Unfollow after min days since follow",           settingKeys: ["unfollow:minFollowAgeDays"] },
         { key: "uf_h_wait",  label: "Wait between sessions",         settingKeys: ["unfollow:delayMin","unfollow:delayMax"] },
@@ -213,6 +198,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
     ]},
     { label: "Contact Tool Settings", options: [
+      { key: "hs_cnfEnabled",          label: "Contact New Followers Start / Stop",   description: "Copy the Contact New Followers enabled checkbox" },
+      { key: "hs_autoReplyEnabled",    label: "Auto Reply Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
+      { key: "hs_contactUsersEnabled", label: "Contact Users Sending Start / Stop",   description: "Copy the Contact Users Sending enabled checkbox" },
+      { key: "hs_contactOrder", label: "Contact Tool Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Contact Tool", subOptions: [
+        { key: "co_orderRange", label: "Execution order", settingKeys: ["contactOrderMin","contactOrderMax"] },
+        { key: "co_skipRange",  label: "Skip chance %",   settingKeys: ["contactSkipMin","contactSkipMax"] },
+      ]},
       { key: "hs_contactNewFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
         { key: "ct_h_onlyApp",   label: "Only app-followed users",              settingKeys: ["contact:contactOnlyAppFollowed"] },
         { key: "ct_h_message",   label: "Message template",                     settingKeys: ["contact:contactMessage"] },
