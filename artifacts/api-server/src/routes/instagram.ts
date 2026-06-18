@@ -2338,7 +2338,7 @@ export async function registerInstagramRoutes(
       req.log.info({ filteredCount: apiCalls.length, requestedIds }, "[export-api-calls] filtered api calls ready");
 
       const headers = [
-        "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
+        "Status", "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
         "Message", "Source", "NavChain", "IpAddress", "Duration(miliseconds)"
       ];
 
@@ -2407,7 +2407,11 @@ export async function registerInstagramRoutes(
         }
         const ipPort = ip && port ? `${ip}:${port}` : ip;
 
+        const isError = !!(call.isError);
+        const status = isError ? "ERROR" : "OK";
+
         return [
+          status,
           `Instagram_${call.profileId}`,
           date,
           username,

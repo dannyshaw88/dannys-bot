@@ -171,6 +171,7 @@ export const instagramApiCalls = sqliteTable("instagram_api_calls", {
   navChain: text("nav_chain").default(""),
   ipAddress: text("ip_address").default(""),
   durationMs: integer("duration_ms").default(0),
+  isError: integer("is_error", { mode: "boolean" }).default(false),
 });
 
 export const logsRelations = relations(logs, ({ one }) => ({

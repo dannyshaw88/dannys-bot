@@ -243,7 +243,7 @@ function patchDeviceStringVersionCode(ig: IgApiClient, targetVersionCode: string
   }
 }
 
-type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
+type ApiCallLogger = (op: string, durationMs: number, message?: string, isError?: boolean) => void;
 
 // Keep this version current — Instagram rejects signup requests from versions
 // older than a few months with error_type:"needs_upgrade".
@@ -1557,20 +1557,38 @@ export class InstagramWebClient {
     // Jarvee fires these BEFORE loading the session cookie. Instagram sees a
     // clean device probe and stops treating the subsequent authenticated calls
     // as a suspicious cold-start, which prevents the 4415001 prompt gate.
-    try {
-      await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
-      console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed OK");
-    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #1 (non-fatal): ${e?.message}`); }
+    { const t0 = Date.now();
+      try {
+        await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
+        console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed OK");
+        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, "tokens/keyed → OK (device probe before session load)", false);
+      } catch (e: any) {
+        console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #1 (non-fatal): ${e?.message}`);
+        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, `tokens/keyed → 404 (non-fatal — device probe before session load)`, true);
+      }
+    }
 
-    try {
-      await ig.launcher.preLoginSync();
-      console.log("[webClient] _buildWarmedIgClient: Phase 0 — launcher/sync (preLoginSync) OK");
-    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: launcher/sync (non-fatal): ${e?.message}`); }
+    { const t0 = Date.now();
+      try {
+        await ig.launcher.preLoginSync();
+        console.log("[webClient] _buildWarmedIgClient: Phase 0 — launcher/sync (preLoginSync) OK");
+        this.logCallFn?.("SendMobileConfig", Date.now() - t0, "launcher/sync (preLoginSync) OK — device config established", false);
+      } catch (e: any) {
+        console.warn(`[webClient] _buildWarmedIgClient: launcher/sync (non-fatal): ${e?.message}`);
+        this.logCallFn?.("SendMobileConfig", Date.now() - t0, `launcher/sync (non-fatal): ${e?.message?.slice(0, 80) ?? "error"}`, true);
+      }
+    }
 
-    try {
-      await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
-      console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed #2 OK");
-    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #2 (non-fatal): ${e?.message}`); }
+    { const t0 = Date.now();
+      try {
+        await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
+        console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed #2 OK");
+        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, "tokens/keyed #2 → OK (post-sync probe)", false);
+      } catch (e: any) {
+        console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #2 (non-fatal): ${e?.message}`);
+        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, `tokens/keyed #2 → 404 (non-fatal — post-sync probe)`, true);
+      }
+    }
 
     // ── Phase 1: Load session cookies ────────────────────────────────────────
     // Extract ownUserId from sessionid (format: "userId:hash:seq:token") and
@@ -3265,6 +3283,11 @@ export class InstagramWebClient {
       // Always log non-200 responses; log body snippet for debugging
     if (res.status !== 200 || !res.json) {
       console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
+      // Log media/seen 5xx errors to the API call log so they appear in the export
+      if (res.status >= 500 && path.includes("media/seen")) {
+        const errMsg = res.json?.message ?? res.rawBody.slice(0, 120) ?? "server error";
+        this.logCallFn?.("MediaSeenError", 0, `media/seen status=${res.status} — "${errMsg}"`, true);
+      }
       // If Instagram explicitly rejected the request (4xx/5xx or non-JSON response
       // despite a 200), the session cookies are expired or invalid. Mark the session
       // as needing refresh so the next isMobileLoggedIn() call returns false and the

@@ -1675,7 +1675,7 @@ class AutomationEngine {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
       state.currentProxyUrl = proxyUrl;
       // Log every API call — no filtering.
-      state.client.setLogger((op, durationMs, message) => {
+      state.client.setLogger((op, durationMs, message, isError) => {
         storage.createInstagramApiCall({
           profileId: profile.id,
           username: profile.username,
@@ -1684,6 +1684,7 @@ class AutomationEngine {
           message: message ?? "",
           source: state.client!.apiCallSource,
           durationMs,
+          isError: isError ?? false,
         }).catch(() => {});
       });
     }

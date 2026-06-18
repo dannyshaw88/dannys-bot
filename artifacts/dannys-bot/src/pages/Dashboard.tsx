@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.26",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Logging", text: "API Calls export now includes a Status column — rows show OK or ERROR so you can instantly spot failed calls." },
+      { category: "Logging", text: "media/seen 500 errors are now recorded in the API call log as MediaSeenError entries so they appear in the export." },
+      { category: "Logging", text: "Jarvee bootstrap calls (tokens/keyed, launcher/sync) are now recorded in the API call log so the full session warm-up is visible in the export." },
+    ],
+  },
+  {
     version: "1.1.25",
     date: "17 Jun 2026",
     items: [
