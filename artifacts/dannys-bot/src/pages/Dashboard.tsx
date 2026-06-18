@@ -62,6 +62,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.27",
+    date: "18 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Manager: group chevron arrow now appears after the account count, not before the group name." },
+      { category: "UI", text: "Ghost Browser: Skip Warmup checkbox now sits directly next to the Scheduler label instead of being pushed to the far right." },
+      { category: "UI", text: "Account settings tab buttons are now brighter cyan so they are easier to read." },
+      { category: "UI", text: "Account settings: Group dropdown now comes before the Group label." },
+      { category: "UI", text: "Account settings: Inject Session Cookies textarea is now a single compact row." },
+      { category: "UI", text: "Human Session: Like heart icon is now filled red, and the heart + Like% label appear after the min/max inputs." },
+      { category: "UI", text: "Human Session: Reel View% inputs have their own row directly below View Timeline Feed, with the icon and label after the inputs." },
+      { category: "UI", text: "Human Session: Removed the verbose sub-action description paragraph from the Human Session row." },
+      { category: "UI", text: "Follow / Unfollow / Contact tool headers: Order% and Skip% fields now sit inline directly after the tool name, styled to match the Emulation section." },
+      { category: "UI", text: "All four cyan tool header bars are now 25% narrower (37.5% of screen width instead of 50%)." },
+    ],
+  },
+  {
     version: "1.1.26",
     date: "18 Jun 2026",
     items: [

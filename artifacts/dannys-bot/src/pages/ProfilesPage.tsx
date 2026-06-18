@@ -1607,9 +1607,6 @@ export function ProfilesPage() {
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 min-w-0 text-left">
-                          {isCollapsed
-                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                           <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground italic" : "text-foreground"}`}>{displayName}</span>
                         </button>
                         {groupKey !== "__ungrouped__" && (
@@ -1624,7 +1621,12 @@ export function ProfilesPage() {
                             }
                           </button>
                         )}
-                        <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
+                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
+                          {isCollapsed
+                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                        </button>
                       </div>
                       <button
                         onClick={() => {
