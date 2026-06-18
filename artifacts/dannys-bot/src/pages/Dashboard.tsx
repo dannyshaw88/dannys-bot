@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.33",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Fix", text: "Use Home IP accounts can now open the embedded browser — the 'no proxy' block in the browser route and WebSocket stream no longer fires when Home IP is selected." },
+      { category: "Fix", text: "Active toggle and browser button are no longer disabled for Use Home IP accounts on the accounts page." },
+    ],
+  },
+  {
     version: "1.1.32",
     date: "18 Jun 2026",
     items: [

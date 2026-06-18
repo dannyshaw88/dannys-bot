@@ -1360,7 +1360,7 @@ export function ProfilesPage() {
               const acctStatus = (verifyingIds.has(profile.id) ? "verifying" : (profile.accountStatus ?? "pending")) as AccountStatus;
               const isStopped  = acctStatus === "stopped";
               const isEven     = idx % 2 === 1;
-              const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+              const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort) || (profile as any).useHomeIp);
               const isDupUsername = !!(profile.username && duplicateUsernames.has((profile.username ?? "").trim().toLowerCase()));
               return (
                 <div

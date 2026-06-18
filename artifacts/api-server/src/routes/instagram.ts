@@ -2469,7 +2469,7 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
     const proxyForEb = await resolveProxyConfig(profile);
-    if (!proxyForEb) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
+    if (!proxyForEb && !(profile as any).useHomeIp) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
     // ── UA BLOCK — per USER-AGENT RULE ─────────────────────────────────────────
     if (!profile.userAgentEmbedded) {
       return res.status(403).json({ error: "No EB User-Agent configured for this account. Assign a unique User-Agent before opening the embedded browser." });
@@ -2771,7 +2771,7 @@ export async function registerInstagramRoutes(
     if (!profile) { socket.destroy(); return; }
 
     const proxyForEbWs = await resolveProxyConfig(profile);
-    if (!proxyForEbWs) {
+    if (!proxyForEbWs && !(profile as any).useHomeIp) {
       // Send a WS close with an error message then destroy the socket
       wss.handleUpgrade(request, socket, head, (ws) => {
         ws.send(JSON.stringify({ type: "error", message: "No proxy assigned — assign a proxy to this account before using the embedded browser." }));
