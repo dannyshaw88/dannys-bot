@@ -28,7 +28,7 @@ import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 import { api } from "@shared/routes";
-import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { shouldWarnForNewAccount, recordLoginEvent } from "@/lib/ipLoginTracker";
 import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ export function ProfilesPage() {
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
-      if (data.ok) recordLoginEvent(proxyHostVal, proxyPortVal);
+      if (data.ok) recordLoginEvent(proxyHostVal, proxyPortVal, id);
       toast({
         title: data.ok ? "Verification started" : "Verification Failed",
         description: data.message,
@@ -232,17 +232,13 @@ export function ProfilesPage() {
     const port: number | null = p
       ? (p.proxyId && proxies ? (proxies.find(x => x.id === p.proxyId)?.port ?? p.proxyPort ?? null) : (p.proxyPort ?? null))
       : null;
-    if (host) {
-      const lastMs = getMostRecentLoginMs(host, port);
-      if (lastMs !== null) {
-        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
-        setLoginWarnState({
-          proxyDisplay: port ? `${host}:${port}` : host,
-          minutesAgo,
-          onConfirm: () => { setLoginWarnState(null); _executeVerify(id, host, port); },
-        });
-        return;
-      }
+    if (host && shouldWarnForNewAccount(host, port, id)) {
+      setLoginWarnState({
+        proxyDisplay: port ? `${host}:${port}` : host,
+        minutesAgo: 0,
+        onConfirm: () => { setLoginWarnState(null); _executeVerify(id, host, port); },
+      });
+      return;
     }
     _executeVerify(id, host, port);
   }, [profiles, proxies, _executeVerify]);
@@ -1610,16 +1606,23 @@ export function ProfilesPage() {
                           <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground italic" : "text-foreground"}`}>{displayName}</span>
                         </button>
                         {groupKey !== "__ungrouped__" && (
-                          <button
-                            onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
-                            title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
-                            className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
-                          >
-                            {groupIcons[groupKey]
-                              ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
-                              : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
-                            }
-                          </button>
+                          <div className="relative group/icon shrink-0">
+                            <button
+                              onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
+                              title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
+                              className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
+                            >
+                              {groupIcons[groupKey]
+                                ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
+                                : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
+                              }
+                            </button>
+                            {groupIcons[groupKey] && (
+                              <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
+                                <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-cover shadow-lg border border-border" />
+                              </div>
+                            )}
+                          </div>
                         )}
                         <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>

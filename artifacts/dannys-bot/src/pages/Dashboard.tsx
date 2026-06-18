@@ -62,6 +62,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.29",
+    date: "18 Jun 2026",
+    items: [
+      { category: "UI", text: "Follow / Unfollow / Contact tool headers: Order% and Skip% fields now sit to the right of the tool name within the cyan bar, matching the Emulation section layout — no wrapping or expansion." },
+      { category: "UI", text: "Statistics: Human Session toggle and counts are now centred in their column." },
+      { category: "UI", text: "Statistics: Sort arrows and chevrons removed from all column header titles." },
+      { category: "UI", text: "Statistics: Proxy IP column title is now full brightness instead of dimmed." },
+      { category: "UI", text: "Statistics: Raw API Endpoint Count table now scrolls after 10 rows with a sticky header — no more endless page." },
+      { category: "UI", text: "Account Manager: hovering over a group icon now shows a larger preview of that icon above the row." },
+      { category: "Security", text: "IP login rate limit warning now only fires when adding a brand-new account to a proxy that already has 3 or more new accounts verified today. Re-verifying existing accounts on the same proxy never triggers the warning." },
+    ],
+  },
+  {
     version: "1.1.28",
     date: "18 Jun 2026",
     items: [

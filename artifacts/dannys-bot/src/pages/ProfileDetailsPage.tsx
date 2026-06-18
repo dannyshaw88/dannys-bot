@@ -33,7 +33,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { shouldWarnForNewAccount, recordLoginEvent } from "@/lib/ipLoginTracker";
 import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
@@ -665,7 +665,7 @@ export function ProfileDetailsPage() {
       if (data.ok) {
         // Only record a login event on a successful verify — failed attempts must not
         // count against the IP rate limit window or future verifies would show a false warning.
-        recordLoginEvent(host, port);
+        recordLoginEvent(host, port, profileId);
         setVerifyStatus("ok");
         toast({ title: "Credentials Verified", description: data.message });
       } else {
@@ -684,18 +684,14 @@ export function ProfileDetailsPage() {
   const handleVerify = (bypassProxy = false) => {
     const host: string | null = profile?.proxyHost ?? null;
     const port: number | null = profile?.proxyPort ?? null;
-    if (host && !bypassProxy) {
-      const lastMs = getMostRecentLoginMs(host, port);
-      if (lastMs !== null) {
-        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
-        setLoginWarnState({
-          proxyDisplay: port ? `${host}:${port}` : host,
-          minutesAgo,
-          bypassProxy,
-          onConfirm: () => { setLoginWarnState(null); _executeVerify(bypassProxy); },
-        });
-        return;
-      }
+    if (host && !bypassProxy && shouldWarnForNewAccount(host, port, profileId)) {
+      setLoginWarnState({
+        proxyDisplay: port ? `${host}:${port}` : host,
+        minutesAgo: 0,
+        bypassProxy,
+        onConfirm: () => { setLoginWarnState(null); _executeVerify(bypassProxy); },
+      });
+      return;
     }
     _executeVerify(bypassProxy);
   };

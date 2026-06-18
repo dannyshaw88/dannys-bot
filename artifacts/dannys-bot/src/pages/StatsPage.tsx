@@ -234,7 +234,7 @@ function ProfileStatsRow({
         return (
           <td key={key} style={{ width: colWidths[key] }} className="px-4 py-3 text-center">
             {key === "human_session" ? (
-              <div className="flex items-center justify-start gap-1.5 pl-2">
+              <div className="flex items-center justify-center gap-1.5">
                 {tool && (
                   <Switch
                     checked={tool.enabled}
@@ -743,7 +743,7 @@ export function StatsPage() {
                     <tr>
                       <th className="px-4 py-3 font-bold uppercase tracking-wide text-left">
                         <button onClick={() => cycleSort("account")} className="flex items-center hover:text-foreground transition-colors">
-                          Account Name{sortIcon("account")}
+                          Account Name
                         </button>
                       </th>
                       {statColOrder.filter(key => visibleCols[key]).map(key => {
@@ -767,17 +767,16 @@ export function StatsPage() {
                           thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
                         } else if (key === "proxy_ip") {
                           thContent = (
-                            <button onClick={() => cycleSort("proxy_ip")} className={`inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-muted-foreground/60 ${sortKey === "proxy_ip" ? "opacity-100" : "opacity-60"}`}>
+                            <button onClick={() => cycleSort("proxy_ip")} className="inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-foreground font-bold">
                               <Globe className="w-3 h-3" />
                               <span className="text-[10px] uppercase tracking-wide">Proxy IP</span>
-                              {sortIcon("proxy_ip")}
                             </button>
                           );
                         } else {
                           const st = ALL_STAT_TYPES.find(s => s.key === key)!;
                           thContent = (
                             <button onClick={() => cycleSort(key as StatKey)} className={`inline-flex items-center gap-1 hover:opacity-90 transition-opacity ${st.color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}>
-                              {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>{sortIcon(key as StatKey)}
+                              {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>
                             </button>
                           );
                         }
@@ -1070,9 +1069,9 @@ export function StatsPage() {
                     {!endpointCountsData || endpointCountsData.length === 0 ? (
                       <div className="py-8 text-center text-muted-foreground text-sm">No API calls recorded yet for this account.</div>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead>
+                          <thead className="sticky top-0 bg-card z-10">
                             <tr className="border-b border-border/50">
                               {([ 
                                 { key: "endpoint" as const, label: "Endpoint", align: "left", cls: "text-muted-foreground", pad: "py-2 pr-4" },
@@ -1088,9 +1087,6 @@ export function StatsPage() {
                                   className={`${col.pad} text-${col.align} text-[10px] font-bold uppercase tracking-wide ${col.cls} whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors`}
                                 >
                                   {col.label}
-                                  {epSortCol === col.key && (
-                                    <span className="ml-1 opacity-60">{epSortDir === "asc" ? "↑" : "↓"}</span>
-                                  )}
                                 </th>
                               ))}
                             </tr>
