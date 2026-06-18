@@ -322,6 +322,9 @@ if (!colNames.has("resuming_until")) {
 if (!colNames.has("resuming_prev_status")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN resuming_prev_status TEXT;`);
 }
+if (!colNames.has("use_home_ip")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN use_home_ip INTEGER DEFAULT 0;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

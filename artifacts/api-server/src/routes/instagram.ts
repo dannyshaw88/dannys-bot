@@ -1493,11 +1493,15 @@ export async function registerInstagramRoutes(
       }
     }
 
-    // Block verify if no proxy is configured — never connect via bare server IP
+    // Block verify if no proxy is configured — never connect via bare server IP.
+    // Exception: accounts with useHomeIp=true intentionally bypass the proxy and
+    // use the machine's broadband connection directly.
     // NOTE: this check must happen BEFORE setting accountStatus="verifying" so a
     // 400 response never leaves the button stuck on "Verifying".
     if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
-      return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
+      if (!(effectiveProfile as any).useHomeIp) {
+        return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
+      }
     }
 
     // Mark as "verifying" in the DB — only reached once proxy is confirmed present.
@@ -1526,13 +1530,17 @@ export async function registerInstagramRoutes(
     // This is exactly how Jarvee authenticates: EB logs in first, then the API
     // uses the browser-generated session cookies for all follow/like/DM actions.
 
-    const proxyConfig: ProxyConfig | undefined = effectiveProfile.proxyHost ? {
-      host: effectiveProfile.proxyHost,
-      port: effectiveProfile.proxyPort!,
-      username: effectiveProfile.proxyUsername ?? undefined,
-      password: effectiveProfile.proxyPassword ?? undefined,
-      type:     ((effectiveProfile as any).proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
-    } : undefined;
+    // When useHomeIp is true the account deliberately skips the proxy and uses
+    // the machine's home broadband — proxyConfig stays undefined.
+    const proxyConfig: ProxyConfig | undefined = (effectiveProfile as any).useHomeIp
+      ? undefined
+      : effectiveProfile.proxyHost ? {
+          host: effectiveProfile.proxyHost,
+          port: effectiveProfile.proxyPort!,
+          username: effectiveProfile.proxyUsername ?? undefined,
+          password: effectiveProfile.proxyPassword ?? undefined,
+          type: ((effectiveProfile as any).proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
+        } : undefined;
 
     // ── UA BLOCK — per USER-AGENT RULE (non-negotiable) ─────────────────────────
     // A null userAgentEmbedded means every null-UA account uses the same shared
@@ -1577,6 +1585,7 @@ export async function registerInstagramRoutes(
             // fields).  doAutoLogin (called from /eb/silent-verify) is the sole owner of
             // form interaction during the verify flow.
             proxy:      proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+            useHomeIp:  !!(effectiveProfile as any).useHomeIp,
             userAgent:  ebUA,
             apiUA:      effectiveProfile.userAgentApi ?? undefined,
             // Opens a small (430×700) corner window so the user can watch without

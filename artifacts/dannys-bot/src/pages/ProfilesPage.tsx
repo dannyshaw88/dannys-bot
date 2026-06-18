@@ -189,7 +189,6 @@ export function ProfilesPage() {
   // IP login rate limit warning dialog state — stores display info + confirm callback
   const [loginWarnState, setLoginWarnState] = useState<{
     proxyDisplay: string;
-    minutesAgo: number;
     onConfirm: () => void;
   } | null>(null);
 
@@ -235,7 +234,6 @@ export function ProfilesPage() {
     if (host && shouldWarnForNewAccount(host, port, id)) {
       setLoginWarnState({
         proxyDisplay: port ? `${host}:${port}` : host,
-        minutesAgo: 0,
         onConfirm: () => { setLoginWarnState(null); _executeVerify(id, host, port); },
       });
       return;
@@ -2517,7 +2515,6 @@ export function ProfilesPage() {
         <LoginRateLimitDialog
           open
           proxyDisplay={loginWarnState.proxyDisplay}
-          minutesAgo={loginWarnState.minutesAgo}
           onCancel={() => setLoginWarnState(null)}
           onContinue={loginWarnState.onConfirm}
         />

@@ -59,6 +59,7 @@ export type Profile = {
   proxyPort: number | null;
   proxyUsername: string | null;
   proxyPassword: string | null;
+  useHomeIp: boolean | null;
   status: string;
   accountStatus: string;
   userAgentApi: string | null;
@@ -210,6 +211,7 @@ export const insertProfileSchema = z.object({
   proxyPort: z.number().optional().nullable(),
   proxyUsername: z.string().optional().nullable(),
   proxyPassword: z.string().optional().nullable(),
+  useHomeIp: z.boolean().optional().nullable(),
   accountStatus: z.string().optional(),
   userAgentApi: z.string().optional().nullable(),
   userAgentEmbedded: z.string().optional().nullable(),

@@ -62,6 +62,7 @@ export const profiles = sqliteTable("profiles", {
   proxyPort: integer("proxy_port"),
   proxyUsername: text("proxy_username"),
   proxyPassword: text("proxy_password"),
+  useHomeIp: integer("use_home_ip", { mode: "boolean" }).default(false),
   status: text("status").notNull().default('idle'),
   accountStatus: text("account_status").notNull().default('pending'),
   statusMessage: text("status_message"),

@@ -522,6 +522,7 @@ export function ProfileDetailsPage() {
         proxyPort: profile.proxyPort?.toString() || "",
         proxyUsername: profile.proxyUsername || "",
         proxyPassword: profile.proxyPassword || "",
+        useHomeIp: profile.useHomeIp ?? false,
         userAgentApi: profile.userAgentApi || "",
         userAgentEmbedded: profile.userAgentEmbedded || "",
         apiLimits: (profile.apiLimits as any) || {
@@ -1353,6 +1354,18 @@ export function ProfileDetailsPage() {
                                     placeholder="password"
                                     className="text-sm h-8 w-32 shrink-0"
                                   />
+                                  <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!formData.useHomeIp}
+                                      onChange={e => {
+                                        updateField({ useHomeIp: e.target.checked });
+                                        updateProfileMutation.mutate({ id: profileId, useHomeIp: e.target.checked });
+                                      }}
+                                      className="w-3.5 h-3.5 rounded accent-primary"
+                                    />
+                                    Use Home IP
+                                  </label>
                                 </div>
                                 {proxies && proxies.length > 0 && (
                                   <select

@@ -1811,8 +1811,10 @@ export async function openEbWindow(opts: {
    * the user can see the login happening without it blocking their screen.
    */
   verifyMode?: boolean;
+  /** When true, skip all proxy setup and use the machine's home broadband (direct connection). */
+  useHomeIp?: boolean;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp } = opts;
   const isGhostBrowser = profileId === -1;
   _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
@@ -1927,11 +1929,17 @@ export async function openEbWindow(opts: {
   // Configure proxy.
   // HTTP proxies use fixed_servers + proxyRules with embedded credentials.
   // SOCKS5 proxies also use fixed_servers with socks5:// proxyRules.
+  // When useHomeIp=true the account deliberately uses the machine's home
+  // broadband — proxy is skipped and the session runs as DIRECT.
   if (proxy) {
     const cfg = buildProxyConfig(proxy);
     _ebCrashLog(profileId, `STEP-4: setting proxy type=${proxy.type||"http"} host=${proxy.host}:${proxy.port}`);
     await ses.setProxy(cfg);
     _ebCrashLog(profileId, "STEP-5: proxy set (first pass)");
+  } else if (useHomeIp) {
+    _ebCrashLog(profileId, `STEP-4: useHomeIp=true — running DIRECT (home broadband) for @${username}`);
+    await ses.setProxy({ mode: "direct" });
+    _ebCrashLog(profileId, "STEP-5: direct mode set");
   } else {
     _ebCrashLog(profileId, `STEP-4: BLOCKED — no proxy assigned for @${username} (profileId=${profileId})`);
     throw new Error(`[IP-LEAK BLOCKED] Embedded browser for @${username} has no proxy assigned. Assign a proxy to this account before opening the browser.`);
@@ -4214,6 +4222,7 @@ export function startEbIpcServer(
           password:  body.password,
           twoFAKey:  body.twoFAKey,
           proxy:     body.proxy,
+          useHomeIp: body.useHomeIp === true,
           userAgent: body.userAgent,
           apiUA:     body.apiUA,
           ebFingerprint: parsedFp,

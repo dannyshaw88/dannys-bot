@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.31",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Safety", text: "IP login rate limit now correctly identifies established accounts — only accounts running on a proxy for 24+ hours are exempt from the 3-login-per-day limit." },
+      { category: "Safety", text: "Removed the redundant 90-minute login gap warning — the 3 new accounts per IP per 24 hours rule is the only limit enforced." },
+      { category: "Settings", text: "New 'Use Home IP' checkbox in account settings — when ticked, the account bypasses the proxy and uses the machine's home broadband directly." },
+    ],
+  },
+  {
     version: "1.1.30",
     date: "18 Jun 2026",
     items: [

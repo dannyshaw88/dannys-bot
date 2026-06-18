@@ -9,8 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
-import { getMostRecentLoginMs, recordLoginEvent } from "@/lib/ipLoginTracker";
-import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
+import { recordLoginEvent } from "@/lib/ipLoginTracker";
 
 function cleanLoginError(msg: string): string {
   const m = (msg ?? "").toLowerCase();
@@ -96,11 +95,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const esRef = useRef<WebSocket | null>(null);
   const addressFocusedRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
-
-  const [loginWarnState, setLoginWarnState] = useState<{
-    proxyDisplay: string;
-    minutesAgo: number;
-  } | null>(null);
 
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
@@ -803,21 +797,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       setLoginState("idle");
       return;
     }
-    if (proxyHost) {
-      const lastMs = getMostRecentLoginMs(proxyHost, proxyPort);
-      if (lastMs !== null) {
-        const minutesAgo = Math.max(1, Math.round((Date.now() - lastMs) / 60000));
-        setLoginWarnState({ proxyDisplay: proxyPort ? `${proxyHost}:${proxyPort}` : proxyHost, minutesAgo });
-        return;
-      }
-    }
     _doLoginCore();
   };
 
-  const _handleLoginConfirm = () => {
-    setLoginWarnState(null);
-    _doLoginCore();
-  };
 
   const lastEntry = loginLog[loginLog.length - 1];
   const statusColor = { idle: "text-slate-400", connecting: "text-amber-500", connected: "text-green-600", error: "text-red-500" }[status];
@@ -1458,15 +1440,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         </DialogContent>
       </Dialog>
 
-      {loginWarnState && (
-        <LoginRateLimitDialog
-          open
-          proxyDisplay={loginWarnState.proxyDisplay}
-          minutesAgo={loginWarnState.minutesAgo}
-          onCancel={() => setLoginWarnState(null)}
-          onContinue={_handleLoginConfirm}
-        />
-      )}
     </div>
   );
 }
