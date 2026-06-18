@@ -2146,11 +2146,12 @@ export async function openEbWindow(opts: {
         win.show();
       }
     } else {
-      // Regular manual open — full screen.
-      // Use workArea bounds — never covers the Windows taskbar.
-      const _disp = eScreen.getPrimaryDisplay();
+      // Regular manual open — truly maximized so the OS title-bar maximize
+      // button shows as inactive (window is already maximized).
+      // win.maximize() both maximizes AND shows the window, but calling
+      // show() first ensures the window is visible before maximize fires.
       win.show();
-      win.setBounds(_disp.workArea);
+      win.maximize();
     }
   });
 

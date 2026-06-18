@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.35",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser window now opens truly maximised — the title-bar maximise button is correctly shown as inactive instead of clickable." },
+      { category: "UI", text: "Account Settings tab bar (Account Settings, Human Session Tool, Session Log, Dash, Browser, Metrics, Copy Settings) is now a slightly darker blue." },
+      { category: "UI", text: "Copy Settings: Fire Random Endpoints description updated to 'Fire random endpoints to each login sequence'." },
+    ],
+  },
+  {
     version: "1.1.34",
     date: "18 Jun 2026",
     items: [
