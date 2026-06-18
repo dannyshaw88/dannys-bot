@@ -54,8 +54,8 @@ export function ContactNewFollowersPanel({ tool, profile, embedded }: Props) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
-      contactNewFollowersEnabled: true,
-      contactOnlyAppFollowed: true,
+      contactNewFollowersEnabled: false,
+      contactOnlyAppFollowed: false,
       contactMessage: "",
       contactCheckIntervalMin: 30,
       contactCheckIntervalMax: 60,

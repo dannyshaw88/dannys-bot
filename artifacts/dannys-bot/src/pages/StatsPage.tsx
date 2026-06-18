@@ -844,16 +844,23 @@ export function StatsPage() {
                                     </span>
                                   </button>
                                   {groupKey !== "__ungrouped__" && (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
-                                      title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
-                                      className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
-                                    >
-                                      {groupIcons[groupKey]
-                                        ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
-                                        : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
-                                      }
-                                    </button>
+                                    <div className="relative group/icon shrink-0">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
+                                        title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
+                                        className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
+                                      >
+                                        {groupIcons[groupKey]
+                                          ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
+                                          : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
+                                        }
+                                      </button>
+                                      {groupIcons[groupKey] && (
+                                        <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
+                                          <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-cover shadow-lg border border-border" />
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                   <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                                 </div>

@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.30",
+    date: "18 Jun 2026",
+    items: [
+      { category: "UI", text: "Inject Browsing sub-settings now appear in a hover popup instead of expanding the panel — keeps the Follow tool header clean." },
+      { category: "UI", text: "Statistics page: hovering over a group icon now shows a larger image preview, matching the Account Manager page." },
+      { category: "UI", text: "Unfollow target list field reduced to 5 rows with scroll — no more giant textarea taking over the panel." },
+      { category: "UI", text: "Contact Tool: Contact New Followers and Only App-Followed are now off by default when adding a new account." },
+    ],
+  },
+  {
     version: "1.1.29",
     date: "18 Jun 2026",
     items: [

@@ -183,17 +183,19 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         <div className="flex items-center gap-2 flex-wrap">
           <UserMinus className="w-4 h-4 text-muted-foreground shrink-0" />
           <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
-          <input
-            type="checkbox"
-            id={`uf-enabled-${tool.id}`}
-            checked={tool.enabled}
-            onChange={(e) => toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: e.target.checked })}
-            disabled={toggleMutation.isPending}
-            className="w-3.5 h-3.5 accent-primary cursor-pointer"
-          />
-          <label htmlFor={`uf-enabled-${tool.id}`} className={`text-sm font-medium cursor-pointer select-none ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
-            {tool.enabled ? "ACTIVE" : "STOPPED"}
-          </label>
+          {!hideEnableToggle && <>
+            <input
+              type="checkbox"
+              id={`uf-enabled-${tool.id}`}
+              checked={tool.enabled}
+              onChange={(e) => toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: e.target.checked })}
+              disabled={toggleMutation.isPending}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer"
+            />
+            <label htmlFor={`uf-enabled-${tool.id}`} className={`text-sm font-medium cursor-pointer select-none ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+              {tool.enabled ? "ACTIVE" : "STOPPED"}
+            </label>
+          </>}
           {!hideEnableToggle && nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
@@ -283,8 +285,8 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         </p>
         <div className={`space-y-3 transition-opacity ${!(settings as any).unfollowTargetListEnabled ? "opacity-40 pointer-events-none" : ""}`}>
           <textarea
-            rows={20}
-            className="w-full text-xs border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+            rows={5}
+            className="w-full text-xs border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary overflow-y-auto"
             placeholder={"@user1\n@user2\nuser3"}
             value={(settings as any).unfollowTargetList ?? ""}
             onChange={(e) => setSettings(s => ({ ...s, unfollowTargetList: e.target.value }))}
