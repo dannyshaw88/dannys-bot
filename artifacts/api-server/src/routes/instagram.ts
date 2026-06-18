@@ -2348,7 +2348,7 @@ export async function registerInstagramRoutes(
       req.log.info({ filteredCount: apiCalls.length, requestedIds }, "[export-api-calls] filtered api calls ready");
 
       const headers = [
-        "Status", "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
+        "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
         "Message", "Source", "NavChain", "IpAddress", "Duration(miliseconds)"
       ];
 
@@ -2418,16 +2418,20 @@ export async function registerInstagramRoutes(
         const ipPort = ip && port ? `${ip}:${port}` : ip;
 
         const isError = !!(call.isError);
-        const status = isError ? "ERROR" : "OK";
+        // Fold error status into the message so there is one authoritative column.
+        // NOISY_FAILED_OPS already had their messages replaced with "OK" — they are
+        // non-fatal 4xx probes, so no ERROR prefix is added even though isError=true.
+        // Real failures get "ERROR: " prepended so the cell is unambiguous.
+        const rawMsg = call.message ?? "";
+        const msgCell = (isError && rawMsg !== "OK") ? `ERROR: ${rawMsg}` : rawMsg;
 
         return [
-          status,
           `Instagram_${call.profileId}`,
           date,
           username,
           resolveOperationName(call.source ?? "", call.operationName ?? ""),
           call.operationName ?? "",
-          call.message ?? "",
+          msgCell,
           resolveSource(call.source ?? ""),
           call.navChain ?? "",
           ipPort,

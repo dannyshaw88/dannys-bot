@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.37",
+    date: "18 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call export no longer has a separate Status column. The Message column now says exactly what happened — non-fatal probes show OK, real failures are prefixed with ERROR: so there is no more contradictory OK message / ERROR status combination." },
+    ],
+  },
+  {
     version: "1.1.36",
     date: "18 Jun 2026",
     items: [
