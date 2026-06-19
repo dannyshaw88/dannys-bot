@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.67",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: confirmed via live testing that the 'upload id is missing' error was caused by the signed_body request format, not TLS fingerprint. Switching configure to plain form fields (URLSearchParams) causes Instagram to find the upload. Also ensures configure uses the same TLS transport as the upload step." },
+    ],
+  },
+  {
     version: "1.1.66",
     date: "19 Jun 2026",
     items: [

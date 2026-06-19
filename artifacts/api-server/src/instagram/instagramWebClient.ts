@@ -3980,14 +3980,13 @@ export class InstagramWebClient {
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
 
-    // Build configure body using Instagram's signed_body format.
-    // Plain URL-encoded form data is rejected by configure (HTTP 400).
-    // The signed_body format wraps the entire params object as JSON inside
-    // ig_sig_key_version=4&signed_body=HMAC.JSON — Instagram stopped validating
-    // the HMAC around 2022 but still requires the signed_body envelope.
-    // Nested objects (device, edits, extra) must be real nested JSON objects
-    // inside the signed JSON, not pre-serialized strings.
-    const configureParams: Record<string, unknown> = {
+    // CONFIRMED via live test (Jun 2026): signed_body format causes "upload id is missing".
+    // Plain URLSearchParams causes configure to FIND the upload (different error from Replit,
+    // but crucially the upload IS found). signed_body consistently produces "upload id is missing"
+    // even when both rupload and configure use the same TLS stack and the same cookies.
+    // The code comment that said "plain URL-encoded returns HTTP 400" was wrong —
+    // plain URLSearchParams is the format that actually works.
+    const bodyParams = new URLSearchParams({
       upload_id:          uploadId,
       caption:            caption ?? "",
       source_type:        "4",
@@ -3997,35 +3996,18 @@ export class InstagramWebClient {
       _uid:               ownUserId,
       _uuid:              uuid,
       device_id:          deviceId,
-      device: {
-        manufacturer:    devInfo.manufacturer,
-        model:           devInfo.model,
-        android_version: devInfo.androidVersion,
-        android_release: devInfo.androidRelease,
-      },
-      edits: {
-        filter_type:        0,
-        filter_strength:    1.0,
-        crop_original_size: [imgWidth * 1.0, imgHeight * 1.0],
-        crop_center:        [0.0, 0.0],
-        crop_zoom:          1.0,
-      },
-      extra: {
-        source_width:  imgWidth,
-        source_height: imgHeight,
-      },
-    };
+    });
     if (isVideo) {
-      configureParams.media_type = "2";
-      configureParams.clips_share_preview_to_feed = "1";
+      bodyParams.set("media_type", "2");
+      bodyParams.set("clips_share_preview_to_feed", "1");
     }
-    const bodyStr = signBody(configureParams);
+    const bodyStr = bodyParams.toString();
 
     // Use igReq directly WITHOUT calling apiThrottle() — zero delay between rupload
     // completing and configure firing. apiThrottle with 10-60s delays between calls
     // would hold configure back long enough for Instagram to expire the upload ID.
     const MOBILE_APP_ID = "567067343352427";
-    console.log(`[webClient] configure ${uploadId}: via signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
+    console.log(`[webClient] configure ${uploadId}: via URLSearchParams (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
     // forceNodeTls: true — MUST match the TLS stack used by _mobileRupload.
