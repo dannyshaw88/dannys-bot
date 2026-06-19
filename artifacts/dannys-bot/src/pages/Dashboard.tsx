@@ -68,6 +68,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.75",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Evasion stats export: added 'activeCallRate_perMin' — the real API call speed during active windows only, excluding idle gaps between sessions." },
+      { category: "Analytics", text: "Evasion stats export: added 'activeTimeMin' (total minutes actually running) and 'activeSessionCount' (number of distinct sessions)." },
+      { category: "Analytics", text: "Evasion stats export: updated field notes to clearly warn that callRate_perMin is misleading when used alone (it averages over idle time) and that bannedAt timestamps reflect when the operator marked the ban, not when Instagram acted." },
+    ],
+  },
+  {
     version: "1.1.74",
     date: "19 Jun 2026",
     items: [

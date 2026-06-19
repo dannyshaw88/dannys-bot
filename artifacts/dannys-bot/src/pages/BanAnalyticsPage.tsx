@@ -30,6 +30,7 @@ interface EntryMetrics {
   sessionPerAction: number; sessionPerFollow: number; authPerAction: number;
   followCount: number; preActionWarmup: number; actionVelocityPerHour: number;
   spanMin: number; cats: Record<string, number>; anomalyScore: number; flagHour: number;
+  activeTimeMin: number; activeCallRate_perMin: number; activeSessionCount: number;
 }
 
 interface Reliability { reAddCount: number; weight: number; label: string; }
@@ -239,6 +240,23 @@ function computeMetrics(eps: EpItem[], flagTime?: string): EntryMetrics {
   const actionVelocityPerHour = spanMin > 0 ? actionCount / (spanMin / 60) : 0;
   const ft = flagTime ? new Date(flagTime) : null;
   const flagHour = ft && !isNaN(ft.getTime()) ? ft.getUTCHours() : -1;
+  // Active session metrics: group consecutive calls with gap < 5 min into sessions,
+  // then sum only the session durations (ignoring idle gaps between sessions).
+  let activeTimeMin = 0;
+  let activeSessionCount = 0;
+  if (timestamps.length >= 2) {
+    const SESSION_GAP_MS = 5 * 60 * 1000;
+    let sessStart = timestamps[0];
+    for (let i = 1; i <= timestamps.length; i++) {
+      const gap = i < timestamps.length ? timestamps[i] - timestamps[i - 1] : SESSION_GAP_MS + 1;
+      if (gap > SESSION_GAP_MS) {
+        const dur = (timestamps[i - 1] - sessStart) / 60000;
+        if (dur > 0) { activeTimeMin += dur; activeSessionCount++; }
+        if (i < timestamps.length) sessStart = timestamps[i];
+      }
+    }
+  }
+  const activeCallRate_perMin = activeTimeMin > 0 ? eps.length / activeTimeMin : 0;
   return {
     totalCalls: eps.length, callsPerMin, avgInterCallSec, minInterCallSec, maxInterCallSec,
     timingCoV: coV, shannonEntropy: entropy, uniqueEndpoints, endpointDiversity,
@@ -246,6 +264,7 @@ function computeMetrics(eps: EpItem[], flagTime?: string): EntryMetrics {
     sessionPerAction, sessionPerFollow: sessionPerFollow >= 0 ? sessionPerFollow : 0,
     authPerAction, followCount: cats.follow, preActionWarmup: warmup,
     actionVelocityPerHour, spanMin, cats, anomalyScore: 0, flagHour,
+    activeTimeMin, activeCallRate_perMin, activeSessionCount,
   };
 }
 
@@ -1966,6 +1985,9 @@ export function BanAnalyticsPage() {
         const topOps = topEps(eps, 10);
         const computedMetrics = {
           callRate_perMin: m.callsPerMin > 0 ? m.callsPerMin : null,
+          activeCallRate_perMin: m.activeCallRate_perMin > 0 ? m.activeCallRate_perMin : null,
+          activeTimeMin: m.activeTimeMin > 0 ? m.activeTimeMin : null,
+          activeSessionCount: m.activeSessionCount > 0 ? m.activeSessionCount : null,
           spanMin: m.spanMin > 0 ? m.spanMin : null,
           avgInterCallSec: m.avgInterCallSec > 0 ? m.avgInterCallSec : null,
           minInterCallSec: eps.length > 1 ? m.minInterCallSec : null,
@@ -1995,9 +2017,14 @@ export function BanAnalyticsPage() {
       _fieldNotes: {
         trustScore: "USER-ASSIGNED label — this is the operator's own estimate of the account's trust level on Instagram, not a score computed or returned by Instagram. null = no label assigned yet (account was banned before the user labelled it, or simply not labelled). NOOB = user's guess that the account is brand new / low trust. Do NOT treat trustScore as a signal from Instagram's systems.",
         proxyHost: "The proxy IP associated with the account at the time of the ban event. Empty string means the proxy was not recorded in the evasion log for this account — it does NOT mean the account ran without a proxy. All accounts require a proxy to run.",
-        spanHours: "Time in hours between the FIRST and LAST logged endpoint call for this account. Only accounts that have endpoint snapshot data will have a spanHours value. null means endpoint history was not captured.",
+        spanHours: "Time in hours between the FIRST and LAST logged endpoint call for this account. This is the full wall-clock survival window — it includes idle gaps between sessions where no API calls were made. Useful for comparing how long accounts survived, NOT for measuring how active they were. Only accounts that have endpoint snapshot data will have a spanHours value.",
         runningMs: "For survivor accounts: milliseconds since the account was first registered in the software. This is a wall-clock duration, not a measure of active API usage. An account can have a high runningMs without ever having made a mobile API call.",
-        anomalyScore: "Computed from the endpoint timing and diversity of the account's logged API calls. Lower = more human-like. This is calculated from the app's own heuristics, not from Instagram."
+        anomalyScore: "Computed from the endpoint timing and diversity of the account's logged API calls. Lower = more human-like. This is calculated from the app's own heuristics, not from Instagram.",
+        callRate_perMin: "MISLEADING IF USED ALONE. Total API calls divided by total span minutes (first call to last call). This averages over all idle gaps between sessions and produces an artificially low number. Do NOT use this to compare how fast accounts were calling Instagram. Use activeCallRate_perMin instead.",
+        activeCallRate_perMin: "Calls per minute during active session windows only. Sessions are defined as groups of consecutive calls with less than 5 minutes between each call. Idle gaps between sessions are excluded. This is the real API call speed when the account was actually running.",
+        activeTimeMin: "Total minutes spent in active sessions (sum of all session durations, excluding idle gaps). Use this to understand how long the account was actually running, as opposed to spanHours which includes idle time.",
+        activeSessionCount: "Number of distinct active sessions detected. A new session begins when a gap of more than 5 minutes occurs between consecutive API calls.",
+        bannedAt: "The timestamp when the operator MANUALLY marked this account as banned in the software. This is NOT when Instagram banned the account. Do not use timestamp clustering or time-of-day patterns in bannedAt to infer Instagram server behaviour — clusters reflect when the operator sat down to mark bans, not Instagram sweep timing.",
       },
       exportedAt: new Date().toISOString(),
       summary: {
@@ -2034,6 +2061,9 @@ export function BanAnalyticsPage() {
           spanHours = m.spanMin > 0 ? +(m.spanMin / 60).toFixed(4) : null;
           computedMetrics = {
             callRate_perMin: m.callsPerMin > 0 ? m.callsPerMin : null,
+            activeCallRate_perMin: m.activeCallRate_perMin > 0 ? m.activeCallRate_perMin : null,
+            activeTimeMin: m.activeTimeMin > 0 ? m.activeTimeMin : null,
+            activeSessionCount: m.activeSessionCount > 0 ? m.activeSessionCount : null,
             spanMin: m.spanMin > 0 ? m.spanMin : null,
             avgInterCallSec: m.avgInterCallSec > 0 ? m.avgInterCallSec : null,
             minInterCallSec: eps.length > 1 ? m.minInterCallSec : null,
