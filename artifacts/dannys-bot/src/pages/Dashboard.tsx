@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.60",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: configure step now uses the same plain form body transport as every other working API call (follow, DM, like). The previous signed_body format was being rejected by Instagram. No delay is inserted between upload and configure — even with API Control set to slow speeds, the publish step fires immediately after the upload completes." },
+    ],
+  },
+  {
     version: "1.1.59",
     date: "19 Jun 2026",
     items: [

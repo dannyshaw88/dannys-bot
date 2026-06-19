@@ -3807,7 +3807,6 @@ export class InstagramWebClient {
     mediaType: "photo" | "video",
     buffer: Buffer,
     uploadId: string,
-    sharedAgent?: any,
   ): Promise<string | null> {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
@@ -3933,7 +3932,6 @@ export class InstagramWebClient {
     caption: string,
     isVideo: boolean,
     imgBuffer?: Buffer,
-    sharedAgent?: any,
   ): Promise<string | null> {
     if (!this.igApiCookies) {
       console.warn(`[webClient] configure ${uploadId}: no igApiCookies — cannot proceed`);
@@ -3978,83 +3976,102 @@ export class InstagramWebClient {
     // Parse device info from the UA string for the device object
     const devInfo = this._parseUADeviceInfo();
 
-    const formBase: Record<string, unknown> = {
-      upload_id: uploadId,
-      caption:   caption ?? "",
-      source_type: "4",
-      timezone_offset: "0",
-      date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      _csrftoken: csrf,
-      _uid:       ownUserId,
-      _uuid:      uuid,
-      device_id:  deviceId,
-      // device, edits, extra — required by Instagram v431+; absence produces
-      // "upload id is missing" even when the rupload succeeded.
-      device: {
+    const authorization = this._deviceAuthorization;
+
+    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
+
+    // Build flat URLSearchParams body — NO signBody wrapper.
+    // Every other working mobile API call (follow, DM, like) uses plain URL-encoded
+    // params via igReq/mobileSessionPost. signBody uses a custom HMAC key and wraps
+    // everything in signed_body=HASH.JSON which configure may reject even when
+    // rupload succeeds. Plain form body with a valid sessionid cookie is sufficient
+    // for authenticated write actions — Instagram validates via cookie + _csrftoken.
+    // Nested objects (device, edits, extra) are JSON-encoded strings in the form body.
+    const formParams = new URLSearchParams({
+      upload_id:           uploadId,
+      caption:             caption ?? "",
+      source_type:         "4",
+      timezone_offset:     "0",
+      date_time_original:  new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      _csrftoken:          csrf,
+      _uid:                ownUserId,
+      _uuid:               uuid,
+      device_id:           deviceId,
+      // device, edits, extra — required by Instagram v431+
+      device: JSON.stringify({
         manufacturer:    devInfo.manufacturer,
         model:           devInfo.model,
         android_version: devInfo.androidVersion,
         android_release: devInfo.androidRelease,
-      },
-      edits: {
+      }),
+      edits: JSON.stringify({
         filter_type:        0,
         filter_strength:    1.0,
         crop_original_size: [imgWidth * 1.0, imgHeight * 1.0],
         crop_center:        [0.0, 0.0],
         crop_zoom:          1.0,
-      },
-      extra: {
+      }),
+      extra: JSON.stringify({
         source_width:  imgWidth,
         source_height: imgHeight,
-      },
-    };
-    if (isVideo) {
-      formBase.media_type = "2";
-      formBase.clips_share_preview_to_feed = "1";
-    }
+      }),
+      ...(isVideo ? { media_type: "2", clips_share_preview_to_feed: "1" } : {}),
+    });
+    const bodyStr = formParams.toString();
 
-    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
-    const bodyStr = signBody(formBase);
-    const bodyBuf = Buffer.from(bodyStr, "utf8");
-
-    // Build headers identical to mobileSessionPost — same UA, same cookies, same App-ID.
-    const configHeaders: Record<string, string> = {
-      "Host": "i.instagram.com",
-      "User-Agent": this._fullMobileUA,
-      "Accept": "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "Content-Length": String(bodyBuf.length),
-      "X-IG-App-ID": MOBILE_AID,
-      "X-CSRFToken": csrf,
-      "X-IG-Capabilities": "3brTvwE=",
-      "X-IG-Connection-Type": "WIFI",
-      "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-      "X-IG-Bandwidth-TotalBytes-B": "0",
-      "X-IG-Bandwidth-TotalTime-MS": "0",
-      "Cookie": this.mobileCookieJar.join("; "),
-      ...(this._deviceAuthorization ? { Authorization: this._deviceAuthorization } : {}),
-    };
-
-    console.log(`[webClient] configure ${uploadId}: via node-https+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model}) sharedAgent=${!!sharedAgent}`);
-    // Log the raw signed body so we can inspect what Instagram is receiving
+    // Use igReq directly (same CycleTLS path as mobileSessionPost) WITHOUT calling
+    // apiThrottle() — there must be zero artificial delay between rupload completing
+    // and configure firing. apiThrottle with 10-60s delays between calls would hold
+    // configure back long enough for Instagram to expire the upload ID.
+    const MOBILE_APP_ID = "567067343352427";
+    console.log(`[webClient] configure ${uploadId}: via igReq plain-body (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
-    // Use the shared agent (same TCP connection as rupload) so Instagram routes
-    // configure to the same backend shard that stored the upload.
-    const res = await tlsMultipartPost("i.instagram.com", url, configHeaders, bodyBuf, this.proxyUrl, true, sharedAgent);
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: url,
+      method: "POST",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": this._fullMobileUA,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-IG-App-ID": MOBILE_APP_ID,
+        "X-CSRFToken": csrf,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI",
+        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+        "X-IG-Bandwidth-TotalBytes-B": "0",
+        "X-IG-Bandwidth-TotalTime-MS": "0",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      body: bodyStr,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl,
+    });
 
-    if (res?.media?.id) {
-      const mediaId = String(res.media.id);
+    // Merge any new cookies (keep session fresh)
+    if (res.cookies?.length) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) this.mobileCsrf = newCsrf;
+    }
+
+    const json = res.json;
+    if (json?.media?.id) {
+      const mediaId = String(json.media.id);
       console.log(`[webClient] configure ${uploadId}: OK — media_id=${mediaId}`);
       return mediaId;
     }
-    if (res?.status === "ok") {
+    if (json?.status === "ok") {
       console.log(`[webClient] configure ${uploadId}: OK (no media.id) — returning uploadId`);
       return uploadId;
     }
-    if (res) {
-      console.warn(`[webClient] configure ${uploadId}: unexpected response — ${JSON.stringify(res).slice(0, 600)}`);
+    if (json) {
+      console.warn(`[webClient] configure ${uploadId}: unexpected response (HTTP ${res.status}) — ${JSON.stringify(json).slice(0, 600)}`);
+    } else {
+      console.warn(`[webClient] configure ${uploadId}: non-JSON response (HTTP ${res.status}) — ${res.rawBody?.slice(0, 400)}`);
     }
     return null;
   }
@@ -4064,28 +4081,12 @@ export class InstagramWebClient {
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
-
-      // Create a shared keep-alive agent so rupload and configure reuse the
-      // same TCP connection → same Instagram backend shard → configure can
-      // find the upload that rupload just stored.  Without this, each request
-      // opens a new connection and Instagram's LB may route them to different
-      // shards, causing a spurious "upload id is missing" on configure.
-      const { HttpsProxyAgent } = await import("https-proxy-agent");
-      const sharedAgent = this.proxyUrl
-        ? new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 })
-        : undefined;
-
-      try {
-        // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
-        const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId, sharedAgent);
-        if (!confirmedUploadId) return null;
-
-        // Step 2 — configure (pass imgBuffer so configure can get dimensions for device/edits/extra)
-        // sharedAgent keeps us on the same TCP connection → same shard as rupload.
-        return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
-      } finally {
-        (sharedAgent as any)?.destroy?.();
-      }
+      // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
+      const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
+      if (!confirmedUploadId) return null;
+      // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
+      // igReq (CycleTLS) is used — same transport as all other working mobile API calls.
+      return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
@@ -4097,22 +4098,11 @@ export class InstagramWebClient {
   async uploadVideo(videoBuffer: Buffer, caption: string): Promise<string | null> {
     return this.timed("UploadVideo", async () => {
       const uploadId = String(Date.now());
-
-      const { HttpsProxyAgent } = await import("https-proxy-agent");
-      const sharedAgent = this.proxyUrl
-        ? new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 })
-        : undefined;
-
-      try {
-        // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
-        const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId, sharedAgent);
-        if (!confirmedUploadId) return null;
-
-        // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
-        return await this._configureViaIgClient(confirmedUploadId, caption, true, undefined, sharedAgent);
-      } finally {
-        (sharedAgent as any)?.destroy?.();
-      }
+      // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
+      const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
+      if (!confirmedUploadId) return null;
+      // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
+      return await this._configureViaIgClient(confirmedUploadId, caption, true, undefined);
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
