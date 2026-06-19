@@ -3807,6 +3807,7 @@ export class InstagramWebClient {
     mediaType: "photo" | "video",
     buffer: Buffer,
     uploadId: string,
+    sharedAgent?: any,
   ): Promise<string | null> {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
@@ -3850,11 +3851,12 @@ export class InstagramWebClient {
       ...(authorization ? { Authorization: authorization } : {}),
     };
 
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary]`);
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary] sharedAgent=${!!sharedAgent}`);
     await this.apiThrottle();
     // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
     // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
-    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
+    // sharedAgent keeps this TCP connection alive so configure can reuse it → same Instagram shard.
+    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true, sharedAgent);
     if (!json || json.status !== "ok") {
       console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
       return null;
@@ -3931,6 +3933,7 @@ export class InstagramWebClient {
     caption: string,
     isVideo: boolean,
     imgBuffer?: Buffer,
+    sharedAgent?: any,
   ): Promise<string | null> {
     if (!this.igApiCookies) {
       console.warn(`[webClient] configure ${uploadId}: no igApiCookies — cannot proceed`);
@@ -4033,11 +4036,13 @@ export class InstagramWebClient {
       ...(this._deviceAuthorization ? { Authorization: this._deviceAuthorization } : {}),
     };
 
-    console.log(`[webClient] configure ${uploadId}: via node-https+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
+    console.log(`[webClient] configure ${uploadId}: via node-https+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model}) sharedAgent=${!!sharedAgent}`);
     // Log the raw signed body so we can inspect what Instagram is receiving
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
-    const res = await tlsMultipartPost("i.instagram.com", url, configHeaders, bodyBuf, this.proxyUrl, true);
+    // Use the shared agent (same TCP connection as rupload) so Instagram routes
+    // configure to the same backend shard that stored the upload.
+    const res = await tlsMultipartPost("i.instagram.com", url, configHeaders, bodyBuf, this.proxyUrl, true, sharedAgent);
 
     if (res?.media?.id) {
       const mediaId = String(res.media.id);
@@ -4060,12 +4065,27 @@ export class InstagramWebClient {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
 
-      // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
-      const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
-      if (!confirmedUploadId) return null;
+      // Create a shared keep-alive agent so rupload and configure reuse the
+      // same TCP connection → same Instagram backend shard → configure can
+      // find the upload that rupload just stored.  Without this, each request
+      // opens a new connection and Instagram's LB may route them to different
+      // shards, causing a spurious "upload id is missing" on configure.
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      const sharedAgent = this.proxyUrl
+        ? new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 })
+        : undefined;
 
-      // Step 2 — configure (pass imgBuffer so configure can get dimensions for device/edits/extra)
-      return this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
+      try {
+        // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
+        const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId, sharedAgent);
+        if (!confirmedUploadId) return null;
+
+        // Step 2 — configure (pass imgBuffer so configure can get dimensions for device/edits/extra)
+        // sharedAgent keeps us on the same TCP connection → same shard as rupload.
+        return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
+      } finally {
+        (sharedAgent as any)?.destroy?.();
+      }
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
@@ -4078,12 +4098,21 @@ export class InstagramWebClient {
     return this.timed("UploadVideo", async () => {
       const uploadId = String(Date.now());
 
-      // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
-      const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
-      if (!confirmedUploadId) return null;
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      const sharedAgent = this.proxyUrl
+        ? new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 })
+        : undefined;
 
-      // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
-      return this._configureViaIgClient(confirmedUploadId, caption, true);
+      try {
+        // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
+        const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId, sharedAgent);
+        if (!confirmedUploadId) return null;
+
+        // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
+        return await this._configureViaIgClient(confirmedUploadId, caption, true, undefined, sharedAgent);
+      } finally {
+        (sharedAgent as any)?.destroy?.();
+      }
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 

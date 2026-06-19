@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.59",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: rupload and configure now share the same TCP connection to Instagram. Previously each step opened a new connection, which could land on a different backend server (shard) that had no record of the upload — causing the instant 'upload id is missing' failure. The shared keep-alive connection ensures both steps reach the same server." },
+    ],
+  },
+  {
     version: "1.1.58",
     date: "19 Jun 2026",
     items: [

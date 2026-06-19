@@ -541,6 +541,12 @@ export async function tlsMultipartPost(
    *  bytes > 127 as multi-byte UTF-8 sequences, corrupting JPEG/MP4 data.
    *  Node.js req.write(Buffer) sends raw bytes correctly. */
   forceNodeHttps = false,
+  /** Optional pre-created HttpsProxyAgent to reuse across requests.
+   *  When supplied, the agent is NOT destroyed after the request — the
+   *  caller owns the lifecycle (and should destroy it when done).
+   *  Used to keep rupload and configure on the same proxy tunnel so
+   *  Instagram routes both to the same backend shard. */
+  agentOverride?: any,
 ): Promise<any> {
   if (!proxyUrl) {
     throw new Error(
@@ -594,7 +600,10 @@ export async function tlsMultipartPost(
   // Used when forceNodeHttps=true (binary rupload) or when CycleTLS is unavailable.
   const { HttpsProxyAgent } = await import("https-proxy-agent");
   const https = await import("node:https");
-  const agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+  // Use the caller-supplied agent when provided (keeps-alive between rupload + configure).
+  // When no agent is supplied create a short-lived one and destroy it after the request.
+  const ownedAgent = agentOverride == null;
+  const agent = agentOverride ?? new HttpsProxyAgent(proxyUrl, { keepAlive: true, maxSockets: 1 });
   try {
     const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
       const req = https.request(
@@ -621,6 +630,7 @@ export async function tlsMultipartPost(
     }
     return json;
   } finally {
-    agent.destroy();
+    // Only destroy the agent if we created it; shared agents are destroyed by the caller.
+    if (ownedAgent) (agent as any).destroy?.();
   }
 }
