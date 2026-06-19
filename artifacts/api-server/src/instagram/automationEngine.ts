@@ -2743,9 +2743,28 @@ class AutomationEngine {
             const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
             const captionTemplate = String(s.repostCaptionText ?? "").trim();
             const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
+            const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
+            const useChatGptCaption = !!(s as any).repostUseChatGpt;
+
+            // Filter already-reposted files when noRepeat is ON
+            let filteredFiles = imageFiles;
+            if (noRepeat) {
+              const existingReposted = await storage.getRepostedPostsByProfile(profile.id, 10000);
+              const postedLocalSet = new Set(
+                existingReposted
+                  .filter(r => r.mediaId.startsWith("local:"))
+                  .map(r => r.mediaId.slice(6))
+              );
+              filteredFiles = imageFiles.filter(f => !postedLocalSet.has(f));
+              if (filteredFiles.length === 0) {
+                console.log(`[engine] @${profile.username}: 🔁 local folder — all images already reposted (noRepeat=true)`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "All local folder images already reposted (Do not repost same image is ON)");
+                return;
+              }
+            }
 
             // Shuffle and pick targetCount files
-            const shuffled = [...imageFiles].sort(() => Math.random() - 0.5);
+            const shuffled = [...filteredFiles].sort(() => Math.random() - 0.5);
             const picked = shuffled.slice(0, targetCount);
             let uploadedCount = 0;
 
@@ -2753,9 +2772,31 @@ class AutomationEngine {
               const filePath = nodePath.join(repostLocalFolderPath, fileName);
               const rawBuffer = await fsPromises.readFile(filePath);
               const alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
-              const caption = captionTemplate
+              let caption = captionTemplate
                 ? captionTemplate.replace(/\{own_username\}/g, profile.username)
                 : "";
+              if (useChatGptCaption && captionTemplate) {
+                try {
+                  const gs_openai = await storage.getGlobalSettings();
+                  const openaiKey = ((gs_openai as any).openaiApiKey ?? "").trim();
+                  if (openaiKey) {
+                    const gptRes = await fetch("https://api.openai.com/v1/chat/completions", {
+                      method: "POST",
+                      headers: { "Authorization": `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        model: "gpt-4o-mini",
+                        messages: [{ role: "user", content: captionTemplate }],
+                        max_tokens: 500,
+                      }),
+                    });
+                    const gptJson = await gptRes.json() as any;
+                    const generated = (gptJson.choices?.[0]?.message?.content ?? "").trim();
+                    if (generated) caption = generated;
+                  }
+                } catch (gptErr: any) {
+                  console.warn(`[engine] @${profile.username}: ChatGPT caption failed: ${gptErr?.message}`);
+                }
+              }
 
               const postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
               if (postedMediaId) {
@@ -2765,6 +2806,21 @@ class AutomationEngine {
                 console.log(`[engine] @${profile.username}: 🔁 uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
                 await storage.incrementStat(profile.id, "repost");
+                if (noRepeat) {
+                  try {
+                    await storage.createRepostedPost({
+                      profileId:       profile.id,
+                      toolId:          tool.id,
+                      sourceUsername:  repostLocalFolderPath,
+                      mediaId:         `local:${fileName}`,
+                      shortcode:       "",
+                      caption:         "",
+                      thumbnailUrl:    "",
+                      repostedAt:      new Date().toISOString(),
+                      postedShortcode: "",
+                    });
+                  } catch { /* non-fatal */ }
+                }
                 uploadedCount++;
                 if (deleteAfterUpload) {
                   try { await fsPromises.unlink(filePath); } catch (e: any) {

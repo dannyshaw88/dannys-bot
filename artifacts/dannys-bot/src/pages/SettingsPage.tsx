@@ -493,6 +493,8 @@ export function SettingsPage() {
   const [geminiKeyInitialized, setGeminiKeyInitialized] = useState(false);
   const [geminiTestState, setGeminiTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [geminiTestResult, setGeminiTestResult] = useState<string>("");
+  const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
+  const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
   const [settingsTab, setSettingsTab] = useState("my account");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
@@ -551,6 +553,10 @@ export function SettingsPage() {
   if (settings && !geminiKeyInitialized) {
     setGeminiKeyDraft((settings as any).geminiApiKey ?? "");
     setGeminiKeyInitialized(true);
+  }
+  if (settings && !openaiKeyInitialized) {
+    setOpenaiKeyDraft((settings as any).openaiApiKey ?? "");
+    setOpenaiKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -1022,6 +1028,38 @@ export function SettingsPage() {
                 {geminiTestResult}
               </p>
             )}
+          </div>
+        </div>
+
+        {/* OpenAI API Key */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">OpenAI API Key (ChatGPT)</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Used by the Repost tool's "Use ChatGPT" caption feature — the caption text becomes the prompt sent to ChatGPT.
+            Get your key at <span className="font-medium">platform.openai.com</span> → API Keys.
+            If both Gemini and OpenAI keys are set, Gemini is preferred for the AI Bot chat.
+          </p>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">API Key</Label>
+            <Input
+              type="password"
+              placeholder="sk-..."
+              value={openaiKeyDraft ?? ""}
+              onChange={(e) => setOpenaiKeyDraft(e.target.value)}
+              onBlur={(e) => {
+                const v = e.target.value;
+                if (v !== ((settings as any)?.openaiApiKey ?? "")) {
+                  mutation.mutate({ openaiApiKey: v } as any);
+                }
+              }}
+              className="font-mono text-sm"
+              disabled={isLoading}
+            />
           </div>
         </div>
 

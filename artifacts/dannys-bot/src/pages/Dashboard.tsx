@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.42",
+    date: "19 Jun 2026",
+    items: [
+      { category: "New", text: "Repost Local Folder: added "Do not repost the same image" checkbox — already-uploaded images are tracked and skipped on future sessions." },
+      { category: "New", text: "Repost Local Folder: added "Use ChatGPT" checkbox next to Post Caption Text — the caption box becomes the prompt sent to ChatGPT, which generates the actual caption." },
+      { category: "New", text: "Settings (Security tab): OpenAI API key field re-added — required for the ChatGPT caption feature in Repost." },
+      { category: "Tweak", text: "Repost Local Folder: folder path browse field is now compact (~50% width) and the "Delete from PC" + "Do not repost same image" checkboxes sit side-by-side." },
+    ],
+  },
+  {
     version: "1.1.41",
     date: "19 Jun 2026",
     items: [

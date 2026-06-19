@@ -488,6 +488,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostLocalFolderEnabled: false,
       repostLocalFolderPath: "",
       repostLocalFolderDeleteAfterUpload: true,
+      repostLocalFolderNoRepeat: false,
+      repostUseChatGpt: false,
       repostAlterationLevel: "small",
       repostCaptionText: "",
       repostImageSettings: {
@@ -555,6 +557,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostEnabled: false, repostUseHikerApi: false, repostSourceUsername: "",
       repostDisableUsernameSource: false, repostLocalFolderEnabled: false,
       repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
+      repostLocalFolderNoRepeat: false, repostUseChatGpt: false,
       repostAlterationLevel: "small", repostCaptionText: "",
       repostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 }, brightness: { enabled: true, min: 5, max: 250 },
@@ -634,7 +637,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     if (!lastAction && !(engineStatus?.nextHumanSessionAt)) return null;
     const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss, d MMM"), executing: false };
+    return { label: format(new Date(nextAt), "hh:mm:ssaaa - do MMMM yyyy"), executing: false };
   })();
 
   return (
@@ -1236,7 +1239,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           {/* ── Post Caption Text ──────────────────────────────────── */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
+              <div className="flex items-center gap-3">
+                <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="repostUseChatGpt"
+                    checked={!!(settings as any).repostUseChatGpt}
+                    onChange={(e) => setSettings({ ...settings, repostUseChatGpt: e.target.checked } as any)}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor="repostUseChatGpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
+                </div>
+              </div>
               <div className="flex gap-1.5">
                 <button
                   type="button"
@@ -1468,8 +1483,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
             <div className={`space-y-2 transition-opacity ${!settings.repostLocalFolderEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Folder path on your PC <span className="text-muted-foreground/60">(e.g. C:\Images\Repost)</span></Label>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 max-w-[50%]">
                   <Input
                     type="text"
                     placeholder="C:\Users\You\Pictures\Repost"
@@ -1512,17 +1526,31 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="repostLocalFolderDeleteAfterUpload"
-                  checked={settings.repostLocalFolderDeleteAfterUpload !== false}
-                  onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
-                  Delete image from PC folder after successful upload
-                </label>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="repostLocalFolderNoRepeat"
+                    checked={!!(settings as any).repostLocalFolderNoRepeat}
+                    onChange={(e) => setSettings({ ...settings, repostLocalFolderNoRepeat: e.target.checked } as any)}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="repostLocalFolderNoRepeat" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Do not repost the same image
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="repostLocalFolderDeleteAfterUpload"
+                    checked={settings.repostLocalFolderDeleteAfterUpload !== false}
+                    onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Delete from PC after upload
+                  </label>
+                </div>
               </div>
             </div>
           </div>{/* end Source 2 border */}
