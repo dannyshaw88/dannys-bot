@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.71",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: added creation_logger_session_id to the configure body — a standard field the Instagram API uses to deduplicate publish requests, previously missing from our payload." },
+      { category: "Logs", text: "Repost: rupload and configure log lines now show rur=present or rur=MISSING so you can instantly verify the routing cookie is flowing through on every upload attempt." },
+    ],
+  },
+  {
     version: "1.1.70",
     date: "19 Jun 2026",
     items: [

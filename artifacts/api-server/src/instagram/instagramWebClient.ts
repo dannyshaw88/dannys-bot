@@ -3851,7 +3851,8 @@ export class InstagramWebClient {
     };
 
     const proxyHost = this.proxyUrl ? (() => { try { return new URL(this.proxyUrl).host; } catch { return this.proxyUrl; } })() : "none";
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} proxy=${proxyHost} [via node-https, raw binary]`);
+    const hasRurRupload = this.mobileCookieJar.some(c => c.startsWith("rur="));
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} rur=${hasRurRupload ? "present" : "MISSING"} proxy=${proxyHost} [via node-https, raw binary]`);
     await this.apiThrottle();
     // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
     // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
@@ -3987,15 +3988,16 @@ export class InstagramWebClient {
     // The code comment that said "plain URL-encoded returns HTTP 400" was wrong —
     // plain URLSearchParams is the format that actually works.
     const bodyParams = new URLSearchParams({
-      upload_id:          uploadId,
-      caption:            caption ?? "",
-      source_type:        "4",
-      timezone_offset:    "0",
-      date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      _csrftoken:         csrf,
-      _uid:               ownUserId,
-      _uuid:              uuid,
-      device_id:          deviceId,
+      upload_id:                    uploadId,
+      caption:                      caption ?? "",
+      source_type:                  "4",
+      timezone_offset:              "0",
+      date_time_original:           new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      creation_logger_session_id:   randomUUID(),
+      _csrftoken:                   csrf,
+      _uid:                         ownUserId,
+      _uuid:                        uuid,
+      device_id:                    deviceId,
     });
     if (isVideo) {
       bodyParams.set("media_type", "2");
@@ -4029,7 +4031,8 @@ export class InstagramWebClient {
     // completing and configure firing. apiThrottle with 10-60s delays between calls
     // would hold configure back long enough for Instagram to expire the upload ID.
     const MOBILE_APP_ID = "567067343352427";
-    console.log(`[webClient] configure ${uploadId}: via URLSearchParams (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight})`);
+    const hasRurConfigure = this.mobileCookieJar.some(c => c.startsWith("rur="));
+    console.log(`[webClient] configure ${uploadId}: via URLSearchParams (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} rur=${hasRurConfigure ? "present" : "MISSING"})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
     // forceNodeTls: true — MUST match the TLS stack used by _mobileRupload.
