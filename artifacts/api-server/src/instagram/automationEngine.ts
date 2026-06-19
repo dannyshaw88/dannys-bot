@@ -1693,12 +1693,16 @@ class AutomationEngine {
     // Always sync apiLimits from the profile (user may have changed them)
     const limits = profile.apiLimits as any;
     if (limits && typeof limits === "object") {
-      state.client.setApiLimits({
-        requestsMin:   Number(limits.requestsMin   ?? 1),
-        requestsMax:   Number(limits.requestsMax   ?? 1),
-        everySecondsMin: Number(limits.everySecondsMin ?? 1000),
-        everySecondsMax: Number(limits.everySecondsMax ?? 30000),
-      });
+      const rMin = Number(limits.requestsMin   ?? 1);
+      const rMax = Number(limits.requestsMax   ?? 1);
+      const sMin = Number(limits.everySecondsMin ?? 1000);
+      const sMax = Number(limits.everySecondsMax ?? 30000);
+      state.client.setApiLimits({ requestsMin: rMin, requestsMax: rMax, everySecondsMin: sMin, everySecondsMax: sMax });
+      // Log so slow-call issues are immediately diagnosable from the server log
+      const toSec = (v: number) => (v < 1000 ? v : Math.round(v / 100) / 10);
+      const delayMin = Math.round((toSec(sMin) / Math.max(1, rMax)) * 10) / 10;
+      const delayMax = Math.round((toSec(sMax) / Math.max(1, rMin)) * 10) / 10;
+      console.log(`[engine] @${profile.username}: API Control — ${rMin}–${rMax} req / ${toSec(sMin)}–${toSec(sMax)}s window → delay ${delayMin}–${delayMax}s per call`);
     }
 
     // Always sync the EB browser UA so webPost uses the same UA that created

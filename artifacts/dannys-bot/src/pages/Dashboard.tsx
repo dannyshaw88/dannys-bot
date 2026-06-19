@@ -197,6 +197,23 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.61",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "View Stories: now reads story IDs directly from the tray response instead of making a second API call — fixes 'no story items found' error on accounts that have stories." },
+      { category: "Fix", text: "View Stories: eliminated the 10–60s throttle delay that was separating the tray fetch from the story items fetch — stories now complete in one step." },
+      { category: "Log", text: "API Control settings (requests per window and resulting per-call delay) are now printed to the server log at the start of every session — makes slow-call issues immediately diagnosable." },
+    ],
+  },
+  {
+    version: "1.1.60",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost upload: configure step now sends a plain URL-encoded body instead of a signed body — fixes 'upload id is missing' error that was blocking all photo posts." },
+      { category: "Fix", text: "Repost upload: configure fires immediately after the upload completes with no throttle delay, preventing the upload ID from expiring between the two steps." },
+    ],
+  },
+  {
     version: "1.1.43",
     date: "19 Jun 2026",
     items: [

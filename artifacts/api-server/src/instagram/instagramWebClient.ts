@@ -2360,46 +2360,43 @@ export class InstagramWebClient {
       const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
       let seenCount = 0;
 
-      // Instagram's reels_tray does not inline story items — fetch them separately.
-      // Build a map of userId → items from inline data (older API) or fetch via reels_media.
+      // Instagram's reels_tray does not inline full story items in the modern API —
+      // but it does include a media_ids array per entry.  Use that directly so we
+      // never need to make a second reels_media API call (which uses mobileSessionPost
+      // and would be throttled 10-60s after the tray fetch, and currently returns 500).
+      //
+      // Priority order:
+      //   1. inline reel.items[]  (older API — has full taken_at)
+      //   2. reel.media_ids[]     (modern API — use expiring_at-86400 as approx taken_at)
       let reelsMap: Record<string, any[]> = {};
 
-      // Try inline items first (older API behaviour)
+      // Log first tray entry structure for diagnostics
+      console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}] user.pk=${toView[0]?.user?.pk} media_ids=${JSON.stringify(toView[0]?.media_ids)?.slice(0,80)} items=${JSON.stringify(toView[0]?.items)?.slice(0,60)}`);
+
       for (const reel of toView) {
         const userId = String(reel.user?.pk ?? reel.id ?? "");
-        const items: any[] = Array.isArray(reel.items) ? reel.items : [];
-        if (userId && items.length) reelsMap[userId] = items;
-      }
+        if (!userId) continue;
 
-      // Log first tray entry structure so we can see what fields are available
-      console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}] user.pk=${toView[0]?.user?.pk} id=${toView[0]?.id} items=${JSON.stringify(toView[0]?.items)?.slice(0,80)}`);
+        // Path 1: full items array inlined (older API)
+        const inlineItems: any[] = Array.isArray(reel.items) ? reel.items : [];
+        if (inlineItems.length) {
+          reelsMap[userId] = inlineItems;
+          continue;
+        }
 
-      // If no inline items, fetch via /api/v1/feed/reels_media/ (modern API behaviour)
-      if (Object.keys(reelsMap).length === 0) {
-        const userIds = toView
-          .map((r: any) => String(r.user?.pk ?? r.id ?? ""))
-          .filter(Boolean);
-        console.log(`[webClient] viewTimelineStories: fetching reels_media for userIds=[${userIds.join(",")}]`);
-        if (userIds.length) {
-          // reels_media requires POST with user_ids as a JSON array in the form body
-          const body = new URLSearchParams({ user_ids: JSON.stringify(userIds) }).toString();
-          const rm = await this.mobileSessionPost(`/api/v1/feed/reels_media/`, body);
-          console.log(`[webClient] reels_media response: null=${rm === null} keys=${Object.keys(rm ?? {}).join(",")} reels_keys=${Object.keys(rm?.reels ?? {}).join(",").slice(0,100)} reels_media_len=${Array.isArray(rm?.reels_media)?rm.reels_media.length:"N/A"}`);
-          if (rm?.reels && typeof rm.reels === "object") {
-            for (const [uid, reelData] of Object.entries(rm.reels as Record<string, any>)) {
-              const items: any[] = Array.isArray(reelData?.items) ? reelData.items : [];
-              console.log(`[webClient] reels[${uid}] items.length=${items.length} keys=${Object.keys(reelData ?? {}).join(",")}`);
-              if (items.length) reelsMap[uid] = items;
-            }
-          }
-          // Also check reels_media array (alternate response shape)
-          if (Array.isArray(rm?.reels_media)) {
-            for (const reelData of rm.reels_media as any[]) {
-              const uid = String(reelData?.user?.pk ?? reelData?.id ?? "");
-              const items: any[] = Array.isArray(reelData?.items) ? reelData.items : [];
-              if (uid && items.length) reelsMap[uid] = items;
-            }
-          }
+        // Path 2: media_ids present (modern API) — build synthetic item objects
+        // taken_at ≈ expiring_at − 86400 (stories expire 24h after posting).
+        // If expiring_at is missing, fall back to now − 1h.
+        const mediaIds: string[] = Array.isArray(reel.media_ids)
+          ? reel.media_ids.map(String)
+          : [];
+        if (mediaIds.length) {
+          const expiringAt = Number(reel.expiring_at ?? 0);
+          const approxTakenAt = expiringAt > 0
+            ? expiringAt - 86400
+            : Math.floor(Date.now() / 1000) - 3600;
+          reelsMap[userId] = mediaIds.map((id) => ({ id, taken_at: approxTakenAt }));
+          console.log(`[webClient] viewTimelineStories: user ${userId} — using ${mediaIds.length} media_ids from tray (approxTakenAt=${approxTakenAt})`);
         }
       }
 
