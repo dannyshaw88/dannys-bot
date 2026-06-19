@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.52",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: fixed binary data corruption in photo/video uploads. The upload library was re-encoding image bytes through a JSON layer which scrambled every byte above 127 — including the first three bytes of every JPEG. Instagram received garbage and silently rejected it. Uploads now send raw binary directly, which is how the official app sends them." },
+    ],
+  },
+  {
     version: "1.1.51",
     date: "19 Jun 2026",
     items: [

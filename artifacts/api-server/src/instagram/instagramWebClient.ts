@@ -3850,9 +3850,11 @@ export class InstagramWebClient {
       ...(authorization ? { Authorization: authorization } : {}),
     };
 
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"}`);
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary]`);
     await this.apiThrottle();
-    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl);
+    // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
+    // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
+    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
     if (!json || json.status !== "ok") {
       console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
       return null;

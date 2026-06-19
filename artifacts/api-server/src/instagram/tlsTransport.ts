@@ -535,6 +535,12 @@ export async function tlsMultipartPost(
   headers: Record<string, string>,
   body: Buffer,
   proxyUrl: string | undefined,
+  /** Force Node.js HTTPS instead of CycleTLS.
+   *  REQUIRED for raw binary uploads (rupload_igphoto / rupload_igvideo):
+   *  CycleTLS serialises the body through JSON, which re-encodes Latin-1
+   *  bytes > 127 as multi-byte UTF-8 sequences, corrupting JPEG/MP4 data.
+   *  Node.js req.write(Buffer) sends raw bytes correctly. */
+  forceNodeHttps = false,
 ): Promise<any> {
   if (!proxyUrl) {
     throw new Error(
@@ -544,7 +550,7 @@ export async function tlsMultipartPost(
 
   const client = await getClient();
 
-  if (client) {
+  if (client && !forceNodeHttps) {
     const url = `https://${host}${path}`;
     const userAgent = headers["User-Agent"] ?? "";
     const { "User-Agent": _ua, ...headersWithoutUA } = headers;
@@ -584,7 +590,8 @@ export async function tlsMultipartPost(
     }
   }
 
-  // Fallback: Node.js HTTPS
+  // Node.js HTTPS path — handles raw binary buffers correctly (no JSON re-encoding).
+  // Used when forceNodeHttps=true (binary rupload) or when CycleTLS is unavailable.
   const { HttpsProxyAgent } = await import("https-proxy-agent");
   const https = await import("node:https");
   const agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
@@ -600,12 +607,18 @@ export async function tlsMultipartPost(
         },
       );
       req.on("error", reject);
-      req.setTimeout(60000, () => req.destroy(new Error("request_timeout")));
+      req.setTimeout(90000, () => req.destroy(new Error("request_timeout")));
       req.write(body);
       req.end();
     });
     let json: any = null;
-    try { json = JSON.parse(res.body); } catch {}
+    try { json = JSON.parse(res.body); } catch {
+      const preview = res.body.slice(0, 400).replace(/[\r\n]+/g, " ").trim();
+      console.warn(`[tls:node-https] POST ${host}${path} status=${res.status} — non-JSON response: ${preview}`);
+    }
+    if (json !== null) {
+      console.log(`[tls:node-https] POST ${host}${path} status=${res.status} json.status="${json.status ?? "?"}" upload_id="${json.upload_id ?? "none"}"`);
+    }
     return json;
   } finally {
     agent.destroy();
