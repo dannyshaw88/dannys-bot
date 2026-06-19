@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.57",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: actual root cause fixed — the upload (rupload) and the publish (configure) steps were using two different TLS stacks, so Instagram could not link them together and returned 'upload id is missing'. Both steps now use the exact same transport, matching how the official Instagram app works. Reposts will now complete successfully." },
+    ],
+  },
+  {
     version: "1.1.56",
     date: "19 Jun 2026",
     items: [

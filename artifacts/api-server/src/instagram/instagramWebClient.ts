@@ -3897,17 +3897,19 @@ export class InstagramWebClient {
     }, `Get feed of @${username}`);
   }
 
-  // ── Configure (publish) a media upload via signBody + mobileSessionPost ─────
-  // ROOT CAUSE of "upload id is missing" (confirmed from logs):
-  //   The rupload succeeds via mobileSessionPost (same sessionid, same UA, same TLS).
-  //   The previous IgApiClient configure used a different HTTP stack (got-scraping /
-  //   axios) with a different TLS fingerprint and different headers. Instagram links
-  //   the upload to the exact session+TLS that performed it — a configure from a
-  //   different stack can't find the upload and returns the misleading "upload id is
-  //   missing" 500. This is NOT about the upload_id value itself.
+  // ── Configure (publish) a media upload — SAME Node.js HTTPS stack as rupload ──
+  // ROOT CAUSE of "upload id is missing" (confirmed from production logs v1.1.56):
+  //   rupload uses tlsMultipartPost(forceNodeHttps=true) → Node.js HTTPS / OpenSSL TLS.
+  //   configure was using mobileSessionPost → igReq → CycleTLS (OkHttp4 JA3).
+  //   Instagram links the upload to the exact TLS session that performed it.
+  //   A configure arriving via a DIFFERENT TLS fingerprint cannot find the upload
+  //   and returns the misleading "upload id is missing" HTTP 500.
+  //   This is NOT about the upload_id value — the upload truly succeeded. The
+  //   configure just can't match it because the fingerprint differs.
   //
-  // Fix: use signBody() (already in scope) + mobileSessionPost — the SAME session,
-  //   same UA, same TLS fingerprint as the rupload that just succeeded.
+  // Fix (v1.1.57): build identical headers to mobileSessionPost but send via
+  //   tlsMultipartPost(forceNodeHttps=true) so BOTH steps share the same
+  //   Node.js HTTPS transport → same TLS fingerprint → Instagram finds the upload.
   private async _configureViaIgClient(
     uploadId: string,
     caption: string,
@@ -3931,12 +3933,9 @@ export class InstagramWebClient {
         deviceId = saved.deviceId ?? "";
       } catch { /* ignore */ }
     }
-    // Fall back to mobile session fields if igDeviceState is missing
     if (!uuid)     uuid     = this._mobileIgDid ?? randomUUID();
     if (!deviceId) deviceId = `android-${(this._mobileMid ?? randomUUID()).replace(/-/g, "").slice(0, 16)}`;
 
-    // Ensure we have a fresh CSRF token (mobileSessionPost bootstraps it automatically,
-    // but calling it here makes the log line below accurate)
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
@@ -3959,14 +3958,36 @@ export class InstagramWebClient {
     }
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
-    console.log(`[webClient] configure ${uploadId}: via mobileSessionPost+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"})`);
+    const bodyStr = signBody(formBase);
+    const bodyBuf = Buffer.from(bodyStr, "utf8");
 
-    // A configure failure does NOT mean the session is invalid — the upload already
-    // succeeded in this same session. Save and restore mobileSessionReady so a
-    // 500 from configure doesn't prevent subsequent tools from running.
-    const wasSessionReady = this.mobileSessionReady;
-    const res = await this.mobileSessionPost(url, signBody(formBase));
-    if (wasSessionReady) this.mobileSessionReady = true;
+    // Build headers identical to mobileSessionPost — same UA, same cookies,
+    // same App-ID — but transport via tlsMultipartPost(forceNodeHttps=true)
+    // so the TLS fingerprint matches the rupload step exactly.
+    const configHeaders: Record<string, string> = {
+      "Host": "i.instagram.com",
+      "User-Agent": this._fullMobileUA,
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "Content-Length": String(bodyBuf.length),
+      "X-IG-App-ID": MOBILE_AID,
+      "X-CSRFToken": csrf,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
+      "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+      "X-IG-Bandwidth-TotalBytes-B": "0",
+      "X-IG-Bandwidth-TotalTime-MS": "0",
+      "Cookie": this.mobileCookieJar.join("; "),
+      ...(this._deviceAuthorization ? { Authorization: this._deviceAuthorization } : {}),
+    };
+
+    console.log(`[webClient] configure ${uploadId}: via node-https+signBody [SAME TLS as rupload] (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"})`);
+
+    // forceNodeHttps=true — MUST match the rupload transport (Node.js HTTPS).
+    // Using CycleTLS here produces a different TLS fingerprint and causes
+    // Instagram to return "upload id is missing" even though the upload succeeded.
+    const res = await tlsMultipartPost("i.instagram.com", url, configHeaders, bodyBuf, this.proxyUrl, true);
 
     if (res?.media?.id) {
       const mediaId = String(res.media.id);
