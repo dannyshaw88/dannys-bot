@@ -42,7 +42,7 @@ jobs:
           if-no-files-found: error
 
   package-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: build-web
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,11 @@ jobs:
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron
-        run: npm install
+        run: npm install --ignore-scripts
+
+      - name: Rebuild native modules for Electron
+        working-directory: artifacts/electron
+        run: npx electron-builder install-app-deps
 
       - name: Build Electron bundle
         working-directory: artifacts/electron

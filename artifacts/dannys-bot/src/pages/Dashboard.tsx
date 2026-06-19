@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.40",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Windows installer build now compiles native modules (better-sqlite3) against Electron's ABI instead of Node's — fixes build failure on GitHub Actions Windows runner." },
+      { category: "Fix", text: "CI runner switched from windows-latest (Windows Server 2025 / VS2022 v18) to windows-2022 (VS2022 v17) to match the node-gyp version bundled with npm." },
+    ],
+  },
+  {
     version: "1.1.39",
     date: "19 Jun 2026",
     items: [
