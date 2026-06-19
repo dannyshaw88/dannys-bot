@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.39",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "GitHub Actions workflow YAML syntax error fixed — build and package jobs now run correctly on every push to main." },
+    ],
+  },
+  {
     version: "1.1.38",
     date: "19 Jun 2026",
     items: [
