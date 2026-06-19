@@ -524,7 +524,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const localFolderPickerRef = useRef<HTMLInputElement>(null);
   const [localFolderFileCount, setLocalFolderFileCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1520,43 +1519,23 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <button
                     type="button"
-                    onClick={() => localFolderPickerRef.current?.click()}
+                    onClick={async () => {
+                      const api = (window as any).electronAPI;
+                      if (!api?.openFolderDialog) return;
+                      const result = await api.openFolderDialog();
+                      if (result?.canceled || !result?.folder) return;
+                      const folderPath: string = result.folder;
+                      setSettings({ ...settings, repostLocalFolderPath: folderPath });
+                      try {
+                        const countResult = await api.countFolderFiles(folderPath);
+                        setLocalFolderFileCount(countResult?.count ?? 0);
+                      } catch { setLocalFolderFileCount(0); }
+                    }}
                     className="h-8 px-3 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 shrink-0"
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
                     Browse…
                   </button>
-                  {/* Hidden folder picker — webkitdirectory picks a folder; we only use top-level files (no subfolders) */}
-                  <input
-                    ref={localFolderPickerRef}
-                    type="file"
-                    // @ts-ignore webkitdirectory is valid but missing from TS typedefs
-                    webkitdirectory=""
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files ?? []);
-                      if (!files.length) return;
-                      const IMAGE_EXTS = new Set(["jpg","jpeg","png","webp","gif"]);
-                      // Only files directly in the selected folder (no subfolders)
-                      const topLevelFiles = files.filter(f => f.webkitRelativePath.split("/").length === 2);
-                      const imgFiles = topLevelFiles.filter(f => IMAGE_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ""));
-                      // Use the full OS path if available (Electron), otherwise fall back to folder name
-                      const firstPath: string = (files[0] as any).path ?? "";
-                      let folderPath: string;
-                      if (firstPath) {
-                        const sep = firstPath.includes("\\") ? "\\" : "/";
-                        const parts = firstPath.split(sep);
-                        parts.pop();
-                        folderPath = parts.join(sep);
-                      } else {
-                        folderPath = files[0].webkitRelativePath.split("/")[0];
-                      }
-                      setSettings({ ...settings, repostLocalFolderPath: folderPath });
-                      setLocalFolderFileCount(imgFiles.length);
-                      e.target.value = "";
-                    }}
-                  />
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"

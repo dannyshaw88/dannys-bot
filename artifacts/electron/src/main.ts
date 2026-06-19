@@ -1105,6 +1105,38 @@ async function createWindow() {
     }
   });
 
+  // Open a native OS folder-picker dialog and return the selected directory path.
+  // Used by the Repost Local Folder feature to reliably get the full Windows path.
+  ipcMain.handle("open-folder-dialog", async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: "Select media folder",
+        properties: ["openDirectory"],
+      });
+      if (result.canceled || !result.filePaths.length) return { canceled: true };
+      return { canceled: false, folder: result.filePaths[0] };
+    } catch (err: any) {
+      throw err;
+    }
+  });
+
+  // Count media files (images + videos) directly inside a folder (non-recursive).
+  ipcMain.handle("count-folder-files", async (_e, folderPath: string) => {
+    try {
+      const { readdir } = await import("node:fs/promises");
+      const MEDIA_EXTS = new Set([
+        ".jpg",".jpeg",".png",".webp",".gif",".heic",".heif",".avif",".bmp",
+        ".mp4",".mov",".avi",".mkv",".webm",".m4v",".3gp",".wmv",".flv",
+        ".ts",".mts",".mpeg",".mpg",".f4v",".ogv",
+      ]);
+      const entries = await readdir(folderPath, { withFileTypes: true });
+      const count = entries.filter(e => e.isFile() && MEDIA_EXTS.has(e.name.slice(e.name.lastIndexOf(".")).toLowerCase())).length;
+      return { count };
+    } catch {
+      return { count: 0 };
+    }
+  });
+
   // Step 1 of the two-phase EQX export flow: ask where to save BEFORE fetching data.
   ipcMain.handle("pick-eqx-folder", async () => {
     appendToMainLog(`[export-eqx] pick-eqx-folder IPC received`);

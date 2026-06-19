@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.47",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: Browse button now opens the native Windows folder picker — always saves the full path (e.g. C:\\Users\\You\\Pictures\\Repost). Previously only the folder name was stored, causing an ENOENT error when the engine tried to find the files." },
+    ],
+  },
+  {
     version: "1.1.46",
     date: "19 Jun 2026",
     items: [
