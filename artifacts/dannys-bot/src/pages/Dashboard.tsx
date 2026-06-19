@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.58",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: configure request now includes the device, edits, and extra fields required by Instagram v431+. Their absence was causing Instagram to return 'upload id is missing' even though the upload succeeded. Image dimensions are read from the buffer and passed through to the publish step." },
+    ],
+  },
+  {
     version: "1.1.57",
     date: "19 Jun 2026",
     items: [

@@ -3907,13 +3907,30 @@ export class InstagramWebClient {
   //   This is NOT about the upload_id value — the upload truly succeeded. The
   //   configure just can't match it because the fingerprint differs.
   //
-  // Fix (v1.1.57): build identical headers to mobileSessionPost but send via
-  //   tlsMultipartPost(forceNodeHttps=true) so BOTH steps share the same
-  //   Node.js HTTPS transport → same TLS fingerprint → Instagram finds the upload.
+  // Parses manufacturer/model/android version from the full mobile UA string.
+  // UA format: "Instagram X.X Android (33/13; 500dpi; 1440x3088; Samsung; SM-G975U; ...)"
+  private _parseUADeviceInfo(): { manufacturer: string; model: string; androidVersion: number; androidRelease: string } {
+    const fallback = { manufacturer: "samsung", model: "SM-A515F", androidVersion: 33, androidRelease: "13" };
+    try {
+      const inner = /\(([^)]+)\)/.exec(this._fullMobileUA)?.[1];
+      if (!inner) return fallback;
+      const parts = inner.split(";").map(s => s.trim());
+      const avParts = (parts[0] ?? "").split("/");
+      const androidVersion = parseInt(avParts[0] ?? "33", 10) || 33;
+      const androidRelease = avParts[1]?.trim() || "13";
+      const manufacturer  = parts[3]?.trim() || "samsung";
+      const model         = parts[4]?.trim() || "SM-A515F";
+      return { manufacturer, model, androidVersion, androidRelease };
+    } catch {
+      return fallback;
+    }
+  }
+
   private async _configureViaIgClient(
     uploadId: string,
     caption: string,
     isVideo: boolean,
+    imgBuffer?: Buffer,
   ): Promise<string | null> {
     if (!this.igApiCookies) {
       console.warn(`[webClient] configure ${uploadId}: no igApiCookies — cannot proceed`);
@@ -3941,6 +3958,23 @@ export class InstagramWebClient {
     }
     const csrf = this.mobileCsrf || this.csrfToken || "";
 
+    // Get image dimensions for edits/extra — required by Instagram v431+
+    let imgWidth  = 1080;
+    let imgHeight = 1350;
+    if (imgBuffer && !isVideo) {
+      try {
+        const sharpMod = await import("sharp").then(m => m.default).catch(() => null);
+        if (sharpMod) {
+          const meta = await sharpMod(imgBuffer).metadata();
+          if (meta.width)  imgWidth  = meta.width;
+          if (meta.height) imgHeight = meta.height;
+        }
+      } catch { /* use defaults — non-fatal */ }
+    }
+
+    // Parse device info from the UA string for the device object
+    const devInfo = this._parseUADeviceInfo();
+
     const formBase: Record<string, unknown> = {
       upload_id: uploadId,
       caption:   caption ?? "",
@@ -3951,6 +3985,25 @@ export class InstagramWebClient {
       _uid:       ownUserId,
       _uuid:      uuid,
       device_id:  deviceId,
+      // device, edits, extra — required by Instagram v431+; absence produces
+      // "upload id is missing" even when the rupload succeeded.
+      device: {
+        manufacturer:    devInfo.manufacturer,
+        model:           devInfo.model,
+        android_version: devInfo.androidVersion,
+        android_release: devInfo.androidRelease,
+      },
+      edits: {
+        filter_type:        0,
+        filter_strength:    1.0,
+        crop_original_size: [imgWidth * 1.0, imgHeight * 1.0],
+        crop_center:        [0.0, 0.0],
+        crop_zoom:          1.0,
+      },
+      extra: {
+        source_width:  imgWidth,
+        source_height: imgHeight,
+      },
     };
     if (isVideo) {
       formBase.media_type = "2";
@@ -3961,9 +4014,7 @@ export class InstagramWebClient {
     const bodyStr = signBody(formBase);
     const bodyBuf = Buffer.from(bodyStr, "utf8");
 
-    // Build headers identical to mobileSessionPost — same UA, same cookies,
-    // same App-ID — but transport via tlsMultipartPost(forceNodeHttps=true)
-    // so the TLS fingerprint matches the rupload step exactly.
+    // Build headers identical to mobileSessionPost — same UA, same cookies, same App-ID.
     const configHeaders: Record<string, string> = {
       "Host": "i.instagram.com",
       "User-Agent": this._fullMobileUA,
@@ -3982,11 +4033,10 @@ export class InstagramWebClient {
       ...(this._deviceAuthorization ? { Authorization: this._deviceAuthorization } : {}),
     };
 
-    console.log(`[webClient] configure ${uploadId}: via node-https+signBody [SAME TLS as rupload] (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"})`);
+    console.log(`[webClient] configure ${uploadId}: via node-https+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
+    // Log the raw signed body so we can inspect what Instagram is receiving
+    console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
-    // forceNodeHttps=true — MUST match the rupload transport (Node.js HTTPS).
-    // Using CycleTLS here produces a different TLS fingerprint and causes
-    // Instagram to return "upload id is missing" even though the upload succeeded.
     const res = await tlsMultipartPost("i.instagram.com", url, configHeaders, bodyBuf, this.proxyUrl, true);
 
     if (res?.media?.id) {
@@ -4014,8 +4064,8 @@ export class InstagramWebClient {
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
       if (!confirmedUploadId) return null;
 
-      // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
-      return this._configureViaIgClient(confirmedUploadId, caption, false);
+      // Step 2 — configure (pass imgBuffer so configure can get dimensions for device/edits/extra)
+      return this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
