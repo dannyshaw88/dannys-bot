@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.68",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: images with aspect ratio outside Instagram's 0.8–1.91 range (e.g. very tall portrait photos) are now automatically cropped to the nearest valid boundary before upload. Previously these were silently accepted by the upload step but rejected at the publish step." },
+      { category: "Fix", text: "Repost: configure body now includes device, edits, and extra fields (image dimensions, crop info, manufacturer/model) required by Instagram v431+. Also explicitly sets media_type=1 for photos." },
+    ],
+  },
+  {
     version: "1.1.67",
     date: "19 Jun 2026",
     items: [

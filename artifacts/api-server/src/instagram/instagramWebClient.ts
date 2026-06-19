@@ -4000,6 +4000,28 @@ export class InstagramWebClient {
     if (isVideo) {
       bodyParams.set("media_type", "2");
       bodyParams.set("clips_share_preview_to_feed", "1");
+    } else {
+      bodyParams.set("media_type", "1");
+    }
+    if (!isVideo) {
+      // device, edits, extra — required by Instagram v431+ for photo configure
+      bodyParams.set("device", JSON.stringify({
+        manufacturer:    devInfo.manufacturer,
+        model:           devInfo.model,
+        android_version: devInfo.androidVersion,
+        android_release: devInfo.androidRelease,
+      }));
+      bodyParams.set("edits", JSON.stringify({
+        filter_type:         0,
+        filter_name:         "IGNormalFilter",
+        crop_original_size:  [imgWidth, imgHeight],
+        crop_center:         [0.0, 0.0],
+        crop_zoom:           1.0,
+      }));
+      bodyParams.set("extra", JSON.stringify({
+        source_width:  imgWidth,
+        source_height: imgHeight,
+      }));
     }
     const bodyStr = bodyParams.toString();
 
@@ -4070,6 +4092,38 @@ export class InstagramWebClient {
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
     return this.timed("UploadPhoto", async () => {
+      // ── Aspect ratio enforcement ────────────────────────────────────────────
+      // Instagram requires aspect ratio between 0.8 (4:5 portrait) and 1.91
+      // (landscape). Images outside this range are silently accepted by rupload
+      // but rejected at the configure step with "something went wrong".
+      // Crop to the nearest valid boundary before upload.
+      try {
+        const sharpMod = await import("sharp").then(m => m.default).catch(() => null);
+        if (sharpMod) {
+          const meta = await sharpMod(imageBuffer).metadata();
+          const w = meta.width ?? 1080;
+          const h = meta.height ?? 1080;
+          const ratio = w / h;
+          const MIN_RATIO = 0.8;   // 4:5 portrait
+          const MAX_RATIO = 1.91;  // landscape
+          if (ratio < MIN_RATIO) {
+            // Too tall — crop height to w / MIN_RATIO
+            const newH = Math.floor(w / MIN_RATIO);
+            const top  = Math.floor((h - newH) / 2);
+            console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} < 0.8 — cropping ${w}x${h} → ${w}x${newH}`);
+            imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).jpeg({ quality: 92 }).toBuffer();
+          } else if (ratio > MAX_RATIO) {
+            // Too wide — crop width to h * MAX_RATIO
+            const newW  = Math.floor(h * MAX_RATIO);
+            const left  = Math.floor((w - newW) / 2);
+            console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} > 1.91 — cropping ${w}x${h} → ${newW}x${h}`);
+            imageBuffer = await sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }).jpeg({ quality: 92 }).toBuffer();
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[webClient:${this.profileId}] uploadPhoto: aspect ratio check failed (non-fatal) — ${e?.message}`);
+      }
+
       // ── EB browser-fetch path (preferred) ──────────────────────────────────
       // Uses Chrome's native session: same cookies, same TLS fingerprint for
       // both rupload and configure — exactly what Instagram's own web app does.
