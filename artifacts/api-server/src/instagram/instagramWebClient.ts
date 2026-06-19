@@ -3897,6 +3897,112 @@ export class InstagramWebClient {
     }, `Get feed of @${username}`);
   }
 
+  // ── Configure (publish) a media upload via IgApiClient (signed_body) ────────
+  // Plain mobileSessionPost sends an unsigned URL-encoded body, which causes Instagram
+  // to return HTTP 500 "We're sorry, but something went wrong during media publish."
+  // The configure endpoint requires a HMAC-SHA256 signed_body — same as follow/unfollow.
+  // Pattern mirrors _followViaIgClient: build IgApiClient, seed device state + cookies,
+  // pre-warm to get a fresh csrftoken, then use ig.request.sign() + ig.request.send().
+  private async _configureViaIgClient(
+    uploadId: string,
+    caption: string,
+    isVideo: boolean,
+  ): Promise<string | null> {
+    if (!this.igApiCookies) {
+      console.warn(`[webClient] _configureViaIgClient: no igApiCookies — cannot use IgApiClient`);
+      return null;
+    }
+    const ig = newIgClient();
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookieEntries = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries,
+    }));
+
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
+
+    // Pre-warm: fetch user.info to get a fresh csrftoken before the configure POST.
+    // Without this, cookieCsrfToken returns "missing" and Instagram rejects the write.
+    const ownUserId = pairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+    if (ownUserId) {
+      try {
+        await ig.user.info(ownUserId);
+        console.log(`[webClient] configure ${uploadId}: pre-warm user.info OK — csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
+      } catch (e: any) {
+        console.warn(`[webClient] configure ${uploadId}: pre-warm user.info failed (${e?.message}) — continuing`);
+      }
+    }
+
+    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
+    const formBase: Record<string, any> = {
+      upload_id: uploadId,
+      caption,
+      source_type: "4",
+      timezone_offset: "0",
+      date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+    };
+    if (isVideo) {
+      formBase.media_type = "2";
+      formBase.clips_share_preview_to_feed = "1";
+    }
+
+    try {
+      console.log(`[webClient] configure ${uploadId}: via IgApiClient ig.request.sign (isVideo=${isVideo} uuid=${ig.state.uuid?.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
+      const res = await ig.request.send<any>({
+        url,
+        method: "POST",
+        form: ig.request.sign(formBase),
+      });
+      console.log(`[webClient] configure ${uploadId}: OK — media_id=${res?.media?.id ?? res?.upload_id ?? "none"}`);
+      return res?.media?.id ? String(res.media.id) : uploadId;
+    } catch (err: any) {
+      const rawMsg: string = err?.message ?? String(err);
+      const msg = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] configure ${uploadId}: IgApiClient error — ${rawMsg}`);
+      if (body) console.warn(`[webClient] configure ${uploadId}: raw body — ${JSON.stringify(body)?.slice(0, 600)}`);
+      if (/feedback_required|ActionBlocked/i.test(msg)) {
+        console.warn(`[webClient] configure ${uploadId}: account blocked from posting — ${msg}`);
+      }
+      return null;
+    }
+  }
+
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
@@ -3907,22 +4013,8 @@ export class InstagramWebClient {
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
       if (!confirmedUploadId) return null;
 
-      // Step 2 — configure (creates the post)
-      const body = new URLSearchParams({
-        upload_id: confirmedUploadId,
-        caption,
-        source_type: "4",
-        timezone_offset: "0",
-        date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      }).toString();
-
-      const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
-      if (!confRes || confRes.status !== "ok") {
-        console.warn(`[webClient] media/configure failed: status="${confRes?.status}" message="${confRes?.message ?? "?"}" spam="${confRes?.spam ?? false}" feedback_title="${confRes?.feedback_title ?? ""}"`);
-      }
-      const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
-      if (!mediaId && confRes?.status === "ok") return confirmedUploadId;
-      return mediaId;
+      // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
+      return this._configureViaIgClient(confirmedUploadId, caption, false);
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
@@ -3939,24 +4031,8 @@ export class InstagramWebClient {
       const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
       if (!confirmedUploadId) return null;
 
-      // Step 2 — configure (creates the post)
-      const body = new URLSearchParams({
-        upload_id: confirmedUploadId,
-        caption,
-        source_type: "4",
-        media_type: "2",
-        timezone_offset: "0",
-        date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-        clips_share_preview_to_feed: "1",
-      }).toString();
-
-      const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
-      if (!confRes || confRes.status !== "ok") {
-        console.warn(`[webClient] video/configure failed: status="${confRes?.status}" message="${confRes?.message ?? "?"}" spam="${confRes?.spam ?? false}" feedback_title="${confRes?.feedback_title ?? ""}"`);
-      }
-      const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
-      if (!mediaId && confRes?.status === "ok") return confirmedUploadId;
-      return mediaId;
+      // Step 2 — configure via IgApiClient (signed_body required — plain POST returns HTTP 500)
+      return this._configureViaIgClient(confirmedUploadId, caption, true);
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 

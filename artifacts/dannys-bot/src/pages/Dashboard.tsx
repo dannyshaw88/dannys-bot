@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.53",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: fixed the final step of photo/video posting. Instagram requires a cryptographic signature on the publish request — the app was sending an unsigned request which Instagram rejected with a generic 'something went wrong' error. The publish step now uses the same signed request method that the follow tool uses, which is the correct approach." },
+    ],
+  },
+  {
     version: "1.1.52",
     date: "19 Jun 2026",
     items: [
