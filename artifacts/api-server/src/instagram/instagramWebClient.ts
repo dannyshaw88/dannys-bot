@@ -1585,43 +1585,6 @@ export class InstagramWebClient {
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     patchIgClientTls(ig, this.proxyUrl);
 
-    // ── Phase 0: unauthenticated probe calls (no cookies) ────────────────────
-    // Jarvee fires these BEFORE loading the session cookie. Instagram sees a
-    // clean device probe and stops treating the subsequent authenticated calls
-    // as a suspicious cold-start, which prevents the 4415001 prompt gate.
-    { const t0 = Date.now();
-      try {
-        await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
-        console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed OK");
-        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, "tokens/keyed → OK (device probe before session load)", false);
-      } catch (e: any) {
-        console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #1 (non-fatal): ${e?.message}`);
-        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, `tokens/keyed → 404 (non-fatal — device probe before session load)`, true);
-      }
-    }
-
-    { const t0 = Date.now();
-      try {
-        await ig.launcher.preLoginSync();
-        console.log("[webClient] _buildWarmedIgClient: Phase 0 — launcher/sync (preLoginSync) OK");
-        this.logCallFn?.("SendMobileConfig", Date.now() - t0, "launcher/sync (preLoginSync) OK — device config established", false);
-      } catch (e: any) {
-        console.warn(`[webClient] _buildWarmedIgClient: launcher/sync (non-fatal): ${e?.message}`);
-        this.logCallFn?.("SendMobileConfig", Date.now() - t0, `launcher/sync (non-fatal): ${e?.message?.slice(0, 80) ?? "error"}`, true);
-      }
-    }
-
-    { const t0 = Date.now();
-      try {
-        await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
-        console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed #2 OK");
-        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, "tokens/keyed #2 → OK (post-sync probe)", false);
-      } catch (e: any) {
-        console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #2 (non-fatal): ${e?.message}`);
-        this.logCallFn?.("GetKeyedTokens", Date.now() - t0, `tokens/keyed #2 → 404 (non-fatal — post-sync probe)`, true);
-      }
-    }
-
     // ── Phase 1: Load session cookies ────────────────────────────────────────
     // Extract ownUserId from sessionid (format: "userId:hash:seq:token") and
     // inject ds_user_id so the library can read cookieUserId.
@@ -3993,6 +3956,7 @@ export class InstagramWebClient {
       source_type:                  "4",
       timezone_offset:              "0",
       date_time_original:           new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      client_shared_at:             String(Math.floor(Date.now() / 1000)),
       creation_logger_session_id:   randomUUID(),
       _csrftoken:                   csrf,
       _uid:                         ownUserId,
@@ -4148,7 +4112,7 @@ export class InstagramWebClient {
       if (!confirmedUploadId) return null;
       // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
       return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
-    }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+    }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
 
   /**
@@ -4164,7 +4128,7 @@ export class InstagramWebClient {
       if (!confirmedUploadId) return null;
       // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
       return await this._configureViaIgClient(confirmedUploadId, caption, true, undefined);
-    }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+    }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
 
   /** Disables comments on a post via the Instagram private API. */

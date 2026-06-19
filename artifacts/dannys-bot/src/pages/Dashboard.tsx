@@ -68,6 +68,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.73",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Removed the Phase 0 cold-start probes (tokens/keyed × 2 and launcher/sync × 1) that were firing on every session cycle — these are not normal user behaviour and were making unnecessary API calls to Instagram on every run." },
+      { category: "Fix", text: "Statistics: Failed photo and video uploads are no longer counted in the API call pie chart — only successful publishes are recorded." },
+      { category: "Fix", text: "Repost: added client_shared_at timestamp to the configure publish body — a required field in Instagram v431+ that was missing and causing the HTTP 500 publish failure." },
+    ],
+  },
+  {
     version: "1.1.72",
     date: "19 Jun 2026",
     items: [
