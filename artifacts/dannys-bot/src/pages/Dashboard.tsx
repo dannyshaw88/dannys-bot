@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.50",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: fixed makeUnique image pipeline crashing with 'Expected number for hue' — Sharp requires an integer hue value, now correctly rounded. The pipeline was silently falling back to a lower-quality image every time." },
+    ],
+  },
+  {
     version: "1.1.49",
     date: "19 Jun 2026",
     items: [

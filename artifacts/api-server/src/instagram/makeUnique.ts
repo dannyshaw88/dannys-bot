@@ -196,8 +196,8 @@ export async function makeUniqueImage(input: Buffer): Promise<Buffer> {
     const gGain = rnd(0.982, 1.018);
     const bGain = rnd(0.978, 1.022);
 
-    // Layer 4 — hue shift (±2–9°)
-    const hueShift = rnd(2, 9) * (coin() ? 1 : -1);
+    // Layer 4 — hue shift (±2–9°) — must be integer, Sharp rejects floats
+    const hueShift = Math.round(rnd(2, 9)) * (coin() ? 1 : -1);
 
     // Layer 5 — brightness jitter (0.96–1.04)
     const brightnessF = rnd(0.96, 1.04);
