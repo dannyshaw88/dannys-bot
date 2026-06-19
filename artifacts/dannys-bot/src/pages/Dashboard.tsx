@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.44",
+    date: "19 Jun 2026",
+    items: [
+      { category: "New", text: "Emulation Local PC Folder: added Pick at random checkbox — randomly picks a media file from the folder each session." },
+      { category: "Tweak", text: "Nav buttons (Account Settings, Human Session Tool, Session Log, Dash, Browser, Metrics, Copy Settings) are now darker blue." },
+      { category: "Fix", text: "Ghost Browser: Username / Password / DOB / Bio and Email / IMAP fields no longer overlap — layout changed to 2-column grid." },
+      { category: "Tweak", text: "Equinox Bot: simplified welcome message." },
+      { category: "New", text: "Settings: Evasion Stats is now its own tab in Settings." },
+      { category: "New", text: "Settings: new Tools tab (wrench icon) contains Import and TrustScores as sub-tabs, with Import as the landing tab." },
+    ],
+  },
+  {
     version: "1.1.43",
     date: "19 Jun 2026",
     items: [

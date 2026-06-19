@@ -1180,7 +1180,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
           {/* ── ROW 4: Username | Password | DOB | Bio Spin ── */}
           <div className="desktop-card p-2.5">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
 
               {/* Username Spin */}
               <div className="space-y-1">
@@ -1245,7 +1245,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <Mail className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email / IMAP</p>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Email Address</p>
                 <div className="flex gap-1">

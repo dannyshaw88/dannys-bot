@@ -934,7 +934,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-[#22D3EE] border-transparent hover:border-border",
+                      : "text-[#1D4ED8] border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -946,27 +946,27 @@ export function ProfileDetailsPage() {
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#22D3EE] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
                 <button
                   onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#22D3EE] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Monitor className="w-3.5 h-3.5 shrink-0" />
                   BROWSER
                 </button>
                 <Link
                   href={`/stats?profileId=${profileId}&tab=metrics`}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#22D3EE] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                 >
                   <Activity className="w-3.5 h-3.5 shrink-0" />
                   METRICS
                 </Link>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#22D3EE] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);

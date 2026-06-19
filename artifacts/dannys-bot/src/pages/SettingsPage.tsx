@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus, Crown, LogOut, UserCircle, Instagram, Eye, EyeOff, ClipboardPaste, Camera } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus, Crown, LogOut, UserCircle, Instagram, Eye, EyeOff, ClipboardPaste, Camera, Wrench } from "lucide-react";
+import { BanAnalyticsPage } from "./BanAnalyticsPage";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -496,6 +497,7 @@ export function SettingsPage() {
   const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
   const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
   const [settingsTab, setSettingsTab] = useState("my account");
+  const [toolsSubTab, setToolsSubTab] = useState("import");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
   const jarveeFileRef = useRef<HTMLInputElement>(null);
@@ -621,8 +623,8 @@ export function SettingsPage() {
         <p className="text-muted-foreground mt-1">Configure application-wide preferences.</p>
       </div>
 
-      <div className="flex items-center gap-0 mb-6 border-b border-border/60">
-        {(["My Account", "General", "Scraping", "Automation", "Security", "Data", "Import", "TrustScores"] as const).map(tab => (
+      <div className="flex items-center gap-0 mb-6 border-b border-border/60 flex-wrap">
+        {(["My Account", "General", "Scraping", "Automation", "Security", "Data", "Evasion Stats"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -631,13 +633,15 @@ export function SettingsPage() {
             {tab}
           </button>
         ))}
+        {/* Tools tab — wrench icon, cyan */}
+        <button
+          onClick={() => setSettingsTab("tools")}
+          className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === "tools" ? "border-cyan-500 text-cyan-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          <Wrench className="w-3.5 h-3.5 fill-cyan-500 text-cyan-500" />
+          Tools
+        </button>
       </div>
-
-      {settingsTab === "trustscores" && (
-        <div className="desktop-card p-6">
-          <TrustScoresTabContent />
-        </div>
-      )}
 
       {settingsTab === "my account" && (
         <div className="desktop-card p-6">
@@ -645,9 +649,34 @@ export function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "import" && <BulkImportTabContent />}
+      {settingsTab === "evasion stats" && (
+        <BanAnalyticsPage />
+      )}
 
-      <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" || settingsTab === "my account" || settingsTab === "import" ? "hidden" : ""}`}>
+      {settingsTab === "tools" && (
+        <div className="space-y-4">
+          {/* Sub-tab bar */}
+          <div className="flex items-center gap-0 border-b border-border/60">
+            {(["Import", "TrustScores"] as const).map(sub => (
+              <button
+                key={sub}
+                onClick={() => setToolsSubTab(sub.toLowerCase())}
+                className={`px-5 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${toolsSubTab === sub.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+          {toolsSubTab === "import" && <BulkImportTabContent />}
+          {toolsSubTab === "trustscores" && (
+            <div className="desktop-card p-6">
+              <TrustScoresTabContent />
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={`space-y-4 max-w-2xl ${["my account", "evasion stats", "tools"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

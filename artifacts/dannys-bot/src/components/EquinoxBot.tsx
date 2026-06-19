@@ -8,7 +8,7 @@ type Message = { role: "user" | "assistant"; content: string };
 
 const WELCOME: Message = {
   role: "assistant",
-  content: "Hi! I'm the Equinox Bot 👋\n\nAsk me anything about using the software — tools, proxies, Ghost Browser, account setup, metrics, and more.",
+  content: "Hi! I'm the Equinox Bot 👋\n\nAsk me anything about using the software",
 };
 
 export function EquinoxBot() {

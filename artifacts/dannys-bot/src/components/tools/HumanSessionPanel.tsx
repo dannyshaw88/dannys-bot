@@ -1556,6 +1556,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
+                      id="repostLocalFolderRandom"
+                      checked={!!(settings as any).repostLocalFolderRandom}
+                      onChange={(e) => setSettings({ ...settings, repostLocalFolderRandom: e.target.checked } as any)}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="repostLocalFolderRandom" className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Pick at random
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
                       id="repostLocalFolderDeleteAfterUpload"
                       checked={settings.repostLocalFolderDeleteAfterUpload !== false}
                       onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
