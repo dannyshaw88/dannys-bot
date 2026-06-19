@@ -3975,6 +3975,13 @@ export class InstagramWebClient {
       source_type: "4",
       timezone_offset: "0",
       date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      // Required auth fields — every other ig.request.sign() call in this codebase includes these.
+      // Without them Instagram validates the signed body, fails auth, and returns the misleading
+      // "upload id is missing, please send a valid upload id" 500 error.
+      _csrftoken: ig.state.cookieCsrfToken,
+      _uid: ownUserId,
+      _uuid: ig.state.uuid,
+      device_id: ig.state.deviceId,
     };
     if (isVideo) {
       formBase.media_type = "2";

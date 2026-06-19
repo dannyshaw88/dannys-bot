@@ -78,13 +78,10 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
 }
 
 
-function FilledSpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+function FilledWrenchIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {/* Thick lens ring — evenodd punches the inner hole without needing white fill */}
-      <path fill="currentColor" fillRule="evenodd" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
-      {/* Thick handle */}
-      <rect fill="currentColor" x="14.8" y="14.2" width="8.5" height="3.8" rx="1.9" transform="rotate(45 14.8 14.2)"/>
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
     </svg>
   );
 }
@@ -104,7 +101,7 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon          },
-    { name: "Evasion Stats",   shortLabel: "EVASION STATS",  path: "/ban-analytics",  icon: FilledSpyIcon            },
+    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",          icon: FilledWrenchIcon         },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
   ];
 

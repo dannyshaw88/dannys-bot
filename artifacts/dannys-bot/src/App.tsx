@@ -17,7 +17,7 @@ import { BulkImportPage } from "@/pages/BulkImportPage";
 import { MobilePage } from "@/pages/MobilePage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
-import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
+import { ToolsPage } from "@/pages/ToolsPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
@@ -115,7 +115,8 @@ function Router() {
       <Route path="/mobile" component={MobilePage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
-      <Route path="/ban-analytics" component={BanAnalyticsPage} />
+      <Route path="/tools" component={ToolsPage} />
+      <Route path="/ban-analytics"><Redirect to="/tools" /></Route>
       <Route path="/readme" component={ReadmePage} />
       <Route component={NotFound} />
     </Switch>

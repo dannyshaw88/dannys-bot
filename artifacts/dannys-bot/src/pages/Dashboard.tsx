@@ -66,6 +66,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.55",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: confirmed fix — the publish step now correctly includes the required auth fields in the signed request. Reposts complete without 'upload id is missing' errors." },
+      { category: "UI", text: "Tools: sidebar nav item is live. Evasion Stats, Bulk Import, and Trust Scores are now all under Tools." },
+    ],
+  },
+  {
     version: "1.1.54",
     date: "19 Jun 2026",
     items: [
