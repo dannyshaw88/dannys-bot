@@ -25,6 +25,7 @@ import { triggerBanPipeline } from "./banPipeline";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
+import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
 import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
@@ -2727,12 +2728,11 @@ class AutomationEngine {
         // ── Local folder source ───────────────────────────────────────────────
         if (repostLocalFolderEnabled) {
           try {
-            const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
             const entries = await fsPromises.readdir(repostLocalFolderPath);
-            const imageFiles = entries.filter(f => IMAGE_EXTS.has(nodePath.extname(f).toLowerCase()));
-            if (imageFiles.length === 0) {
-              console.warn(`[engine] @${profile.username}: 🔁 local folder repost — no image files found in "${repostLocalFolderPath}"`);
-              this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "No image files found in local folder");
+            const mediaFiles = entries.filter(f => ALL_MEDIA_EXTS.has(nodePath.extname(f).toLowerCase()));
+            if (mediaFiles.length === 0) {
+              console.warn(`[engine] @${profile.username}: 🔁 local folder repost — no media files found in "${repostLocalFolderPath}"`);
+              this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "No media files found in local folder");
               return;
             }
 
@@ -2745,9 +2745,11 @@ class AutomationEngine {
             const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
             const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
             const useChatGptCaption = !!(s as any).repostUseChatGpt;
+            const makeUnique = !!(s as any).repostMakeUnique;
+            const pickRandom = !!(s as any).repostLocalFolderRandom;
 
             // Filter already-reposted files when noRepeat is ON
-            let filteredFiles = imageFiles;
+            let filteredFiles = mediaFiles;
             if (noRepeat) {
               const existingReposted = await storage.getRepostedPostsByProfile(profile.id, 10000);
               const postedLocalSet = new Set(
@@ -2755,23 +2757,28 @@ class AutomationEngine {
                   .filter(r => r.mediaId.startsWith("local:"))
                   .map(r => r.mediaId.slice(6))
               );
-              filteredFiles = imageFiles.filter(f => !postedLocalSet.has(f));
+              filteredFiles = mediaFiles.filter(f => !postedLocalSet.has(f));
               if (filteredFiles.length === 0) {
-                console.log(`[engine] @${profile.username}: 🔁 local folder — all images already reposted (noRepeat=true)`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "All local folder images already reposted (Do not repost same image is ON)");
+                console.log(`[engine] @${profile.username}: 🔁 local folder — all media already reposted (noRepeat=true)`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "All local folder media already reposted (Do not repost same image is ON)");
                 return;
               }
             }
 
-            // Shuffle and pick targetCount files
-            const shuffled = [...filteredFiles].sort(() => Math.random() - 0.5);
-            const picked = shuffled.slice(0, targetCount);
+            // Sort or shuffle, then pick targetCount files
+            const ordered = pickRandom
+              ? [...filteredFiles].sort(() => Math.random() - 0.5)
+              : [...filteredFiles].sort((a, b) => a.localeCompare(b));
+            const picked = ordered.slice(0, targetCount);
             let uploadedCount = 0;
 
             for (const fileName of picked) {
               const filePath = nodePath.join(repostLocalFolderPath, fileName);
-              const rawBuffer = await fsPromises.readFile(filePath);
-              const alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
+              const ext = nodePath.extname(fileName).toLowerCase();
+              const isVideo = isVideoFile(ext);
+              const isImage = isImageFile(ext);
+
+              // Build caption
               let caption = captionTemplate
                 ? captionTemplate.replace(/\{own_username\}/g, profile.username)
                 : "";
@@ -2798,13 +2805,52 @@ class AutomationEngine {
                 }
               }
 
-              const postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+              let postedMediaId: string | null = null;
+              const uniqueTag = makeUnique ? " +unique" : "";
+
+              if (isVideo) {
+                // ── Video upload path ────────────────────────────────────────
+                let videoPath = filePath;
+                let cleanup: (() => Promise<void>) | undefined;
+                if (makeUnique) {
+                  try {
+                    const result = await makeUniqueVideo(filePath);
+                    videoPath = result.outputPath;
+                    cleanup = result.cleanup;
+                    console.log(`[engine] @${profile.username}: 🎬 video uniquified: ${fileName}`);
+                  } catch (uqErr: any) {
+                    console.warn(`[engine] @${profile.username}: makeUniqueVideo failed for ${fileName}: ${uqErr?.message}`);
+                  }
+                }
+                try {
+                  const videoBuffer = await fsPromises.readFile(videoPath);
+                  postedMediaId = await client.uploadVideo(videoBuffer, caption);
+                } finally {
+                  if (cleanup) await cleanup();
+                }
+              } else if (isImage) {
+                // ── Image upload path ────────────────────────────────────────
+                const rawBuffer = await fsPromises.readFile(filePath);
+                // Apply standard alteration first
+                let alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
+                // Then apply make-unique aggressive pipeline on top
+                if (makeUnique) {
+                  try {
+                    alteredBuffer = await makeUniqueImage(alteredBuffer);
+                  } catch (uqErr: any) {
+                    console.warn(`[engine] @${profile.username}: makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
+                  }
+                }
+                postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+              }
+
               if (postedMediaId) {
                 if (s.repostDisableComments) {
                   try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
                 }
-                console.log(`[engine] @${profile.username}: 🔁 uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
+                const mediaType = isVideo ? "video" : "image";
+                console.log(`[engine] @${profile.username}: 🔁 uploaded ${mediaType} from local folder: ${fileName}${uniqueTag} [${uploadedCount + 1}/${targetCount}]`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded ${mediaType} from local folder: ${fileName} (alteration: ${level}${uniqueTag}) [${uploadedCount + 1}/${targetCount}]`);
                 await storage.incrementStat(profile.id, "repost");
                 if (noRepeat) {
                   try {

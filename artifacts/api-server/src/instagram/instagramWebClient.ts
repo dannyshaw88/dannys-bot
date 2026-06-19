@@ -3850,6 +3850,43 @@ export class InstagramWebClient {
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
+  /**
+   * Uploads a video (any format, pre-converted to MP4 by makeUniqueVideo)
+   * to the user's feed via the Instagram private API.
+   * Uses the same multipart endpoint as uploadPhoto but with media_type=2.
+   */
+  async uploadVideo(videoBuffer: Buffer, caption: string): Promise<string | null> {
+    return this.timed("UploadVideo", async () => {
+      const uploadId = String(Date.now());
+
+      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
+        { name: "upload_id", value: uploadId },
+        { name: "media_type", value: "2" },
+        { name: "video", value: videoBuffer, filename: `video_${uploadId}.mp4`, contentType: "video/mp4" },
+      ]);
+      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
+      if (!uploaded) {
+        console.warn(`[webClient] video/upload failed: ${JSON.stringify(uploadRes)}`);
+        return null;
+      }
+
+      const body = new URLSearchParams({
+        upload_id: uploadId,
+        caption,
+        source_type: "4",
+        media_type: "2",
+        timezone_offset: "0",
+        date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+        clips_share_preview_to_feed: "1",
+      }).toString();
+
+      const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
+      const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
+      if (!mediaId && confRes?.status === "ok") return uploadId;
+      return mediaId;
+    }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+  }
+
   /** Disables comments on a post via the Instagram private API. */
   async disableComments(mediaId: string): Promise<void> {
     return this.timed("DisableComments", async () => {

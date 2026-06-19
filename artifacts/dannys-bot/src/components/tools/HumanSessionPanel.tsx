@@ -1254,6 +1254,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <div className="flex items-center gap-1.5">
                   <input
                     type="checkbox"
+                    id="repostMakeUnique"
+                    checked={!!(settings as any).repostMakeUnique}
+                    onChange={(e) => setSettings({ ...settings, repostMakeUnique: e.target.checked } as any)}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="repostMakeUnique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
                     id="repostDisableComments"
                     checked={!!settings.repostDisableComments}
                     onChange={(e) => setSettings({ ...settings, repostDisableComments: e.target.checked })}

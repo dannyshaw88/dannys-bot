@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.45",
+    date: "19 Jun 2026",
+    items: [
+      { category: "New", text: "Repost Local Folder: Make it unique checkbox — applies a 7-layer image uniquification pipeline (crop, rotation, hue shift, per-channel gain, noise, brightness, re-encode) designed for 100+ accounts reposting the same content without being detected." },
+      { category: "New", text: "Repost Local Folder: video files now supported — mp4, mov, avi, mkv, webm, m4v, 3gp, wmv, flv, ts, mts and more. When Make it unique is ON, ffmpeg re-encodes the video with subtle filters before upload." },
+      { category: "Tweak", text: "Repost Local Folder: Pick at random OFF now picks files in alphabetical order instead of also randomising." },
+    ],
+  },
+  {
     version: "1.1.44",
     date: "19 Jun 2026",
     items: [
