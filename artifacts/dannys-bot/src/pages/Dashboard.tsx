@@ -62,6 +62,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.41",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Windows installer CI: downloaded build artifacts now land in the correct location so the bundler can find them." },
+    ],
+  },
+  {
     version: "1.1.40",
     date: "19 Jun 2026",
     items: [
