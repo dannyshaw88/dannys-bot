@@ -369,7 +369,10 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(instagramApiCalls)
-      .where(eq(instagramApiCalls.profileId, profileId));
+      .where(and(
+        eq(instagramApiCalls.profileId, profileId),
+        eq(instagramApiCalls.isError, false),
+      ));
     return Number(row?.count ?? 0);
   }
 
@@ -466,6 +469,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(instagramApiCalls.profileId, profileId),
         ne(instagramApiCalls.source, "HikerAPI"),
+        eq(instagramApiCalls.isError, false),
       ))
       .groupBy(instagramApiCalls.operationName)
       .orderBy(desc(sql<number>`COUNT(*)`));

@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.72",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Statistics Metrics pie chart now only counts successful API calls — failed calls are excluded so the chart accurately reflects productive Instagram activity." },
+    ],
+  },
+  {
     version: "1.1.71",
     date: "19 Jun 2026",
     items: [
