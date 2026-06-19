@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.43",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Tweak", text: "Emulation: folder picker now shows the full directory path in the field instead of just the folder name." },
+      { category: "Tweak", text: "Emulation: folder picker no longer includes files from subfolders — only images directly inside the selected folder are counted." },
+      { category: "Tweak", text: "Emulation: Disable Comments checkbox moved next to Use ChatGPT — no separate explanation text." },
+      { category: "Tweak", text: "Emulation: Do not repost same image and Delete from PC after upload are now on the same row as the folder directory field." },
+      { category: "Tweak", text: "Emulation: Post Caption field is now compact width (~10 words wide) and 3 rows tall instead of full-width." },
+    ],
+  },
+  {
     version: "1.1.42",
     date: "19 Jun 2026",
     items: [

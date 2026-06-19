@@ -1251,6 +1251,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <label htmlFor="repostUseChatGpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="repostDisableComments"
+                    checked={!!settings.repostDisableComments}
+                    onChange={(e) => setSettings({ ...settings, repostDisableComments: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="repostDisableComments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
+                </div>
               </div>
               <div className="flex gap-1.5">
                 <button
@@ -1299,7 +1309,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </p>
 
             <Textarea
-              className="text-xs font-mono resize-none h-24 leading-relaxed"
+              className="text-xs font-mono resize-none h-[72px] leading-relaxed max-w-[280px]"
+              rows={3}
               placeholder="Type a caption or use a token"
               value={(settings as any).repostCaptionText ?? ""}
               onChange={(e) => {
@@ -1483,11 +1494,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
             <div className={`space-y-2 transition-opacity ${!settings.repostLocalFolderEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 max-w-[50%]">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input
                     type="text"
                     placeholder="C:\Users\You\Pictures\Repost"
-                    className="h-8 text-xs font-mono flex-1"
+                    className="h-8 text-xs font-mono w-[280px]"
                     value={settings.repostLocalFolderPath ?? ""}
                     onChange={(e) => setSettings({ ...settings, repostLocalFolderPath: e.target.value })}
                   />
@@ -1499,7 +1510,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <FolderOpen className="w-3.5 h-3.5" />
                     Browse…
                   </button>
-                  {/* Hidden folder picker webkitdirectory: user picks a folder, browser returns all files inside it */}
+                  {/* Hidden folder picker — webkitdirectory picks a folder; we only use top-level files (no subfolders) */}
                   <input
                     ref={localFolderPickerRef}
                     type="file"
@@ -1511,63 +1522,59 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       const files = Array.from(e.target.files ?? []);
                       if (!files.length) return;
                       const IMAGE_EXTS = new Set(["jpg","jpeg","png","webp","gif"]);
-                      const imgFiles = files.filter(f => IMAGE_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ""));
-                      const topFolder = files[0].webkitRelativePath.split("/")[0];
-                      setSettings({ ...settings, repostLocalFolderPath: topFolder });
+                      // Only files directly in the selected folder (no subfolders)
+                      const topLevelFiles = files.filter(f => f.webkitRelativePath.split("/").length === 2);
+                      const imgFiles = topLevelFiles.filter(f => IMAGE_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ""));
+                      // Use the full OS path if available (Electron), otherwise fall back to folder name
+                      const firstPath: string = (files[0] as any).path ?? "";
+                      let folderPath: string;
+                      if (firstPath) {
+                        const sep = firstPath.includes("\\") ? "\\" : "/";
+                        const parts = firstPath.split(sep);
+                        parts.pop();
+                        folderPath = parts.join(sep);
+                      } else {
+                        folderPath = files[0].webkitRelativePath.split("/")[0];
+                      }
+                      setSettings({ ...settings, repostLocalFolderPath: folderPath });
                       setLocalFolderFileCount(imgFiles.length);
                       e.target.value = "";
                     }}
                   />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="repostLocalFolderNoRepeat"
+                      checked={!!(settings as any).repostLocalFolderNoRepeat}
+                      onChange={(e) => setSettings({ ...settings, repostLocalFolderNoRepeat: e.target.checked } as any)}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="repostLocalFolderNoRepeat" className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Do not repost the same image
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="repostLocalFolderDeleteAfterUpload"
+                      checked={settings.repostLocalFolderDeleteAfterUpload !== false}
+                      onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Delete from PC after upload
+                    </label>
+                  </div>
                 </div>
                 {localFolderFileCount !== null && (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <FolderOpen className="w-3 h-3 shrink-0" />
-                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in folder verify the full path above is correct (e.g. C:\Users\You\Pictures\Repost).
+                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in folder.
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="repostLocalFolderNoRepeat"
-                    checked={!!(settings as any).repostLocalFolderNoRepeat}
-                    onChange={(e) => setSettings({ ...settings, repostLocalFolderNoRepeat: e.target.checked } as any)}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor="repostLocalFolderNoRepeat" className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Do not repost the same image
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="repostLocalFolderDeleteAfterUpload"
-                    checked={settings.repostLocalFolderDeleteAfterUpload !== false}
-                    onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Delete from PC after upload
-                  </label>
-                </div>
-              </div>
             </div>
           </div>{/* end Source 2 border */}
-
-          {/* Shared options */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="repostDisableComments"
-              checked={!!settings.repostDisableComments}
-              onChange={(e) => setSettings({ ...settings, repostDisableComments: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="repostDisableComments" className="text-xs text-muted-foreground cursor-pointer select-none">
-              Disable comments after repost
-            </label>
-          </div>
 
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             During each session, picks the latest unreposted post from the source account and reposts it.
