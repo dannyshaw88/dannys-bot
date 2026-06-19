@@ -3976,51 +3976,52 @@ export class InstagramWebClient {
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
 
-    // Build flat URLSearchParams body — NO signBody wrapper.
-    // Every other working mobile API call (follow, DM, like) uses plain URL-encoded
-    // params via igReq/mobileSessionPost. signBody uses a custom HMAC key and wraps
-    // everything in signed_body=HASH.JSON which configure may reject even when
-    // rupload succeeds. Plain form body with a valid sessionid cookie is sufficient
-    // for authenticated write actions — Instagram validates via cookie + _csrftoken.
-    // Nested objects (device, edits, extra) are JSON-encoded strings in the form body.
-    const formParams = new URLSearchParams({
-      upload_id:           uploadId,
-      caption:             caption ?? "",
-      source_type:         "4",
-      timezone_offset:     "0",
-      date_time_original:  new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      _csrftoken:          csrf,
-      _uid:                ownUserId,
-      _uuid:               uuid,
-      device_id:           deviceId,
-      // device, edits, extra — required by Instagram v431+
-      device: JSON.stringify({
+    // Build configure body using Instagram's signed_body format.
+    // Plain URL-encoded form data is rejected by configure (HTTP 400).
+    // The signed_body format wraps the entire params object as JSON inside
+    // ig_sig_key_version=4&signed_body=HMAC.JSON — Instagram stopped validating
+    // the HMAC around 2022 but still requires the signed_body envelope.
+    // Nested objects (device, edits, extra) must be real nested JSON objects
+    // inside the signed JSON, not pre-serialized strings.
+    const configureParams: Record<string, unknown> = {
+      upload_id:          uploadId,
+      caption:            caption ?? "",
+      source_type:        "4",
+      timezone_offset:    "0",
+      date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      _csrftoken:         csrf,
+      _uid:               ownUserId,
+      _uuid:              uuid,
+      device_id:          deviceId,
+      device: {
         manufacturer:    devInfo.manufacturer,
         model:           devInfo.model,
         android_version: devInfo.androidVersion,
         android_release: devInfo.androidRelease,
-      }),
-      edits: JSON.stringify({
+      },
+      edits: {
         filter_type:        0,
         filter_strength:    1.0,
         crop_original_size: [imgWidth * 1.0, imgHeight * 1.0],
         crop_center:        [0.0, 0.0],
         crop_zoom:          1.0,
-      }),
-      extra: JSON.stringify({
+      },
+      extra: {
         source_width:  imgWidth,
         source_height: imgHeight,
-      }),
-      ...(isVideo ? { media_type: "2", clips_share_preview_to_feed: "1" } : {}),
-    });
-    const bodyStr = formParams.toString();
+      },
+    };
+    if (isVideo) {
+      configureParams.media_type = "2";
+      configureParams.clips_share_preview_to_feed = "1";
+    }
+    const bodyStr = signBody(configureParams);
 
-    // Use igReq directly (same CycleTLS path as mobileSessionPost) WITHOUT calling
-    // apiThrottle() — there must be zero artificial delay between rupload completing
-    // and configure firing. apiThrottle with 10-60s delays between calls would hold
-    // configure back long enough for Instagram to expire the upload ID.
+    // Use igReq directly WITHOUT calling apiThrottle() — zero delay between rupload
+    // completing and configure firing. apiThrottle with 10-60s delays between calls
+    // would hold configure back long enough for Instagram to expire the upload ID.
     const MOBILE_APP_ID = "567067343352427";
-    console.log(`[webClient] configure ${uploadId}: via igReq plain-body (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
+    console.log(`[webClient] configure ${uploadId}: via signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
     const res = await igReq({

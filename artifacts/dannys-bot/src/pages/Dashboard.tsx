@@ -197,6 +197,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.63",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: configure now uses Instagram's required signed_body format with nested JSON objects — fixes HTTP 500 'something went wrong during media publish' error." },
+    ],
+  },
+  {
     version: "1.1.62",
     date: "19 Jun 2026",
     items: [
