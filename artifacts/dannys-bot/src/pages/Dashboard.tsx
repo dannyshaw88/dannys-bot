@@ -68,11 +68,12 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.1.68",
+    version: "1.1.69",
     date: "19 Jun 2026",
     items: [
-      { category: "Fix", text: "Repost: images with aspect ratio outside Instagram's 0.8–1.91 range (e.g. very tall portrait photos) are now automatically cropped to the nearest valid boundary before upload. Previously these were silently accepted by the upload step but rejected at the publish step." },
-      { category: "Fix", text: "Repost: configure body now includes device, edits, and extra fields (image dimensions, crop info, manufacturer/model) required by Instagram v431+. Also explicitly sets media_type=1 for photos." },
+      { category: "Fix", text: "Repost: removed the embedded browser upload path. All photo uploads now go exclusively through the mobile API (rupload + configure), consistent with the rule that the EB is only used for session establishment, never for actions." },
+      { category: "Fix", text: "Repost: images with aspect ratio outside Instagram's 0.8–1.91 range are now automatically cropped to the nearest valid boundary before upload." },
+      { category: "Fix", text: "Repost: configure body now includes device, edits, and extra fields required by Instagram v431+, and explicitly sets media_type=1 for photos." },
     ],
   },
   {

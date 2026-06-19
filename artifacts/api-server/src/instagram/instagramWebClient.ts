@@ -60,7 +60,7 @@ import { generateSync as totpGenerate } from "otplib";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
 import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls } from "./tlsTransport.js";
-import { uploadPhotoViaFetch, hasBrowserSession } from "./browserSession.js";
+
 
 // Warm up the CycleTLS Go subprocess at module load so the first real request
 // doesn't pay the ~300 ms startup cost.
@@ -4124,27 +4124,9 @@ export class InstagramWebClient {
         console.warn(`[webClient:${this.profileId}] uploadPhoto: aspect ratio check failed (non-fatal) — ${e?.message}`);
       }
 
-      // ── EB browser-fetch path (preferred) ──────────────────────────────────
-      // Uses Chrome's native session: same cookies, same TLS fingerprint for
-      // both rupload and configure — exactly what Instagram's own web app does.
-      // The mobile API configure path has consistently failed ("upload id is
-      // missing") despite many attempts, because the mobile session cookies are
-      // associated with the mobile API backend, while the rupload CDN routes the
-      // upload to a shard that the configure call can't locate via a different
-      // session.  The browser-fetch approach bypasses this entirely.
-      if (this.profileId && hasBrowserSession(this.profileId)) {
-        console.log(`[webClient:${this.profileId}] uploadPhoto: EB session available — using uploadPhotoViaFetch`);
-        const ebResult = await uploadPhotoViaFetch(this.profileId, imageBuffer, caption);
-        if (ebResult) {
-          console.log(`[webClient:${this.profileId}] uploadPhoto: EB fetch succeeded — media_id=${ebResult}`);
-          return ebResult;
-        }
-        console.warn(`[webClient:${this.profileId}] uploadPhoto: EB fetch returned null — falling back to mobile API`);
-      } else {
-        console.log(`[webClient:${this.profileId}] uploadPhoto: no EB session — using mobile API path`);
-      }
-
-      // ── Mobile API path (fallback) ─────────────────────────────────────────
+      // ── Mobile API path ────────────────────────────────────────────────────
+      // All actions go via the mobile API only. The EB is used exclusively for
+      // session/cookie establishment (Jarvee model) — never for actions.
       const uploadId = String(Date.now());
       // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
