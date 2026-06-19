@@ -68,6 +68,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.74",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost — Instagram Account source: the 'Disable this source' checkbox was not actually stopping the engine from running that source. It is now replaced with an 'Enable this source' checkbox that correctly enables or disables the source." },
+      { category: "Fix", text: "Repost — Instagram Account source: stealth image alteration (Make Unique) was missing from this source path. It now applies the same pixel-level uniqueness as the Local PC Folder source." },
+      { category: "UI", text: "Repost tool: Instagram Account source header simplified — removed redundant labels, sources now collapse when not enabled." },
+      { category: "UI", text: "Repost tool: 'Use HikerAPI for scraping' and 'Disable when no more posts are found' moved to a single compact row. Removed the explanatory text block below the sources." },
+    ],
+  },
+  {
     version: "1.1.73",
     date: "19 Jun 2026",
     items: [

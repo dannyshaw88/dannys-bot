@@ -2892,6 +2892,8 @@ class AutomationEngine {
         }
 
         // ── @username source ──────────────────────────────────────────────────
+        // Skip if the source has been disabled by the user in settings.
+        if (!repostUsernameSourceActive) return;
         const sourceUsername = repostSourceUsername;
         try {
           const useHiker = !!s.repostUseHikerApi;
@@ -2941,8 +2943,16 @@ class AutomationEngine {
             if (already) continue;
 
             uploadAttempted++;
-            const imageBuffer   = await client.downloadImage(item.imageUrl);
-            const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
+            const imageBuffer = await client.downloadImage(item.imageUrl);
+            const makeUnique = !!(s as any).repostMakeUnique;
+            let alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
+            if (makeUnique) {
+              try {
+                alteredBuffer = await makeUniqueImage(alteredBuffer);
+              } catch (uqErr: any) {
+                console.warn(`[engine] @${profile.username}: makeUniqueImage failed (non-fatal): ${uqErr?.message}`);
+              }
+            }
             const finalCaption  = captionTemplate
               ? resolveCaption(captionTemplate, item, sourceUsername, profile.username)
               : item.caption.slice(0, 2200);

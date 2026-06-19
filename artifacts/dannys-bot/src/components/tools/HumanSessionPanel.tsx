@@ -1380,15 +1380,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="repostDisableUsernameSource"
-                checked={!!settings.repostDisableUsernameSource}
-                onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: e.target.checked })}
+                id="repostUsernameSourceEnabled"
+                checked={!settings.repostDisableUsernameSource}
+                onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: !e.target.checked })}
                 className="w-3.5 h-3.5 accent-primary cursor-pointer"
               />
-              <label htmlFor="repostDisableUsernameSource" className="text-[11px] text-muted-foreground cursor-pointer select-none">Disable this source</label>
-              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5 ml-1">
-                <AtSign className="w-3.5 h-3.5 text-muted-foreground" /> Source: Instagram Account
-              </Label>
+              <label htmlFor="repostUsernameSourceEnabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
+                INSTAGRAM ACCOUNT
+              </label>
             </div>
             {!settings.repostDisableUsernameSource && (<>
             <div className={`flex flex-wrap items-end gap-4`}>
@@ -1463,30 +1462,31 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               />
             </div>
             </div>{/* end flex-wrap */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="repostUseHikerApi"
-                checked={!!settings.repostUseHikerApi}
-                onChange={(e) => setSettings({ ...settings, repostUseHikerApi: e.target.checked })}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-              />
-              <label htmlFor="repostUseHikerApi" className="text-xs text-muted-foreground cursor-pointer select-none">
-                Use HikerAPI to scrape source account feed (GetNewMedia)
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="repostDisableWhenExhausted"
-                checked={!!settings.repostDisableWhenExhausted}
-                onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-              />
-              <label htmlFor="repostDisableWhenExhausted" className="text-xs text-muted-foreground cursor-pointer select-none">
-                Auto-disable when no more unique posts are found from the source account
-              </label>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="repostUseHikerApi"
+                  checked={!!settings.repostUseHikerApi}
+                  onChange={(e) => setSettings({ ...settings, repostUseHikerApi: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor="repostUseHikerApi" className="text-xs text-muted-foreground cursor-pointer select-none">
+                  Use HikerAPI for scraping
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="repostDisableWhenExhausted"
+                  checked={!!settings.repostDisableWhenExhausted}
+                  onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor="repostDisableWhenExhausted" className="text-xs text-muted-foreground cursor-pointer select-none">
+                  Disable when no more posts are found
+                </label>
+              </div>
             </div>
             </>)}
           </div>{/* end Source 1 border */}
@@ -1583,11 +1583,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
           </div>{/* end Source 2 border */}
 
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            During each session, picks the latest unreposted post from the source account and reposts it.
-            <br />
-            <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
-          </p>
 
 
         </div>
