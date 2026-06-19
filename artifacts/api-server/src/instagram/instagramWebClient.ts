@@ -4028,6 +4028,12 @@ export class InstagramWebClient {
     console.log(`[webClient] configure ${uploadId}: via signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} mfr=${devInfo.manufacturer} model=${devInfo.model})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
+    // forceNodeTls: true — MUST match the TLS stack used by _mobileRupload.
+    // rupload uses tlsMultipartPost(forceNodeHttps=true) → Node.js HTTPS / OpenSSL.
+    // Without this flag igReq routes through CycleTLS (OkHttp4 JA3 fingerprint).
+    // Instagram associates the upload with the TLS session that performed the rupload.
+    // A configure arriving via a different TLS fingerprint cannot locate the upload
+    // and returns "upload id is missing" (HTTP 500). Same stack = same fingerprint = found.
     const res = await igReq({
       host: "i.instagram.com",
       path: url,
@@ -4050,6 +4056,7 @@ export class InstagramWebClient {
       body: bodyStr,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
+      forceNodeTls: true,
     });
 
     // Merge any new cookies (keep session fresh)

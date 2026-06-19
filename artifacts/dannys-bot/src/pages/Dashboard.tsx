@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.66",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: configure step now uses the same TLS stack (Node.js HTTPS) as the upload step. The upload and configure were previously using different TLS stacks — Instagram associates an upload with the TLS session that created it, so a configure arriving with a different fingerprint could not locate the upload and returned 'upload id is missing'. Both steps now use identical transport, confirmed by direct live testing." },
+    ],
+  },
+  {
     version: "1.1.65",
     date: "19 Jun 2026",
     items: [
