@@ -56,6 +56,8 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   check_dm:                { label: "Check DM",        cls: "text-purple-600",    icon: "✉" },
   view_post:               { label: "View Post",       cls: "text-teal-600",      icon: "◈" },
   visit_profile:           { label: "Visit Profile",   cls: "text-sky-700",       icon: "◉" },
+  view_profile_post:       { label: "View Profile Post", cls: "text-cyan-700",    icon: "◈" },
+  view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
@@ -66,10 +68,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.56",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: root cause found and fixed — the configure (publish) step was using a different HTTP stack than the upload, so Instagram couldn't match the upload to the session and returned 'upload id is missing'. Both steps now use the same session, same cookies, and same TLS fingerprint. Reposts should complete successfully." },
+      { category: "UI", text: "Dashboard: View Profile Post and View Profile Feed actions now show their own coloured badges with icons instead of a grey fallback dot." },
+    ],
+  },
+  {
     version: "1.1.55",
     date: "19 Jun 2026",
     items: [
-      { category: "Fix", text: "Repost: confirmed fix — the publish step now correctly includes the required auth fields in the signed request. Reposts complete without 'upload id is missing' errors." },
+      { category: "Fix", text: "Repost: previous fix attempt — added auth fields to signed request body. Did not fully resolve the issue (root cause fixed in 1.1.56)." },
       { category: "UI", text: "Tools: sidebar nav item is live. Evasion Stats, Bulk Import, and Trust Scores are now all under Tools." },
     ],
   },

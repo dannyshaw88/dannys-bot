@@ -3897,117 +3897,90 @@ export class InstagramWebClient {
     }, `Get feed of @${username}`);
   }
 
-  // ── Configure (publish) a media upload via IgApiClient (signed_body) ────────
-  // Plain mobileSessionPost sends an unsigned URL-encoded body, which causes Instagram
-  // to return HTTP 500 "We're sorry, but something went wrong during media publish."
-  // The configure endpoint requires a HMAC-SHA256 signed_body — same as follow/unfollow.
-  // Pattern mirrors _followViaIgClient: build IgApiClient, seed device state + cookies,
-  // pre-warm to get a fresh csrftoken, then use ig.request.sign() + ig.request.send().
+  // ── Configure (publish) a media upload via signBody + mobileSessionPost ─────
+  // ROOT CAUSE of "upload id is missing" (confirmed from logs):
+  //   The rupload succeeds via mobileSessionPost (same sessionid, same UA, same TLS).
+  //   The previous IgApiClient configure used a different HTTP stack (got-scraping /
+  //   axios) with a different TLS fingerprint and different headers. Instagram links
+  //   the upload to the exact session+TLS that performed it — a configure from a
+  //   different stack can't find the upload and returns the misleading "upload id is
+  //   missing" 500. This is NOT about the upload_id value itself.
+  //
+  // Fix: use signBody() (already in scope) + mobileSessionPost — the SAME session,
+  //   same UA, same TLS fingerprint as the rupload that just succeeded.
   private async _configureViaIgClient(
     uploadId: string,
     caption: string,
     isVideo: boolean,
   ): Promise<string | null> {
     if (!this.igApiCookies) {
-      console.warn(`[webClient] _configureViaIgClient: no igApiCookies — cannot use IgApiClient`);
+      console.warn(`[webClient] configure ${uploadId}: no igApiCookies — cannot proceed`);
       return null;
     }
-    const ig = newIgClient();
-    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+
+    // Extract identity fields directly from stored state (no IgApiClient needed)
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const ownUserId = pairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+
+    let uuid = "";
+    let deviceId = "";
     if (this.igDeviceState) {
       try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
-        ig.state.generateDevice(deviceSeed);
-        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
-        if (saved.uuid)         ig.state.uuid         = saved.uuid;
-        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
-        if (saved.adid)         ig.state.adid         = saved.adid;
-        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-        if (saved.authorization) ig.state.authorization = saved.authorization;
-        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
-      } catch { ig.state.generateDevice(deviceSeed); }
-    } else {
-      ig.state.generateDevice(deviceSeed);
+        const saved = JSON.parse(this.igDeviceState) as { uuid?: string; deviceId?: string };
+        uuid = saved.uuid ?? "";
+        deviceId = saved.deviceId ?? "";
+      } catch { /* ignore */ }
     }
+    // Fall back to mobile session fields if igDeviceState is missing
+    if (!uuid)     uuid     = this._mobileIgDid ?? randomUUID();
+    if (!deviceId) deviceId = `android-${(this._mobileMid ?? randomUUID()).replace(/-/g, "").slice(0, 16)}`;
 
-    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
-    const now = new Date().toISOString();
-    const cookieEntries = pairs.flatMap(pair => {
-      const eqIdx = pair.indexOf("=");
-      if (eqIdx === -1) return [];
-      const key = pair.slice(0, eqIdx).trim();
-      let value = pair.slice(eqIdx + 1).trim();
-      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
-      return [
-        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
-        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
-      ];
-    });
-    await ig.state.deserializeCookieJar(JSON.stringify({
-      version: "tough-cookie@4.1.3",
-      storeType: "MemoryCookieStore",
-      rejectPublicSuffixes: true,
-      cookies: cookieEntries,
-    }));
-
-    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
-    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
-    patchIgClientTls(ig, this.proxyUrl);
-
-    // Pre-warm: fetch user.info to get a fresh csrftoken before the configure POST.
-    // Without this, cookieCsrfToken returns "missing" and Instagram rejects the write.
-    const ownUserId = pairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
-    if (ownUserId) {
-      try {
-        await ig.user.info(ownUserId);
-        console.log(`[webClient] configure ${uploadId}: pre-warm user.info OK — csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
-      } catch (e: any) {
-        console.warn(`[webClient] configure ${uploadId}: pre-warm user.info failed (${e?.message}) — continuing`);
-      }
+    // Ensure we have a fresh CSRF token (mobileSessionPost bootstraps it automatically,
+    // but calling it here makes the log line below accurate)
+    if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
     }
+    const csrf = this.mobileCsrf || this.csrfToken || "";
 
-    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
-    const formBase: Record<string, any> = {
+    const formBase: Record<string, unknown> = {
       upload_id: uploadId,
-      caption,
+      caption:   caption ?? "",
       source_type: "4",
       timezone_offset: "0",
       date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      // Required auth fields — every other ig.request.sign() call in this codebase includes these.
-      // Without them Instagram validates the signed body, fails auth, and returns the misleading
-      // "upload id is missing, please send a valid upload id" 500 error.
-      _csrftoken: ig.state.cookieCsrfToken,
-      _uid: ownUserId,
-      _uuid: ig.state.uuid,
-      device_id: ig.state.deviceId,
+      _csrftoken: csrf,
+      _uid:       ownUserId,
+      _uuid:      uuid,
+      device_id:  deviceId,
     };
     if (isVideo) {
       formBase.media_type = "2";
       formBase.clips_share_preview_to_feed = "1";
     }
 
-    try {
-      console.log(`[webClient] configure ${uploadId}: via IgApiClient ig.request.sign (isVideo=${isVideo} uuid=${ig.state.uuid?.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      const res = await ig.request.send<any>({
-        url,
-        method: "POST",
-        form: ig.request.sign(formBase),
-      });
-      console.log(`[webClient] configure ${uploadId}: OK — media_id=${res?.media?.id ?? res?.upload_id ?? "none"}`);
-      return res?.media?.id ? String(res.media.id) : uploadId;
-    } catch (err: any) {
-      const rawMsg: string = err?.message ?? String(err);
-      const msg = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
-      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
-      console.warn(`[webClient] configure ${uploadId}: IgApiClient error — ${rawMsg}`);
-      if (body) console.warn(`[webClient] configure ${uploadId}: raw body — ${JSON.stringify(body)?.slice(0, 600)}`);
-      if (/feedback_required|ActionBlocked/i.test(msg)) {
-        console.warn(`[webClient] configure ${uploadId}: account blocked from posting — ${msg}`);
-      }
-      return null;
+    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
+    console.log(`[webClient] configure ${uploadId}: via mobileSessionPost+signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"})`);
+
+    // A configure failure does NOT mean the session is invalid — the upload already
+    // succeeded in this same session. Save and restore mobileSessionReady so a
+    // 500 from configure doesn't prevent subsequent tools from running.
+    const wasSessionReady = this.mobileSessionReady;
+    const res = await this.mobileSessionPost(url, signBody(formBase));
+    if (wasSessionReady) this.mobileSessionReady = true;
+
+    if (res?.media?.id) {
+      const mediaId = String(res.media.id);
+      console.log(`[webClient] configure ${uploadId}: OK — media_id=${mediaId}`);
+      return mediaId;
     }
+    if (res?.status === "ok") {
+      console.log(`[webClient] configure ${uploadId}: OK (no media.id) — returning uploadId`);
+      return uploadId;
+    }
+    if (res) {
+      console.warn(`[webClient] configure ${uploadId}: unexpected response — ${JSON.stringify(res).slice(0, 600)}`);
+    }
+    return null;
   }
 
   // ── Upload a photo and create the Instagram post ──────────────────────────
