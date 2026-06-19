@@ -52,6 +52,10 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   visit_settings_activity: { label: "Settings",        cls: "text-slate-600",     icon: "⚙" },
   save_media:              { label: "Save Media",      cls: "text-emerald-600",   icon: "⊙" },
   server_started:          { label: "Started",         cls: "text-cyan-600",      icon: "⚡" },
+  repost:                  { label: "Repost",          cls: "text-pink-600",      icon: "↻" },
+  check_dm:                { label: "Check DM",        cls: "text-purple-600",    icon: "✉" },
+  view_post:               { label: "View Post",       cls: "text-teal-600",      icon: "◈" },
+  visit_profile:           { label: "Visit Profile",   cls: "text-sky-700",       icon: "◉" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
@@ -61,6 +65,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.1.54",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: fixed 'upload id is missing' error — the publish step was missing required auth fields in the signed request body, causing Instagram to silently reject it. The correct fields are now included and reposts complete successfully." },
+      { category: "UI", text: "Dashboard: Repost, Check DM, View Post, and Visit Profile actions now each have their own icon in the action badge instead of showing a plain dot." },
+      { category: "UI", text: "Dashboard: story tray empty message simplified to '0 stories in feed the tray is empty'." },
+      { category: "UI", text: "Tools: new sidebar nav item replaces Evasion Stats. The Tools page contains Evasion Stats, Bulk Import, and Trust Scores as sub-tabs." },
+    ],
+  },
   {
     version: "1.1.53",
     date: "19 Jun 2026",

@@ -2584,7 +2584,7 @@ class AutomationEngine {
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "error", `Instagram rejected reels_tray: challenge_required${acctStatus ? ` — account marked ${acctStatus}` : ""}`);
           } else if (watched === -2) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories: tray was empty (0 stories in feed) — see server log for response keys`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed — tray empty (Instagram returned no stories for this account's following list)");
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed the tray is empty");
           } else if (watched === -3) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories: tray had entries but none contained story items — see server log for entry keys`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "View Stories: tray returned but no story items found in entries — check server log for details");
