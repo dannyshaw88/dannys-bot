@@ -3797,6 +3797,70 @@ export class InstagramWebClient {
   }
 
 
+  // ── Rupload binary — common helper for photo and video uploads ────────────
+  // Uses Instagram's rupload protocol (Content-Type: application/octet-stream)
+  // to /rupload_igphoto/{name} or /rupload_igvideo/{name}.
+  // This is the only supported upload protocol for the mobile private API.
+  // The old /api/v1/media/upload/ multipart endpoint does not exist and
+  // returns a non-JSON HTML error page.
+  private async _mobileRupload(
+    mediaType: "photo" | "video",
+    buffer: Buffer,
+    uploadId: string,
+  ): Promise<string | null> {
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
+    if (!hasMobileSession) {
+      console.warn(`[webClient] _mobileRupload: no mobile session — run Verify Credentials first`);
+      return null;
+    }
+    if (!this.mobileCsrf) await this._bootstrapMobileCsrf();
+
+    const suffix = `${uploadId}_0_${Math.floor(Math.random() * 9000000000) + 1000000000}`;
+    const isPhoto = mediaType === "photo";
+    const entityType = isPhoto ? "image/jpeg" : "video/mp4";
+    const ruploadPath = isPhoto ? `/rupload_igphoto/${suffix}` : `/rupload_igvideo/${suffix}`;
+    const waterfallHeader = isPhoto ? "X_FB_PHOTO_WATERFALL_ID" : "X_FB_VIDEO_WATERFALL_ID";
+    const ruploadParams = JSON.stringify({
+      retry_context: JSON.stringify({ num_step_auto_retry: 0, num_reupload: 0, num_step_manual_retry: 0 }),
+      media_type: isPhoto ? "1" : "2",
+      upload_id: uploadId,
+      xsharing_user_ids: JSON.stringify([]),
+      image_compression: isPhoto
+        ? JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "80" })
+        : undefined,
+    });
+
+    const csrf = this.mobileCsrf || this.csrfToken;
+    const headers: Record<string, string> = {
+      "User-Agent": this._fullMobileUA,
+      [waterfallHeader]: randomUUID(),
+      "X-Entity-Type": entityType,
+      "Offset": "0",
+      "X-Instagram-Rupload-Params": ruploadParams,
+      "X-Entity-Name": suffix,
+      "X-Entity-Length": String(buffer.length),
+      "Content-Type": "application/octet-stream",
+      "Content-Length": String(buffer.length),
+      "X-IG-App-ID": MOBILE_AID,
+      "X-CSRFToken": csrf,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
+      Cookie: this.mobileCookieJar.join("; "),
+      ...(authorization ? { Authorization: authorization } : {}),
+    };
+
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"}`);
+    await this.apiThrottle();
+    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl);
+    if (!json || json.status !== "ok") {
+      console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
+      return null;
+    }
+    console.log(`[webClient] rupload ${ruploadPath} OK — upload_id="${json.upload_id}"`);
+    return String(json.upload_id ?? uploadId);
+  }
+
   // ── Get recent photo posts from a user's feed (with image URLs) ───────────
   // Used when repostUseHikerApi is OFF — the account's own session does the scrape.
   async getUserFeedItems(username: string): Promise<Array<{
@@ -3837,26 +3901,13 @@ export class InstagramWebClient {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
 
-      // Step 1 — multipart/form-data upload via /api/v1/media/upload/
-      // This is a standard /api/v1/ endpoint (same auth path as like/follow)
-      // so it accepts our web session cookies without requiring a Bearer token.
-      // The rupload binary protocol (/rupload/igphoto/...) requires a genuine
-      // mobile session and rejects web sessionids.
-      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
-        { name: "upload_id", value: uploadId },
-        { name: "media_type", value: "1" },
-        { name: "image_compression", value: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "95" }) },
-        { name: "photo", value: imageBuffer, filename: `photo_${uploadId}.jpg`, contentType: "image/jpeg" },
-      ]);
-      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
-      if (!uploaded) {
-        console.warn(`[webClient] media/upload failed: ${JSON.stringify(uploadRes)}`);
-        return null;
-      }
+      // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
+      const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
+      if (!confirmedUploadId) return null;
 
       // Step 2 — configure (creates the post)
       const body = new URLSearchParams({
-        upload_id: uploadId,
+        upload_id: confirmedUploadId,
         caption,
         source_type: "4",
         timezone_offset: "0",
@@ -3868,7 +3919,7 @@ export class InstagramWebClient {
         console.warn(`[webClient] media/configure failed: status="${confRes?.status}" message="${confRes?.message ?? "?"}" spam="${confRes?.spam ?? false}" feedback_title="${confRes?.feedback_title ?? ""}"`);
       }
       const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
-      if (!mediaId && confRes?.status === "ok") return uploadId;
+      if (!mediaId && confRes?.status === "ok") return confirmedUploadId;
       return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
@@ -3876,25 +3927,19 @@ export class InstagramWebClient {
   /**
    * Uploads a video (any format, pre-converted to MP4 by makeUniqueVideo)
    * to the user's feed via the Instagram private API.
-   * Uses the same multipart endpoint as uploadPhoto but with media_type=2.
+   * Uses the rupload binary protocol to /rupload_igvideo/{name}.
    */
   async uploadVideo(videoBuffer: Buffer, caption: string): Promise<string | null> {
     return this.timed("UploadVideo", async () => {
       const uploadId = String(Date.now());
 
-      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
-        { name: "upload_id", value: uploadId },
-        { name: "media_type", value: "2" },
-        { name: "video", value: videoBuffer, filename: `video_${uploadId}.mp4`, contentType: "video/mp4" },
-      ]);
-      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
-      if (!uploaded) {
-        console.warn(`[webClient] video/upload failed: ${JSON.stringify(uploadRes)}`);
-        return null;
-      }
+      // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
+      const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
+      if (!confirmedUploadId) return null;
 
+      // Step 2 — configure (creates the post)
       const body = new URLSearchParams({
-        upload_id: uploadId,
+        upload_id: confirmedUploadId,
         caption,
         source_type: "4",
         media_type: "2",
@@ -3904,8 +3949,11 @@ export class InstagramWebClient {
       }).toString();
 
       const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
+      if (!confRes || confRes.status !== "ok") {
+        console.warn(`[webClient] video/configure failed: status="${confRes?.status}" message="${confRes?.message ?? "?"}" spam="${confRes?.spam ?? false}" feedback_title="${confRes?.feedback_title ?? ""}"`);
+      }
       const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
-      if (!mediaId && confRes?.status === "ok") return uploadId;
+      if (!mediaId && confRes?.status === "ok") return confirmedUploadId;
       return mediaId;
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }

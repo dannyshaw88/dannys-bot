@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.51",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: switched to the correct Instagram upload protocol (rupload) — the old endpoint we were using does not exist and silently rejected every upload. Photos and videos now go through /rupload_igphoto and /rupload_igvideo, the same path the official Instagram app uses." },
+      { category: "Fix", text: "Repost: upload failure responses now show the exact error text Instagram returns (previously the server response was silently dropped, making it impossible to diagnose failures)." },
+    ],
+  },
+  {
     version: "1.1.50",
     date: "19 Jun 2026",
     items: [

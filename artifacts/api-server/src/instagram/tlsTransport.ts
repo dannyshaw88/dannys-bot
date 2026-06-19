@@ -573,6 +573,10 @@ export async function tlsMultipartPost(
       try { json = JSON.parse(rawBody); } catch {
         if (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data)) json = resp.data;
       }
+      if (json === null) {
+        const preview = rawBody.slice(0, 400).replace(/[\r\n]+/g, " ").trim();
+        console.warn(`[tls:multipart] POST ${host}${path} status=${resp.status} — non-JSON response: ${preview}`);
+      }
       return json;
     } catch (err: any) {
       console.error(`[tls:multipart] POST ${host}${path} FAILED — err=${err?.message ?? err}`);
