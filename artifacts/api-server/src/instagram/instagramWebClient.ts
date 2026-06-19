@@ -4127,6 +4127,18 @@ export class InstagramWebClient {
       // ── Mobile API path ────────────────────────────────────────────────────
       // All actions go via the mobile API only. The EB is used exclusively for
       // session/cookie establishment (Jarvee model) — never for actions.
+
+      // Merge rur (Instagram routing cookie) from web jar into mobileCookieJar.
+      // rur routes requests to the correct CDN shard. loadBrowserCookies() loads
+      // it into this.cookieJar but not mobileCookieJar. Without rur the rupload
+      // lands on shard A while configure lands on shard B → "something went wrong
+      // during media publish" (upload exists but configure can't locate it).
+      const rurCookie = this.cookieJar.find(c => c.startsWith("rur="));
+      if (rurCookie && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
+        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurCookie]);
+        console.log(`[webClient:${this.profileId}] uploadPhoto: added rur to mobileCookieJar from web jar`);
+      }
+
       const uploadId = String(Date.now());
       // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);

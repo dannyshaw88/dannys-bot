@@ -68,12 +68,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.1.69",
+    version: "1.1.70",
     date: "19 Jun 2026",
     items: [
-      { category: "Fix", text: "Repost: removed the embedded browser upload path. All photo uploads now go exclusively through the mobile API (rupload + configure), consistent with the rule that the EB is only used for session establishment, never for actions." },
-      { category: "Fix", text: "Repost: images with aspect ratio outside Instagram's 0.8–1.91 range are now automatically cropped to the nearest valid boundary before upload." },
-      { category: "Fix", text: "Repost: configure body now includes device, edits, and extra fields required by Instagram v431+, and explicitly sets media_type=1 for photos." },
+      { category: "Fix", text: "Repost: the rur (routing) cookie is now copied from the browser cookie jar into the mobile API session before upload. Without it, the rupload and configure requests could land on different Instagram CDN shards — configure would then fail to locate the upload and return 'something went wrong during media publish'." },
     ],
   },
   {
