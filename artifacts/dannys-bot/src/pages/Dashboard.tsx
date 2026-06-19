@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.38",
+    date: "19 Jun 2026",
+    items: [
+      { category: "UI", text: "Human Session: Follow Tool, Unfollow Tool and Contact Tool cyan header blocks now match the Emulation block width (37.5%). Order % and Skip Chance % fields moved to the right side of the header row, matching the size and spacing of the Emulation section fields." },
+      { category: "UI", text: "Inject Browsing popup now stacks all settings vertically (Feed Posts, Like %, Save Media %, Watch Stories %, View Highlights %, Comment %, Browse Before Follow, Abandon Follow) instead of wrapping horizontally. Labels are left-aligned with fixed width so all input pairs column-align." },
+      { category: "UI", text: "Emulation: Fire Chance % fields moved to the same row as Open Instagram Calls instead of a separate line below." },
+    ],
+  },
+  {
     version: "1.1.37",
     date: "18 Jun 2026",
     items: [
