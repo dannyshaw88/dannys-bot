@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.65",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: photo uploads now route through the embedded browser session (Chrome's own cookies and TLS) when the browser is open for that account. This bypasses the mobile API configure step that has been failing with 'upload id is missing' — the browser path is identical to what Instagram's own website does, so both the upload and publish use the same session with no mismatch. Accounts without an active browser session fall back to the existing mobile API path." },
+    ],
+  },
+  {
     version: "1.1.60",
     date: "19 Jun 2026",
     items: [
