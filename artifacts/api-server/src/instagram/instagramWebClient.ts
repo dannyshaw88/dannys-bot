@@ -3847,12 +3847,11 @@ export class InstagramWebClient {
       ...(authorization ? { Authorization: authorization } : {}),
     };
 
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary] sharedAgent=${!!sharedAgent}`);
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary]`);
     await this.apiThrottle();
     // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
     // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
-    // sharedAgent keeps this TCP connection alive so configure can reuse it → same Instagram shard.
-    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true, sharedAgent);
+    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
     if (!json || json.status !== "ok") {
       console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
       return null;

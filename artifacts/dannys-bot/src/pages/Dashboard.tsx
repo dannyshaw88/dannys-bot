@@ -197,6 +197,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.62",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: fixed 'sharedAgent is not defined' crash that was blocking all uploads — leftover reference from the v1.1.60 cleanup." },
+    ],
+  },
+  {
     version: "1.1.61",
     date: "19 Jun 2026",
     items: [
