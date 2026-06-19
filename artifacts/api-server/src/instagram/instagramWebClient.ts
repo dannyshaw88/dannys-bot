@@ -2208,29 +2208,38 @@ export class InstagramWebClient {
   // ── Scroll through a user's post feed (profile grid) ────────────────────
   // Fetches up to `count` posts from the user's feed and marks them as seen,
   // simulating a user scrolling through someone's profile grid.
+  // Each API call is logged individually: one ViewUserFeed for the fetch,
+  // then one ViewFeedPost per post marked as seen.
   async viewUserFeed(userId: string, count: number): Promise<Array<{ mediaId: string; shortcode: string; username: string }>> {
-    return this.timed("ViewUserFeed", async () => {
-      const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
-      if (!j?.items) return [];
-      const items: any[] = (j.items as any[]).slice(0, Math.max(1, count));
-      const result: Array<{ mediaId: string; shortcode: string; username: string }> = [];
-      for (const media of items) {
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+    const clampedCount = Math.max(1, count);
+    let rawItems: any[] = [];
+    await this.timed("ViewUserFeed", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=${clampedCount}`);
+      rawItems = (j?.items as any[] ?? []).slice(0, clampedCount);
+      return rawItems.length;
+    }, (n) => `Viewed user feed: ${n} posts`);
+
+    const result: Array<{ mediaId: string; shortcode: string; username: string }> = [];
+    let seen = 0;
+    for (const media of rawItems) {
+      const mediaId = String(media?.id ?? media?.pk ?? "");
+      if (!mediaId) continue;
+      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+      await this.timed("ViewFeedPost", async () => {
         await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
           reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
         }).toString()).catch(() => {});
-        result.push({
-          mediaId,
-          shortcode: this.mediaIdToShortcode(mediaId),
-          username: String(media?.user?.username ?? ""),
-        });
-      }
-      return result;
-    }, (r) => `Viewed user feed: ${r.length} posts`);
+        return ++seen;
+      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+      result.push({
+        mediaId,
+        shortcode: this.mediaIdToShortcode(mediaId),
+        username: String(media?.user?.username ?? ""),
+      });
+    }
+    return result;
   }
 
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
@@ -3318,11 +3327,6 @@ export class InstagramWebClient {
       // Always log non-200 responses; log body snippet for debugging
     if (res.status !== 200 || !res.json) {
       console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
-      // Log media/seen 5xx errors to the API call log so they appear in the export
-      if (res.status >= 500 && path.includes("media/seen")) {
-        const errMsg = res.json?.message ?? res.rawBody.slice(0, 120) ?? "server error";
-        this.logCallFn?.("MediaSeenError", 0, `media/seen status=${res.status} — "${errMsg}"`, true);
-      }
       // If Instagram explicitly rejected the request (4xx/5xx or non-JSON response
       // despite a 200), the session cookies are expired or invalid. Mark the session
       // as needing refresh so the next isMobileLoggedIn() call returns false and the
@@ -3719,6 +3723,15 @@ export class InstagramWebClient {
   // which requires a genuine mobile Bearer-token session and rejects web
   // sessionids with HTML 404.
   private async mobilePostMultipart(path: string, parts: Array<{ name: string; value: string | Buffer; filename?: string; contentType?: string }>): Promise<any> {
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
+    if (!hasMobileSession) {
+      console.warn(`[webClient] mobilePostMultipart ${path}: no mobile session — run Verify Credentials first`);
+      return null;
+    }
+    if (!this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
+    }
     await this.apiThrottle();
     const boundary = `----InstaBoundary${Date.now()}`;
     const chunks: Buffer[] = [];
@@ -3735,6 +3748,7 @@ export class InstagramWebClient {
     chunks.push(Buffer.from(`--${boundary}--\r\n`));
     const body = Buffer.concat(chunks);
 
+    const csrf = this.mobileCsrf || this.csrfToken;
     const headers: Record<string, string> = {
       "User-Agent": this._fullMobileUA,
       Accept: "*/*",
@@ -3742,14 +3756,20 @@ export class InstagramWebClient {
       "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": String(body.length),
       "X-IG-App-ID": MOBILE_AID,
-      "X-CSRFToken": this.csrfToken,
+      "X-CSRFToken": csrf,
       "X-IG-Capabilities": "3brTvwE=",
       "X-IG-Connection-Type": "WIFI",
-      Cookie: this.cookieJar.join("; "),
+      Cookie: this.mobileCookieJar.join("; "),
+      ...(authorization ? { Authorization: authorization } : {}),
     };
 
+    console.log(`[webClient] mobilePostMultipart ${path} bodySize=${body.length}B csrf=${csrf.slice(0,8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"}`);
     const json = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl);
-    if (!json) console.log(`[webClient] mobilePostMultipart ${path} returned null — upload may have failed`);
+    if (!json) {
+      console.warn(`[webClient] mobilePostMultipart ${path} returned null — upload may have failed (no JSON in response)`);
+    } else {
+      console.log(`[webClient] mobilePostMultipart ${path} → status="${json.status ?? "?"}" upload_id="${json.upload_id ?? "none"}"`);
+    }
     return json;
   }
 
@@ -3844,6 +3864,9 @@ export class InstagramWebClient {
       }).toString();
 
       const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
+      if (!confRes || confRes.status !== "ok") {
+        console.warn(`[webClient] media/configure failed: status="${confRes?.status}" message="${confRes?.message ?? "?"}" spam="${confRes?.spam ?? false}" feedback_title="${confRes?.feedback_title ?? ""}"`);
+      }
       const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
       if (!mediaId && confRes?.status === "ok") return uploadId;
       return mediaId;

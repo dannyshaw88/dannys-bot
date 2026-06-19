@@ -62,6 +62,23 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.49",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost Local Folder: fixed a core bug where the upload was sending the wrong session cookies (web cookies instead of mobile API cookies) — this is why uploads silently failed with no useful error. All uploads now use the correct mobile session." },
+      { category: "Fix", text: "Repost: added detailed upload debug logging — logs now show exactly which step failed (media/upload or media/configure), the full Instagram error message, and whether the mobile session was present before the upload attempt." },
+    ],
+  },
+  {
+    version: "1.1.48",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "media/seen 500 errors no longer flood the API calls log — these are routine Instagram server responses that were being logged as noise. They are now silently ignored." },
+      { category: "Fix", text: "View User Feed now logs each individual post mark-as-seen as a separate API call entry instead of one combined 'Viewed user feed: N posts' line — every API call is now visible individually." },
+      { category: "Fix", text: "View User Feed now requests only as many posts from Instagram as your scroll count setting specifies, instead of always fetching 12 and discarding extras." },
+    ],
+  },
+  {
     version: "1.1.47",
     date: "19 Jun 2026",
     items: [

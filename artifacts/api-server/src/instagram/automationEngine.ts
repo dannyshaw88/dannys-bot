@@ -2807,6 +2807,7 @@ class AutomationEngine {
 
               let postedMediaId: string | null = null;
               const uniqueTag = makeUnique ? " +unique" : "";
+              console.log(`[engine] @${profile.username}: 🔁 repost upload starting — file="${fileName}" isImage=${isImage} isVideo=${isVideo} makeUnique=${makeUnique} level=${level} captionLen=${caption.length}`);
 
               if (isVideo) {
                 // ── Video upload path ────────────────────────────────────────
