@@ -197,6 +197,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.64",
+    date: "19 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: added Accept and Accept-Language headers to the upload request — fixes HTTP 400 failures on rupload for some accounts." },
+      { category: "Fix", text: "Repost: upload errors now log Instagram's full error message so failures are easier to diagnose." },
+    ],
+  },
+  {
     version: "1.1.63",
     date: "19 Jun 2026",
     items: [

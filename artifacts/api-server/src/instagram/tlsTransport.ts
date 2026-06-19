@@ -626,7 +626,9 @@ export async function tlsMultipartPost(
       console.warn(`[tls:node-https] POST ${host}${path} status=${res.status} — non-JSON response: ${preview}`);
     }
     if (json !== null) {
-      console.log(`[tls:node-https] POST ${host}${path} status=${res.status} json.status="${json.status ?? "?"}" upload_id="${json.upload_id ?? "none"}"`);
+      const msg = json.message ? ` msg="${json.message}"` : "";
+      const errType = json.error_type ? ` err_type="${json.error_type}"` : "";
+      console.log(`[tls:node-https] POST ${host}${path} status=${res.status} json.status="${json.status ?? "?"}" upload_id="${json.upload_id ?? "none"}"${msg}${errType}`);
     }
     return json;
   } finally {

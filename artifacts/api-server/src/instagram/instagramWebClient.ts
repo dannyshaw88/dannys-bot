@@ -3831,6 +3831,8 @@ export class InstagramWebClient {
     const csrf = this.mobileCsrf || this.csrfToken;
     const headers: Record<string, string> = {
       "User-Agent": this._fullMobileUA,
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
       [waterfallHeader]: randomUUID(),
       "X-Entity-Type": entityType,
       "Offset": "0",
@@ -3847,7 +3849,8 @@ export class InstagramWebClient {
       ...(authorization ? { Authorization: authorization } : {}),
     };
 
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} [via node-https, raw binary]`);
+    const proxyHost = this.proxyUrl ? (() => { try { return new URL(this.proxyUrl).host; } catch { return this.proxyUrl; } })() : "none";
+    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} proxy=${proxyHost} [via node-https, raw binary]`);
     await this.apiThrottle();
     // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
     // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
