@@ -2493,12 +2493,18 @@ class AutomationEngine {
             const toClick = [...vtfResult.items].sort(() => 0.5 - Math.random()).slice(0, clickCount);
             for (const item of toClick) {
               try {
-                await client.viewFeedPost(item.mediaId);
-                console.log(`[engine] @${profile.username}: 🔍 opened post ${item.shortcode} by @${item.username} from feed`);
-                this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from feed");
+                if (item.isReel) {
+                  await client.viewFeedReel(item.mediaId);
+                  console.log(`[engine] @${profile.username}: 🎬 opened reel ${item.shortcode} by @${item.username} from feed`);
+                  this.logAction(profile.id, tool.id, "view_reel", item.username, item.shortcode, "post", "ok", "Opened reel from feed");
+                } else {
+                  await client.viewFeedPost(item.mediaId);
+                  console.log(`[engine] @${profile.username}: 🔍 opened post ${item.shortcode} by @${item.username} from feed`);
+                  this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from feed");
+                }
               } catch (e: any) {
                 if (await checkSessionErr(e, "view_post")) return;
-                console.warn(`[engine] @${profile.username}: view post error: ${e?.message}`);
+                console.warn(`[engine] @${profile.username}: view post/reel error: ${e?.message}`);
                 continue;
               }
 

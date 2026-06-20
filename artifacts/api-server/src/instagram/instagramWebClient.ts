@@ -2102,7 +2102,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string }> }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -2152,7 +2152,7 @@ export class InstagramWebClient {
       .slice(0, count);
 
     let viewed = 0;
-    const viewedItems: Array<{ mediaId: string; userId: string; username: string; shortcode: string }> = [];
+    const viewedItems: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> = [];
 
     for (const media of items) {
       const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -2176,9 +2176,24 @@ export class InstagramWebClient {
         return ++viewed;
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
 
+      // When a reel was actually watched (watch % > 0), also fire clips_viewed —
+      // the real app sends this to tell Instagram the reel played, not just scrolled past.
+      if (isReel && reelWatchPercentMax > 0) {
+        await this.timed("ClipsViewed", async () => {
+          await this.mobileSessionPost(
+            `/api/v1/clips/clips_viewed/`,
+            new URLSearchParams({
+              clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
+              is_clips_creation_page: "false",
+            }).toString(),
+          ).catch(() => {});
+          return true;
+        }, "Marked reel as played").catch(() => {});
+      }
+
       const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
       const username = String(media?.user?.username ?? "");
-      if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId) });
+      if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
     }
 
     return { viewed, items: viewedItems };
@@ -2194,6 +2209,31 @@ export class InstagramWebClient {
         return true;
       } catch { return false; }
     }, "Viewed feed post");
+  }
+
+  // ── Open and play a reel from the feed (simulates tapping + watching) ────
+  // When a feed item is a reel, the real app fires two calls:
+  //   1. media/{id}/info/ — fetches reel metadata (tap to open)
+  //   2. clips/clips_viewed/ — tells Instagram the reel played (not just scrolled past)
+  // This is distinct from viewFeedPost which only fires the info call.
+  async viewFeedReel(mediaId: string): Promise<boolean> {
+    return this.timed("ViewFeedReel", async () => {
+      try {
+        await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
+      } catch { return false; }
+      // Fire clips_viewed separately — a failure here should not fail the whole action
+      await this.timed("ClipsViewed", async () => {
+        await this.mobileSessionPost(
+          `/api/v1/clips/clips_viewed/`,
+          new URLSearchParams({
+            clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
+            is_clips_creation_page: "false",
+          }).toString(),
+        ).catch(() => {});
+        return true;
+      }, "Marked reel as played").catch(() => {});
+      return true;
+    }, "Opened and played reel from feed");
   }
 
   // ── Visit a user's profile page ──────────────────────────────────────────

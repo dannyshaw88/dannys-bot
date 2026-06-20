@@ -68,6 +68,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.93",
+    date: "20 Jun 2026",
+    items: [
+      { category: "New", text: "Full reel emulation: when scrolling the timeline, reels that are watched now fire clips/clips_viewed/ in addition to media/seen/ — matching what the real Instagram app sends when a reel autoplays." },
+      { category: "New", text: "Click Post %: if the randomly selected post turns out to be a reel, the bot now fires both media/{id}/info/ and clips/clips_viewed/ — correctly emulating a user tapping and playing a reel. Previously only the info call was made." },
+      { category: "Fix", text: "View Reels % (the watch percentage field under View Timeline Feed) is now fully wired — setting it above 0 activates clips/clips_viewed/ for every reel encountered while scrolling." },
+    ],
+  },
+  {
     version: "1.1.92",
     date: "20 Jun 2026",
     items: [
