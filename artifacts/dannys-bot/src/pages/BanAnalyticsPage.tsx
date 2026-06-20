@@ -1975,19 +1975,10 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
                 <p className="text-xs text-muted-foreground">No verify-only bans yet. These are accounts banned with zero tool activity — only the verify handshake ran. Flag more accounts on the Data tab to populate this card.</p>
               </div>
             ) : withLeak.length === 0 ? (
-              <div className="p-4 space-y-3">
+              <div className="p-4">
                 <p className="text-[11px] text-muted-foreground">
-                  {accounts.length} verify-only banned account{accounts.length !== 1 ? "s" : ""} found, but none have a leak snapshot. Re-verify these accounts to capture a device fingerprint:
+                  {accounts.length} verify-only banned account{accounts.length !== 1 ? "s" : ""} found but none have a leak snapshot yet. Re-verify each account to capture a device fingerprint and populate this table.
                 </p>
-                <div className="flex flex-col gap-1">
-                  {noLeak.map(a => (
-                    <div key={a.id} className="flex items-center gap-2 text-[11px]">
-                      <span className="font-mono text-muted-foreground">@{a.username}</span>
-                      {a.bannedAt && <span className="text-muted-foreground/60">· banned {new Date(a.bannedAt).toLocaleDateString()}</span>}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground italic">Go to Accounts → click Verify on each account above. The leak check runs silently in the background and populates this analysis automatically.</p>
               </div>
             ) : (
               <div className="divide-y divide-border/50">
@@ -2043,6 +2034,136 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
                   <span><span className="text-red-600 font-bold">FAIL</span> · <span className="text-yellow-600 font-semibold">WARN</span> · <span className="text-emerald-600">PASS</span> = verdict fields</span>
                   <span><span className="font-mono">value</span> = raw data field</span>
                 </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── Verified After a Recent Ban card (ban tab only) ───────────── */}
+      {forTab === "ban" && (() => {
+        // Use lastOperationBeforeBan as the best available proxy for "when this
+        // account actually died." bannedAt = when Danny marked it (could be hours
+        // later). lastOperationBeforeBan = last successful API call = upper bound
+        // on the real ban time.
+        const eligible = banEntries.filter(e => e.proxyHost && e.lastOperationBeforeBan);
+
+        // Group by proxy host
+        const byProxy: Record<string, typeof banEntries> = {};
+        for (const e of eligible) {
+          const k = e.proxyHost!;
+          if (!byProxy[k]) byProxy[k] = [];
+          byProxy[k].push(e);
+        }
+
+        // For each proxy with 2+ bans, compute consecutive gaps (sorted by last op time)
+        const pairs: Array<{ proxy: string; a: AnalyticsEntry; b: AnalyticsEntry; gapHours: number }> = [];
+        for (const [proxy, accs] of Object.entries(byProxy)) {
+          if (accs.length < 2) continue;
+          const sorted = [...accs].sort((x, y) =>
+            new Date(x.lastOperationBeforeBan!).getTime() - new Date(y.lastOperationBeforeBan!).getTime()
+          );
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const tsA = new Date(sorted[i].lastOperationBeforeBan!).getTime();
+            const tsB = new Date(sorted[i + 1].lastOperationBeforeBan!).getTime();
+            pairs.push({ proxy, a: sorted[i], b: sorted[i + 1], gapHours: (tsB - tsA) / 3600000 });
+          }
+        }
+
+        // Sort shortest gap first — the most suspicious pairs at the top
+        pairs.sort((a, b) => a.gapHours - b.gapHours);
+
+        const fmt = (h: number) =>
+          h < 1 ? `${Math.round(h * 60)}m`
+          : h < 24 ? `${h.toFixed(1)}h`
+          : `${(h / 24).toFixed(1)}d`;
+
+        const buckets = [
+          { label: "< 1h",  count: pairs.filter(p => p.gapHours < 1).length },
+          { label: "1–6h",  count: pairs.filter(p => p.gapHours >= 1 && p.gapHours < 6).length },
+          { label: "6–24h", count: pairs.filter(p => p.gapHours >= 6 && p.gapHours < 24).length },
+          { label: "1–3d",  count: pairs.filter(p => p.gapHours >= 24 && p.gapHours < 72).length },
+          { label: "> 3d",  count: pairs.filter(p => p.gapHours >= 72).length },
+        ];
+
+        const shortPairs  = pairs.filter(p => p.gapHours < 24);
+        const proxiesHit  = new Set(shortPairs.map(p => p.proxy)).size;
+
+        return (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold">Verified After a Recent Ban</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Tests whether verifying a new account on an IP that recently had an account banned increases the chance of that new account being banned too — the "tainted IP" theory. Uses <code className="text-[10px] bg-muted px-0.5 rounded">lastOperationBeforeBan</code> (last successful API call) as the closest approximation of when each account actually died, since <code className="text-[10px] bg-muted px-0.5 rounded">bannedAt</code> is when you marked it — which can be hours later.
+                </p>
+              </div>
+              {pairs.length > 0 && <span className="text-[10px] text-muted-foreground pt-0.5 shrink-0">{pairs.length} pair{pairs.length !== 1 ? "s" : ""}</span>}
+            </div>
+
+            {eligible.length < 2 || pairs.length === 0 ? (
+              <div className="p-4">
+                <p className="text-[11px] text-muted-foreground">
+                  Not enough data yet. Need 2+ banned accounts on the same proxy, each with a <code className="text-[10px] bg-muted px-0.5 rounded">lastOperationBeforeBan</code> timestamp. Flag more accounts to populate this card.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {/* gap distribution buckets */}
+                <div className="px-4 py-3 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Gap between consecutive bans on the same proxy</p>
+                  <div className="flex gap-2">
+                    {buckets.map(b => (
+                      <div key={b.label} className={`flex-1 rounded-md border px-2 py-1.5 text-center ${b.count > 0 ? "border-amber-400/60 bg-amber-50/40 dark:bg-amber-900/10" : "border-border bg-muted/10"}`}>
+                        <p className="text-[10px] text-muted-foreground">{b.label}</p>
+                        <p className={`text-sm font-bold ${b.count > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{b.count}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Each column = number of account pairs (A then B on the same proxy) where B's last successful call was this far after A's. A short gap means B was running on the IP very soon after A died there.
+                  </p>
+                </div>
+
+                {/* evidence block */}
+                <div className="px-4 py-3 bg-muted/30 space-y-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
+                  {shortPairs.length > 0 ? (
+                    <p className="text-[11px]">
+                      {shortPairs.length} of {pairs.length} consecutive ban pair{pairs.length !== 1 ? "s" : ""} ({Math.round(shortPairs.length / pairs.length * 100)}%) occurred within 24h of each other on {proxiesHit} proxy{proxiesHit !== 1 ? " IPs" : " IP"}. The shortest gap was {fmt(pairs[0].gapHours)} ({pairs[0].a.username} → {pairs[0].b.username} on {pairs[0].proxy}). If the tainted IP theory is correct, the window closes somewhere between the shortest gap where bans cluster and the point where they stop. Collecting more data points will narrow this estimate.
+                    </p>
+                  ) : (
+                    <p className="text-[11px]">No consecutive ban pairs within 24h found — all pairs on the same proxy are more than a day apart. This is mild evidence against the tainted IP theory, or the proxy was simply reused much later. Collect more same-proxy ban events to strengthen the signal.</p>
+                  )}
+                </div>
+
+                {/* recommended action */}
+                <div className="px-4 py-3 bg-cyan-50 dark:bg-cyan-900/10 border-b border-cyan-200 dark:border-cyan-800">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action (theory not yet confirmed)</p>
+                  <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
+                    If the short-gap pairs keep appearing as you collect more data, stop using a proxy for new verifications for at least {pairs.length >= 3 ? `${fmt(Math.max(...shortPairs.map(p => p.gapHours)) + 1)} (the longest short-gap pair + buffer)` : "24–48h"} after any account on that IP is banned. Rotate to a clean IP for all cold logins immediately after a ban event.
+                  </p>
+                </div>
+
+                {/* per-pair detail */}
+                <details className="group">
+                  <summary className="cursor-pointer px-4 py-2 text-[11px] text-muted-foreground flex items-center gap-1 select-none list-none hover:bg-muted/20">
+                    <ChevronDown className="w-3 h-3 group-open:hidden" /><ChevronUp className="w-3 h-3 hidden group-open:block" />
+                    All {pairs.length} consecutive pairs
+                  </summary>
+                  <div className="divide-y divide-border/30">
+                    {pairs.map((p, i) => (
+                      <div key={i} className={`px-4 py-2 flex items-center gap-3 text-[11px] ${p.gapHours < 24 ? "bg-amber-50/30 dark:bg-amber-900/10" : ""}`}>
+                        <span className={`font-bold w-10 shrink-0 ${p.gapHours < 6 ? "text-red-500" : p.gapHours < 24 ? "text-amber-500" : "text-muted-foreground"}`}>{fmt(p.gapHours)}</span>
+                        <span className="font-mono text-muted-foreground truncate">{p.a.username}</span>
+                        <span className="text-muted-foreground/40 shrink-0">→</span>
+                        <span className="font-mono text-muted-foreground truncate">{p.b.username}</span>
+                        <span className="text-muted-foreground/40 text-[10px] shrink-0 ml-auto">{p.proxy}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
           </div>

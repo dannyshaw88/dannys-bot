@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.87",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Theories tab: removed the account list from the fingerprint card's 'no data' state — it now shows a single line instead of listing usernames." },
+      { category: "Analytics", text: "New theory card on the Ban tab: 'Verified After a Recent Ban' — groups banned accounts by proxy, computes the gap between consecutive ban events on the same IP, and shows a bucket chart (< 1h / 1–6h / 6–24h / 1–3d / > 3d). Short-gap pairs are highlighted as tainted IP candidates." },
+    ],
+  },
+  {
     version: "1.1.86",
     date: "20 Jun 2026",
     items: [
