@@ -313,6 +313,7 @@ export class InstagramWebClient {
   private logCallFn?: ApiCallLogger;
   private profileId?: number;
   private _apiCallSource = "Account";
+  private _inTimedCall = false;
   // User-agent to use for web (www.instagram.com) POST requests.
   // Should match the EB browser's UA so that cookies and UA are consistent.
   private webUserAgent = WEB_UA;
@@ -652,13 +653,33 @@ export class InstagramWebClient {
 
   private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string), shouldLog?: (result: T) => boolean): Promise<T> {
     const t0 = Date.now();
-    const result = await fn();
+    const prevInTimed = this._inTimedCall;
+    this._inTimedCall = true;
+    let result!: T;
+    try {
+      result = await fn();
+    } finally {
+      this._inTimedCall = prevInTimed;
+    }
     const ms = Date.now() - t0;
     if (!shouldLog || shouldLog(result)) {
       const msg = typeof message === "function" ? message(result) : message;
       this.logCallFn?.(opName, ms, msg);
     }
     return result;
+  }
+
+  private _opNameFromPath(path: string, method: string): string {
+    const base = path.split("?")[0].replace(/\/+$/, "");
+    const stripped = base.replace(/^\/api\/v\d+\//, "");
+    const parts = stripped.split("/").filter(p => p && !/^\d+$/.test(p));
+    const pascal = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())).join("");
+    return `${method}:${pascal || base}`;
+  }
+
+  private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
+    if (this._inTimedCall || !this.logCallFn) return;
+    this.logCallFn(this._opNameFromPath(path, method), durationMs, path, isError);
   }
 
   // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.
@@ -1152,6 +1173,7 @@ export class InstagramWebClient {
   // ── Common authenticated request helper ────────────────────────────────────
   // web session GET (www.instagram.com)
   private async webGet(path: string): Promise<any> {
+    const _t0 = Date.now();
     const res = await igReq({
       path,
       method: "GET",
@@ -1168,6 +1190,7 @@ export class InstagramWebClient {
       proxyUrl: this.proxyUrl,
     });
     if (!res.json) console.log(`[webClient] webGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    this._logTransport(path, "GET", Date.now() - _t0, res.status >= 400);
     return res.json;
   }
 
@@ -1175,6 +1198,7 @@ export class InstagramWebClient {
   // NEVER use for session actions — use mobileSessionGet instead.
   private async ebGet(path: string): Promise<any> {
     await this.apiThrottle();
+    const _t0 = Date.now();
     const res = await igReq({
       host: "i.instagram.com",
       path,
@@ -1193,6 +1217,7 @@ export class InstagramWebClient {
       proxyUrl: this.proxyUrl,
     });
     if (!res.json) console.log(`[webClient] ebGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    this._logTransport(path, "GET", Date.now() - _t0, res.status >= 400);
     return res.json;
   }
 
@@ -1215,6 +1240,7 @@ export class InstagramWebClient {
       await this._bootstrapMobileCsrf();
     }
     await this.apiThrottle();
+    const _t0 = Date.now();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || "missing";
     let fullMobileUA: string;
@@ -1263,9 +1289,11 @@ export class InstagramWebClient {
       const bodyMsg: string = (res.json as any)?.message ?? "";
       const errMsg = bodyMsg || "login_required";
       console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      this._logTransport(path, "GET", Date.now() - _t0, true);
       throw new Error(errMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    this._logTransport(path, "GET", Date.now() - _t0, false);
     return res.json;
   }
 
@@ -1293,6 +1321,7 @@ export class InstagramWebClient {
 
   private async webPost(path: string, body = "", _isRetry = false): Promise<any> {
     await this.apiThrottle();
+    const _t0 = Date.now();
     const sessionCookie = this.cookieJar.find(c => c.startsWith("sessionid="));
     console.log(`[webClient] webPost ${path} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}${_isRetry ? " [retry]" : ""}`);
 
@@ -1335,6 +1364,7 @@ export class InstagramWebClient {
     }
 
     if (!res.json) console.log(`[webClient] webPost ${path} status=${res.status} body:`, res.rawBody.slice(0, 300));
+    this._logTransport(path, "POST", Date.now() - _t0, res.status >= 400);
     return { json: res.json, status: res.status, rawBody: res.rawBody };
   }
 
@@ -3266,6 +3296,7 @@ export class InstagramWebClient {
       await this._bootstrapMobileCsrf();
     }
     await this.apiThrottle();
+    const _t0 = Date.now();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || this.csrfToken || "missing";
     // Build full Instagram mobile UA — userAgentApi stores the device string portion only
@@ -3336,6 +3367,7 @@ export class InstagramWebClient {
     if (res.json?.message === "feedback_required" && !this._abdDismissInProgress) {
       this._lastFeedbackResponse = res.json;
     }
+    this._logTransport(path, "POST", Date.now() - _t0, res.status >= 400 || !res.json);
     return res.json;
   }
 

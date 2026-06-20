@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.89",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call export now logs every endpoint the account hits — including timeline feed fetches, media seen calls, and all background requests that were previously missing from the export." },
+    ],
+  },
+  {
     version: "1.1.88",
     date: "20 Jun 2026",
     items: [
