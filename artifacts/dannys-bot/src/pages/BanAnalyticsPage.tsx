@@ -1927,29 +1927,28 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         const withLeak = accounts.filter(a => a.leakData && typeof a.leakData === "object" && a.leakData.results);
         const noLeak = accounts.filter(a => !a.leakData || !a.leakData.results);
 
-        const testKeys: string[] = [];
-        if (withLeak.length > 0) {
-          const keySet = new Set<string>();
-          for (const a of withLeak) {
-            const results = a.leakData.results as Record<string, { status: string; label?: string }>;
-            for (const k of Object.keys(results)) keySet.add(k);
-          }
-          testKeys.push(...Array.from(keySet));
-        }
+        // Scored tests: keys that can actually produce fail/warn verdicts.
+        // Info-only tests (Timezone, Navigator, Hardware, Canvas, Audio, WebGL, etc.)
+        // are excluded from the bar chart — they capture fingerprint data but have
+        // no pass/fail verdict, so counting them as "pass" (green) is misleading.
+        const SCORED_KEYS = ["IPMatch", "WebRTC", "DNS", "UAMatch", "Bot", "Fonts"];
 
-        const testStats = testKeys.map(key => {
-          let fail = 0, warn = 0, pass = 0;
+        const testStats = SCORED_KEYS.map(key => {
+          let fail = 0, warn = 0, pass = 0, missing = 0;
           for (const a of withLeak) {
-            const r = (a.leakData.results as Record<string, { status: string }>)[key];
-            const s = (r?.status ?? "").toLowerCase();
+            const r = (a.leakData.results as Record<string, { status: string; label?: string }>)[key];
+            if (!r) { missing++; continue; }
+            const s = (r.status ?? "").toLowerCase();
             if (s === "fail") fail++;
             else if (s === "warn") warn++;
-            else pass++;
+            else if (s === "pass") pass++;
+            else missing++; // info or unknown = not a verdict
           }
           const n = withLeak.length;
           const label = (withLeak[0]?.leakData?.results as any)?.[key]?.label ?? key;
-          return { key, label, fail, warn, pass, total: n, failPct: Math.round(fail / n * 100) };
-        }).sort((a, b) => b.failPct - a.failPct);
+          const verdicted = fail + warn + pass;
+          return { key, label, fail, warn, pass, missing, total: n, verdicted, failPct: verdicted > 0 ? Math.round(fail / verdicted * 100) : 0 };
+        }).filter(t => t.verdicted > 0).sort((a, b) => b.failPct - a.failPct);
 
         const majorityFails = testStats.filter(t => t.failPct > 50);
 
@@ -2054,8 +2053,15 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
                             <div className="flex flex-wrap gap-1">
                               {Object.entries(results).map(([key, val]) => {
                                 const s = (val.status ?? "").toLowerCase();
-                                const color = s === "fail" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : s === "warn" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
-                                return <span key={key} className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${color}`}>{val.label ?? key}: {val.status?.toUpperCase()}</span>;
+                                const color = s === "fail"
+                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                  : s === "warn"
+                                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                  : s === "pass"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  : "bg-muted text-muted-foreground";
+                                const displayVal = s === "info" ? (val as any).label ?? key : val.status?.toUpperCase();
+                                return <span key={key} className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${color}`}>{key}: {displayVal}</span>;
                               })}
                             </div>
                           ) : (

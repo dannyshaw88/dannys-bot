@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.85",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Verify-Only Device Fingerprint card: bar chart now only shows the 6 tests that can actually produce a verdict (Proxy IP Match, WebRTC, DNS, User-Agent Match, Bot Detection, Fonts). Info-only tests like Canvas, Audio, Timezone are excluded from the bars — they collect fingerprint data but have no pass/fail verdict." },
+      { category: "Analytics", text: "Per-account detail badges: Info-status fields now show as grey instead of green. Green is reserved for confirmed PASS, yellow for WARN, red for FAIL." },
+    ],
+  },
+  {
     version: "1.1.84",
     date: "20 Jun 2026",
     items: [
