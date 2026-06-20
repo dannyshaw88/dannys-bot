@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.97",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: improved configure request format — signed body now sent with raw JSON matching the official Instagram mobile API format. Additional identity headers (ig-u-ds-id, ig-intended-user-id, X-IG-WWW-Claim) added to the publish step." },
+    ],
+  },
+  {
     version: "1.1.96",
     date: "20 Jun 2026",
     items: [

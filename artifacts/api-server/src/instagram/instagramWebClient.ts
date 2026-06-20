@@ -278,14 +278,18 @@ const MOBILE_AID = "567067343352427";
 // required — plain URL-encoded form data returns HTTP 400.
 const IG_SIGNATURE_KEY = "9193488027538fd3450b83b7d05286d4ca9599a0f7eeed90d8c85925698a05dc";
 
-/** Wrap a params object in Instagram's signed_body format */
+/** Wrap a params object in Instagram's signed_body format.
+ *
+ * IMPORTANT: raw string concatenation only — do NOT use URLSearchParams or
+ * any URL-encoding here. The library (instagram-private-api) sends the JSON
+ * payload as-is (no %-encoding). Instagram's configure parser splits on the
+ * first '.' to extract HMAC + raw JSON; if the JSON is URL-encoded the parser
+ * sees garbage (e.g. "%7B%22key%22%3A...") and returns "something went wrong".
+ */
 function signBody(params: Record<string, unknown>): string {
   const json = JSON.stringify(params);
   const hmac = createHmac("sha256", IG_SIGNATURE_KEY).update(json).digest("hex");
-  return new URLSearchParams({
-    ig_sig_key_version: "4",
-    signed_body: `${hmac}.${json}`,
-  }).toString();
+  return `ig_sig_key_version=4&signed_body=${hmac}.${json}`;
 }
 
 /**
@@ -3857,7 +3861,7 @@ export class InstagramWebClient {
     };
 
     console.log(`[webClient] mobilePostMultipart ${path} bodySize=${body.length}B csrf=${csrf.slice(0,8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"}`);
-    const json = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl);
+    const { json } = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl);
     if (!json) {
       console.warn(`[webClient] mobilePostMultipart ${path} returned null — upload may have failed (no JSON in response)`);
     } else {
@@ -3951,10 +3955,18 @@ export class InstagramWebClient {
     await this.apiThrottle();
     // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
     // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
-    const json = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
+    const { json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
     if (!json || json.status !== "ok") {
       console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
       return null;
+    }
+    // Capture rur (shard-routing cookie) from the rupload Set-Cookie response.
+    // rupload and configure MUST land on the same Instagram backend shard.
+    // Without rur in mobileCookieJar, configure hits a different shard and returns HTTP 500.
+    const rurFromRupload = ruploadCookies.find(c => c.startsWith("rur="));
+    if (rurFromRupload && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurFromRupload]);
+      console.log(`[webClient:${this.profileId}] rupload: captured rur from response Set-Cookie → mobileCookieJar`);
     }
     console.log(`[webClient] rupload ${ruploadPath} OK — upload_id="${json.upload_id}"`);
     return String(json.upload_id ?? uploadId);
@@ -4076,59 +4088,68 @@ export class InstagramWebClient {
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
 
-    // CONFIRMED via live test (Jun 2026): signed_body format causes "upload id is missing".
-    // Plain URLSearchParams causes configure to FIND the upload (different error from Replit,
-    // but crucially the upload IS found). signed_body consistently produces "upload id is missing"
-    // even when both rupload and configure use the same TLS stack and the same cookies.
-    // The code comment that said "plain URL-encoded returns HTTP 400" was wrong —
-    // plain URLSearchParams is the format that actually works.
-    const bodyParams = new URLSearchParams({
-      upload_id:                    uploadId,
-      caption:                      caption ?? "",
-      source_type:                  "4",
-      timezone_offset:              "0",
-      date_time_original:           new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
-      client_shared_at:             String(Math.floor(Date.now() / 1000)),
-      creation_logger_session_id:   randomUUID(),
-      _csrftoken:                   csrf,
-      _uid:                         ownUserId,
-      _uuid:                        uuid,
-      device_id:                    deviceId,
-    });
-    if (isVideo) {
-      bodyParams.set("media_type", "2");
-      bodyParams.set("clips_share_preview_to_feed", "1");
-    } else {
-      bodyParams.set("media_type", "1");
-    }
+    // Use signBody() format (ig_sig_key_version=4&signed_body=HMAC.JSON) — this matches
+    // what the instagram-private-api library sends via ig.media.configure().
+    // Previous "upload id is missing" failure was a separate issue (CycleTLS TLS stack
+    // mismatch between rupload and configure). Since both now use Node.js HTTPS via
+    // forceNodeTls:true (and rupload also uses Node.js HTTPS), the TLS stacks match.
+    //
+    // Fields must match what the library sends (confirmed by reading its source):
+    //   _uuid, _uid, _csrftoken — device identity
+    //   upload_id, source_type, caption, timezone_offset, date_time_original — upload identity
+    //   media_folder, camera_model, camera_make, scene_capture_type, software — required by IG
+    //   edits (crop_original_size, crop_center, crop_zoom) — no filter_type/filter_name
+    const now = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+    const nowFormatted = `${now.slice(0,4)}:${now.slice(4,6)}:${now.slice(6,8)} ${now.slice(8,10)}:${now.slice(10,12)}:${now.slice(12,14)}`;
+    let bodyStr: string;
     if (!isVideo) {
-      // device, edits, extra — required by Instagram v431+ for photo configure
-      bodyParams.set("device", JSON.stringify({
-        manufacturer:    devInfo.manufacturer,
-        model:           devInfo.model,
-        android_version: devInfo.androidVersion,
-        android_release: devInfo.androidRelease,
-      }));
-      bodyParams.set("edits", JSON.stringify({
-        filter_type:         0,
-        filter_name:         "IGNormalFilter",
-        crop_original_size:  [imgWidth, imgHeight],
-        crop_center:         [0.0, 0.0],
-        crop_zoom:           1.0,
-      }));
-      bodyParams.set("extra", JSON.stringify({
-        source_width:  imgWidth,
-        source_height: imgHeight,
-      }));
+      bodyStr = signBody({
+        _uuid:                        uuid,
+        _uid:                         ownUserId,
+        _csrftoken:                   csrf,
+        upload_id:                    uploadId,
+        source_type:                  "4",
+        caption:                      caption ?? "",
+        media_folder:                 "Camera",
+        timezone_offset:              "0",
+        date_time_original:           nowFormatted,
+        date_time_digitalized:        nowFormatted,
+        scene_capture_type:           "standard",
+        camera_model:                 devInfo.model,
+        camera_make:                  devInfo.manufacturer,
+        software:                     "1",
+        device_id:                    deviceId,
+        creation_logger_session_id:   randomUUID(),
+        width:                        imgWidth,
+        height:                       imgHeight,
+        edits:                        {
+          crop_original_size: [imgWidth, imgHeight],
+          crop_center:        [0.0, -0.0],
+          crop_zoom:          1.0,
+        },
+      });
+    } else {
+      bodyStr = signBody({
+        _uuid:                        uuid,
+        _uid:                         ownUserId,
+        _csrftoken:                   csrf,
+        upload_id:                    uploadId,
+        source_type:                  "4",
+        caption:                      caption ?? "",
+        timezone_offset:              "0",
+        date_time_original:           nowFormatted,
+        media_type:                   "2",
+        clips_share_preview_to_feed:  "1",
+        device_id:                    deviceId,
+        creation_logger_session_id:   randomUUID(),
+      });
     }
-    const bodyStr = bodyParams.toString();
 
     // Use igReq directly WITHOUT calling apiThrottle() — zero delay between rupload
     // completing and configure firing. apiThrottle with 10-60s delays between calls
     // would hold configure back long enough for Instagram to expire the upload ID.
     const MOBILE_APP_ID = "567067343352427";
-    const hasRurConfigure = this.mobileCookieJar.some(c => c.startsWith("rur="));
-    console.log(`[webClient] configure ${uploadId}: via URLSearchParams (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight} rur=${hasRurConfigure ? "present" : "MISSING"})`);
+    console.log(`[webClient] configure ${uploadId}: signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight})`);
     console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
 
     // forceNodeTls: true — MUST match the TLS stack used by _mobileRupload.
@@ -4137,6 +4158,19 @@ export class InstagramWebClient {
     // Instagram associates the upload with the TLS session that performed the rupload.
     // A configure arriving via a different TLS fingerprint cannot locate the upload
     // and returns "upload id is missing" (HTTP 500). Same stack = same fingerprint = found.
+    //
+    // Authorization header is intentionally omitted — cookie-based auth is sufficient
+    // for configure and the library (ig.media.configure) does not send Authorization.
+    // Get igWWWClaim from stored device state (sent as X-IG-WWW-Claim header).
+    // ig-u-ds-id and ig-intended-user-id are required by Instagram write endpoints.
+    let igWWWClaim = "0";
+    if (this.igDeviceState) {
+      try {
+        const s = JSON.parse(this.igDeviceState) as { igWWWClaim?: string };
+        if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
+      } catch {}
+    }
+
     const res = await igReq({
       host: "i.instagram.com",
       path: url,
@@ -4154,7 +4188,9 @@ export class InstagramWebClient {
         "X-IG-Bandwidth-Speed-KBPS": "-1.000",
         "X-IG-Bandwidth-TotalBytes-B": "0",
         "X-IG-Bandwidth-TotalTime-MS": "0",
-        ...(authorization ? { Authorization: authorization } : {}),
+        "X-IG-WWW-Claim": igWWWClaim,
+        "ig-u-ds-id": ownUserId,
+        "ig-intended-user-id": ownUserId,
       },
       body: bodyStr,
       cookieJar: this.mobileCookieJar,
@@ -4190,6 +4226,93 @@ export class InstagramWebClient {
     return null;
   }
 
+  // ── Publish a photo via IgApiClient (Jarvee model) ───────────────────────
+  // Uses ig.publish.photo() which handles BOTH upload and configure through
+  // the library's native HTTP client with properly signed bodies (HMAC-SHA256).
+  // This is the correct Jarvee/SucoAI approach: both steps use the same client,
+  // same TLS stack, same session — so Instagram can match the upload at configure time.
+  //
+  // The previous hand-rolled split (tlsMultipartPost rupload + igReq configure)
+  // failed with "something went wrong during media publish" because the unsigned
+  // URLSearchParams body is rejected for write actions — the same root cause
+  // that was already fixed for follow/like by switching to IgApiClient.
+  private async _publishViaIgClient(imageBuffer: Buffer, caption: string): Promise<string | null> {
+    if (!this.igApiCookies) {
+      console.warn(`[webClient] _publishViaIgClient: no igApiCookies — cannot use IgApiClient`);
+      return null;
+    }
+
+    const ig = newIgClient();
+
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
+        if (saved.uuid)          ig.state.uuid          = saved.uuid;
+        if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
+        if (saved.adid)          ig.state.adid          = saved.adid;
+        if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookieEntries = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries,
+    }));
+
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
+
+    try {
+      console.log(`[webClient] _publishViaIgClient: ig.publish.photo (uuid=${ig.state.uuid.slice(0, 8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0, 8) ?? "none"} buf=${imageBuffer.length}B)`);
+      const result = await ig.publish.photo({
+        file: imageBuffer,
+        caption: caption ?? "",
+      }) as any;
+      console.log(`[webClient] _publishViaIgClient: raw result —`, JSON.stringify(result).slice(0, 300));
+      const mediaId = result?.media?.id ?? result?.media?.pk ?? result?.pk ?? result?.id ?? null;
+      if (mediaId) {
+        console.log(`[webClient] _publishViaIgClient: OK — media_id=${mediaId}`);
+        return String(mediaId);
+      }
+      console.warn(`[webClient] _publishViaIgClient: no media ID in result — ${JSON.stringify(result).slice(0, 200)}`);
+      this._lastConfigureError = "no media ID in IgApiClient publish result";
+      return null;
+    } catch (err: any) {
+      const rawMsg: string = err?.message ?? String(err);
+      const msg: string = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] _publishViaIgClient: IgApiClient error — ${rawMsg}`);
+      if (body) console.warn(`[webClient] _publishViaIgClient: raw body —`, JSON.stringify(body)?.slice(0, 600));
+      this._lastConfigureError = msg;
+      return null;
+    }
+  }
+
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
@@ -4210,13 +4333,11 @@ export class InstagramWebClient {
           const MIN_RATIO = 0.8;   // 4:5 portrait
           const MAX_RATIO = 1.91;  // landscape
           if (ratio < MIN_RATIO) {
-            // Too tall — crop height to w / MIN_RATIO
             const newH = Math.floor(w / MIN_RATIO);
             const top  = Math.floor((h - newH) / 2);
             console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} < 0.8 — cropping ${w}x${h} → ${w}x${newH}`);
             imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).jpeg({ quality: 92 }).toBuffer();
           } else if (ratio > MAX_RATIO) {
-            // Too wide — crop width to h * MAX_RATIO
             const newW  = Math.floor(h * MAX_RATIO);
             const left  = Math.floor((w - newW) / 2);
             console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} > 1.91 — cropping ${w}x${h} → ${newW}x${h}`);
@@ -4227,15 +4348,19 @@ export class InstagramWebClient {
         console.warn(`[webClient:${this.profileId}] uploadPhoto: aspect ratio check failed (non-fatal) — ${e?.message}`);
       }
 
-      // ── Mobile API path ────────────────────────────────────────────────────
-      // All actions go via the mobile API only. The EB is used exclusively for
-      // session/cookie establishment (Jarvee model) — never for actions.
+      // ── Primary path: IgApiClient native publish (Jarvee model) ───────────
+      // ig.publish.photo() handles upload + configure through the library's
+      // native HTTP client with properly signed bodies. This is the correct
+      // approach — both steps use the same client, same session, same TLS stack.
+      if (this.igApiCookies) {
+        const result = await this._publishViaIgClient(imageBuffer, caption);
+        if (result) return result;
+        console.warn(`[webClient:${this.profileId}] uploadPhoto: IgApiClient publish failed (error="${this._lastConfigureError}") — falling back to hand-rolled rupload+configure`);
+      }
 
-      // Merge rur (Instagram routing cookie) from web jar into mobileCookieJar.
-      // rur routes requests to the correct CDN shard. loadBrowserCookies() loads
-      // it into this.cookieJar but not mobileCookieJar. Without rur the rupload
-      // lands on shard A while configure lands on shard B → "something went wrong
-      // during media publish" (upload exists but configure can't locate it).
+      // ── Fallback: hand-rolled rupload + configure ──────────────────────────
+      // Used only when igApiCookies is absent. The hand-rolled path uses
+      // plain URLSearchParams (unsigned) and is known to fail on some accounts.
       const rurCookie = this.cookieJar.find(c => c.startsWith("rur="));
       if (rurCookie && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurCookie]);
@@ -4243,10 +4368,8 @@ export class InstagramWebClient {
       }
 
       const uploadId = String(Date.now());
-      // Step 1 — rupload binary protocol to /rupload_igphoto/{name}
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
       if (!confirmedUploadId) return null;
-      // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
       return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
