@@ -1541,6 +1541,25 @@ async function runAll() {
     testPermissions(),
     testClientHints(),
   ]);
+
+  // Auto-save snapshot for the account if this leak page is associated with a profile
+  if (ACCOUNT && ACCOUNT.profileId) {
+    try {
+      const snapshot = JSON.stringify({
+        capturedAt: new Date().toISOString(),
+        results: Object.assign({}, RESULTS),
+        proxy: ACCOUNT.proxy ?? null,
+        proxyType: ACCOUNT.proxyType ?? null,
+        ebUA: ACCOUNT.ebUA ?? null,
+        apiUA: ACCOUNT.apiUA ?? null,
+      });
+      await fetch('/api/profiles/' + ACCOUNT.profileId + '/leak-snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot }),
+      }).catch(() => {});
+    } catch {}
+  }
 }
 
 window.addEventListener('DOMContentLoaded', runAll);

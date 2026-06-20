@@ -310,6 +310,9 @@ if (!colNames.has("status_message")) {
 if (!colNames.has("eb_fingerprint")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN eb_fingerprint TEXT;`);
 }
+if (!colNames.has("leak_snapshot")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN leak_snapshot TEXT;`);
+}
 if (!colNames.has("is_template")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN is_template INTEGER DEFAULT 0;`);
 }
@@ -433,6 +436,11 @@ sqlite.exec(`
     "session_to_action_ratio TEXT",
     "span_hours TEXT",
     "last_operation_before_ban TEXT",
+    "user_agent_api TEXT",
+    "user_agent_embedded TEXT",
+    "ig_device_state TEXT",
+    "eb_fingerprint TEXT",
+    "leak_snapshot TEXT",
   ];
   for (const table of Object.keys(analyticsTableMap)) {
     const cols = sqlite.prepare(`pragma table_info(${table})`).all() as { name: string }[];

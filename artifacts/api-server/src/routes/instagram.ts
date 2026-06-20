@@ -982,6 +982,11 @@ export async function registerInstagramRoutes(
           endpointCount: calls.length,
           endpointSnapshot: snapshot,
           capturedAt: now.toISOString(),
+          userAgentApi: (p as any).userAgentApi ?? null,
+          userAgentEmbedded: (p as any).userAgentEmbedded ?? null,
+          igDeviceState: (p as any).igDeviceState ?? null,
+          ebFingerprint: (p as any).ebFingerprint ?? null,
+          leakSnapshot: (p as any).leakSnapshot ?? null,
         };
       }));
 
@@ -2614,6 +2619,7 @@ export async function registerInstagramRoutes(
     let title = "EQUINOX LEAK TEST";
 
     type AccountData = {
+      profileId: number;
       proxy: string | null;
       proxyHost: string | null;
       proxyPort: number | null;
@@ -2626,6 +2632,7 @@ export async function registerInstagramRoutes(
       sessionStoredProxy: { host: string; port: number; type: string; hasCredentials: boolean; user: string | null } | null;
     };
     const accountData: AccountData = {
+      profileId,
       proxy: null, proxyHost: null, proxyPort: null,
       proxyType: null, proxyHasCredentials: false,
       ebUA: null, apiUA: null,
@@ -2715,6 +2722,21 @@ export async function registerInstagramRoutes(
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
+  });
+
+  // Save last leak-check results snapshot for an account
+  app.post("/api/profiles/:id/leak-snapshot", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid profileId" });
+      const body = req.body as { snapshot?: string };
+      if (!body?.snapshot) return res.status(400).json({ error: "Missing snapshot" });
+      await storage.saveLeakSnapshot(id, body.snapshot);
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[leak-snapshot] error");
+      res.status(500).json({ error: "Failed to save leak snapshot" });
+    }
   });
 
   app.get("/api/browser/debug", async (_req, res) => {

@@ -15,7 +15,7 @@ import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 interface ProfileRow { id: number; username: string; accountLabel?: string | null; accountStatus?: string | null; tags?: string | null; notes?: string | null; proxyId?: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface ProxyRow { id: number; host: string | null; port: number | null; proxyHost?: string | null; proxyPort?: number | null; }
 interface AnalyticsEntry { id: number; username: string; proxyHost: string; endpointCount: number; endpointSnapshot: string; bannedAt?: string; flaggedAt?: string; verifyCountLast24h?: number | null; accountAgeDays?: number | null; proxyAccountCount?: number | null; followCountBeforeBan?: number | null; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; }
-interface SurvivorPattern { profileId: number; username: string; accountAgeDays: number | null; endpointCount: number; endpointSnapshot: string; capturedAt: string; }
+interface SurvivorPattern { profileId: number; username: string; accountAgeDays: number | null; endpointCount: number; endpointSnapshot: string; capturedAt: string; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null; }
 interface EpItem { operationName: string; date: string; source?: string | null; }
 interface ProxyRisk { host: string; banCount: number; automatedCount: number; captchaCount: number; lockedCount: number; total: number; accounts: string[]; entryIds: { ban: number[]; automated: number[]; captcha: number[]; locked: number[] }; }
 interface ConcurrencyAlert { proxyHost: string; accounts: string[]; times: string[]; category: string; }
@@ -2016,10 +2016,18 @@ export function BanAnalyticsPage() {
           anomalyScore: anomaly,
           top10Endpoints: topOps.map(ep => ({ name: ep.name, label: ep.label ?? ep.name, count: ep.count })),
         };
+        const fp = (e as any);
         return {
           ...e,
           trustScore: ti ? { rank: ti.rank, label: ti.label } : null,
           computedMetrics,
+          deviceFingerprint: {
+            userAgentApi: fp.userAgentApi ?? null,
+            userAgentEmbedded: fp.userAgentEmbedded ?? null,
+            igDeviceState: fp.igDeviceState ? (() => { try { return JSON.parse(fp.igDeviceState); } catch { return fp.igDeviceState; } })() : null,
+            ebFingerprint: fp.ebFingerprint ? (() => { try { return JSON.parse(fp.ebFingerprint); } catch { return fp.ebFingerprint; } })() : null,
+          },
+          leakSnapshot: fp.leakSnapshot ? (() => { try { return JSON.parse(fp.leakSnapshot); } catch { return fp.leakSnapshot; } })() : null,
         };
       };
     }
@@ -2036,6 +2044,8 @@ export function BanAnalyticsPage() {
         activeTimeMin: "Total minutes spent in active sessions (sum of all session durations, excluding idle gaps). Use this to understand how long the account was actually running, as opposed to spanHours which includes idle time.",
         activeSessionCount: "Number of distinct active sessions detected. A new session begins when a gap of more than 5 minutes occurs between consecutive API calls.",
         bannedAt: "The timestamp when the operator MANUALLY marked this account as banned in the software. This is NOT when Instagram banned the account. Do not use timestamp clustering or time-of-day patterns in bannedAt to infer Instagram server behaviour — clusters reflect when the operator sat down to mark bans, not Instagram sweep timing.",
+        deviceFingerprint: "Device identity snapshot captured at the moment of the ban/flag event (or at last verification for survivors). userAgentApi = the mobile API user-agent string sent in HTTP headers to Instagram's private API. userAgentEmbedded = the user-agent string used by the embedded Chrome browser for web sessions. igDeviceState = the persistent mobile device identity (uuid, deviceId, phoneId, adid, igDid) — these MUST stay constant for the lifetime of an account. ebFingerprint = the full Chrome browser fingerprint object (screen resolution, platform, hardware concurrency, etc.) recorded at last EB session. null means the data was not recorded before the account was flagged.",
+        leakSnapshot: "The last leak-check result set captured automatically when the embedded browser opened the Equinox Leak Test page for this account. Contains capturedAt timestamp, per-test pass/fail/warn/info results (IP, DNS, WebRTC, UA match, bot detection, etc.), proxy details, and user-agent strings active at the time of the test. null means no leak test has ever been run for this account.",
       },
       exportedAt: new Date().toISOString(),
       summary: {
@@ -2112,6 +2122,13 @@ export function BanAnalyticsPage() {
           spanHours,
           trustScore: ti ? { rank: ti.rank, label: ti.label } : null,
           computedMetrics,
+          deviceFingerprint: {
+            userAgentApi: sp?.userAgentApi ?? (p as any).userAgentApi ?? null,
+            userAgentEmbedded: sp?.userAgentEmbedded ?? (p as any).userAgentEmbedded ?? null,
+            igDeviceState: (() => { const raw = sp?.igDeviceState ?? (p as any).igDeviceState ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
+            ebFingerprint: (() => { const raw = sp?.ebFingerprint ?? (p as any).ebFingerprint ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
+          },
+          leakSnapshot: (() => { const raw = sp?.leakSnapshot ?? (p as any).leakSnapshot ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
         };
       }),
       proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),

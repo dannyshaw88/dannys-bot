@@ -68,6 +68,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.79",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Evasion stats export now includes device fingerprints (API user-agent, embedded browser user-agent, mobile device state, EB fingerprint) for every banned, flagged, and surviving account." },
+      { category: "Analytics", text: "Evasion stats export now includes the last leak-check snapshot for each account, showing pass/fail results for IP, DNS, WebRTC, UA match, and bot detection tests." },
+      { category: "Leak Test", text: "The embedded browser leak test page now automatically saves its results to the account's record after every run — no manual action required." },
+    ],
+  },
+  {
     version: "1.1.78",
     date: "20 Jun 2026",
     items: [

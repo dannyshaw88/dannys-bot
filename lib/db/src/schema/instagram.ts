@@ -106,6 +106,7 @@ export const profiles = sqliteTable("profiles", {
   locked: integer("locked", { mode: "boolean" }).default(false),
   cookieBakerSettings: text("cookie_baker_settings", { mode: "json" }).default(null),
   ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
   isTemplate: integer("is_template", { mode: "boolean" }).default(false),
   templateId: text("template_id"),
 });
@@ -384,6 +385,11 @@ export const bannedAccountsAnalytics = sqliteTable("banned_accounts_analytics", 
   sessionToActionRatio: text("session_to_action_ratio"),
   spanHours: text("span_hours"),
   lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
 });
 
 export const insertBannedAccountAnalyticsSchema = createInsertSchema(bannedAccountsAnalytics).omit({ id: true });
@@ -404,6 +410,11 @@ export const automatedBehaviourAnalytics = sqliteTable("automated_behaviour_anal
   sessionToActionRatio: text("session_to_action_ratio"),
   spanHours: text("span_hours"),
   lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
 });
 
 export type AutomatedBehaviourAnalytics = typeof automatedBehaviourAnalytics.$inferSelect;
@@ -422,6 +433,11 @@ export const captchaAnalytics = sqliteTable("captcha_analytics", {
   sessionToActionRatio: text("session_to_action_ratio"),
   spanHours: text("span_hours"),
   lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
 });
 
 export type CaptchaAnalytics = typeof captchaAnalytics.$inferSelect;
@@ -440,6 +456,11 @@ export const lockedAccountsAnalytics = sqliteTable("locked_accounts_analytics", 
   sessionToActionRatio: text("session_to_action_ratio"),
   spanHours: text("span_hours"),
   lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
 });
 
 export type LockedAccountAnalytics = typeof lockedAccountsAnalytics.$inferSelect;

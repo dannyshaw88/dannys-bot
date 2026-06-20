@@ -57,6 +57,11 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
     endpointCount: calls.length,
     endpointSnapshot: snapshot,
     ...ctx,
+    userAgentApi: (profile as any).userAgentApi ?? null,
+    userAgentEmbedded: (profile as any).userAgentEmbedded ?? null,
+    igDeviceState: (profile as any).igDeviceState ?? null,
+    ebFingerprint: (profile as any).ebFingerprint ?? null,
+    leakSnapshot: (profile as any).leakSnapshot ?? null,
   });
 
   const freshNotes = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";

@@ -143,20 +143,24 @@ export interface IStorage {
   deleteApiCreatedAccount(id: number): Promise<void>;
 
   // Ban Analytics
-  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
+  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
   getBanAnalytics(): Promise<BannedAccountAnalytics[]>;
 
   // Automated Behaviour Analytics
-  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
+  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
   getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]>;
 
   // Captcha Analytics
-  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
+  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
   getCaptchaAnalytics(): Promise<CaptchaAnalytics[]>;
 
   // Locked Account Analytics
-  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null }): Promise<void>;
+  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
   getLockedAnalytics(): Promise<LockedAccountAnalytics[]>;
+
+  // Leak Snapshot
+  saveLeakSnapshot(profileId: number, snapshot: string): Promise<void>;
+  getLeakSnapshot(profileId: number): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -934,7 +938,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(apiCreatedAccounts).where(eq(apiCreatedAccounts.id, id));
   }
 
-  async insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+  async insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
     await db.insert(bannedAccountsAnalytics).values(entry);
   }
 
@@ -946,7 +950,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(bannedAccountsAnalytics).where(eq(bannedAccountsAnalytics.id, id));
   }
 
-  async insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+  async insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
     await db.insert(automatedBehaviourAnalytics).values(entry);
   }
 
@@ -958,7 +962,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(automatedBehaviourAnalytics).where(eq(automatedBehaviourAnalytics.id, id));
   }
 
-  async insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+  async insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
     await db.insert(captchaAnalytics).values(entry);
   }
 
@@ -970,7 +974,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(captchaAnalytics).where(eq(captchaAnalytics.id, id));
   }
 
-  async insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string }): Promise<void> {
+  async insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
     await db.insert(lockedAccountsAnalytics).values(entry);
   }
 
@@ -980,6 +984,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLockedAnalytics(id: number): Promise<void> {
     await db.delete(lockedAccountsAnalytics).where(eq(lockedAccountsAnalytics.id, id));
+  }
+
+  async saveLeakSnapshot(profileId: number, snapshot: string): Promise<void> {
+    await db.update(profiles).set({ leakSnapshot: snapshot }).where(eq(profiles.id, profileId));
+  }
+
+  async getLeakSnapshot(profileId: number): Promise<string | null> {
+    const [row] = await db.select({ leakSnapshot: profiles.leakSnapshot }).from(profiles).where(eq(profiles.id, profileId));
+    return row?.leakSnapshot ?? null;
   }
 }
 
