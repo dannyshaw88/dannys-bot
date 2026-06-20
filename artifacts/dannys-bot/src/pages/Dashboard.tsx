@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.76",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Evasion stats export: trust scores now correctly appear for deleted accounts — labels are read directly from the account's stored ID so deletion no longer wipes them from the export." },
+      { category: "UI", text: "Ghost Browser moved from the sidebar into the Tools tab — fewer nav items, same functionality one click away under Tools > Ghost Browser." },
+    ],
+  },
+  {
     version: "1.1.75",
     date: "19 Jun 2026",
     items: [

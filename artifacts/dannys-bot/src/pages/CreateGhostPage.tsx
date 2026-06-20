@@ -14,7 +14,7 @@ const INITIAL_TABS: Tab[] = [
   { id: 1, label: "Signup 1" },
 ];
 
-export function CreateGhostPage() {
+export function GhostBrowserTabContent() {
   const { data: proxies = [] } = useProxies();
   const [tabs, setTabs]           = useState<Tab[]>(INITIAL_TABS);
   const [nextSlot, setNextSlot]   = useState(2);
@@ -38,7 +38,7 @@ export function CreateGhostPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       {/* ── Tab bar ── */}
       <div className="flex items-center gap-0.5 mb-1.5 border-b border-border pb-0 -mt-1 overflow-x-auto">
         {tabs.map((tab, i) => (
@@ -86,6 +86,14 @@ export function CreateGhostPage() {
           <GhostBrowserPanel slot={tab.id} proxies={proxies as SavedProxy[]} />
         </div>
       ))}
+    </>
+  );
+}
+
+export function CreateGhostPage() {
+  return (
+    <AppLayout>
+      <GhostBrowserTabContent />
     </AppLayout>
   );
 }

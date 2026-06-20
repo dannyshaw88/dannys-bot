@@ -1976,8 +1976,20 @@ export function BanAnalyticsPage() {
     function makeEnrichFn(entries: AnalyticsEntry[]) {
       const cross = computeCrossStats(entries, trustMap, profileMap, profileNotesMap);
       return function enrichEntry(e: AnalyticsEntry) {
-        const id = profileMap.get(e.username);
-        const ti = id !== undefined ? trustMap.get(id) : undefined;
+        // Use profileMap first (active accounts), fall back to e.id directly
+        // for deleted accounts — evasion log entries always carry their own ID,
+        // so we can read the trust score straight from localStorage even after
+        // the profile has been deleted from the DB and removed from allProfiles.
+        const id = profileMap.get(e.username) ?? e.id;
+        const ti: TrustInfo | undefined = (() => {
+          if (id === undefined) return undefined;
+          if (trustMap.has(id)) return trustMap.get(id);
+          const levelId = getTrustScore(id);
+          if (!levelId) return undefined;
+          const levels = getTrustLevels();
+          const rank = levels.findIndex(l => l.id === levelId);
+          return { levelId, label: levels[rank]?.label ?? levelId.toUpperCase(), rank: rank >= 0 ? rank + 1 : 1 };
+        })();
         const eps = filterHiker(parseEps(e.endpointSnapshot));
         const ts = e.flaggedAt ?? e.bannedAt ?? "";
         const m = computeMetrics(eps, ts);
@@ -2041,8 +2053,16 @@ export function BanAnalyticsPage() {
       captcha:   captchaEntries.map(makeEnrichFn(captchaEntries)),
       locked:    lockedEntries.map(makeEnrichFn(lockedEntries)),
       survivors: survivingAccounts.map(p => {
-        const id = profileMap.get(p.username);
-        const ti = id !== undefined ? trustMap.get(id) : undefined;
+        const id = profileMap.get(p.username) ?? p.id;
+        const ti: TrustInfo | undefined = (() => {
+          if (id === undefined) return undefined;
+          if (trustMap.has(id)) return trustMap.get(id);
+          const levelId = getTrustScore(id);
+          if (!levelId) return undefined;
+          const levels = getTrustLevels();
+          const rank = levels.findIndex(l => l.id === levelId);
+          return { levelId, label: levels[rank]?.label ?? levelId.toUpperCase(), rank: rank >= 0 ? rank + 1 : 1 };
+        })();
         const sp = survivorPatternMap.get(p.username);
 
         let computedMetrics = null;

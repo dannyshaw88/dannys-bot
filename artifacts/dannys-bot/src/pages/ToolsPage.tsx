@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
+import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -538,7 +539,7 @@ function BulkImportTabContent() {
 
 // ─── Tools Page ───────────────────────────────────────────────────────────────
 
-const TOOLS_TABS = ["Evasion Stats", "Import", "Trust Scores"] as const;
+const TOOLS_TABS = ["Evasion Stats", "Ghost Browser", "Import", "Trust Scores"] as const;
 type ToolsTab = typeof TOOLS_TABS[number];
 
 export function ToolsPage() {
@@ -548,7 +549,7 @@ export function ToolsPage() {
     <AppLayout>
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Tools</h1>
-        <p className="text-muted-foreground mt-1">Evasion analytics, bulk import, and trust score configuration.</p>
+        <p className="text-muted-foreground mt-1">Evasion analytics, ghost browser, bulk import, and trust score configuration.</p>
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
@@ -568,6 +569,8 @@ export function ToolsPage() {
       </div>
 
       {activeTab === "Evasion Stats" && <BanAnalyticsPage />}
+
+      {activeTab === "Ghost Browser" && <GhostBrowserTabContent />}
 
       {activeTab === "Import" && <BulkImportTabContent />}
 
