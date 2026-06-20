@@ -1324,7 +1324,7 @@ export function ProfileDetailsPage() {
                                       className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
                                       onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
                                     >
-                                      <X className="w-3.5 h-3.5 mr-1" /> Unassign
+                                      <X className="w-3.5 h-3.5" />
                                     </Button>
                                   </div>
                                 </div>

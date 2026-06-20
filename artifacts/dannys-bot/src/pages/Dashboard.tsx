@@ -7,8 +7,9 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
-  Fingerprint, ThumbsUp,
+  Fingerprint, ThumbsUp, Monitor,
 } from "lucide-react";
+import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -60,13 +61,26 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
-const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "trustscore", "event", "target", "detail", "timestamp"];
+const DEFAULT_COL_WIDTHS = { account: 160, open_eb: 80, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
+const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "open_eb", "trustscore", "event", "target", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
-  account: "ACCOUNT", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
+  account: "ACCOUNT", open_eb: "OPEN EB", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.1.96",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: now stops after the first upload attempt regardless of outcome — if the first post fails, no further items from the feed are tried. Previously the bot would keep attempting other posts in the feed until one succeeded." },
+      { category: "Fix", text: "Statistics page: Today's count and Lifetime count are now the same font size, matching the rest of the table." },
+      { category: "Fix", text: "Statistics page: Human Session toggle switch is now vertically aligned with the count numbers next to it." },
+      { category: "Fix", text: "Statistics page: Group icon hover preview no longer stretches or distorts — it now fits inside the preview box without cropping." },
+      { category: "New", text: "Dashboard activity log: Open EB button added as a column — click it on any row to open the embedded browser for that account directly from the log." },
+      { category: "Fix", text: "Dashboard changelog filter: search box is now wider so longer search terms are not cut off." },
+      { category: "Fix", text: "Account Settings: proxy unassign button is now icon-only (red X) — the Unassign text label has been removed." },
+    ],
+  },
   {
     version: "1.1.95",
     date: "20 Jun 2026",
@@ -7482,6 +7496,7 @@ export function Dashboard() {
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [manageColsOpen, setManageColsOpen] = useState(false);
+  const { openWindow } = useBrowserWindows();
   const [colWidths, setColWidths] = usePersistentSetting(
     "dashboard_col_widths_px",
     DEFAULT_COL_WIDTHS,
@@ -7943,7 +7958,7 @@ export function Dashboard() {
               placeholder="Filter change log items..."
               value={changelogFilter}
               onChange={e => setChangelogFilter(e.target.value)}
-              className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-64"
+              className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-80"
             />
           </div>
         </CardHeader>
@@ -8021,6 +8036,7 @@ export function Dashboard() {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
+                        if (col === "open_eb") return <td key={col} className="px-3 py-1.5 text-center">{item.profileId ? <button onClick={() => { const p = profiles?.find((pr: any) => pr.id === item.profileId); if (p) openWindow(p.id, p.username ?? "", p.userAgentEmbedded ?? ""); }} className="inline-flex items-center gap-1 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"><Monitor className="w-3.5 h-3.5 shrink-0" /><span>Open EB</span></button> : <span className="text-muted-foreground text-xs">—</span>}</td>;
                         if (col === "trustscore") return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>;
                         if (item.kind === "import") {
                           const imp = item.importData!;

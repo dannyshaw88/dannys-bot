@@ -244,18 +244,18 @@ function ProfileStatsRow({
                   <Switch
                     checked={tool.enabled}
                     onCheckedChange={(val) => handleToggle(tool, val)}
-                    className="scale-75 origin-center shrink-0"
+                    className="scale-75 origin-center shrink-0 self-center"
                   />
                 )}
-                <div className="flex items-baseline gap-0.5 text-[12px]">
+                <div className="flex items-center gap-0.5 text-[11px]">
                   <span className="font-bold tabular-nums text-foreground">{todayCount}</span>
-                  <span className="text-muted-foreground text-[11px]">/{lifetime}</span>
+                  <span className="text-muted-foreground">/{lifetime}</span>
                 </div>
               </div>
             ) : (
-              <div className="flex items-baseline justify-center gap-1 text-[13px]">
+              <div className="flex items-baseline justify-center gap-1 text-[11px]">
                 <span className="font-bold tabular-nums text-foreground">{todayCount}</span>
-                <span className="text-muted-foreground text-[11px]">/ {lifetime}</span>
+                <span className="text-muted-foreground">/ {lifetime}</span>
               </div>
             )}
           </td>
@@ -862,7 +862,7 @@ export function StatsPage() {
                                       </button>
                                       {groupIcons[groupKey] && (
                                         <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
-                                          <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-cover shadow-lg border border-border" />
+                                          <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-contain shadow-lg border border-border bg-muted/10" />
                                         </div>
                                       )}
                                     </div>

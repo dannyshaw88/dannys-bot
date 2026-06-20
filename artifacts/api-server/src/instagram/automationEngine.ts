@@ -2990,6 +2990,7 @@ class AutomationEngine {
               const uploadErr = client.lastUploadError || "Upload failed";
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}: ${uploadErr}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", uploadErr);
+              break;
             }
           }
 
