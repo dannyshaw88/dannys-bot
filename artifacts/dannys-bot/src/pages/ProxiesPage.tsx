@@ -206,16 +206,16 @@ function ProxyRow({
             </div>
           );
           if (col === "proxy") return (
-            <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
-              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-foreground" placeholder="host:port" />
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.proxy }}>
+              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
             </div>
           );
           if (col === "type") return (
-            <div key={col} className="shrink-0" style={{ width: colWidths.type }}>
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.type }}>
               <select
                 value={proxyType}
                 onChange={e => { setProxyType(e.target.value as "http" | "socks5"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
-                className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="h-7 w-full rounded border border-input bg-background px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="http">HTTP</option>
                 <option value="socks5">SOCKS5</option>
@@ -223,13 +223,13 @@ function ProxyRow({
             </div>
           );
           if (col === "username") return (
-            <div key={col} className="shrink-0" style={{ width: colWidths.username }}>
-              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-foreground" />
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.username }}>
+              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-center text-foreground" />
             </div>
           );
           if (col === "password") return (
-            <div key={col} className="shrink-0" style={{ width: colWidths.password }}>
-              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-foreground" />
+            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.password }}>
+              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-center text-foreground" />
             </div>
           );
           if (col === "status") return (
@@ -778,12 +778,12 @@ export function ProxiesPage() {
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
             const sortable = col === "proxy" || col === "username" || col === "status" || col === "accounts";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${(col === "username" || col === "accounts") ? "justify-center" : ""} ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${(col === "password" || col === "type") ? "flex items-center justify-center" : ""} ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center cursor-default whitespace-nowrap ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );

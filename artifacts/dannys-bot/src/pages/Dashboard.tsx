@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.78",
+    date: "20 Jun 2026",
+    items: [
+      { category: "UI", text: "Proxy Manager: all column headers and data cells (proxy address, type, username, password, status, accounts) are now centre-aligned — content sits in the middle of each column with equal spacing on both sides." },
+    ],
+  },
+  {
     version: "1.1.77",
     date: "20 Jun 2026",
     items: [

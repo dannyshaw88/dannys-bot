@@ -100,8 +100,8 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",          icon: FilledWrenchIcon         },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
+    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",          icon: FilledWrenchIcon         },
   ];
 
   return (

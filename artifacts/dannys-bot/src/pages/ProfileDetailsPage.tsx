@@ -998,7 +998,6 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           <CopySettingsDialog
-            key={copyDialogOpen ? "open" : "closed"}
             open={copyDialogOpen}
             onOpenChange={setCopyDialogOpen}
             title="Copy Account Settings"
