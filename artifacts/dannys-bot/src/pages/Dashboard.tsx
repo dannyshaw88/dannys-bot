@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.80",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Clicking Export Evasion Stats now automatically runs a live IP/DNS/proxy leak check for every surviving account through its configured proxy — no browser window needed. Results are saved and included in the export JSON." },
+    ],
+  },
+  {
     version: "1.1.79",
     date: "20 Jun 2026",
     items: [

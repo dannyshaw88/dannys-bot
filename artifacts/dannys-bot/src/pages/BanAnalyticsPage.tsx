@@ -1964,6 +1964,28 @@ export function BanAnalyticsPage() {
   async function handleExport() {
     const levels = getTrustLevels();
 
+    // Run server-side proxy leak checks (no browser needed) for all survivor accounts.
+    // This fires HTTPS requests through each account's proxy and saves results to the DB
+    // so the export contains fresh IP/DNS/proxy test data captured at export time.
+    const survivorIds = survivingAccounts.map(p => p.id).filter(Boolean) as number[];
+    const freshLeakMap = new Map<number, string>(); // profileId → snapshot JSON string
+    if (survivorIds.length > 0) {
+      try {
+        const lrResp = await fetch("/api/analytics/refresh-leak-snapshots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ profileIds: survivorIds }),
+        });
+        if (lrResp.ok) {
+          const lrData = await lrResp.json() as { ok: boolean; results: Record<string, { username: string; snapshot: string }> };
+          for (const [idStr, val] of Object.entries(lrData.results ?? {})) {
+            freshLeakMap.set(Number(idStr), val.snapshot);
+          }
+        }
+      } catch { /* non-fatal — export proceeds without fresh leak data */ }
+    }
+
     // Fetch live survivor endpoint data so survivors have full metrics in the export
     let survivorPatternData: SurvivorPattern[] = [];
     try {
@@ -2128,7 +2150,7 @@ export function BanAnalyticsPage() {
             igDeviceState: (() => { const raw = sp?.igDeviceState ?? (p as any).igDeviceState ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
             ebFingerprint: (() => { const raw = sp?.ebFingerprint ?? (p as any).ebFingerprint ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
           },
-          leakSnapshot: (() => { const raw = sp?.leakSnapshot ?? (p as any).leakSnapshot ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
+          leakSnapshot: (() => { const raw = freshLeakMap.get(p.id) ?? sp?.leakSnapshot ?? (p as any).leakSnapshot ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
         };
       }),
       proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),

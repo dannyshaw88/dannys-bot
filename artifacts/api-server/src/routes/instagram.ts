@@ -2739,6 +2739,161 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Server-side proxy leak check — called at export time, no browser needed ──
+  // Runs IP/DNS checks through each account's proxy using Node.js https.request
+  // + HttpsProxyAgent / SocksProxyAgent. Saves the result to leakSnapshot in the
+  // DB and returns a fresh map so the export can include the latest data.
+  app.post("/api/analytics/refresh-leak-snapshots", async (req, res) => {
+    try {
+      const { profileIds } = req.body as { profileIds?: number[] };
+      if (!Array.isArray(profileIds) || profileIds.length === 0) {
+        return res.status(400).json({ error: "profileIds required" });
+      }
+
+      const https = await import("node:https");
+
+      // Makes one HTTPS request through a proxy agent, returns the body text or null on failure.
+      async function proxyGet(url: string, agent: any, timeoutMs = 9000): Promise<string | null> {
+        const parsed = new URL(url);
+        return new Promise(resolve => {
+          try {
+            const req2 = https.request(
+              {
+                host: parsed.hostname,
+                port: 443,
+                path: parsed.pathname + parsed.search,
+                method: "GET",
+                agent,
+                rejectUnauthorized: false,
+                headers: { "User-Agent": "curl/7.68.0", Accept: "*/*" },
+              },
+              (r) => {
+                const chunks: Buffer[] = [];
+                r.on("data", (c: Buffer) => chunks.push(c));
+                r.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+                r.on("error", () => resolve(null));
+              },
+            );
+            req2.on("error", () => resolve(null));
+            req2.setTimeout(timeoutMs, () => { req2.destroy(); resolve(null); });
+            req2.end();
+          } catch { resolve(null); }
+        });
+      }
+
+      type IpResult = { source: string; ip: string | null; ok: boolean };
+
+      async function checkProfile(profileId: number): Promise<{ username: string; snapshot: string } | null> {
+        const profile = await storage.getProfile(profileId).catch(() => null);
+        if (!profile) return null;
+
+        const capturedAt = new Date().toISOString();
+
+        // Resolve proxy details — profile columns first, then linked proxy table
+        let proxyHost: string | null = (profile as any).proxyHost || null;
+        let proxyPort: number | null = (profile as any).proxyPort || null;
+        let proxyType: string = (profile as any).proxyType || "http";
+        let proxyUser: string | null = (profile as any).proxyUsername || null;
+        let proxyPass: string | null = (profile as any).proxyPassword || null;
+
+        if (!proxyHost && profile.proxyId) {
+          try {
+            const [linked] = await db.select().from(proxies).where(eq(proxies.id, profile.proxyId));
+            if (linked) {
+              proxyHost = linked.host;
+              proxyPort = linked.port;
+              proxyType = (linked as any).proxyType || "http";
+              proxyUser = (linked as any).username || null;
+              proxyPass = (linked as any).password || null;
+            }
+          } catch {}
+        }
+
+        if (!proxyHost || !proxyPort) {
+          const snapshot = JSON.stringify({
+            capturedAt, source: "server-side", proxyConfigured: false,
+            results: { Proxy: { status: "warn", label: "No proxy configured" } },
+          });
+          await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+          return { username: profile.username, snapshot };
+        }
+
+        const auth = proxyUser && proxyPass
+          ? `${encodeURIComponent(proxyUser)}:${encodeURIComponent(proxyPass)}@`
+          : "";
+        const proxyUrl = `${proxyType === "socks5" ? "socks5" : "http"}://${auth}${proxyHost}:${proxyPort}`;
+
+        let agent: any;
+        try {
+          if (proxyType === "socks5") {
+            const { SocksProxyAgent } = await import("socks-proxy-agent");
+            agent = new SocksProxyAgent(proxyUrl);
+          } else {
+            const { HttpsProxyAgent } = await import("https-proxy-agent");
+            agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+          }
+        } catch {
+          const snapshot = JSON.stringify({
+            capturedAt, source: "server-side", proxyConfigured: true,
+            proxy: `${proxyHost}:${proxyPort}`, proxyType,
+            results: { Proxy: { status: "fail", label: "Agent init failed" } },
+          });
+          await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+          return { username: profile.username, snapshot };
+        }
+
+        // Run 3 IP endpoints in parallel through the proxy
+        const [ipifyRaw, cfRaw, myipRaw] = await Promise.all([
+          proxyGet("https://api.ipify.org?format=text", agent),
+          proxyGet("https://1.1.1.1/cdn-cgi/trace", agent),
+          proxyGet("https://api4.my-ip.io/v2/ip.json", agent),
+        ]);
+
+        const ipSources: IpResult[] = [
+          { source: "ipify",      ip: ipifyRaw?.trim() || null,                                                ok: !!ipifyRaw },
+          { source: "cloudflare", ip: cfRaw?.match(/ip=([^\n]+)/)?.[1]?.trim() || null,                       ok: !!cfRaw },
+          { source: "myip",       ip: (() => { try { return JSON.parse(myipRaw ?? "")?.ip ?? null; } catch { return myipRaw?.trim() || null; } })(), ok: !!myipRaw },
+        ];
+
+        const validIps = ipSources.filter(r => r.ok && r.ip).map(r => r.ip!);
+        const uniqueIps = [...new Set(validIps)];
+        const exitIp = validIps[0] ?? null;
+        const ipStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
+        const dnsStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
+
+        const snapshot = JSON.stringify({
+          capturedAt, source: "server-side", proxyConfigured: true,
+          proxy: `${proxyHost}:${proxyPort}`, proxyType,
+          results: {
+            IP:    { status: ipStatus,  label: exitIp ?? "No response" },
+            DNS:   { status: dnsStatus, label: uniqueIps.length <= 1 && validIps.length > 0 ? `${validIps.length}/3 consistent` : uniqueIps.length > 1 ? `${uniqueIps.length} different IPs detected` : "No response" },
+            Proxy: { status: validIps.length > 0 ? "pass" : "fail", label: validIps.length > 0 ? `Connected (${proxyHost})` : "Connection failed" },
+          },
+          ipSources,
+        });
+
+        await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+        return { username: profile.username, snapshot };
+      }
+
+      // Process up to 5 concurrently
+      const CONCURRENCY = 5;
+      const out: Record<number, { username: string; snapshot: string }> = {};
+      for (let i = 0; i < profileIds.length; i += CONCURRENCY) {
+        const chunk = profileIds.slice(i, i + CONCURRENCY);
+        const settled = await Promise.allSettled(chunk.map(id => checkProfile(id)));
+        settled.forEach((r, idx) => {
+          if (r.status === "fulfilled" && r.value) out[chunk[idx]] = r.value;
+        });
+      }
+
+      res.json({ ok: true, count: Object.keys(out).length, results: out });
+    } catch (err) {
+      req.log.error({ err }, "[refresh-leak-snapshots] error");
+      res.status(500).json({ error: "Failed to refresh leak snapshots" });
+    }
+  });
+
   app.get("/api/browser/debug", async (_req, res) => {
     const fs = await import("fs");
     const chromiumPath = process.env.CHROMIUM_PATH || "";
