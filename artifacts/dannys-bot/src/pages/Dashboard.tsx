@@ -68,6 +68,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.77",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings: clicking a group title with sub-settings now only opens/collapses the group — it no longer auto-ticks all the settings inside it." },
+      { category: "UI", text: "Copy Settings: you can now click and drag down the settings list to tick or untick multiple settings in one motion, on both the accounts side and the settings side." },
+      { category: "UI", text: "Copy Settings: account sort order (by name, status, or trust score) is now remembered when you re-open the dialog — only a software restart or pressing Select None resets it." },
+      { category: "UI", text: "Copy Settings: the NONE and Select None buttons are now blue to match the ALL and Select All buttons." },
+      { category: "UI", text: "Copy Settings: both search boxes now show SEARCH as placeholder text." },
+      { category: "UI", text: "Nav bar: SESSION LOG moved to sit after METRICS. COPY SETTINGS is now pushed to the far right of the bar on its own." },
+      { category: "Fix", text: "Evasion Stats: the activity ticker strip at the top of the page was appearing twice — the duplicate has been removed." },
+    ],
+  },
+  {
     version: "1.1.76",
     date: "20 Jun 2026",
     items: [

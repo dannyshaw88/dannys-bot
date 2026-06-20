@@ -102,9 +102,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [expandedOptions, setExpandedOptions] = useState<Set<string>>(new Set());
   const [status, setStatus]           = useState<"idle" | "copying" | "done">("idle");
 
-  // Drag-to-select refs — same pattern as the main accounts list
+  // Drag-to-select refs — accounts list (left panel)
   const isDragSelecting = useRef(false);
   const dragAddMode     = useRef(true);
+
+  // Drag-to-select refs — settings list (right panel)
+  const isSettingsDragSelecting = useRef(false);
+  const settingsDragAddMode     = useRef(true);
 
   // Refs that mirror state — used to capture current values on dialog close
   // without needing to re-register the save effect on every state change.
@@ -122,9 +126,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   useEffect(() => { sortByRef.current   = sortBy;   }, [sortBy]);
   useEffect(() => { sortDirRef.current  = sortDir;  }, [sortDir]);
 
-  // Stop drag on mouseup anywhere (including outside the list)
+  // Stop drag on mouseup anywhere (including outside the list) — covers both panels
   useEffect(() => {
-    const onMouseUp = () => { isDragSelecting.current = false; };
+    const onMouseUp = () => {
+      isDragSelecting.current = false;
+      isSettingsDragSelecting.current = false;
+    };
     window.addEventListener("mouseup", onMouseUp);
     return () => window.removeEventListener("mouseup", onMouseUp);
   }, []);
@@ -300,6 +307,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return next;
   });
 
+  // Clicking a parent row only toggles expansion — never auto-selects or deselects children
   const toggleOptionGroup = (opt: CopyOption) => {
     if (!opt.subOptions?.length) {
       setSelected(prev => {
@@ -309,17 +317,33 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       });
       return;
     }
-    const subKeys  = opt.subOptions.map(s => s.key);
-    const isExpanded = expandedOptions.has(opt.key);
-    if (isExpanded) {
-      // Collapse + deselect all sub-options
-      setExpandedOptions(prev => { const n = new Set(prev); n.delete(opt.key); return n; });
-      setSelected(prev => { const n = new Set(prev); subKeys.forEach(k => n.delete(k)); return n; });
-    } else {
-      // Expand + select all sub-options
-      setExpandedOptions(prev => { const n = new Set(prev); n.add(opt.key); return n; });
-      setSelected(prev => { const n = new Set(prev); subKeys.forEach(k => n.add(k)); return n; });
+    setExpandedOptions(prev => {
+      const n = new Set(prev);
+      if (n.has(opt.key)) n.delete(opt.key); else n.add(opt.key);
+      return n;
+    });
+  };
+
+  // Clicking the parent checkbox selects/deselects all children (independent of expand state)
+  const toggleParentCheckbox = (opt: CopyOption) => {
+    if (!opt.subOptions?.length) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(opt.key)) next.delete(opt.key); else next.add(opt.key);
+        return next;
+      });
+      return;
     }
+    const subKeys = opt.subOptions.map(s => s.key);
+    const allSel  = subKeys.every(k => selected.has(k));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allSel) subKeys.forEach(k => next.delete(k));
+      else subKeys.forEach(k => next.add(k));
+      return next;
+    });
+    // Expand when selecting children so the user can see what got ticked
+    if (!allSel) setExpandedOptions(prev => { const n = new Set(prev); n.add(opt.key); return n; });
   };
 
   const toggleSubOption = (key: string) => setSelected(prev => {
@@ -416,7 +440,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 ALL
               </button>
               <button
-                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide"
+                className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
                 onClick={handleSelectNoneFiltered}
               >
                 NONE
@@ -461,7 +485,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search by name, group, status, badge…"
+                  placeholder="SEARCH"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -595,7 +619,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   }}>
                     Select All
                   </button>
-                  <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>
+                  <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>
                     Select None
                   </button>
                 </div>
@@ -604,7 +628,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search settings…"
+                  placeholder="SEARCH"
                   value={settingsSearch}
                   onChange={e => setSettingsSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -629,23 +653,35 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     let checked       = false;
                     let indeterminate = false;
                     if (hasSubs) {
-                      if (isExpanded) {
-                        const subKeys  = opt.subOptions!.map(s => s.key);
-                        const selCount = subKeys.filter(k => selected.has(k)).length;
-                        checked       = selCount === subKeys.length;
-                        indeterminate = selCount > 0 && selCount < subKeys.length;
-                      }
-                      // collapsed → unchecked, no indeterminate
+                      // Show selection state regardless of expand/collapse
+                      const subKeys  = opt.subOptions!.map(s => s.key);
+                      const selCount = subKeys.filter(k => selected.has(k)).length;
+                      checked       = selCount === subKeys.length && selCount > 0;
+                      indeterminate = selCount > 0 && selCount < subKeys.length;
                     } else {
                       checked = selected.has(opt.key);
                     }
 
                     return (
                       <div key={opt.key}>
-                        <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/10 cursor-pointer select-none hover:bg-muted/20 transition-colors" onClick={() => toggleOptionGroup(opt)}>
+                        <div
+                          className="flex items-center gap-3 px-4 py-2.5 bg-muted/10 cursor-pointer select-none hover:bg-muted/20 transition-colors"
+                          onClick={() => toggleOptionGroup(opt)}
+                          onMouseDown={e => {
+                            if (e.button !== 0 || hasSubs) return;
+                            e.preventDefault();
+                            settingsDragAddMode.current = !selected.has(opt.key);
+                            isSettingsDragSelecting.current = true;
+                            toggleOptionGroup(opt);
+                          }}
+                          onMouseEnter={() => {
+                            if (!isSettingsDragSelecting.current || hasSubs) return;
+                            if (settingsDragAddMode.current !== selected.has(opt.key)) toggleSubOption(opt.key);
+                          }}
+                        >
                           <Checkbox
                             checked={indeterminate ? "indeterminate" : checked}
-                            onCheckedChange={() => toggleOptionGroup(opt)}
+                            onCheckedChange={() => toggleParentCheckbox(opt)}
                             onClick={e => e.stopPropagation()}
                             className="shrink-0"
                           />
@@ -668,6 +704,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                               <label
                                 key={sub.key}
                                 className="flex items-center gap-3 pl-10 pr-4 py-2 cursor-pointer select-none hover:bg-muted/20 transition-colors"
+                                onMouseDown={e => {
+                                  if (e.button !== 0) return;
+                                  e.preventDefault();
+                                  settingsDragAddMode.current = !selected.has(sub.key);
+                                  isSettingsDragSelecting.current = true;
+                                  toggleSubOption(sub.key);
+                                }}
+                                onMouseEnter={() => {
+                                  if (!isSettingsDragSelecting.current) return;
+                                  if (settingsDragAddMode.current !== selected.has(sub.key)) toggleSubOption(sub.key);
+                                }}
                               >
                                 <Checkbox
                                   checked={selected.has(sub.key)}

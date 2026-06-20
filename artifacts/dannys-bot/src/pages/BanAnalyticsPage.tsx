@@ -9,7 +9,6 @@ import {
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
   Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -2153,7 +2152,7 @@ export function BanAnalyticsPage() {
   }
 
   return (
-    <AppLayout>
+    <div className="flex flex-col min-h-0">
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-5xl mx-auto space-y-6">
           <div className="flex items-center gap-3">
@@ -2497,6 +2496,6 @@ export function BanAnalyticsPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </div>
   );
 }

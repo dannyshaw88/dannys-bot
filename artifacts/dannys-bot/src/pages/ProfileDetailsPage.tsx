@@ -923,9 +923,8 @@ export function ProfileDetailsPage() {
           {!profile?.creatorMode && (
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
-                { value: "settings",      label: "ACCOUNT SETTINGS", icon: Settings   },
+                { value: "settings",      label: "ACCOUNT SETTINGS",  icon: Settings    },
                 { value: "human-session", label: "HUMAN SESSION TOOL", icon: Fingerprint },
-                { value: "session-log",   label: "SESSION LOG",       icon: Activity   },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -941,7 +940,7 @@ export function ProfileDetailsPage() {
                   {label}
                 </button>
               ))}
-              {/* Action buttons — inline after SESSION LOG */}
+              {/* Action buttons — inline after HUMAN SESSION TOOL */}
               <div className="flex items-center border-l border-border/50">
                 <Link
                   href="/"
@@ -966,7 +965,22 @@ export function ProfileDetailsPage() {
                   METRICS
                 </Link>
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  onClick={() => navigate(`/profiles/${profileId}?tab=session-log`)}
+                  className={[
+                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
+                    activeTab === "session-log"
+                      ? "text-primary border-primary"
+                      : "text-[#1D4ED8] border-transparent hover:border-border",
+                  ].join(" ")}
+                >
+                  <Activity className="w-3.5 h-3.5 shrink-0" />
+                  SESSION LOG
+                </button>
+              </div>
+              {/* COPY SETTINGS — pushed to the far right */}
+              <div className="ml-auto shrink-0">
+                <button
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);
