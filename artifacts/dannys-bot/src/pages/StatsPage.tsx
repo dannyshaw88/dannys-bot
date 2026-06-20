@@ -116,6 +116,11 @@ const EP_FALLBACK = ["#3b82f6","#10b981","#f43f5e","#f97316","#8b5cf6","#06b6d4"
 function epColor(name: string, idx: number): string {
   return ENDPOINT_COLORS[name] ?? EP_FALLBACK[idx % EP_FALLBACK.length];
 }
+// Strip legacy "METHOD:Name" format (e.g. "POST:FeedTimeline" → "FeedTimeline")
+// that was produced by an older version of _opNameFromPath.
+function cleanEpName(name: string): string {
+  return /^(GET|POST|PUT|PATCH|DELETE):/.test(name) ? name.replace(/^[A-Z]+:/, "") : name;
+}
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
   account: 160, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
@@ -574,14 +579,14 @@ export function StatsPage() {
 
   const pieData = useMemo(() =>
     endpointCountsData
-      .map((ep, idx) => ({ name: ep.operationName, value: ep.todayCount, color: epColor(ep.operationName, idx) }))
+      .map((ep, idx) => ({ name: cleanEpName(ep.operationName), value: ep.todayCount, color: epColor(ep.operationName, idx) }))
       .filter(d => d.value > 0)
       .sort((a, b) => b.value - a.value),
   [endpointCountsData]);
 
   const lifetimePieData = useMemo(() =>
     endpointCountsData
-      .map((ep, idx) => ({ name: ep.operationName, value: ep.totalCount, color: epColor(ep.operationName, idx) }))
+      .map((ep, idx) => ({ name: cleanEpName(ep.operationName), value: ep.totalCount, color: epColor(ep.operationName, idx) }))
       .filter(d => d.value > 0)
       .sort((a, b) => b.value - a.value),
   [endpointCountsData]);
@@ -1101,7 +1106,7 @@ export function StatsPage() {
                           <tbody className="divide-y divide-border/30">
                             {sortedEndpointData.map(row => (
                               <tr key={row.operationName} className="hover:bg-muted/5 transition-colors">
-                                <td className="py-1.5 pr-4 text-[12px] text-foreground">{row.operationName}</td>
+                                <td className="py-1.5 pr-4 text-[12px] text-foreground">{cleanEpName(row.operationName)}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-foreground">{row.todayCount.toLocaleString()}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] text-foreground">{row.totalCount.toLocaleString()}</td>
                                 <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-amber-500">{(perAccountHitsMap[row.operationName] ?? 0) > 0 ? (perAccountHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>

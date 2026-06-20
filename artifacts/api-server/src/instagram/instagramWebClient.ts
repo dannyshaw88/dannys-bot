@@ -305,6 +305,18 @@ export function randomMobileUA(): string {
   return `Instagram ${MOBILE_VERSION} Android (${entry.api}; ${MOBILE_VERSION_CODE})`;
 }
 
+const FORCE_EMU_FRIENDLY: Record<string, string> = {
+  GetReelsTray:       "Checked reels tray",
+  NotificationsBadge: "Checked notifications",
+  GetDirectInbox:     "Checked direct inbox",
+  GetCurrentUser:     "Fetched own account info",
+  ViewTimelineFeed:   "Loaded timeline feed",
+  LauncherSync:       "Synced mobile config",
+  AnalyticsLog:       "Sent analytics log",
+  BatchFetchWeb:      "Batch fetched web queries",
+  AttributionLaunch:  "Sent attribution launch",
+};
+
 // ── Public client class ───────────────────────────────────────────────────────
 export class InstagramWebClient {
   private cookieJar: string[] = [];
@@ -669,12 +681,12 @@ export class InstagramWebClient {
     return result;
   }
 
-  private _opNameFromPath(path: string, method: string): string {
+  private _opNameFromPath(path: string, _method: string): string {
     const base = path.split("?")[0].replace(/\/+$/, "");
     const stripped = base.replace(/^\/api\/v\d+\//, "");
     const parts = stripped.split("/").filter(p => p && !/^\d+$/.test(p));
     const pascal = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())).join("");
-    return `${method}:${pascal || base}`;
+    return pascal || base;
   }
 
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
@@ -1858,7 +1870,7 @@ export class InstagramWebClient {
       }
       const shortcode = this.mediaIdToShortcode(mediaId);
       return `https://www.instagram.com/p/${shortcode}/`;
-    }, username ? `Like post of @${username}` : `Like media ${mediaId}`);
+    }, "Liked media successfully");
   }
 
   // ── Get a user's recent feed media IDs ────────────────────────────────────
@@ -2070,13 +2082,13 @@ export class InstagramWebClient {
             await this.mobileSessionGet(path);
           }
           console.log(`[webClient] forceEmulation: ${method} ${path} OK`);
-          return `${method} ${path} OK`;
+          return true;
         } catch (e: any) {
           const errMsg = (e?.message ?? "error").slice(0, 80);
           console.warn(`[webClient] forceEmulation: ${method} ${path} failed: ${errMsg}`);
-          return `${method} ${path} FAIL: ${errMsg}`;
+          return false;
         }
-      }, (res) => res);
+      }, (ok) => ok ? FORCE_EMU_FRIENDLY[opName] ?? "OK" : `Failed`);
     }
   }
 
@@ -2440,7 +2452,16 @@ export class InstagramWebClient {
 
       await this.mobileSessionPost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
       return seenCount;
-    }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
+    }, (n) => {
+      if (n < 0) {
+        if (n === -1) return "No mobile session";
+        if (n === -2) return "No stories in tray";
+        if (n === -3) return "Story tray fetched — nothing to mark seen";
+        if (n === -5) return "Session expired";
+        return `Story view error (code ${n})`;
+      }
+      return `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`;
+    });
   }
 
   // ── Check direct messages inbox ──────────────────────────────────────────

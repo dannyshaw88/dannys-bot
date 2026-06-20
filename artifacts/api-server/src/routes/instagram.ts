@@ -2411,6 +2411,9 @@ export async function registerInstagramRoutes(
         "GetBanyan",               // alternate logged name for banyan/banyan
         "ExecuteBanyan",           // another alternate name
         "SendMobileConfig",        // launcher/sync — may 400 on first attempt
+        "FetchConfig",             // qe/sync — 400 "Invalid experiment" is non-fatal
+        "QeSync",                  // alternate name for qe/sync
+        "QeSyncExperiments",       // qe/sync_experiments — same non-fatal 400
       ]);
 
       const apiCalls = allApiCalls
@@ -2430,7 +2433,7 @@ export async function registerInstagramRoutes(
 
       const headers = [
         "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
-        "Message", "Source", "NavChain", "IpAddress", "Duration(miliseconds)"
+        "Message", "Source", "IpAddress", "Duration(miliseconds)"
       ];
 
       // "Operation Name" is the tool that made the call.  "API Call" is the raw endpoint.
@@ -2514,7 +2517,6 @@ export async function registerInstagramRoutes(
           call.operationName ?? "",
           msgCell,
           resolveSource(call.source ?? ""),
-          call.navChain ?? "",
           ipPort,
           String(call.durationMs ?? ""),
         ].map(esc).join(",");

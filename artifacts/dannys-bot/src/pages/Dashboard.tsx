@@ -68,6 +68,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.92",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Call Export: LikeMedia message now says 'Liked media successfully' instead of showing the raw media ID. NavChain column removed. FetchConfig 400 errors now show OK (they are non-fatal probes). Endpoint names no longer show the HTTP method prefix (e.g. FeedTimeline instead of POST:FeedTimeline)." },
+      { category: "Fix", text: "Human Session: force emulation calls now show human-friendly messages (e.g. 'Loaded timeline feed', 'Checked notifications') instead of raw API paths." },
+      { category: "Fix", text: "ViewTimelineStories: negative sentinel codes now show readable messages (e.g. 'No stories in tray') instead of 'Viewed -3 stories'." },
+      { category: "Fix", text: "Statistics Metrics pie chart and endpoint table now display clean endpoint names — legacy entries with HTTP method prefixes are automatically cleaned up." },
+    ],
+  },
+  {
     version: "1.1.91",
     date: "20 Jun 2026",
     items: [
