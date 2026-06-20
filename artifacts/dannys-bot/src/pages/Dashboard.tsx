@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.90",
+    date: "20 Jun 2026",
+    items: [
+      { category: "New", text: "Evasion Stats: added 'Endpoint & Action Timing' theory card to all error type tabs — shows what percentage of your flagged accounts were running API calls faster than 30 seconds apart, with evidence and recommended actions based on your own data." },
+    ],
+  },
+  {
     version: "1.1.89",
     date: "20 Jun 2026",
     items: [

@@ -742,7 +742,7 @@ export function StatsPage() {
                   <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
                     <tr>
                       <th className="px-4 py-3 font-bold uppercase tracking-wide text-left">
-                        <button onClick={() => cycleSort("account")} className="flex items-center hover:text-foreground transition-colors">
+                        <button onClick={() => cycleSort("account")} className="flex items-center text-foreground hover:text-primary transition-colors">
                           Account Name
                         </button>
                       </th>
@@ -751,7 +751,7 @@ export function StatsPage() {
                         let thContent: React.ReactNode;
                         if (key === "status") {
                           thContent = (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground/60">
+                            <span className="inline-flex items-center gap-1 text-foreground">
                               <ShieldAlert className="w-3 h-3" />
                               <span className="text-[10px] uppercase tracking-wide">Status</span>
                             </span>
@@ -764,7 +764,7 @@ export function StatsPage() {
                             </span>
                           );
                         } else if (key === "trustscore") {
-                          thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-muted-foreground/60">TrustScore</span>;
+                          thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-foreground">TrustScore</span>;
                         } else if (key === "proxy_ip") {
                           thContent = (
                             <button onClick={() => cycleSort("proxy_ip")} className="inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-foreground font-bold">

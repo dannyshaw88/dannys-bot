@@ -186,6 +186,7 @@ function ProxyRow({
   return (
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
+        <div className="flex items-center gap-2 flex-1 justify-center">
         {colOrder.map(col => {
           if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
           if (col === "accounts") return (
@@ -243,6 +244,7 @@ function ProxyRow({
           );
           return null;
         })}
+        </div>
         {/* Actions — always last */}
         <div className="flex items-center gap-1 shrink-0">
           <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
@@ -751,6 +753,7 @@ export function ProxiesPage() {
 
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
+          <div className="flex items-center gap-2 flex-1 justify-center">
           {proxyColOrder.map(col => {
             if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
             const isDragTarget = proxyDragOverCol === col;
@@ -788,8 +791,8 @@ export function ProxiesPage() {
               </div>
             );
           })}
-          <div className="shrink-0">Actions</div>
-          <div className="flex-1" />
+          <div className="shrink-0 flex items-center justify-center">Actions</div>
+          </div>
           <div ref={manageProxyColsRef} className="relative">
             <button onClick={() => setManageProxyColsOpen(o => !o)} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors">
               <Settings2 className="w-3 h-3" /> Columns

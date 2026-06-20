@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint, Gauge,
 } from "lucide-react";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
@@ -1295,37 +1295,39 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
               <span className="text-sm font-semibold">Pre-{errorTypeLabel} Endpoint Risk Ranking</span>
               <span className="text-xs text-muted-foreground ml-auto">last {RISK_WINDOW} calls · {valid} account{valid !== 1 ? "s" : ""}</span>
             </div>
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-border/60 bg-muted/30">
-                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide w-6">#</th>
-                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
-                  <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
-                  <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Accounts</th>
-                  <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Pre-{errorTypeLabel} %</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {top.map((ep, i) => {
-                  const riskColor = ep.pct >= 50 ? "#dc2626" : ep.pct >= 25 ? "#d97706" : "#6b7280";
-                  const catMeta = CAT_META[ep.category] ?? CAT_META["other"];
-                  return (
-                    <tr key={ep.name} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                      <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
-                      <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[180px] truncate" title={ep.name}>{ep.label ?? ep.name}</td>
-                      <td className="px-3 py-1.5 hidden sm:table-cell">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-muted text-muted-foreground">
-                          <span className={`w-1.5 h-1.5 rounded-full ${catMeta.color}`} />
-                          {catMeta.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.count}</td>
-                      <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: riskColor }}>{ep.pct}%</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-y-auto" style={{ maxHeight: "196px" }}>
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-border/60 bg-muted/30">
+                    <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide w-6">#</th>
+                    <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Endpoint</th>
+                    <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
+                    <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Accounts</th>
+                    <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground uppercase tracking-wide">Pre-{errorTypeLabel} %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {top.map((ep, i) => {
+                    const riskColor = ep.pct >= 50 ? "#dc2626" : ep.pct >= 25 ? "#d97706" : "#6b7280";
+                    const catMeta = CAT_META[ep.category] ?? CAT_META["other"];
+                    return (
+                      <tr key={ep.name} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                        <td className="px-3 py-1.5 text-muted-foreground font-mono">{i + 1}</td>
+                        <td className="px-3 py-1.5 font-mono font-semibold text-foreground max-w-[180px] truncate" title={ep.name}>{ep.label ?? ep.name}</td>
+                        <td className="px-3 py-1.5 hidden sm:table-cell">
+                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-muted text-muted-foreground">
+                            <span className={`w-1.5 h-1.5 rounded-full ${catMeta.color}`} />
+                            {catMeta.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{ep.count}</td>
+                        <td className="px-3 py-1.5 text-right font-mono font-bold" style={{ color: riskColor }}>{ep.pct}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <div className="px-3 py-1.5 border-t border-border/40 bg-muted/20">
               <p className="text-[10px] text-muted-foreground"><strong>Pre-{errorTypeLabel} %</strong> — share of {valid} accounts where this endpoint appeared in their final {RISK_WINDOW} calls before the {errorTypeLower}. Higher = more correlated. Red ≥50%, amber ≥25%.</p>
             </div>
@@ -1596,6 +1598,22 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
     return m && m.callsPerMin > 0.2 && m.spanMin > 20;
   }).length;
   const continuousSessionPct = total > 2 ? Math.round((continuousSessionCount / total) * 100) : -1;
+
+  // Theory: Endpoint & Action Timing — avg inter-call gap < 30s
+  // The 30-second threshold is derived from field observation: noob accounts running faster than
+  // 30s between any two API calls appear at a disproportionate rate in the flagged dataset.
+  // Higher-trust accounts surviving at faster rates is not evidence 30s is unnecessary — it is
+  // evidence those accounts had earned enough trust to tolerate a shorter gap.
+  const fastTimingCount = primaryEntries.filter((_, i) => {
+    const m = primaryMetrics[i];
+    return m && m.avgInterCallSec > 0 && m.avgInterCallSec < 30;
+  }).length;
+  const fastTimingPct = total > 2 ? Math.round((fastTimingCount / total) * 100) : -1;
+  const fastTimingMedianSec = (() => {
+    const gaps = primaryMetrics.map(m => m?.avgInterCallSec ?? 0).filter(v => v > 0);
+    if (!gaps.length) return null;
+    return Math.round(median(gaps));
+  })();
 
   function LikelihoodBar({ pct }: { pct: number }) {
     if (pct < 0) return <span className="text-xs text-muted-foreground italic">— need 3+ events to compute</span>;
@@ -1868,6 +1886,17 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         ? `${continuousSessionCount} of ${total} flagged accounts (${continuousSessionPct}%) had a call rate above 0.2/min sustained over a span of more than 20 minutes — consistent with continuous calling rather than burst-idle. The survivor in this dataset ran at 0.099/min overall but was truly idle for 94% of her 70-hour span, active only in short bursts before going silent for hours.`
         : "Not enough data yet. Flag more accounts with multi-minute session spans to measure burst-idle rhythm.",
       advice: "Structure sessions as short bursts (2–5 minutes of activity) followed by long idle gaps (2–8 hours). The engine should not call the API at a steady rate for 30+ continuous minutes. Schedule runs to mimic human check-in patterns: brief active window, then off for hours. This means lower daily call totals but a session shape that matches organic usage.",
+    },
+    {
+      id: "endpoint-timing", Icon: Gauge,
+      title: "Endpoint & Action Timing",
+      tagline: "Every API call may need a minimum gap — and that minimum is higher for lower-trust accounts",
+      likelihood: fastTimingPct,
+      description: "What is being theorised is that Instagram evaluates the gap between consecutive API calls as part of its session scoring, and that the acceptable minimum gap is not fixed but account-dependent — tied to the account's internal trust level. Under this model, a new or low-trust account ('NOOB') that fires API calls with less than 30 seconds between them triggers a classification pattern consistent with automation, even if the same timing would be tolerated from an established high-trust account. A high-trust account surviving at 5-second call gaps is therefore not evidence that 5 seconds is safe universally — it is evidence that account had earned enough trust to tolerate it. The 30-second threshold is derived from field observation, not from documented Instagram parameters. The trust score shown in this app is our own internal estimate — Instagram's true internal score is not visible and is likely more granular. The internal trust score affects every single endpoint, not just follow actions: feed fetches, story views, and passive endpoints all count toward the timing budget.",
+      evidence: fastTimingPct >= 0
+        ? `${fastTimingCount} of ${total} flagged accounts (${fastTimingPct}%) had an average inter-call gap below 30 seconds.${fastTimingMedianSec !== null ? ` The median average gap across all flagged accounts in this error type is ${fastTimingMedianSec}s.` : ""} Whether the sub-30s average is a cause of the flag or a side-effect of sessions that were short and high-velocity for other reasons cannot be determined from this data alone.`
+        : "Not enough data yet. Flag more accounts to measure inter-call timing distribution.",
+      advice: "Not yet established from data. Flag more accounts with known per-call delay settings and compare their average inter-call gaps against flagged versus surviving outcomes to determine whether a 30-second floor produces a measurably different result.",
     },
   ];
 
@@ -2181,8 +2210,6 @@ export function BanAnalyticsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("ban");
   const [innerTabs, setInnerTabs] = useState<Record<ErrorTab, InnerTab>>({ ban: "data", automated: "data", captcha: "data", locked: "data" });
   const [groupFilters, setGroupFilters] = useState<Record<ErrorTab, GroupFilter>>({ ban: "all", automated: "all", captcha: "all", locked: "all" });
-  const [showAllProxy, setShowAllProxy] = useState(false);
-  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   const { data: banEntries = [], isLoading: banLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/ban-patterns"], queryFn: async () => (await fetch("/api/analytics/ban-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
   const { data: automatedEntries = [], isLoading: autoLoading } = useQuery<AnalyticsEntry[]>({ queryKey: ["/api/analytics/automated-patterns"], queryFn: async () => (await fetch("/api/analytics/automated-patterns", { credentials: "include" })).json(), refetchInterval: 30000 });
@@ -2758,14 +2785,9 @@ export function BanAnalyticsPage() {
                 <span className="text-sm font-semibold">Proxy Risk Ranking</span>
                 <span className="text-xs text-muted-foreground ml-auto">B/A/C/L + /24 subnet shown</span>
               </div>
-              <div className="divide-y divide-border">
-                {(showAllProxy ? proxyRisks : proxyRisks.slice(0, 3)).map((pr, i) => <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />)}
+              <div className="divide-y divide-border overflow-y-auto" style={{ maxHeight: "250px" }}>
+                {proxyRisks.map((pr, i) => <ProxyRankRow key={pr.host} pr={pr} i={i} profileMap={profileMap} />)}
               </div>
-              {proxyRisks.length > 3 && (
-                <button onClick={() => setShowAllProxy(v => !v)} className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t border-border transition-colors flex items-center justify-center gap-1">
-                  {showAllProxy ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show {proxyRisks.length - 3} more</>}
-                </button>
-              )}
             </div>
           )}
 
@@ -2776,8 +2798,8 @@ export function BanAnalyticsPage() {
                 <span className="text-sm font-semibold">Concurrent Usage Alerts</span>
                 <span className="text-xs text-muted-foreground ml-auto">timing based on last API call, not mark time</span>
               </div>
-              <div className="divide-y divide-border">
-                {(showAllAlerts ? concurrencyAlerts : concurrencyAlerts.slice(0, 3)).map((alert, i) => (
+              <div className="divide-y divide-border overflow-y-auto" style={{ maxHeight: "300px" }}>
+                {concurrencyAlerts.map((alert, i) => (
                   <div key={i} className="px-4 py-3 flex items-start gap-3">
                     <Globe className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -2790,11 +2812,6 @@ export function BanAnalyticsPage() {
                   </div>
                 ))}
               </div>
-              {concurrencyAlerts.length > 3 && (
-                <button onClick={() => setShowAllAlerts(v => !v)} className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t border-border transition-colors flex items-center justify-center gap-1">
-                  {showAllAlerts ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show {concurrencyAlerts.length - 3} more</>}
-                </button>
-              )}
             </div>
           )}
         </div>
