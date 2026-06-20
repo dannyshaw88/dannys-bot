@@ -343,6 +343,12 @@ export class InstagramWebClient {
   // signal that causes Instagram to flag and lock the account.
   private _mobileIgDid: string = "";
   private _mobileMid: string = "";
+  // Last configure-step error message, set by _configureViaIgClient when configure
+  // returns a non-ok response. Exposed via lastUploadError getter so callers can
+  // surface the real Instagram error in the activity log instead of a generic
+  // "Upload failed" message.
+  private _lastConfigureError = "";
+  get lastUploadError(): string { return this._lastConfigureError; }
   // Set by _mobileLogin when the failure is definitively bad credentials so
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
@@ -691,7 +697,11 @@ export class InstagramWebClient {
 
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
     if (this._inTimedCall || !this.logCallFn) return;
-    this.logCallFn(this._opNameFromPath(path, method), durationMs, path, isError);
+    const PATH_FRIENDLY: Record<string, string> = {
+      "/api/v1/feed/timeline/": "Loading timeline feed",
+    };
+    const msg = PATH_FRIENDLY[path] ?? path;
+    this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
   }
 
   // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.
@@ -4170,8 +4180,11 @@ export class InstagramWebClient {
       return uploadId;
     }
     if (json) {
+      const errDetail = json?.message ?? `HTTP ${res.status}`;
+      this._lastConfigureError = errDetail;
       console.warn(`[webClient] configure ${uploadId}: unexpected response (HTTP ${res.status}) — ${JSON.stringify(json).slice(0, 600)}`);
     } else {
+      this._lastConfigureError = `HTTP ${res.status}: no response body`;
       console.warn(`[webClient] configure ${uploadId}: non-JSON response (HTTP ${res.status}) — ${res.rawBody?.slice(0, 400)}`);
     }
     return null;
@@ -4180,6 +4193,7 @@ export class InstagramWebClient {
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
+    this._lastConfigureError = "";
     return this.timed("UploadPhoto", async () => {
       // ── Aspect ratio enforcement ────────────────────────────────────────────
       // Instagram requires aspect ratio between 0.8 (4:5 portrait) and 1.91

@@ -2885,8 +2885,9 @@ class AutomationEngine {
                   }
                 }
               } else {
-                console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName}`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName}`);
+                const uploadErr = client.lastUploadError || "Upload failed";
+                console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName} — ${uploadErr}`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName} (${uploadErr})`);
               }
             }
           } catch (e: any) {
@@ -2986,8 +2987,9 @@ class AutomationEngine {
               await storage.incrementStat(profile.id, "repost");
               repostedCount++;
             } else {
-              console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", "Upload failed");
+              const uploadErr = client.lastUploadError || "Upload failed";
+              console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}: ${uploadErr}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", uploadErr);
             }
           }
 
@@ -3995,7 +3997,7 @@ class AutomationEngine {
 
       // Upload via private API
       const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
-      if (!postedMediaId) return { ok: false, message: "Upload failed — Instagram rejected the photo" };
+      if (!postedMediaId) return { ok: false, message: client.lastUploadError || "Upload failed — Instagram rejected the photo" };
 
       if (s.repostDisableComments) {
         try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }

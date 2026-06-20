@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.95",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post: when a repost upload fails at the publish step, the activity log now shows the real Instagram error (e.g. 'We're sorry, but something went wrong during media publish') instead of a generic 'Upload failed' message. This applies to username-source reposts, local folder reposts, and manual one-click reposts." },
+      { category: "Fix", text: "API Call Export: FeedTimeline message now says 'Loading timeline feed' instead of showing the raw path /api/v1/feed/timeline/." },
+    ],
+  },
+  {
     version: "1.1.93",
     date: "20 Jun 2026",
     items: [
