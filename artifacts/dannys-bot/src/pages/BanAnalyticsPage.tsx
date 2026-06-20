@@ -1434,6 +1434,13 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
   const primaryMetrics = useMemo(() => primaryEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [primaryEntries]);
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
 
+  const { data: verifyFpData, isLoading: fpLoading } = useQuery<Array<{ id: number; username: string; bannedAt: string | null; proxyHost: string | null; leakData: any }>>({
+    queryKey: ["/api/analytics/verify-fingerprint"],
+    queryFn: async () => (await fetch("/api/analytics/verify-fingerprint", { credentials: "include" })).json(),
+    enabled: forTab === "ban",
+    refetchInterval: 30000,
+  });
+
   const hotProxyHosts = useMemo(() => new Set(proxyRisks.filter(pr => pr.total >= 2).map(pr => pr.host)), [proxyRisks]);
   const onHotProxy = primaryEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
   const ipTrustPct = total > 2 ? Math.round((onHotProxy / total) * 100) : -1;
@@ -1913,6 +1920,157 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
           ))}
         </div>
       </div>
+
+      {/* ── Verify-Only Device Fingerprint card (ban tab only) ───────────── */}
+      {forTab === "ban" && !fpLoading && (() => {
+        const accounts = verifyFpData ?? [];
+        const withLeak = accounts.filter(a => a.leakData && typeof a.leakData === "object" && a.leakData.results);
+        const noLeak = accounts.filter(a => !a.leakData || !a.leakData.results);
+
+        const testKeys: string[] = [];
+        if (withLeak.length > 0) {
+          const keySet = new Set<string>();
+          for (const a of withLeak) {
+            const results = a.leakData.results as Record<string, { status: string; label?: string }>;
+            for (const k of Object.keys(results)) keySet.add(k);
+          }
+          testKeys.push(...Array.from(keySet));
+        }
+
+        const testStats = testKeys.map(key => {
+          let fail = 0, warn = 0, pass = 0;
+          for (const a of withLeak) {
+            const r = (a.leakData.results as Record<string, { status: string }>)[key];
+            const s = (r?.status ?? "").toLowerCase();
+            if (s === "fail") fail++;
+            else if (s === "warn") warn++;
+            else pass++;
+          }
+          const n = withLeak.length;
+          const label = (withLeak[0]?.leakData?.results as any)?.[key]?.label ?? key;
+          return { key, label, fail, warn, pass, total: n, failPct: Math.round(fail / n * 100) };
+        }).sort((a, b) => b.failPct - a.failPct);
+
+        const majorityFails = testStats.filter(t => t.failPct > 50);
+
+        return (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-start gap-2">
+              <Fingerprint className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold">Verify-Only Device Fingerprint</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Accounts banned having done nothing but the API bootstrap sequence (tokens/keyed → launcher/sync → users/info) — zero follow, DM, or tool activity. Tests whether the <em>verify handshake itself</em> or the device fingerprint at that moment triggered the ban.
+                </p>
+              </div>
+              {accounts.length > 0 && <span className="text-[10px] text-muted-foreground pt-0.5 shrink-0">{accounts.length} account{accounts.length !== 1 ? "s" : ""}</span>}
+            </div>
+
+            {accounts.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-xs text-muted-foreground">No verify-only bans yet. These are accounts banned with zero tool activity — only the verify handshake ran. Flag more accounts on the Data tab to populate this card.</p>
+              </div>
+            ) : withLeak.length === 0 ? (
+              <div className="p-4 space-y-3">
+                <p className="text-[11px] text-muted-foreground">
+                  {accounts.length} verify-only banned account{accounts.length !== 1 ? "s" : ""} found, but none have a leak snapshot. Re-verify these accounts to capture a device fingerprint:
+                </p>
+                <div className="flex flex-col gap-1">
+                  {noLeak.map(a => (
+                    <div key={a.id} className="flex items-center gap-2 text-[11px]">
+                      <span className="font-mono text-muted-foreground">@{a.username}</span>
+                      {a.bannedAt && <span className="text-muted-foreground/60">· banned {new Date(a.bannedAt).toLocaleDateString()}</span>}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground italic">Go to Accounts → click Verify on each account above. The leak check runs silently in the background and populates this analysis automatically.</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                <div className="space-y-2">
+                  {testStats.map(t => (
+                    <div key={t.key} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-muted-foreground">{t.label}</span>
+                        <span className={t.failPct > 50 ? "text-red-500 font-bold" : "text-muted-foreground"}>{t.failPct}% fail</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden flex">
+                        <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.round(t.fail / t.total * 100)}%` }} />
+                        <div className="h-full bg-yellow-400 transition-all" style={{ width: `${Math.round(t.warn / t.total * 100)}%` }} />
+                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round(t.pass / t.total * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex gap-3 text-[9px] text-muted-foreground mt-1">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />Fail</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />Warn</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Pass</span>
+                  </div>
+                </div>
+
+                <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from {withLeak.length} account{withLeak.length !== 1 ? "s" : ""}</p>
+                  {majorityFails.length > 0 ? (
+                    <p className="text-[11px]">
+                      {majorityFails.map(t => t.label).join(", ")} fail{majorityFails.length === 1 ? "s" : ""} on the majority of verify-only banned accounts. These are the likely fingerprint detection signals — Instagram may have identified the device as non-human at verify time, before any tool ever ran.
+                    </p>
+                  ) : (
+                    <p className="text-[11px]">No individual fingerprint test fails on more than 50% of verify-only banned accounts. The device fingerprint passed inspection — the ban trigger is more likely IP-level (login rate limit) than device-level. See the IP Login Rate Limit theory above.</p>
+                  )}
+                </div>
+
+                <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action</p>
+                  {majorityFails.length > 0 ? (
+                    <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
+                      Fix the {majorityFails.map(t => t.label).join(" and ")} test{majorityFails.length !== 1 ? "s" : ""} in the Leak Test before verifying new accounts. A device that fails these checks at verify time is identifiable as non-human independent of any subsequent tool activity.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
+                      Device fingerprint tests pass — the verify-only ban pattern points to the IP Login Rate Limit theory. Space verifications at least 90 minutes apart on the same proxy IP. Each verify generates two login events (browser + mobile API); too many on one IP trips the per-IP login budget.
+                    </p>
+                  )}
+                </div>
+
+                <details className="group">
+                  <summary className="cursor-pointer text-[11px] text-muted-foreground flex items-center gap-1 select-none list-none">
+                    <ChevronDown className="w-3 h-3 group-open:hidden" /><ChevronUp className="w-3 h-3 hidden group-open:block" />
+                    Per-account breakdown
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {[...withLeak, ...noLeak].map(a => {
+                      const capturedAt = a.leakData?.capturedAt ? new Date(a.leakData.capturedAt).toLocaleString() : null;
+                      const results: Record<string, { status: string; label?: string }> = a.leakData?.results ?? {};
+                      return (
+                        <div key={a.id} className="border border-border rounded-md p-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold font-mono">@{a.username}</span>
+                            <div className="flex gap-2 text-[10px] text-muted-foreground">
+                              {a.bannedAt && <span>banned {new Date(a.bannedAt).toLocaleDateString()}</span>}
+                              {capturedAt && <span>· fingerprint {capturedAt}</span>}
+                            </div>
+                          </div>
+                          {Object.keys(results).length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(results).map(([key, val]) => {
+                                const s = (val.status ?? "").toLowerCase();
+                                const color = s === "fail" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : s === "warn" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+                                return <span key={key} className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${color}`}>{val.label ?? key}: {val.status?.toUpperCase()}</span>;
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground italic">No leak snapshot — re-verify to capture fingerprint.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

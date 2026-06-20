@@ -713,6 +713,49 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Verify-Only Fingerprint Analysis ─────────────────────────────────────────
+  // Returns banned accounts whose every non-HikerAPI endpoint came exclusively
+  // from the verify/eb/system bootstrap sequence (no tool activity), joined with
+  // each account's leakSnapshot from the live profiles table.
+  app.get("/api/analytics/verify-fingerprint", async (req, res) => {
+    try {
+      const records = await storage.getBanAnalytics();
+      const allProfiles = await storage.getProfiles();
+      const profileByUsername = new Map<string, any>();
+      for (const p of allProfiles) profileByUsername.set(p.username, p);
+
+      const verifyOnly = records.filter((r: any) => {
+        let eps: Array<{ source?: string | null }> = [];
+        try { eps = JSON.parse(r.endpointSnapshot); } catch { return false; }
+        eps = eps.filter((e: any) => (e.source ?? "").toLowerCase() !== "hiker_api");
+        if (eps.length === 0) return false;
+        return eps.every((ep: any) => {
+          const s = (ep.source ?? "").toLowerCase();
+          return s === "verify" || s === "eb" || s === "system" || s === "";
+        });
+      });
+
+      const results = verifyOnly.map((r: any) => {
+        const profile = profileByUsername.get(r.username);
+        let leakData: any = null;
+        const raw = (profile as any)?.leakSnapshot ?? null;
+        if (raw) { try { leakData = JSON.parse(raw); } catch { leakData = raw; } }
+        return {
+          id: r.id,
+          username: r.username,
+          bannedAt: r.bannedAt ?? r.flaggedAt ?? null,
+          proxyHost: r.proxyHost ?? null,
+          leakData,
+        };
+      });
+
+      res.json(results);
+    } catch (err) {
+      req.log.error({ err }, "[verify-fingerprint] error");
+      res.status(500).json({ error: "Failed to fetch verify-only fingerprint data" });
+    }
+  });
+
   // ── Flag as Automated Behaviour: snapshot → analytics → update status (no delete) ──
   app.post("/api/profiles/:id/flag-automated", async (req, res) => {
     const profileId = Number(req.params.id);

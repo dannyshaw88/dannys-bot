@@ -68,6 +68,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.84",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "New Evasion Stats card: Verify-Only Device Fingerprint. Isolates accounts that were banned with zero tool activity (only the API bootstrap sequence ran) and compares their leak test results side by side." },
+      { category: "Analytics", text: "The fingerprint card shows a bar chart per leak test (WebRTC, Bot Detection, Canvas, Audio, Timezone, Hardware) with red/yellow/green proportions across all verify-only banned accounts, sorted by fail rate." },
+      { category: "Analytics", text: "If a test fails on the majority of these accounts the card calls it out directly and advises fixing it before verifying new accounts. If all pass, it points back to the IP Login Rate Limit theory instead." },
+    ],
+  },
+  {
     version: "1.1.83",
     date: "20 Jun 2026",
     items: [
