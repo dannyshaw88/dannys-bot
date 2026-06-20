@@ -56,7 +56,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-builds
-          path: .
+          path: artifacts
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron
