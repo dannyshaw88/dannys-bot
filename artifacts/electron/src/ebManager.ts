@@ -4378,6 +4378,59 @@ export function startEbIpcServer(
         return send(res, 200, result);
       }
 
+      if (req.method === "POST" && u.pathname === "/eb/run-leak-test") {
+        // Run the full leak page in a hidden BrowserWindow on the account's session
+        // partition.  The proxy is already configured on the partition from the
+        // verify flow that just completed, so all DNS / IP tests go through the
+        // proxy automatically.  Instagram never sees this window — show: false.
+        // The caller (browserSession.ts) passes the complete pre-rendered HTML
+        // (with ACCOUNT data injected, profileId=null to suppress auto-save).
+        const partition = ebPartition(pid);
+        let leakWin: BrowserWindow | null = null;
+        try {
+          leakWin = new BrowserWindow({
+            show: false,
+            width: 1280,
+            height: 720,
+            webPreferences: {
+              partition,
+              nodeIntegration: false,
+              contextIsolation: true,
+            },
+          });
+
+          // Load via data URL so no web server is needed.  Inline scripts are
+          // allowed on data URLs (no server-supplied CSP can block them).
+          const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(body.html ?? "");
+          await leakWin.loadURL(dataUrl);
+
+          // Poll for _leakTestDone (set by runAll() in leaksPage.ts).  40s max.
+          const deadline = Date.now() + 40_000;
+          while (Date.now() < deadline) {
+            await new Promise<void>(r => setTimeout(r, 500));
+            const done: boolean = await leakWin.webContents
+              .executeJavaScript("!!window._leakTestDone")
+              .catch(() => true);
+            if (done) break;
+          }
+
+          const resultsJson: string = await leakWin.webContents
+            .executeJavaScript("JSON.stringify(window.RESULTS || {})")
+            .catch(() => "{}");
+
+          leakWin.destroy();
+          leakWin = null;
+
+          const results: Record<string, unknown> = JSON.parse(resultsJson);
+          console.log(`[run-leak-test:${pid}] done — ${Object.keys(results).length} tests captured`);
+          return send(res, 200, { ok: true, results });
+        } catch (err: any) {
+          if (leakWin && !leakWin.isDestroyed()) { try { leakWin.destroy(); } catch {} }
+          console.error(`[run-leak-test:${pid}] error: ${err?.message}`);
+          return send(res, 500, { error: err?.message });
+        }
+      }
+
       if (req.method === "POST" && u.pathname === "/eb/silent-verify") {
         console.log(`[silent-verify:${pid}] @${body.username} — handler entered`);
         const partition = ebPartition(pid);

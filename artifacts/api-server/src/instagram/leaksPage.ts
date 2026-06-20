@@ -1560,6 +1560,8 @@ async function runAll() {
       }).catch(() => {});
     } catch {}
   }
+  // Signal completion so Puppeteer/Electron silent capture can detect when all tests are done
+  try { (window as any)._leakTestDone = true; } catch {}
 }
 
 window.addEventListener('DOMContentLoaded', runAll);

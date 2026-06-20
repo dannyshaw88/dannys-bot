@@ -13,6 +13,7 @@ import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
 import { generateEbFingerprint } from "./browserFingerprint";
+import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -5231,6 +5232,79 @@ export async function electronSilentVerify(opts: {
   } catch (err: any) {
     log(`[electronSilentVerify:${opts.profileId}] IPC error: ${err?.message}`, "browser");
     return { ok: false, message: err?.message ?? "Silent verify IPC failed", cookies: [] };
+  }
+}
+
+// ── Silent browser-based leak test ───────────────────────────────────────────
+// Runs the full leak page (WebRTC, Bot, Canvas, Audio, Timezone, Hardware, etc.)
+// inside an invisible background context so Instagram never sees it.
+// In Electron mode: opens a hidden BrowserWindow on the account's partition
+//   (proxy already configured) via /eb/run-leak-test IPC.
+// In Puppeteer mode: opens a background page in the existing browser session.
+//
+// ACCOUNT.profileId is set to null in the injected data so the auto-save fetch
+// inside runAll() is skipped — caller is responsible for persisting RESULTS.
+//
+// Returns the RESULTS map on success, null on timeout / error.
+export async function runSilentLeakTest(
+  profileId: number,
+  accountData: {
+    proxy?:     string | null;
+    proxyType?: string | null;
+    ebUA?:      string | null;
+    apiUA?:     string | null;
+  },
+): Promise<Record<string, { status: string; label: string }> | null> {
+
+  const acctJson = JSON.stringify({
+    profileId: null,            // disable auto-save fetch inside runAll()
+    proxy:     accountData.proxy     ?? null,
+    proxyType: accountData.proxyType ?? "http",
+    ebUA:      accountData.ebUA      ?? null,
+    apiUA:     accountData.apiUA     ?? null,
+  });
+  const html = LEAKS_PAGE_HTML
+    .replace("__LEAK_TEST_TITLE__", "Silent Leak Test")
+    .replace('"__ACCOUNT_DATA__"', acctJson)
+    .replace("__ACCOUNT_DATA__",   acctJson);
+
+  if (IS_ELECTRON_EB) {
+    // Electron mode — pass the prepared HTML to ebManager which creates a
+    // hidden BrowserWindow on the account's partition (proxy already set).
+    try {
+      const resp = await ebIpc("POST", "/eb/run-leak-test", { profileId, html });
+      return resp?.results ?? null;
+    } catch (err: any) {
+      log(`[silentLeakTest:${profileId}] Electron IPC error: ${err?.message}`, "browser");
+      return null;
+    }
+  }
+
+  // Puppeteer mode — open a background page in the existing browser.
+  const session = sessions.get(profileId);
+  if (!session?.browser) {
+    log(`[silentLeakTest:${profileId}] no browser session — skipping`, "browser");
+    return null;
+  }
+
+  let bgPage: Page | null = null;
+  try {
+    bgPage = await session.browser.newPage();
+    if (accountData.ebUA) await bgPage.setUserAgent(accountData.ebUA);
+    await bgPage.setContent(html, { waitUntil: "domcontentloaded" });
+    await bgPage.waitForFunction(
+      () => (window as any)._leakTestDone === true,
+      { timeout: 38_000 },
+    );
+    const results: Record<string, { status: string; label: string }> =
+      await bgPage.evaluate(() => (window as any).RESULTS ?? {});
+    log(`[silentLeakTest:${profileId}] Puppeteer done — ${Object.keys(results).length} tests`, "browser");
+    return results;
+  } catch (err: any) {
+    log(`[silentLeakTest:${profileId}] Puppeteer error: ${err?.message}`, "browser");
+    return null;
+  } finally {
+    if (bgPage && !bgPage.isClosed()) bgPage.close().catch(() => {});
   }
 }
 

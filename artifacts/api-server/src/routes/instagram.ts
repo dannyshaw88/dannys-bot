@@ -52,6 +52,7 @@ import {
   scheduleAutoLogin,
   getSessionChallengeUrl,
   deleteSavedCookies,
+  runSilentLeakTest,
   attachSignupWS,
   detachSignupWS,
   signupBrowserInput,
@@ -1711,6 +1712,38 @@ export async function registerInstagramRoutes(
         // the mobile API call temporarily fails (network hiccup, proxy lag, etc.)
         await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
 
+        // Fire-and-forget: run the full leak test (WebRTC, Bot, Canvas, etc.) in a
+        // hidden background context while verifyInstagramCredentials runs in parallel.
+        // The partition already has the correct proxy set from the verify flow above,
+        // so all network tests go through the proxy automatically.
+        // Results are persisted via saveLeakSnapshot when complete.
+        void (async () => {
+          try {
+            const _proxyStr = proxyConfig ? `${proxyConfig.host}:${proxyConfig.port}` : null;
+            const _proxyType = proxyConfig?.type ?? "http";
+            const results = await runSilentLeakTest(profileId, {
+              proxy:     _proxyStr,
+              proxyType: _proxyType,
+              ebUA:      effectiveProfile.userAgentEmbedded ?? null,
+              apiUA:     effectiveProfile.userAgentApi      ?? null,
+            });
+            if (!results || Object.keys(results).length === 0) return;
+            const snapshot = JSON.stringify({
+              capturedAt: new Date().toISOString(),
+              source:     "browser-silent",
+              proxy:      _proxyStr,
+              proxyType:  _proxyType,
+              ebUA:       effectiveProfile.userAgentEmbedded ?? null,
+              apiUA:      effectiveProfile.userAgentApi      ?? null,
+              results,
+            });
+            await storage.saveLeakSnapshot(profileId, snapshot);
+            console.log(`[verify:${profileId}] silent leak test saved — ${Object.keys(results).length} results`);
+          } catch (leakErr: any) {
+            console.warn(`[verify:${profileId}] silent leak test failed (non-fatal): ${leakErr?.message}`);
+          }
+        })();
+
         // Step 5: Mobile API confirmation — the Jarvee step we were missing.
         // EB login proves the web session is alive.  This step confirms the same
         // cookies work at the mobile API layer before the account is marked valid.
@@ -2810,9 +2843,27 @@ export async function registerInstagramRoutes(
         }
 
         if (!proxyHost || !proxyPort) {
+          const _ebUA  = (profile as any).userAgentEmbedded ?? null;
+          const _apiUA = (profile as any).userAgentApi ?? null;
+          let _igDs: Record<string, unknown> | null = null;
+          try { const r = (profile as any).igDeviceState; if (r) _igDs = typeof r === "string" ? JSON.parse(r) : r; } catch {}
           const snapshot = JSON.stringify({
             capturedAt, source: "server-side", proxyConfigured: false,
-            results: { Proxy: { status: "warn", label: "No proxy configured" } },
+            ebUA: _ebUA, apiUA: _apiUA, igDeviceState: _igDs,
+            ebFingerprint: (profile as any).ebFingerprint ?? null,
+            results: {
+              Proxy:   { status: "warn", label: "No proxy configured" },
+              IP:      { status: "na",   label: "No proxy — cannot test" },
+              DNS:     { status: "na",   label: "No proxy — cannot test" },
+              IPMatch: { status: "na",   label: "No proxy — cannot test" },
+              UAMatch: _ebUA ? { status: "info", label: `EB UA configured` } : { status: "warn", label: "No EB UA set" },
+              WebRTC:  { status: "na",   label: "Requires browser session" },
+              Bot:     { status: "na",   label: "Requires browser session" },
+              Canvas:  { status: "na",   label: "Requires browser session" },
+              Audio:   { status: "na",   label: "Requires browser session" },
+              Timezone:{ status: "na",   label: "Requires browser session" },
+              Hardware:{ status: "na",   label: "Requires browser session" },
+            },
           });
           await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
           return { username: profile.username, snapshot };
@@ -2833,10 +2884,28 @@ export async function registerInstagramRoutes(
             agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
           }
         } catch {
+          const _ebUA2  = (profile as any).userAgentEmbedded ?? null;
+          const _apiUA2 = (profile as any).userAgentApi ?? null;
+          let _igDs2: Record<string, unknown> | null = null;
+          try { const r = (profile as any).igDeviceState; if (r) _igDs2 = typeof r === "string" ? JSON.parse(r) : r; } catch {}
           const snapshot = JSON.stringify({
             capturedAt, source: "server-side", proxyConfigured: true,
             proxy: `${proxyHost}:${proxyPort}`, proxyType,
-            results: { Proxy: { status: "fail", label: "Agent init failed" } },
+            ebUA: _ebUA2, apiUA: _apiUA2, igDeviceState: _igDs2,
+            ebFingerprint: (profile as any).ebFingerprint ?? null,
+            results: {
+              Proxy:   { status: "fail", label: "Agent init failed" },
+              IP:      { status: "fail", label: "Proxy agent init failed" },
+              DNS:     { status: "fail", label: "Proxy agent init failed" },
+              IPMatch: { status: "na",   label: "Cannot test — proxy failed" },
+              UAMatch: _ebUA2 ? { status: "info", label: `EB UA configured` } : { status: "warn", label: "No EB UA set" },
+              WebRTC:  { status: "na",   label: "Requires browser session" },
+              Bot:     { status: "na",   label: "Requires browser session" },
+              Canvas:  { status: "na",   label: "Requires browser session" },
+              Audio:   { status: "na",   label: "Requires browser session" },
+              Timezone:{ status: "na",   label: "Requires browser session" },
+              Hardware:{ status: "na",   label: "Requires browser session" },
+            },
           });
           await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
           return { username: profile.username, snapshot };
@@ -2861,13 +2930,66 @@ export async function registerInstagramRoutes(
         const ipStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
         const dnsStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
 
+        // ── Device data from DB ──────────────────────────────────────────────
+        const ebUA  = (profile as any).userAgentEmbedded ?? null;
+        const apiUA = (profile as any).userAgentApi ?? null;
+        let igDeviceStateParsed: Record<string, unknown> | null = null;
+        try {
+          const raw = (profile as any).igDeviceState;
+          if (raw) igDeviceStateParsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        } catch {}
+        const ebFingerprintData = (profile as any).ebFingerprint ?? null;
+
+        // ── IP Match: exit IP vs configured proxy host ───────────────────────
+        const ipMatchStatus = !exitIp ? "na"
+          : exitIp === proxyHost ? "pass"
+          : "warn"; // warn not fail — rotating proxies have different exit IPs
+        const ipMatchLabel = !exitIp ? "No IP detected"
+          : exitIp === proxyHost ? `Match (${exitIp})`
+          : `Exit ${exitIp} ≠ Host ${proxyHost} (may be rotating proxy)`;
+
+        // ── UA analysis: parse Android API UA string for device info ─────────
+        // Format: "Android_ver/API_level; DPIdpi; WxH; Brand; Model; Codename; CPU; Locale"
+        let uaDeviceRows: Record<string, string> = {};
+        if (apiUA) {
+          const parts = apiUA.split(";").map((s: string) => s.trim());
+          if (parts.length >= 8) {
+            uaDeviceRows = {
+              "Android / API Level": parts[0] ?? "",
+              "DPI":                 parts[1] ?? "",
+              "Resolution":          parts[2] ?? "",
+              "Brand":               parts[3] ?? "",
+              "Model":               parts[4] ?? "",
+              "Codename":            parts[5] ?? "",
+              "Chipset":             parts[6] ?? "",
+              "Locale":              parts[7] ?? "",
+            };
+          }
+        }
+
         const snapshot = JSON.stringify({
-          capturedAt, source: "server-side", proxyConfigured: true,
-          proxy: `${proxyHost}:${proxyPort}`, proxyType,
+          capturedAt,
+          source: "server-side",
+          proxyConfigured: true,
+          proxy: `${proxyHost}:${proxyPort}`,
+          proxyType,
+          ebUA,
+          apiUA,
+          igDeviceState: igDeviceStateParsed,
+          ebFingerprint: ebFingerprintData,
+          uaDevice: Object.keys(uaDeviceRows).length ? uaDeviceRows : null,
           results: {
-            IP:    { status: ipStatus,  label: exitIp ?? "No response" },
-            DNS:   { status: dnsStatus, label: uniqueIps.length <= 1 && validIps.length > 0 ? `${validIps.length}/3 consistent` : uniqueIps.length > 1 ? `${uniqueIps.length} different IPs detected` : "No response" },
-            Proxy: { status: validIps.length > 0 ? "pass" : "fail", label: validIps.length > 0 ? `Connected (${proxyHost})` : "Connection failed" },
+            IP:       { status: ipStatus,    label: exitIp ?? "No response" },
+            IPMatch:  { status: ipMatchStatus, label: ipMatchLabel },
+            DNS:      { status: dnsStatus,   label: uniqueIps.length <= 1 && validIps.length > 0 ? `${validIps.length}/3 consistent` : uniqueIps.length > 1 ? `${uniqueIps.length} different IPs detected` : "No response" },
+            Proxy:    { status: validIps.length > 0 ? "pass" : "fail", label: validIps.length > 0 ? `Connected (${proxyHost})` : "Connection failed" },
+            UAMatch:  ebUA ? { status: "info", label: `EB UA configured (${ebUA.slice(0, 60)}${ebUA.length > 60 ? "…" : ""})` } : { status: "warn", label: "No EB UA set" },
+            WebRTC:   { status: "na", label: "Requires browser session" },
+            Bot:      { status: "na", label: "Requires browser session" },
+            Canvas:   { status: "na", label: "Requires browser session" },
+            Audio:    { status: "na", label: "Requires browser session" },
+            Timezone: { status: "na", label: "Requires browser session" },
+            Hardware: { status: "na", label: "Requires browser session" },
           },
           ipSources,
         });

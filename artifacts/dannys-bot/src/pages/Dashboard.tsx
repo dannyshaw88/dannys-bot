@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.83",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Security", text: "Leak tests (WebRTC, Bot Detection, Canvas, Audio, Timezone, Hardware) now run automatically and silently during every account verify — Instagram never sees this window." },
+      { category: "Security", text: "Leak results are captured in the background while the mobile API confirmation runs, then saved to the account profile without any extra steps." },
+    ],
+  },
+  {
     version: "1.1.81",
     date: "20 Jun 2026",
     items: [
@@ -79,6 +87,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "20 Jun 2026",
     items: [
       { category: "Analytics", text: "Clicking Export Evasion Stats now automatically runs a live IP/DNS/proxy leak check for every surviving account through its configured proxy — no browser window needed. Results are saved and included in the export JSON." },
+    ],
+  },
+  {
+    version: "1.1.82",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Analytics", text: "Evasion stats export now includes full device data in the leak snapshot for every account — EB user-agent, API user-agent, mobile device state (uuid, deviceId, phoneId, adid, igDid), and device model/brand/resolution/DPI/chipset parsed from the API UA — without opening a browser." },
+      { category: "Analytics", text: "Leak snapshot now includes IP Match (exit IP vs proxy host), UA configured check, and explicit markers for browser-only tests (WebRTC, Bot, Canvas, Audio, Timezone, Hardware) so every field is accounted for in the export." },
+      { category: "Analytics", text: "Accounts with no proxy configured or a failed proxy agent now still receive a full leak snapshot including all device data from the database." },
     ],
   },
   {

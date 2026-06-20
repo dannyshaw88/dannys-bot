@@ -56,11 +56,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-builds
-          path: artifacts
+          path: .
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron
-        run: npm install --ignore-scripts
+        run: npm install
 
       - name: Rebuild native modules for Electron
         working-directory: artifacts/electron
