@@ -2337,6 +2337,8 @@ export class InstagramWebClient {
       // Log first tray entry structure for diagnostics
       console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}] user.pk=${toView[0]?.user?.pk} media_ids=${JSON.stringify(toView[0]?.media_ids)?.slice(0,80)} items=${JSON.stringify(toView[0]?.items)?.slice(0,60)}`);
 
+      const path3UserIds: string[] = [];
+
       for (const reel of toView) {
         const userId = String(reel.user?.pk ?? reel.id ?? "");
         if (!userId) continue;
@@ -2361,6 +2363,33 @@ export class InstagramWebClient {
             : Math.floor(Date.now() / 1000) - 3600;
           reelsMap[userId] = mediaIds.map((id) => ({ id, taken_at: approxTakenAt }));
           console.log(`[webClient] viewTimelineStories: user ${userId} — using ${mediaIds.length} media_ids from tray (approxTakenAt=${approxTakenAt})`);
+          continue;
+        }
+
+        // Path 3: tray entry has no items/media_ids — fetch user story directly.
+        // The tray tells us this user HAS stories even when it doesn't inline them.
+        // Entry keys logged above help diagnose the tray structure variant.
+        console.log(`[webClient] viewTimelineStories: user ${userId} — no items/media_ids in tray entry (keys: ${Object.keys(reel).join(", ")}), queuing direct story fetch`);
+        path3UserIds.push(userId);
+      }
+
+      // Path 3 fetch — /api/v1/feed/user/{pk}/story/ returns full item arrays
+      for (const userId of path3UserIds) {
+        try {
+          const storyJ = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/story/`);
+          const storyItems: any[] = Array.isArray(storyJ?.reel?.items)
+            ? storyJ.reel.items
+            : Array.isArray(storyJ?.items)
+            ? storyJ.items
+            : [];
+          if (storyItems.length) {
+            reelsMap[userId] = storyItems;
+            console.log(`[webClient] viewTimelineStories: user ${userId} — path 3 fetched ${storyItems.length} items`);
+          } else {
+            console.log(`[webClient] viewTimelineStories: user ${userId} — path 3 story fetch returned no items (keys: ${Object.keys(storyJ ?? {}).join(", ")})`);
+          }
+        } catch (err: any) {
+          console.warn(`[webClient] viewTimelineStories: path 3 story fetch for user ${userId} failed: ${err?.message}`);
         }
       }
 

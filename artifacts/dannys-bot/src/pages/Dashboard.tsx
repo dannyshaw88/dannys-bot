@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.88",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Watch Stories: added a fallback path for tray entries that have no inline items or media_ids. The engine now fetches those users' stories directly via a per-user story endpoint, so accounts with stories in the feed no longer silently skip them." },
+    ],
+  },
+  {
     version: "1.1.87",
     date: "20 Jun 2026",
     items: [
