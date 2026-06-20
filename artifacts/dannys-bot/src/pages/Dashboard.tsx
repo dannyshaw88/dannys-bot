@@ -68,6 +68,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.86",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings: clicking a setting no longer flashes and deselects itself. The double-toggle bug (mousedown + click both firing) is fixed for both top-level settings and sub-settings in all Copy Settings dialogs." },
+      { category: "Analytics", text: "Verify-Only Device Fingerprint card redesigned: now shows a side-by-side comparison table of all accounts' raw fingerprint values (Bot Detection, WebRTC, DNS, UA Match, Proxy IP, Fonts, IP, Timezone, Screen, Platform, Connection, Timer Resolution). Rows highlighted amber when all accounts share the same value." },
+    ],
+  },
+  {
     version: "1.1.85",
     date: "20 Jun 2026",
     items: [

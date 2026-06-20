@@ -666,7 +666,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                       <div key={opt.key}>
                         <div
                           className="flex items-center gap-3 px-4 py-2.5 bg-muted/10 cursor-pointer select-none hover:bg-muted/20 transition-colors"
-                          onClick={() => toggleOptionGroup(opt)}
+                          onClick={() => { if (hasSubs) toggleOptionGroup(opt); }}
                           onMouseDown={e => {
                             if (e.button !== 0 || hasSubs) return;
                             e.preventDefault();
@@ -704,6 +704,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                               <label
                                 key={sub.key}
                                 className="flex items-center gap-3 pl-10 pr-4 py-2 cursor-pointer select-none hover:bg-muted/20 transition-colors"
+                                onClick={e => e.preventDefault()}
                                 onMouseDown={e => {
                                   if (e.button !== 0) return;
                                   e.preventDefault();

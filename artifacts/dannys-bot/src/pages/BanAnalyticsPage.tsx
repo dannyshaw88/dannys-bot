@@ -1927,30 +1927,35 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         const withLeak = accounts.filter(a => a.leakData && typeof a.leakData === "object" && a.leakData.results);
         const noLeak = accounts.filter(a => !a.leakData || !a.leakData.results);
 
-        // Scored tests: keys that can actually produce fail/warn verdicts.
-        // Info-only tests (Timezone, Navigator, Hardware, Canvas, Audio, WebGL, etc.)
-        // are excluded from the bar chart — they capture fingerprint data but have
-        // no pass/fail verdict, so counting them as "pass" (green) is misleading.
-        const SCORED_KEYS = ["IPMatch", "WebRTC", "DNS", "UAMatch", "Bot", "Fonts"];
+        // Fields to compare — ordered by usefulness.
+        // Canvas/Audio/WebGL/Battery/Media/Perms/Speech/Hints all store "Done"
+        // as their label (the hash runs in the page but isn't saved to the result
+        // object), so they are omitted from comparison.
+        const COMPARE_FIELDS: Array<{ key: string; name: string; type: "verdict" | "data" }> = [
+          { key: "Bot",      name: "Bot Detection",    type: "verdict" },
+          { key: "WebRTC",   name: "WebRTC",           type: "verdict" },
+          { key: "DNS",      name: "DNS",              type: "verdict" },
+          { key: "UAMatch",  name: "User-Agent Match", type: "verdict" },
+          { key: "IPMatch",  name: "Proxy IP Match",   type: "verdict" },
+          { key: "Fonts",    name: "Fonts",            type: "verdict" },
+          { key: "IP",       name: "Detected IP",      type: "data"    },
+          { key: "Timezone", name: "Timezone",         type: "data"    },
+          { key: "Hardware", name: "Screen",           type: "data"    },
+          { key: "Navigator",name: "Platform",         type: "data"    },
+          { key: "Network",  name: "Connection",       type: "data"    },
+          { key: "Timing",   name: "Timer Resolution", type: "data"    },
+        ];
 
-        const testStats = SCORED_KEYS.map(key => {
-          let fail = 0, warn = 0, pass = 0, missing = 0;
-          for (const a of withLeak) {
-            const r = (a.leakData.results as Record<string, { status: string; label?: string }>)[key];
-            if (!r) { missing++; continue; }
-            const s = (r.status ?? "").toLowerCase();
-            if (s === "fail") fail++;
-            else if (s === "warn") warn++;
-            else if (s === "pass") pass++;
-            else missing++; // info or unknown = not a verdict
-          }
-          const n = withLeak.length;
-          const label = (withLeak[0]?.leakData?.results as any)?.[key]?.label ?? key;
-          const verdicted = fail + warn + pass;
-          return { key, label, fail, warn, pass, missing, total: n, verdicted, failPct: verdicted > 0 ? Math.round(fail / verdicted * 100) : 0 };
-        }).filter(t => t.verdicted > 0).sort((a, b) => b.failPct - a.failPct);
-
-        const majorityFails = testStats.filter(t => t.failPct > 50);
+        // Per-field comparison: key → array of { username, value, status }
+        const fieldRows = COMPARE_FIELDS.map(f => {
+          const entries = withLeak.map(a => {
+            const r = (a.leakData.results as Record<string, { status: string; label?: string }>)?.[f.key];
+            return { username: a.username, value: r?.label ?? null, status: (r?.status ?? "").toLowerCase() };
+          }).filter(e => e.value !== null && e.value !== "Done");
+          const values = entries.map(e => e.value ?? "");
+          const allSame = values.length > 1 && values.every(v => v === values[0]);
+          return { ...f, entries, allSame };
+        }).filter(f => f.entries.length > 0);
 
         return (
           <div className="border border-border rounded-lg overflow-hidden">
@@ -1985,93 +1990,59 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
                 <p className="text-[10px] text-muted-foreground italic">Go to Accounts → click Verify on each account above. The leak check runs silently in the background and populates this analysis automatically.</p>
               </div>
             ) : (
-              <div className="p-4 space-y-4">
-                <div className="space-y-2">
-                  {testStats.map(t => (
-                    <div key={t.key} className="space-y-0.5">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-muted-foreground">{t.label}</span>
-                        <span className={t.failPct > 50 ? "text-red-500 font-bold" : "text-muted-foreground"}>{t.failPct}% fail</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden flex">
-                        <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.round(t.fail / t.total * 100)}%` }} />
-                        <div className="h-full bg-yellow-400 transition-all" style={{ width: `${Math.round(t.warn / t.total * 100)}%` }} />
-                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round(t.pass / t.total * 100)}%` }} />
-                      </div>
-                    </div>
+              <div className="divide-y divide-border/50">
+                {/* header row */}
+                <div className="px-4 py-2 bg-muted/20 flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground w-32 shrink-0">Field</span>
+                  {withLeak.map(a => (
+                    <span key={a.username} className="text-[10px] font-mono text-muted-foreground truncate flex-1 min-w-0">@{a.username}</span>
                   ))}
-                  <div className="flex gap-3 text-[9px] text-muted-foreground mt-1">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />Fail</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />Warn</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Pass</span>
+                  {noLeak.map(a => (
+                    <span key={a.username} className="text-[10px] font-mono text-muted-foreground/40 truncate flex-1 min-w-0 italic">@{a.username} (no data)</span>
+                  ))}
+                </div>
+                {fieldRows.map(f => (
+                  <div key={f.key} className={`px-4 py-2 flex items-start gap-2 ${f.allSame ? "bg-amber-50/40 dark:bg-amber-900/10" : ""}`}>
+                    <span className="text-[10px] text-muted-foreground w-32 shrink-0 pt-0.5 font-medium">
+                      {f.name}
+                      {f.allSame && <span className="ml-1 text-amber-600 dark:text-amber-400 font-bold">↔</span>}
+                    </span>
+                    <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                      {f.entries.map(e => {
+                        const s = e.status;
+                        const verdictColor = f.type === "verdict"
+                          ? s === "fail" ? "text-red-600 dark:text-red-400 font-bold"
+                          : s === "warn" ? "text-yellow-600 dark:text-yellow-400 font-semibold"
+                          : s === "pass" ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-foreground"
+                          : "text-foreground font-mono";
+                        return (
+                          <span key={e.username} className={`text-[11px] flex-1 min-w-0 truncate ${verdictColor}`}>
+                            {e.value}
+                          </span>
+                        );
+                      })}
+                      {/* pad empty slots for no-leak accounts */}
+                      {noLeak.map(a => (
+                        <span key={a.username} className="text-[11px] flex-1 min-w-0 text-muted-foreground/30 italic">—</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from {withLeak.length} account{withLeak.length !== 1 ? "s" : ""}</p>
-                  {majorityFails.length > 0 ? (
-                    <p className="text-[11px]">
-                      {majorityFails.map(t => t.label).join(", ")} fail{majorityFails.length === 1 ? "s" : ""} on the majority of verify-only banned accounts. These are the likely fingerprint detection signals — Instagram may have identified the device as non-human at verify time, before any tool ever ran.
+                ))}
+                {/* no-data accounts footer */}
+                {noLeak.length > 0 && (
+                  <div className="px-4 py-2.5 bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground italic">
+                      {noLeak.map(a => `@${a.username}`).join(", ")} — no fingerprint yet. Re-verify to populate.
                     </p>
-                  ) : (
-                    <p className="text-[11px]">No individual fingerprint test fails on more than 50% of verify-only banned accounts. The device fingerprint passed inspection — the ban trigger is more likely IP-level (login rate limit) than device-level. See the IP Login Rate Limit theory above.</p>
-                  )}
-                </div>
-
-                <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action</p>
-                  {majorityFails.length > 0 ? (
-                    <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
-                      Fix the {majorityFails.map(t => t.label).join(" and ")} test{majorityFails.length !== 1 ? "s" : ""} in the Leak Test before verifying new accounts. A device that fails these checks at verify time is identifiable as non-human independent of any subsequent tool activity.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
-                      Device fingerprint tests pass — the verify-only ban pattern points to the IP Login Rate Limit theory. Space verifications at least 90 minutes apart on the same proxy IP. Each verify generates two login events (browser + mobile API); too many on one IP trips the per-IP login budget.
-                    </p>
-                  )}
-                </div>
-
-                <details className="group">
-                  <summary className="cursor-pointer text-[11px] text-muted-foreground flex items-center gap-1 select-none list-none">
-                    <ChevronDown className="w-3 h-3 group-open:hidden" /><ChevronUp className="w-3 h-3 hidden group-open:block" />
-                    Per-account breakdown
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    {[...withLeak, ...noLeak].map(a => {
-                      const capturedAt = a.leakData?.capturedAt ? new Date(a.leakData.capturedAt).toLocaleString() : null;
-                      const results: Record<string, { status: string; label?: string }> = a.leakData?.results ?? {};
-                      return (
-                        <div key={a.id} className="border border-border rounded-md p-3 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold font-mono">@{a.username}</span>
-                            <div className="flex gap-2 text-[10px] text-muted-foreground">
-                              {a.bannedAt && <span>banned {new Date(a.bannedAt).toLocaleDateString()}</span>}
-                              {capturedAt && <span>· fingerprint {capturedAt}</span>}
-                            </div>
-                          </div>
-                          {Object.keys(results).length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {Object.entries(results).map(([key, val]) => {
-                                const s = (val.status ?? "").toLowerCase();
-                                const color = s === "fail"
-                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                  : s === "warn"
-                                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                  : s === "pass"
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                  : "bg-muted text-muted-foreground";
-                                const displayVal = s === "info" ? (val as any).label ?? key : val.status?.toUpperCase();
-                                return <span key={key} className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${color}`}>{key}: {displayVal}</span>;
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-[10px] text-muted-foreground italic">No leak snapshot — re-verify to capture fingerprint.</p>
-                          )}
-                        </div>
-                      );
-                    })}
                   </div>
-                </details>
+                )}
+                {/* legend */}
+                <div className="px-4 py-2 flex gap-4 text-[9px] text-muted-foreground">
+                  <span><span className="text-amber-600 font-bold">↔</span> = all accounts share this value</span>
+                  <span><span className="text-red-600 font-bold">FAIL</span> · <span className="text-yellow-600 font-semibold">WARN</span> · <span className="text-emerald-600">PASS</span> = verdict fields</span>
+                  <span><span className="font-mono">value</span> = raw data field</span>
+                </div>
               </div>
             )}
           </div>
