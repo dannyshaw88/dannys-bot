@@ -1964,18 +1964,26 @@ export function BanAnalyticsPage() {
   async function handleExport() {
     const levels = getTrustLevels();
 
-    // Run server-side proxy leak checks (no browser needed) for all survivor accounts.
-    // This fires HTTPS requests through each account's proxy and saves results to the DB
-    // so the export contains fresh IP/DNS/proxy test data captured at export time.
+    // Run server-side proxy leak checks (no browser needed) for ALL accounts —
+    // survivors AND every banned/automated/captcha/locked entry that still has a
+    // profile record in the DB. Fires HTTPS requests through each account's proxy
+    // to api.ipify.org, 1.1.1.1/cdn-cgi/trace, and api4.my-ip.io — zero Instagram
+    // API calls, zero browsers opened. Results are saved to leakSnapshot in the DB.
+    const allFlaggedEntries = [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries];
+    const flaggedProfileIds = allFlaggedEntries
+      .map(e => profileMap.get(e.username))
+      .filter((id): id is number => id !== undefined);
     const survivorIds = survivingAccounts.map(p => p.id).filter(Boolean) as number[];
+    const allProfileIds = [...new Set([...survivorIds, ...flaggedProfileIds])];
+
     const freshLeakMap = new Map<number, string>(); // profileId → snapshot JSON string
-    if (survivorIds.length > 0) {
+    if (allProfileIds.length > 0) {
       try {
         const lrResp = await fetch("/api/analytics/refresh-leak-snapshots", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ profileIds: survivorIds }),
+          body: JSON.stringify({ profileIds: allProfileIds }),
         });
         if (lrResp.ok) {
           const lrData = await lrResp.json() as { ok: boolean; results: Record<string, { username: string; snapshot: string }> };
@@ -2049,7 +2057,7 @@ export function BanAnalyticsPage() {
             igDeviceState: fp.igDeviceState ? (() => { try { return JSON.parse(fp.igDeviceState); } catch { return fp.igDeviceState; } })() : null,
             ebFingerprint: fp.ebFingerprint ? (() => { try { return JSON.parse(fp.ebFingerprint); } catch { return fp.ebFingerprint; } })() : null,
           },
-          leakSnapshot: fp.leakSnapshot ? (() => { try { return JSON.parse(fp.leakSnapshot); } catch { return fp.leakSnapshot; } })() : null,
+          leakSnapshot: (() => { const pid = profileMap.get(e.username); const raw = (pid !== undefined ? freshLeakMap.get(pid) : undefined) ?? fp.leakSnapshot ?? null; if (!raw) return null; try { return JSON.parse(raw); } catch { return raw; } })(),
         };
       };
     }
