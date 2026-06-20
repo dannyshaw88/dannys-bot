@@ -87,6 +87,17 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.94",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: STATUS and TRUST are now full columns in the header bar — draggable, resizable, and configurable via the Columns panel. Account names align directly under the PROXY column, with status pills and trust badges under their matching header columns." },
+      { category: "Fix", text: "Proxy Manager: ACTIONS column (ping + delete buttons) now correctly aligns under the ACTIONS header instead of being pushed to the far right." },
+      { category: "Fix", text: "Copy Settings button moved to sit directly next to the Session Log button in the tab bar." },
+      { category: "Safety", text: "IP login rate limit window reduced from 24 hours to 6 hours — after 6 hours the counter resets and verifying new accounts on the same proxy works freely again." },
+      { category: "Safety", text: "IP login rate limit warning text and icon colour changed from orange to red for higher visibility." },
+    ],
+  },
+  {
     version: "1.1.91",
     date: "20 Jun 2026",
     items: [

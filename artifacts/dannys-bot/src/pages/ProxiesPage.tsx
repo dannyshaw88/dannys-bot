@@ -20,10 +20,11 @@ import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 
-type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "status", "accounts"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS", accounts: "ACCOUNTS" };
+type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts" | "acctStatus" | "acctTrustScore";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS", accounts: "ACCOUNTS", acctStatus: "STATUS", acctTrustScore: "TRUST" };
+const ACTIONS_COL_WIDTH = 76;
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -185,126 +186,152 @@ function ProxyRow({
 
   return (
     <>
-      <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
+      {/* Main proxy row */}
+      <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
         <div className="flex items-center gap-2 flex-1 justify-center">
-        {colOrder.map(col => {
-          if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
-          if (col === "accounts") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.accounts }}>
-              {assigned.length > 0 ? (() => {
-                const validCount = assigned.filter(p => p.accountStatus === "valid").length;
-                return (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
-                    <User className="w-3 h-3" />
-                    <span className="text-emerald-600">{validCount}</span>
-                    <span className="text-muted-foreground/60">/</span>
-                    <span>{assigned.length}</span>
+          {colOrder.map(col => {
+            if (col === "acctStatus" || col === "acctTrustScore") return (
+              <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />
+            );
+            if (col === "accounts") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.accounts }}>
+                {assigned.length > 0 ? (() => {
+                  const validCount = assigned.filter(p => p.accountStatus === "valid").length;
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
+                      <User className="w-3 h-3" />
+                      <span className="text-emerald-600">{validCount}</span>
+                      <span className="text-muted-foreground/60">/</span>
+                      <span>{assigned.length}</span>
+                    </span>
+                  );
+                })() : (
+                  <span className="text-[11px] text-muted-foreground/40">—</span>
+                )}
+              </div>
+            );
+            if (col === "proxy") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.proxy }}>
+                <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
+              </div>
+            );
+            if (col === "type") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.type }}>
+                <select
+                  value={proxyType}
+                  onChange={e => { setProxyType(e.target.value as "http" | "socks5"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
+                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="http">HTTP</option>
+                  <option value="socks5">SOCKS5</option>
+                </select>
+              </div>
+            );
+            if (col === "username") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.username }}>
+                <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-center text-foreground" />
+              </div>
+            );
+            if (col === "password") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.password }}>
+                <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-center text-foreground" />
+              </div>
+            );
+            if (col === "status") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.status }}>
+                {pingResult ? (
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
+                    {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />Dead</>}
                   </span>
-                );
-              })() : (
-                <span className="text-[11px] text-muted-foreground/40">—</span>
-              )}
-            </div>
-          );
-          if (col === "proxy") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.proxy }}>
-              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
-            </div>
-          );
-          if (col === "type") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.type }}>
-              <select
-                value={proxyType}
-                onChange={e => { setProxyType(e.target.value as "http" | "socks5"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
-                className="h-7 w-full rounded border border-input bg-background px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="http">HTTP</option>
-                <option value="socks5">SOCKS5</option>
-              </select>
-            </div>
-          );
-          if (col === "username") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.username }}>
-              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-center text-foreground" />
-            </div>
-          );
-          if (col === "password") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.password }}>
-              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-center text-foreground" />
-            </div>
-          );
-          if (col === "status") return (
-            <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.status }}>
-              {pingResult ? (
-                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
-                  {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />Dead</>}
-                </span>
-              ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
-            </div>
-          );
-          return null;
-        })}
-        </div>
-        {/* Actions — always last */}
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
-            {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+                ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
+              </div>
+            );
+            return null;
+          })}
+          {/* Actions — inside the centered group so it aligns with the header */}
+          <div className="shrink-0 flex items-center justify-center gap-1" style={{ width: ACTIONS_COL_WIDTH }}>
+            <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
+              {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Assigned accounts — always visible */}
-      <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
-        <div className="flex flex-col gap-0.5">
-          {assigned.length > 0 && (
-            <div className="flex items-center gap-2 px-2 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 select-none">
-              <span className="flex-1">Account</span>
-              <span>Status</span>
-              <span>Trust</span>
-              <span className="w-3.5" />
+      {/* Account sub-rows — aligned under the same column grid */}
+      <div className="border-b border-border/40 bg-accent/10">
+        {assigned.map(profile => (
+          <div key={profile.id} className="flex items-center gap-2 px-3 py-1 group hover:bg-accent/30 transition-colors">
+            <div className="flex items-center gap-2 flex-1 justify-center">
+              {colOrder.map(col => {
+                if (col === "proxy") return (
+                  <div key={col} className="shrink-0 flex items-center gap-1.5" style={{ width: colWidths.proxy }}>
+                    <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+                    <span className="text-[13px] font-medium text-foreground truncate">{profile.username}</span>
+                  </div>
+                );
+                if (col === "acctStatus") return (
+                  <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.acctStatus }}>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap uppercase ${acctStatusPill(profile.accountStatus ?? "pending")}`}>
+                      {acctStatusLabel(profile.accountStatus ?? "pending")}
+                    </span>
+                  </div>
+                );
+                if (col === "acctTrustScore") return (
+                  <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.acctTrustScore }}>
+                    <TrustScoreBadge profileId={profile.id} />
+                  </div>
+                );
+                return <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />;
+              })}
+              <div className="shrink-0 flex items-center justify-center" style={{ width: ACTIONS_COL_WIDTH }}>
+                <button
+                  onClick={() => handleUnassign(profile)}
+                  disabled={assignPending}
+                  title="Remove from proxy"
+                  className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          )}
-          {assigned.map(profile => (
-            <div key={profile.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
-              <User className="w-3.5 h-3.5 shrink-0 text-primary" />
-              <span className="text-sm font-medium text-foreground truncate flex-1">{profile.username}</span>
-              <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap uppercase shrink-0 ${acctStatusPill(profile.accountStatus ?? "pending")}`}>
-                {acctStatusLabel(profile.accountStatus ?? "pending")}
-              </span>
-              <span className="shrink-0"><TrustScoreBadge profileId={profile.id} /></span>
-              <button
-                onClick={() => handleUnassign(profile)}
-                disabled={assignPending}
-                title="Remove from proxy"
-                className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-all shrink-0"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-          {unassignedProfiles.length > 0 && (
-            <select
-              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-              value=""
-              onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
-              disabled={assignPending}
-            >
-              <option value="" className="text-muted-foreground">+ Assign account…</option>
-              {unassignedProfiles.map(p => (
-                <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
+          </div>
+        ))}
+        {/* Assign dropdown — left-aligned under proxy column */}
+        {unassignedProfiles.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1">
+            <div className="flex items-center gap-2 flex-1 justify-center">
+              <div className="shrink-0" style={{ width: colWidths.proxy }}>
+                <select
+                  className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                  value=""
+                  onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
+                  disabled={assignPending}
+                >
+                  <option value="" className="text-muted-foreground">+ Assign account…</option>
+                  {unassignedProfiles.map(p => (
+                    <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
+                  ))}
+                </select>
+              </div>
+              {colOrder.filter(c => c !== "proxy").map(col => (
+                <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />
               ))}
-            </select>
-          )}
-          {assigned.length === 0 && unassignedProfiles.length === 0 && (
-            <span className="text-xs text-muted-foreground italic px-2 py-0.5">All accounts assigned to proxies</span>
-          )}
-          {assigned.length === 0 && unassignedProfiles.length > 0 && (
-            <span className="text-xs text-muted-foreground italic px-2 py-0.5">No accounts assigned — use dropdown to add</span>
-          )}
-        </div>
+              <div className="shrink-0" style={{ width: ACTIONS_COL_WIDTH }} />
+            </div>
+          </div>
+        )}
+        {assigned.length === 0 && unassignedProfiles.length === 0 && (
+          <div className="flex items-center gap-2 px-3 py-1">
+            <div className="flex items-center gap-2 flex-1 justify-center">
+              <div className="shrink-0 flex items-center" style={{ width: colWidths.proxy }}>
+                <span className="text-xs text-muted-foreground italic">All accounts assigned to proxies</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -755,7 +782,6 @@ export function ProxiesPage() {
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
           <div className="flex items-center gap-2 flex-1 justify-center">
           {proxyColOrder.map(col => {
-            if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
             const isDragTarget = proxyDragOverCol === col;
             const dragProps = {
               draggable: true as const,
@@ -791,7 +817,7 @@ export function ProxiesPage() {
               </div>
             );
           })}
-          <div className="shrink-0 flex items-center justify-center">Actions</div>
+          <div className="shrink-0 flex items-center justify-center" style={{ width: ACTIONS_COL_WIDTH }}>Actions</div>
           </div>
           <div ref={manageProxyColsRef} className="relative">
             <button onClick={() => setManageProxyColsOpen(o => !o)} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors">

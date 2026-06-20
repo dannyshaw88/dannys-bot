@@ -977,11 +977,8 @@ export function ProfileDetailsPage() {
                   <Activity className="w-3.5 h-3.5 shrink-0" />
                   SESSION LOG
                 </button>
-              </div>
-              {/* COPY SETTINGS — pushed to the far right */}
-              <div className="ml-auto shrink-0">
                 <button
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
                   onClick={() => {
                     if (activeTab === "human-session" && getTool('human_sessions')) {
                       setHumanCopyOpen(true);

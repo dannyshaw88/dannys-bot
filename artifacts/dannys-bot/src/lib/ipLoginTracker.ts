@@ -1,7 +1,7 @@
 const STORAGE_KEY      = "equinox_ipLoginEvents_v1";
 const PRUNE_MS         = 30 * 24 * 60 * 60 * 1000; // keep 30 days so we can check "established" status
-const WINDOW_MS        = 24 * 60 * 60 * 1000;       // 24-hour login-count window
-const ESTABLISHED_MS   = 24 * 60 * 60 * 1000;       // account is "established" if first login > 24h ago
+const WINDOW_MS        = 6 * 60 * 60 * 1000;        // 6-hour login-count window
+const ESTABLISHED_MS   = 6 * 60 * 60 * 1000;        // account is "established" if first login > 6h ago
 const NEW_ACCOUNT_LIMIT = 3;
 
 interface LoginEvent {
