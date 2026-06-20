@@ -68,6 +68,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.91",
+    date: "20 Jun 2026",
+    items: [
+      { category: "Fix", text: "Number input fields across all tool panels are now fully editable — you can clear the field and type a fresh value without it snapping back or locking up." },
+    ],
+  },
+  {
     version: "1.1.90",
     date: "20 Jun 2026",
     items: [

@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useProxies, useUpdateProxy } from "@/hooks/use-proxies";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NumField } from "@/components/ui/num-field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -1403,19 +1404,19 @@ export function ProfileDetailsPage() {
                           <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                           <div className="flex flex-wrap gap-2 items-start">
                             <div className="space-y-1">
-                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.requestsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, requestsMax: min} }); }} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.everySecondsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: min} }); }} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
                             <Button

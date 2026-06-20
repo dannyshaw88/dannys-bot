@@ -5,6 +5,7 @@ import { useProfiles } from "@/hooks/use-profiles";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { NumField } from "@/components/ui/num-field";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -611,9 +612,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       <div className="flex items-center gap-1.5">
         <Label className="text-xs text-muted-foreground uppercase">Min</Label>
         <div className="relative">
-          <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
+          <NumField min={0} max={100} className="w-16 h-7 text-xs pr-5"
             value={settings[minKey] ?? 0}
-            onChange={(e) => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
+            onChange={(v) => setSettings({ ...settings, [minKey]: v })}
           />
           <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
         </div>
@@ -621,9 +622,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       <div className="flex items-center gap-1.5">
         <Label className="text-xs text-muted-foreground uppercase">Max</Label>
         <div className="relative">
-          <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
+          <NumField min={0} max={100} className="w-16 h-7 text-xs pr-5"
             value={settings[maxKey] ?? 0}
-            onChange={(e) => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
+            onChange={(v) => setSettings({ ...settings, [maxKey]: v })}
           />
           <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
         </div>
@@ -666,16 +667,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap">Execute Every (min)</span>
             <div className="flex items-center gap-1.5">
               <Label className="text-[10px] text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="10000" className="w-14 h-7 text-xs"
+              <NumField min={1} max={10000} className="w-14 h-7 text-xs"
                 value={settings.delayMin ?? 30}
-                onChange={(e) => setSettings({ ...settings, delayMin: Math.max(1, Number(e.target.value)) })}
+                onChange={(v) => setSettings({ ...settings, delayMin: v })}
               />
             </div>
             <div className="flex items-center gap-1.5">
               <Label className="text-[10px] text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="10000" className="w-14 h-7 text-xs"
+              <NumField min={1} max={10000} className="w-14 h-7 text-xs"
                 value={settings.delayMax ?? 60}
-                onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
+                onChange={(v) => setSettings({ ...settings, delayMax: v })}
               />
             </div>
           </div>
@@ -722,14 +723,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className={`flex items-center gap-2 transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Fire Chance %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).forceEmulationChanceMin ?? 100}
-                    onChange={(e) => setSettings({ ...settings, forceEmulationChanceMin: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                    onChange={(v) => setSettings({ ...settings, forceEmulationChanceMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).forceEmulationChanceMax ?? 100}
-                    onChange={(e) => setSettings({ ...settings, forceEmulationChanceMax: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                    onChange={(v) => setSettings({ ...settings, forceEmulationChanceMax: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">% of executions</span>
                 </div>
@@ -757,14 +758,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
                       <Label className="text-xs text-muted-foreground">Min</Label>
-                      <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                      <NumField min={1} max={100} className="w-14 h-7 text-xs"
                         value={settings.viewTimelineFeedMin ?? 3}
-                        onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
+                        onChange={(v) => setSettings({ ...settings, viewTimelineFeedMin: v })}
                       />
                       <Label className="text-xs text-muted-foreground">Max</Label>
-                      <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                      <NumField min={1} max={100} className="w-14 h-7 text-xs"
                         value={settings.viewTimelineFeedMax ?? 8}
-                        onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
+                        onChange={(v) => setSettings({ ...settings, viewTimelineFeedMax: v })}
                       />
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -777,14 +778,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       />
                       <div className={`flex items-center gap-1.5 transition-opacity ${!settings.followSuggestedUsersIfEmptyEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                         <Label className="text-xs text-muted-foreground">Min</Label>
-                        <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                        <NumField min={1} max={10} className="w-12 h-7 text-xs"
                           value={settings.followSuggestedUsersIfEmptyMin ?? 1}
-                          onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: Math.max(1, Number(e.target.value)) })}
+                          onChange={(v) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: v })}
                         />
                         <Label className="text-xs text-muted-foreground">Max</Label>
-                        <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                        <NumField min={1} max={10} className="w-12 h-7 text-xs"
                           value={settings.followSuggestedUsersIfEmptyMax ?? 3}
-                          onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: Math.max(1, Number(e.target.value)) })}
+                          onChange={(v) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: v })}
                         />
                       </div>
                     </div>
@@ -793,26 +794,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedOrderMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, viewTimelineFeedOrderMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedOrderMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, viewTimelineFeedOrderMax: v })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedNotUsedMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, viewTimelineFeedNotUsedMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.viewTimelineFeedNotUsedMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, viewTimelineFeedNotUsedMax: v })}
                     />
                   </div>
                 </div>
@@ -834,17 +835,17 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like Delay</span>
                   <Label className="text-xs text-muted-foreground">Min</Label>
                   <div className="relative">
-                    <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
+                    <NumField min={0} max={300} className="w-14 h-7 text-xs pr-4"
                       value={settings.likeTimelinePostsDelayMin ?? 3}
-                      onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, likeTimelinePostsDelayMin: v })}
                     />
                     <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
                   </div>
                   <Label className="text-xs text-muted-foreground">Max</Label>
                   <div className="relative">
-                    <Input type="number" min="0" max="300" className="w-14 h-7 text-xs pr-4"
+                    <NumField min={0} max={300} className="w-14 h-7 text-xs pr-4"
                       value={settings.likeTimelinePostsDelayMax ?? 8}
-                      onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, likeTimelinePostsDelayMax: v })}
                     />
                     <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
                   </div>
@@ -858,9 +859,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <div className={`flex items-center gap-1.5 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                     <div className="relative">
-                      <Input type="number" min={1} max={100} className="w-14 h-7 text-xs pr-5"
+                      <NumField min={1} max={100} className="w-14 h-7 text-xs pr-5"
                         value={settings.saveMediaPercent ?? 20}
-                        onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
+                        onChange={(v) => setSettings({ ...settings, saveMediaPercent: v })}
                       />
                       <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
                     </div>
@@ -895,14 +896,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL</span>
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={20} className="w-14 h-7 text-xs"
                       value={settings.viewProfilePostsCountMin ?? 1}
-                      onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMin: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, viewProfilePostsCountMin: v })}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={20} className="w-14 h-7 text-xs"
                       value={settings.viewProfilePostsCountMax ?? 3}
-                      onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMax: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, viewProfilePostsCountMax: v })}
                     />
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">at</span>
                     {pctInputs("viewProfilePostsPercentMin", "viewProfilePostsPercentMax")}
@@ -940,17 +941,17 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap shrink-0">{label}</span>
                       <div className="flex items-center gap-0.5">
                         <div className="relative">
-                          <Input type="number" min="0" max="100" className="w-14 h-6 text-xs pr-5 pl-1.5"
+                          <NumField min={0} max={100} className="w-14 h-6 text-xs pr-5 pl-1.5"
                             value={(settings as any)[minKey] ?? 100}
-                            onChange={e => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                            onChange={v => setSettings({ ...settings, [minKey]: v } as any)}
                           />
                           <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
                         </div>
                         <span className="text-[10px] text-muted-foreground px-0.5">–</span>
                         <div className="relative">
-                          <Input type="number" min="0" max="100" className="w-14 h-6 text-xs pr-5 pl-1.5"
+                          <NumField min={0} max={100} className="w-14 h-6 text-xs pr-5 pl-1.5"
                             value={(settings as any)[maxKey] ?? 100}
-                            onChange={e => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                            onChange={v => setSettings({ ...settings, [maxKey]: v } as any)}
                           />
                           <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
                         </div>
@@ -963,26 +964,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, humanSessionOrderMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, humanSessionOrderMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, humanSessionOrderMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, humanSessionOrderMax: v })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionNotUsedMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, humanSessionNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, humanSessionNotUsedMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionNotUsedMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, humanSessionNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, humanSessionNotUsedMax: v })}
                     />
                   </div>
                 </div>
@@ -1005,40 +1006,40 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
                     <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesMin ?? 3}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMin: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMin: v })}
                     />
                     <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesMax ?? 8}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMax: v })}
                     />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesOrderMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesOrderMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesOrderMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesOrderMax: v })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesNotUsedMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesNotUsedMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkTimelineStoriesNotUsedMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesNotUsedMax: v })}
                     />
                   </div>
                 </div>
@@ -1061,40 +1062,40 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
                     <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmMin ?? 5}
-                      onChange={(e) => setSettings({ ...settings, checkDmMin: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmMin: v })}
                     />
                     <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmMax ?? 15}
-                      onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmMax: v })}
                     />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmOrderMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkDmOrderMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmOrderMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmOrderMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkDmOrderMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmOrderMax: v })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmNotUsedMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkDmNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmNotUsedMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.checkDmNotUsedMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, checkDmNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, checkDmNotUsedMax: v })}
                     />
                   </div>
                 </div>
@@ -1129,26 +1130,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.repostOrderMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, repostOrderMin: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, repostOrderMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.repostOrderMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, repostOrderMax: Math.max(0, Number(e.target.value)) })}
+                      onChange={(v) => setSettings({ ...settings, repostOrderMax: v })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.repostNotUsedMin ?? 0}
-                      onChange={(e) => setSettings({ ...settings, repostNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, repostNotUsedMin: v })}
                     />
                     <span className="text-[10px] text-muted-foreground">–</span>
-                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.repostNotUsedMax ?? 0}
-                      onChange={(e) => setSettings({ ...settings, repostNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      onChange={(v) => setSettings({ ...settings, repostNotUsedMax: v })}
                     />
                   </div>
                 </div>
@@ -1409,16 +1410,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">Min</Label>
-                  <Input type="number" min="1" max="20" className="w-16 h-7 text-xs"
+                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
                     value={settings.repostMin ?? 1}
-                    onChange={(e) => setSettings({ ...settings, repostMin: Math.max(1, Number(e.target.value)) })}
+                    onChange={(v) => setSettings({ ...settings, repostMin: v })}
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">Max</Label>
-                  <Input type="number" min="1" max="20" className="w-16 h-7 text-xs"
+                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
                     value={settings.repostMax ?? 1}
-                    onChange={(e) => setSettings({ ...settings, repostMax: Math.max(1, Number(e.target.value)) })}
+                    onChange={(v) => setSettings({ ...settings, repostMax: v })}
                   />
                 </div>
               </div>
@@ -1455,10 +1456,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
-              <Input
-                type="number" min="0" className="w-20 h-8 text-xs"
+              <NumField
+                min={0} className="w-20 h-8 text-xs"
                 value={settings.repostDisableAtPostCount ?? 0}
-                onChange={(e) => setSettings({ ...settings, repostDisableAtPostCount: Math.max(0, Number(e.target.value)) })}
+                onChange={(v) => setSettings({ ...settings, repostDisableAtPostCount: v })}
               />
             </div>
             </div>{/* end flex-wrap */}
@@ -1614,26 +1615,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="ml-auto flex flex-col gap-1.5 shrink-0 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).followOrderMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, followOrderMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).followOrderMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followOrderMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, followOrderMax: v } as any)}
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).followSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, followSkipMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).followSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, followSkipMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, followSkipMax: v } as any)}
                   />
                 </div>
               </div>
@@ -1667,26 +1668,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="ml-auto flex flex-col gap-1.5 shrink-0 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowOrderMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, unfollowOrderMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowOrderMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowOrderMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, unfollowOrderMax: v } as any)}
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, unfollowSkipMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, unfollowSkipMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, unfollowSkipMax: v } as any)}
                   />
                 </div>
               </div>
@@ -1720,26 +1721,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="ml-auto flex flex-col gap-1.5 shrink-0 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).contactOrderMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, contactOrderMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).contactOrderMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactOrderMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, contactOrderMax: v } as any)}
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).contactSkipMin ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, contactSkipMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
                     value={(settings as any).contactSkipMax ?? 0}
-                    onChange={(e) => setSettings({ ...settings, contactSkipMax: Number(e.target.value) } as any)}
+                    onChange={(v) => setSettings({ ...settings, contactSkipMax: v } as any)}
                   />
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { NumField } from "@/components/ui/num-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -1739,7 +1740,7 @@ function AdminUsersSection() {
             </div>
             <div>
               <Label className="text-[10px] mb-1 block">Account Slots</Label>
-              <Input type="number" value={addForm.accountLimit} onChange={e => setAddForm(f => ({ ...f, accountLimit: Number(e.target.value) }))} className="h-7 text-xs" />
+              <NumField min={0} value={addForm.accountLimit} onChange={v => setAddForm(f => ({ ...f, accountLimit: v }))} className="h-7 text-xs" />
             </div>
             <div>
               <Label className="text-[10px] mb-1 block">Expires (leave blank = never)</Label>
@@ -1777,7 +1778,7 @@ function AdminUsersSection() {
                     </div>
                     <div>
                       <Label className="text-[10px] mb-1 block">Slots</Label>
-                      <Input type="number" value={editForm.accountLimit} onChange={e => setEditForm(f => f ? { ...f, accountLimit: Number(e.target.value) } : f)} className="h-7 text-xs" />
+                      <NumField min={0} value={editForm.accountLimit} onChange={v => setEditForm(f => f ? { ...f, accountLimit: v } : f)} className="h-7 text-xs" />
                     </div>
                     <div>
                       <Label className="text-[10px] mb-1 block">Expires</Label>

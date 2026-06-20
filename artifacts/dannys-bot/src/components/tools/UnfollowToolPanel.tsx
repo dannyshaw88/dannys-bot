@@ -3,6 +3,7 @@ import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { NumField } from "@/components/ui/num-field";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2, Copy, List, Upload, Loader2, Download, TrendingUp } from "lucide-react";
@@ -124,12 +125,11 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   };
 
   const num = (key: string, min = 0) => (
-    <Input
-      type="number"
+    <NumField
       min={min}
       className="w-20 h-8 text-sm"
       value={(settings as any)[key] ?? 0}
-      onChange={(e) => setSettings(s => ({ ...s, [key]: Math.max(min, Number(e.target.value)) }))}
+      onChange={(v) => setSettings(s => ({ ...s, [key]: v }))}
     />
   );
 
@@ -416,14 +416,14 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <div className="space-y-1.5">
               <h4 className="text-xs text-muted-foreground">Stop unfollow tool when having less than followings</h4>
               <div className="flex items-center gap-1.5">
-                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                <NumField min={0} className="w-20 h-7 text-xs"
                   value={(settings as any).autoStopUnfollowAtFollowingsMin ?? 7000}
-                  onChange={(e) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMin: Number(e.target.value) }))}
+                  onChange={(v) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMin: v }))}
                 />
                 <span className="text-[10px] text-muted-foreground">–</span>
-                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                <NumField min={0} className="w-20 h-7 text-xs"
                   value={(settings as any).autoStopUnfollowAtFollowingsMax ?? 7000}
-                  onChange={(e) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMax: Number(e.target.value) }))}
+                  onChange={(v) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMax: v }))}
                 />
               </div>
             </div>
@@ -431,14 +431,14 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <div className="space-y-1.5">
               <h4 className="text-xs text-muted-foreground">Start follow tool after (minutes)</h4>
               <div className="flex items-center gap-1.5">
-                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                <NumField min={0} className="w-20 h-7 text-xs"
                   value={(settings as any).autoStartFollowAfterMin ?? 60}
-                  onChange={(e) => setSettings(s => ({ ...s, autoStartFollowAfterMin: Number(e.target.value) }))}
+                  onChange={(v) => setSettings(s => ({ ...s, autoStartFollowAfterMin: v }))}
                 />
                 <span className="text-[10px] text-muted-foreground">–</span>
-                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                <NumField min={0} className="w-20 h-7 text-xs"
                   value={(settings as any).autoStartFollowAfterMax ?? 135}
-                  onChange={(e) => setSettings(s => ({ ...s, autoStartFollowAfterMax: Number(e.target.value) }))}
+                  onChange={(v) => setSettings(s => ({ ...s, autoStartFollowAfterMax: v }))}
                 />
               </div>
             </div>

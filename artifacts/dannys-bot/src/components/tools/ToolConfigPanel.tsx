@@ -8,6 +8,7 @@ import { useSources, useCreateSource, useDeleteSource, useImportSources, useClea
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { NumField } from "@/components/ui/num-field";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp, Search } from "lucide-react";
 import { useRef } from "react";
@@ -437,10 +438,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
   const NumInput = ({ valueKey, min = 0, max, unit, onChange, pairKey, pairRole }: { valueKey: string; min?: number; max?: number; unit?: string; onChange?: (v: number) => void; pairKey?: string; pairRole?: "min" | "max" }) => (
     <div className="relative w-16">
-      <Input type="number" className={`w-full h-6 text-xs px-2 ${unit ? 'pr-4' : ''}`} min={min} max={max}
+      <NumField className={`w-full h-6 text-xs px-2 ${unit ? 'pr-4' : ''}`} min={min} max={max}
         value={(settings as any)[valueKey]}
-        onChange={(e) => {
-          let v = max !== undefined ? Math.min(max, Number(e.target.value)) : Number(e.target.value);
+        onChange={(v) => {
           if (pairKey && pairRole === "min") v = Math.min(v, (settings as any)[pairKey] ?? v);
           if (pairKey && pairRole === "max") v = Math.max(v, (settings as any)[pairKey] ?? v);
           setSettings({ ...settings, [valueKey]: v });
@@ -938,13 +938,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       </label>
                     </div>
                     <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="1440"
+                      <NumField
+                        min={1}
+                        max={1440}
                         className="w-16 h-7 text-xs"
                         value={(settings as any).stopOnBlockMinutes ?? 60}
-                        onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) } as any)}
+                        onChange={(v) => setSettings({ ...settings, stopOnBlockMinutes: v } as any)}
                       />
                       <span className="text-xs text-muted-foreground">minutes</span>
                     </div>
@@ -961,9 +960,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <input type="checkbox" id="injectSearchEnabled" checked={!!(settings as any).injectSearchEnabled} onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                       <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Inject Search</label>
                       <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSearchMin ?? 1} onChange={(e) => setSettings({ ...settings, injectSearchMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMax ?? 100) } as any)} />
+                        <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSearchMin ?? 1} onChange={(v) => setSettings({ ...settings, injectSearchMin: Math.min(v, (settings as any).injectSearchMax ?? 100) } as any)} />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSearchMax ?? 1} onChange={(e) => setSettings({ ...settings, injectSearchMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMin ?? 1) } as any)} />
+                        <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSearchMax ?? 1} onChange={(v) => setSettings({ ...settings, injectSearchMax: Math.max(v, (settings as any).injectSearchMin ?? 1) } as any)} />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
                     </div>
@@ -972,9 +971,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <input type="checkbox" id="injectSuggestedEnabled" checked={!!(settings as any).injectSuggestedEnabled} onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                       <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0" title="GetSuggestedUsers always fires before the first follow every session. Enable this to also re-inject it mid-session at the set % chance per follow.">Inject Suggested Users (Re-inject %)</label>
                       <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSuggestedMin ?? 1} onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMax ?? 100) } as any)} />
+                        <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSuggestedMin ?? 1} onChange={(v) => setSettings({ ...settings, injectSuggestedMin: Math.min(v, (settings as any).injectSuggestedMax ?? 100) } as any)} />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                        <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSuggestedMax ?? 1} onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectSuggestedMax: v, injectSuggestedMin: Math.min((settings as any).injectSuggestedMin ?? 1, v) } as any); }} />
+                        <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectSuggestedMax ?? 1} onChange={(v) => setSettings({ ...settings, injectSuggestedMax: v, injectSuggestedMin: Math.min((settings as any).injectSuggestedMin ?? 1, v) } as any)} />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                       </div>
                     </div>
@@ -985,9 +984,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         <input type="checkbox" id="injectProfileBrowsingEnabled" checked={!!(settings as any).injectProfileBrowsingEnabled} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                         <label htmlFor="injectProfileBrowsingEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Inject Browsing</label>
                         <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                          <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingMin ?? 1} onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingMin: v, injectProfileBrowsingMax: Math.max(v, (settings as any).injectProfileBrowsingMax ?? 100) } as any); }} />
+                          <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingMin ?? 1} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingMin: v, injectProfileBrowsingMax: Math.max(v, (settings as any).injectProfileBrowsingMax ?? 100) } as any)} />
                           <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                          <Input type="number" min="1" max="100" className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingMax ?? 1} onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingMax: v, injectProfileBrowsingMin: Math.min(v, (settings as any).injectProfileBrowsingMin ?? 1) } as any); }} />
+                          <NumField min={1} max={100} className="w-12 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingMax ?? 1} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingMax: v, injectProfileBrowsingMin: Math.min(v, (settings as any).injectProfileBrowsingMin ?? 1) } as any)} />
                           <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                         </div>
                       </div>
@@ -997,43 +996,43 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           <div className="flex flex-col gap-1.5">
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">Feed Posts</span>
-                              <Input type="number" min="0" max="30" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingFeedMin ?? 3} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingFeedMin: v, injectProfileBrowsingFeedMax: Math.max(v, (settings as any).injectProfileBrowsingFeedMax ?? 30) } as any); }} />
+                              <NumField min={0} max={30} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingFeedMin ?? 3} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingFeedMin: v, injectProfileBrowsingFeedMax: Math.max(v, (settings as any).injectProfileBrowsingFeedMax ?? 30) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="30" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingFeedMax ?? 6} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingFeedMax: v, injectProfileBrowsingFeedMin: Math.min(v, (settings as any).injectProfileBrowsingFeedMin ?? 0) } as any); }} />
+                              <NumField min={0} max={30} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingFeedMax ?? 6} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingFeedMax: v, injectProfileBrowsingFeedMin: Math.min(v, (settings as any).injectProfileBrowsingFeedMin ?? 0) } as any)} />
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">Like %</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingLikePctMin: v, injectProfileBrowsingLikePctMax: Math.max(v, (settings as any).injectProfileBrowsingLikePctMax ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingLikePctMin: v, injectProfileBrowsingLikePctMax: Math.max(v, (settings as any).injectProfileBrowsingLikePctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingLikePctMax: v, injectProfileBrowsingLikePctMin: Math.min(v, (settings as any).injectProfileBrowsingLikePctMin ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingLikePctMax: v, injectProfileBrowsingLikePctMin: Math.min(v, (settings as any).injectProfileBrowsingLikePctMin ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">Save Media %</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMin: v, injectProfileBrowsingSaveMediaPctMax: Math.max(v, (settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMin: v, injectProfileBrowsingSaveMediaPctMax: Math.max(v, (settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMax: v, injectProfileBrowsingSaveMediaPctMin: Math.min(v, (settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMax: v, injectProfileBrowsingSaveMediaPctMin: Math.min(v, (settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">Watch Stories %</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMin: v, injectProfileBrowsingWatchStoriesPctMax: Math.max(v, (settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMin: v, injectProfileBrowsingWatchStoriesPctMax: Math.max(v, (settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMax: v, injectProfileBrowsingWatchStoriesPctMin: Math.min(v, (settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMax: v, injectProfileBrowsingWatchStoriesPctMin: Math.min(v, (settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">View Highlights %</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMin: v, injectProfileBrowsingViewHighlightsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMin: v, injectProfileBrowsingViewHighlightsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMax: v, injectProfileBrowsingViewHighlightsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMax: v, injectProfileBrowsingViewHighlightsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[160px]">Comment %</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingCommentPctMin: v, injectProfileBrowsingCommentPctMax: Math.max(v, (settings as any).injectProfileBrowsingCommentPctMax ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingCommentPctMin: v, injectProfileBrowsingCommentPctMax: Math.max(v, (settings as any).injectProfileBrowsingCommentPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMax ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingCommentPctMax: v, injectProfileBrowsingCommentPctMin: Math.min(v, (settings as any).injectProfileBrowsingCommentPctMin ?? 0) } as any); }} />
+                              <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingCommentPctMax: v, injectProfileBrowsingCommentPctMin: Math.min(v, (settings as any).injectProfileBrowsingCommentPctMin ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                             </div>
                             <div className="flex flex-col gap-1.5 pt-1.5 mt-0.5 border-t border-border/40">
@@ -1043,9 +1042,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                                   <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Browse Before Follow</label>
                                 </div>
                                 <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}>
-                                  <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: v, injectProfileBrowsingBeforeFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any); }} />
+                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: v, injectProfileBrowsingBeforeFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any)} />
                                   <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                                  <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: v, injectProfileBrowsingBeforeFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any); }} />
+                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: v, injectProfileBrowsingBeforeFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)} />
                                   <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                                 </div>
                               </div>
@@ -1056,9 +1055,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                                     <label htmlFor="injectProfileBrowsingAbandonFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Abandon Follow</label>
                                   </div>
                                   <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingAbandonFollow ? 'opacity-40 pointer-events-none' : ''}`}>
-                                    <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any); }} />
+                                    <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)} />
                                     <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                                    <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any); }} />
+                                    <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)} />
                                     <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                                   </div>
                                 </div>
@@ -1102,14 +1101,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <div className="space-y-1.5">
                         <h4 className="text-xs text-muted-foreground">Stop follow tool when followings reaches</h4>
                         <div className="flex items-center gap-1.5">
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStopFollowAtFollowingsMin ?? 7400}
-                            onChange={(e) => setSettings({ ...settings, autoStopFollowAtFollowingsMin: Math.min(Number(e.target.value), (settings as any).autoStopFollowAtFollowingsMax ?? Infinity) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStopFollowAtFollowingsMin: Math.min(v, (settings as any).autoStopFollowAtFollowingsMax ?? Infinity) } as any)}
                           />
                           <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStopFollowAtFollowingsMax ?? 7400}
-                            onChange={(e) => setSettings({ ...settings, autoStopFollowAtFollowingsMax: Math.max(Number(e.target.value), (settings as any).autoStopFollowAtFollowingsMin ?? 0) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStopFollowAtFollowingsMax: Math.max(v, (settings as any).autoStopFollowAtFollowingsMin ?? 0) } as any)}
                           />
                         </div>
                       </div>
@@ -1117,14 +1116,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <div className="space-y-1.5">
                         <h4 className="text-xs text-muted-foreground">Start unfollow tool after (minutes)</h4>
                         <div className="flex items-center gap-1.5">
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStartUnfollowAfterMin ?? 60}
-                            onChange={(e) => setSettings({ ...settings, autoStartUnfollowAfterMin: Math.min(Number(e.target.value), (settings as any).autoStartUnfollowAfterMax ?? Infinity) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartUnfollowAfterMin: Math.min(v, (settings as any).autoStartUnfollowAfterMax ?? Infinity) } as any)}
                           />
                           <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStartUnfollowAfterMax ?? 135}
-                            onChange={(e) => setSettings({ ...settings, autoStartUnfollowAfterMax: Math.max(Number(e.target.value), (settings as any).autoStartUnfollowAfterMin ?? 0) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartUnfollowAfterMax: Math.max(v, (settings as any).autoStartUnfollowAfterMin ?? 0) } as any)}
                           />
                         </div>
                       </div>
@@ -1142,23 +1141,23 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                   <div className="flex flex-wrap gap-x-6 gap-y-4">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Min Follow Age (days)</Label>
-                      <Input type="number" className="w-24 h-8 text-xs"
+                      <NumField min={0} className="w-24 h-8 text-xs"
                         value={(settings as any).minFollowAgeDays ?? 3}
-                        onChange={(e) => setSettings({ ...settings, minFollowAgeDays: Number(e.target.value) } as any)}
+                        onChange={(v) => setSettings({ ...settings, minFollowAgeDays: v } as any)}
                       />
                       <p className="text-[10px] text-muted-foreground">Only unfollow accounts followed at least this many days ago.</p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Delay after Unfollow (s)</Label>
                       <div className="flex items-center gap-1.5">
-                        <Input type="number" className="w-16 h-8 text-xs"
+                        <NumField min={0} className="w-16 h-8 text-xs"
                           value={(settings as any).delayAfterUnfollowMin ?? 5}
-                          onChange={(e) => setSettings({ ...settings, delayAfterUnfollowMin: Math.min(Number(e.target.value), (settings as any).delayAfterUnfollowMax ?? Infinity) } as any)}
+                          onChange={(v) => setSettings({ ...settings, delayAfterUnfollowMin: Math.min(v, (settings as any).delayAfterUnfollowMax ?? Infinity) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" className="w-16 h-8 text-xs"
+                        <NumField min={0} className="w-16 h-8 text-xs"
                           value={(settings as any).delayAfterUnfollowMax ?? 15}
-                          onChange={(e) => setSettings({ ...settings, delayAfterUnfollowMax: Math.max(Number(e.target.value), (settings as any).delayAfterUnfollowMin ?? 0) } as any)}
+                          onChange={(v) => setSettings({ ...settings, delayAfterUnfollowMax: Math.max(v, (settings as any).delayAfterUnfollowMin ?? 0) } as any)}
                         />
                       </div>
                     </div>
@@ -1181,14 +1180,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <div className="space-y-1.5">
                         <h4 className="text-xs text-muted-foreground">Stop unfollow tool &amp; activate follow tool when followings drops to</h4>
                         <div className="flex items-center gap-1.5">
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStartFollowAtFollowingsMin ?? 5000}
-                            onChange={(e) => setSettings({ ...settings, autoStartFollowAtFollowingsMin: Math.min(Number(e.target.value), (settings as any).autoStartFollowAtFollowingsMax ?? Infinity) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartFollowAtFollowingsMin: Math.min(v, (settings as any).autoStartFollowAtFollowingsMax ?? Infinity) } as any)}
                           />
                           <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                          <NumField min={0} className="w-20 h-7 text-xs"
                             value={(settings as any).autoStartFollowAtFollowingsMax ?? 5000}
-                            onChange={(e) => setSettings({ ...settings, autoStartFollowAtFollowingsMax: Math.max(Number(e.target.value), (settings as any).autoStartFollowAtFollowingsMin ?? 0) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartFollowAtFollowingsMax: Math.max(v, (settings as any).autoStartFollowAtFollowingsMin ?? 0) } as any)}
                           />
                         </div>
                       </div>
@@ -1204,14 +1203,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           Activate tool after
                         </label>
                         <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).autoStartFollowStaggerEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                          <Input type="number" min="0" className="w-16 h-7 text-xs"
+                          <NumField min={0} className="w-16 h-7 text-xs"
                             value={(settings as any).autoStartFollowAfterMin ?? 60}
-                            onChange={(e) => setSettings({ ...settings, autoStartFollowAfterMin: Math.min(Number(e.target.value), (settings as any).autoStartFollowAfterMax ?? Infinity) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartFollowAfterMin: Math.min(v, (settings as any).autoStartFollowAfterMax ?? Infinity) } as any)}
                           />
                           <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-16 h-7 text-xs"
+                          <NumField min={0} className="w-16 h-7 text-xs"
                             value={(settings as any).autoStartFollowAfterMax ?? 120}
-                            onChange={(e) => setSettings({ ...settings, autoStartFollowAfterMax: Math.max(Number(e.target.value), (settings as any).autoStartFollowAfterMin ?? 0) } as any)}
+                            onChange={(v) => setSettings({ ...settings, autoStartFollowAfterMax: Math.max(v, (settings as any).autoStartFollowAfterMin ?? 0) } as any)}
                           />
                           <span className="text-[10px] text-muted-foreground">minutes</span>
                         </div>
@@ -1236,13 +1235,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       </label>
                     </div>
                     <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="1440"
+                      <NumField
+                        min={1}
+                        max={1440}
                         className="w-16 h-7 text-xs"
                         value={(settings as any).stopOnBlockMinutes ?? 60}
-                        onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) } as any)}
+                        onChange={(v) => setSettings({ ...settings, stopOnBlockMinutes: v } as any)}
                       />
                       <span className="text-xs text-muted-foreground">minutes</span>
                     </div>
