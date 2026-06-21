@@ -4215,46 +4215,59 @@ export class InstagramWebClient {
         if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
       } catch {}
     }
-    // Bootstrap igWWWClaim if not stored — make a lightweight GET to get the
-    // fresh x-ig-www-claim header that Instagram returns with every API response.
-    // Without a real claim token, configure may be rejected or return a generic 500.
-    if (igWWWClaim === "0") {
-      try {
-        const MOBILE_APP_ID_EARLY = "567067343352427";
-        const claimRes = await igReq({
-          host: "i.instagram.com",
-          path: "/api/v1/accounts/get_badge_notifications/",
-          method: "GET",
-          headers: {
-            Host: "i.instagram.com",
-            "User-Agent": this._fullMobileUA,
-            "X-IG-App-ID": MOBILE_APP_ID_EARLY,
-            "X-IG-Capabilities": "3brTvwE=",
-            "X-IG-Connection-Type": "WIFI",
-            "Accept-Language": "en-US,en;q=0.9",
-            "X-IG-WWW-Claim": "0",
-          },
-          cookieJar: this.mobileCookieJar,
-          proxyUrl: this.proxyUrl,
-          forceNodeTls: true,
-        });
-        const freshClaim = (claimRes.responseHeaders?.["x-ig-www-claim"] ?? claimRes.responseHeaders?.["X-IG-WWW-Claim"]) as string | undefined;
-        if (freshClaim && freshClaim !== "0") {
-          igWWWClaim = freshClaim;
-          console.log(`${TAG}   ✓ igWWWClaim bootstrapped (status=${claimRes.status}): ${igWWWClaim.slice(0, 25)}…`);
-          // Persist the fresh claim back to igDeviceState so future configure calls use it
-          if (this.igDeviceState) {
-            try {
-              const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
-              ds.igWWWClaim = igWWWClaim;
-              this.igDeviceState = JSON.stringify(ds);
-            } catch {}
+    // Bootstrap igWWWClaim if not stored — use GET /users/{userId}/info/ which
+    // is far more reliable than get_badge_notifications/ (which returns 404 on
+    // many accounts). Instagram returns x-ig-www-claim in the response headers
+    // of every authenticated mobile API call. Without a real claim token,
+    // configure returns a generic 500.
+    if (igWWWClaim === "0" && ownUserId) {
+      const MOBILE_APP_ID_EARLY = "567067343352427";
+      const bootstrapEndpoints = [
+        `/api/v1/users/${ownUserId}/info/`,
+        `/api/v1/accounts/current_user/?edit=true`,
+      ];
+      for (const bootstrapPath of bootstrapEndpoints) {
+        if (igWWWClaim !== "0") break;
+        try {
+          console.log(`${TAG}   Bootstrapping igWWWClaim via GET ${bootstrapPath}`);
+          const claimRes = await igReq({
+            host: "i.instagram.com",
+            path: bootstrapPath,
+            method: "GET",
+            headers: {
+              Host: "i.instagram.com",
+              "User-Agent": this._fullMobileUA,
+              "X-IG-App-ID": MOBILE_APP_ID_EARLY,
+              "X-IG-Capabilities": "3brTvwE=",
+              "X-IG-Connection-Type": "WIFI",
+              "Accept-Language": "en-US,en;q=0.9",
+              "X-IG-WWW-Claim": "0",
+            },
+            cookieJar: this.mobileCookieJar,
+            proxyUrl: this.proxyUrl,
+            forceNodeTls: true,
+          });
+          const freshClaim = (claimRes.responseHeaders?.["x-ig-www-claim"] ?? claimRes.responseHeaders?.["X-IG-WWW-Claim"]) as string | undefined;
+          if (freshClaim && freshClaim !== "0") {
+            igWWWClaim = freshClaim;
+            console.log(`${TAG}   ✓ igWWWClaim bootstrapped via ${bootstrapPath} (status=${claimRes.status}): ${igWWWClaim.slice(0, 25)}…`);
+            // Persist so future calls skip the bootstrap
+            if (this.igDeviceState) {
+              try {
+                const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
+                ds.igWWWClaim = igWWWClaim;
+                this.igDeviceState = JSON.stringify(ds);
+              } catch {}
+            }
+          } else {
+            console.warn(`${TAG}   ⚠ ${bootstrapPath} returned no claim header (status=${claimRes.status}) — trying next endpoint`);
           }
-        } else {
-          console.warn(`${TAG}   ⚠ igWWWClaim bootstrap returned no claim header (status=${claimRes.status}) — proceeding with "0"`);
+        } catch (claimErr: any) {
+          console.warn(`${TAG}   ⚠ Bootstrap GET ${bootstrapPath} failed (non-fatal): ${claimErr?.message}`);
         }
-      } catch (claimErr: any) {
-        console.warn(`${TAG}   ⚠ igWWWClaim bootstrap call failed (non-fatal): ${claimErr?.message}`);
+      }
+      if (igWWWClaim === "0") {
+        console.warn(`${TAG}   ⚠ All igWWWClaim bootstrap attempts failed — proceeding with "0" (configure may fail)`);
       }
     }
     console.log(`${TAG}   igWWWClaim: ${igWWWClaim === "0" ? "0 (default — bootstrap failed)" : igWWWClaim.slice(0,25)+"…"}`);
@@ -4555,9 +4568,41 @@ export class InstagramWebClient {
     }
     patchIgClientTls(ig, this.proxyUrl);
 
+    // ── PRE-WARM: fire user.info to get fresh CSRF + igWWWClaim ─────────────
+    // Same pattern as _followViaIgClient. Without this, cookieCsrfToken is
+    // "missing" and ig.state.igWWWClaim is empty — both cause configure to
+    // fail with a generic 500. The fresh claim is also persisted to
+    // igDeviceState so that PATH B's hand-rolled configure can read it.
+    const ownUserIdForWarm = igCookiePairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+    if (ownUserIdForWarm) {
+      try {
+        console.log(`${TAG} ── PRE-WARM: ig.user.info(${ownUserIdForWarm}) to prime CSRF + igWWWClaim ──`);
+        await ig.user.info(ownUserIdForWarm as any);
+        const freshClaim = ig.state.igWWWClaim;
+        const freshCsrf  = ig.state.cookieCsrfToken;
+        console.log(`${TAG}   Pre-warm OK — csrf=${freshCsrf?.slice(0,8) ?? "none"} igWWWClaim=${freshClaim ? freshClaim.slice(0,25)+"…" : "NONE"}`);
+        // Persist the fresh claim so PATH B configure can read it from igDeviceState
+        if (freshClaim && freshClaim !== "0" && this.igDeviceState) {
+          try {
+            const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
+            ds.igWWWClaim = freshClaim;
+            this.igDeviceState = JSON.stringify(ds);
+            console.log(`${TAG}   igWWWClaim persisted to igDeviceState — PATH B configure will use it`);
+          } catch {}
+        } else if (!freshClaim) {
+          console.warn(`${TAG}   Pre-warm returned no igWWWClaim — PATH B will attempt its own bootstrap`);
+        }
+      } catch (preErr: any) {
+        // Non-fatal — if info call fails, try publish anyway
+        console.warn(`${TAG}   Pre-warm ig.user.info failed (non-fatal, will try publish): ${preErr?.message}`);
+      }
+    } else {
+      console.warn(`${TAG}   No ds_user_id found — skipping pre-warm (PATH B bootstrap will handle igWWWClaim)`);
+    }
+
     // ── CALL ig.publish.photo ────────────────────────────────────────────────
     console.log(`${TAG} ── CALLING ig.publish.photo ───────────────────────────`);
-    console.log(`${TAG}   uuid=${ig.state.uuid?.slice(0,8)}… csrf=${csrfAfterLoad?.slice(0,8) ?? "NONE"} uid=${userIdAfterLoad ?? "NONE"} buf=${imageBuffer.length}B`);
+    console.log(`${TAG}   uuid=${ig.state.uuid?.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "NONE"} uid=${userIdAfterLoad ?? "NONE"} buf=${imageBuffer.length}B`);
     try {
       const result = await ig.publish.photo({
         file: imageBuffer,

@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.109",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: before attempting to publish, the app now fires a warm-up call through the same Instagram session used for the publish. This gives the session a fresh CSRF token and a real claim token — both of which are required for the publish step to succeed. Previous builds were sometimes publishing without these, causing generic 500 errors from Instagram." },
+      { category: "Fix", text: "Repost: the claim-token lookup now falls back through two reliable Instagram API endpoints instead of the single endpoint that was returning 404 on most accounts. The claim token is also saved so subsequent publish attempts skip the lookup entirely." },
+    ],
+  },
+  {
     version: "1.1.108",
     date: "21 Jun 2026",
     items: [
