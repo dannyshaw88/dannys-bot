@@ -4208,69 +4208,12 @@ export class InstagramWebClient {
     const devInfo = this._parseUADeviceInfo();
     console.log(`${TAG}   device: ${devInfo.manufacturer} ${devInfo.model} Android ${devInfo.androidVersion}/${devInfo.androidRelease}`);
 
-    let igWWWClaim = "0";
-    if (this.igDeviceState) {
-      try {
-        const s = JSON.parse(this.igDeviceState) as { igWWWClaim?: string };
-        if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
-      } catch {}
-    }
-    // Bootstrap igWWWClaim if not stored — use GET /users/{userId}/info/ which
-    // is far more reliable than get_badge_notifications/ (which returns 404 on
-    // many accounts). Instagram returns x-ig-www-claim in the response headers
-    // of every authenticated mobile API call. Without a real claim token,
-    // configure returns a generic 500.
-    if (igWWWClaim === "0" && ownUserId) {
-      const MOBILE_APP_ID_EARLY = "567067343352427";
-      const bootstrapEndpoints = [
-        `/api/v1/users/${ownUserId}/info/`,
-        `/api/v1/accounts/current_user/?edit=true`,
-      ];
-      for (const bootstrapPath of bootstrapEndpoints) {
-        if (igWWWClaim !== "0") break;
-        try {
-          console.log(`${TAG}   Bootstrapping igWWWClaim via GET ${bootstrapPath}`);
-          const claimRes = await igReq({
-            host: "i.instagram.com",
-            path: bootstrapPath,
-            method: "GET",
-            headers: {
-              Host: "i.instagram.com",
-              "User-Agent": this._fullMobileUA,
-              "X-IG-App-ID": MOBILE_APP_ID_EARLY,
-              "X-IG-Capabilities": "3brTvwE=",
-              "X-IG-Connection-Type": "WIFI",
-              "Accept-Language": "en-US,en;q=0.9",
-              "X-IG-WWW-Claim": "0",
-            },
-            cookieJar: this.mobileCookieJar,
-            proxyUrl: this.proxyUrl,
-            forceNodeTls: true,
-          });
-          const freshClaim = (claimRes.responseHeaders?.["x-ig-www-claim"] ?? claimRes.responseHeaders?.["X-IG-WWW-Claim"]) as string | undefined;
-          if (freshClaim && freshClaim !== "0") {
-            igWWWClaim = freshClaim;
-            console.log(`${TAG}   ✓ igWWWClaim bootstrapped via ${bootstrapPath} (status=${claimRes.status}): ${igWWWClaim.slice(0, 25)}…`);
-            // Persist so future calls skip the bootstrap
-            if (this.igDeviceState) {
-              try {
-                const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
-                ds.igWWWClaim = igWWWClaim;
-                this.igDeviceState = JSON.stringify(ds);
-              } catch {}
-            }
-          } else {
-            console.warn(`${TAG}   ⚠ ${bootstrapPath} returned no claim header (status=${claimRes.status}) — trying next endpoint`);
-          }
-        } catch (claimErr: any) {
-          console.warn(`${TAG}   ⚠ Bootstrap GET ${bootstrapPath} failed (non-fatal): ${claimErr?.message}`);
-        }
-      }
-      if (igWWWClaim === "0") {
-        console.warn(`${TAG}   ⚠ All igWWWClaim bootstrap attempts failed — proceeding with "0" (configure may fail)`);
-      }
-    }
-    console.log(`${TAG}   igWWWClaim: ${igWWWClaim === "0" ? "0 (default — bootstrap failed)" : igWWWClaim.slice(0,25)+"…"}`);
+    // X-IG-WWW-Claim: Instagram does not return x-ig-www-claim in GET response
+    // headers when accessed through this session type (confirmed across multiple
+    // endpoints). Sending the header with value "0" for write operations triggers
+    // a 500 from Instagram's media publish endpoint. mobileSessionPost (which
+    // handles all other working mobile API calls: follow, DM, timeline) does NOT
+    // send X-IG-WWW-Claim at all — we mirror that behaviour here.
     console.log(`${TAG}   mobileCookieJar rur=${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓ (from rupload response)" : "✗ absent — mobile API routes by session"}`);
     console.log(`${TAG}   proxyUrl=${this.proxyUrl ?? "NONE (direct)"}`);
 
@@ -4331,8 +4274,13 @@ export class InstagramWebClient {
     console.log(`${TAG}   Body preview (first 400 chars): ${bodyStr.slice(0, 400)}`);
     console.log(`${TAG}   upload_id in body: "${uploadId}"`);
     console.log(`${TAG}   _uid: "${ownUserId || "EMPTY"}" _csrftoken: "${csrf.slice(0,8)}…" _uuid: "${uuid.slice(0,8)}…"`);
-    console.log(`${TAG}   X-IG-WWW-Claim: "${igWWWClaim.slice(0,20)}" ig-u-ds-id: "${ownUserId}" Cookie count: ${this.mobileCookieJar.length}`);
-    console.log(`${TAG}   forceNodeTls=true (MUST match rupload TLS stack)`);
+    // Use CycleTLS (OkHttp4 JA3 fingerprint) — same stack as mobileSessionPost.
+    // Using forceNodeTls (OpenSSL) for the configure POST caused HTTP 500 even
+    // though the same Node.js TLS stack works for GETs. Instagram fingerprint-
+    // checks write operations more strictly. All working mobile POSTs (follow,
+    // DM, timeline) go through CycleTLS → we match that here.
+    const authorization = this._deviceAuthorization;
+    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} auth=${authorization ? "✓ Bearer" : "✗ none"} TLS=CycleTLS(OkHttp4)`);
 
     let res: any;
     try {
@@ -4353,14 +4301,11 @@ export class InstagramWebClient {
           "X-IG-Bandwidth-Speed-KBPS": "-1.000",
           "X-IG-Bandwidth-TotalBytes-B": "0",
           "X-IG-Bandwidth-TotalTime-MS": "0",
-          "X-IG-WWW-Claim": igWWWClaim,
-          "ig-u-ds-id": ownUserId,
-          "ig-intended-user-id": ownUserId,
+          ...(authorization ? { Authorization: authorization } : {}),
         },
         body: bodyStr,
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
-        forceNodeTls: true,
       });
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);

@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.110",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: the publish step now uses the same secure connection type (OkHttp4) as all other Instagram actions like follow and DM. The previous build was using a different connection type for the publish-only step, which Instagram was silently rejecting with a 500 error. All Instagram API writes now go through the same consistent channel." },
+      { category: "Fix", text: "Repost: removed an unnecessary claim-token header that was being sent during publish. Instagram's other API actions don't send this header, and sending a default placeholder value for it was causing the publish to fail. The header is now omitted entirely, matching the behaviour of every other working action." },
+    ],
+  },
+  {
     version: "1.1.109",
     date: "21 Jun 2026",
     items: [
