@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.111",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: fixed 'upload id is missing' error during publish. The photo upload and the publish step were using different connection types, causing Instagram to look for the uploaded photo on a different backend server and fail. Both steps now use the same connection type (Node.js HTTPS), matching each other exactly. Confirmed with @anais.23164 — the 'something went wrong' error seen on earlier tests was from a banned account, not a real code issue." },
+    ],
+  },
+  {
     version: "1.1.110",
     date: "21 Jun 2026",
     items: [

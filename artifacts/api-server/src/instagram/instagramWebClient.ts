@@ -4274,13 +4274,14 @@ export class InstagramWebClient {
     console.log(`${TAG}   Body preview (first 400 chars): ${bodyStr.slice(0, 400)}`);
     console.log(`${TAG}   upload_id in body: "${uploadId}"`);
     console.log(`${TAG}   _uid: "${ownUserId || "EMPTY"}" _csrftoken: "${csrf.slice(0,8)}…" _uuid: "${uuid.slice(0,8)}…"`);
-    // Use CycleTLS (OkHttp4 JA3 fingerprint) — same stack as mobileSessionPost.
-    // Using forceNodeTls (OpenSSL) for the configure POST caused HTTP 500 even
-    // though the same Node.js TLS stack works for GETs. Instagram fingerprint-
-    // checks write operations more strictly. All working mobile POSTs (follow,
-    // DM, timeline) go through CycleTLS → we match that here.
+    // forceNodeTls=true MUST match rupload's TLS stack (tlsMultipartPost also
+    // uses forceNodeTls=true / Node.js HTTPS). Instagram routes rupload and
+    // configure to the same backend shard based on the TLS fingerprint + session.
+    // Using CycleTLS for configure while rupload uses Node.js causes
+    // "upload id is missing" (500) because configure lands on a different shard
+    // that has no record of the rupload. Confirmed on @anais.23164 v1.1.110.
     const authorization = this._deviceAuthorization;
-    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} auth=${authorization ? "✓ Bearer" : "✗ none"} TLS=CycleTLS(OkHttp4)`);
+    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} auth=${authorization ? "✓ Bearer" : "✗ none"} TLS=NodeHTTPS(mustMatchRupload)`);
 
     let res: any;
     try {
@@ -4306,6 +4307,7 @@ export class InstagramWebClient {
         body: bodyStr,
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
+        forceNodeTls: true,
       });
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);
