@@ -4215,8 +4215,50 @@ export class InstagramWebClient {
         if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
       } catch {}
     }
-    console.log(`${TAG}   igWWWClaim: ${igWWWClaim === "0" ? "0 (default — may need real claim token)" : igWWWClaim.slice(0,20)+"…"}`);
-    console.log(`${TAG}   mobileCookieJar rur=${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓" : "✗ MISSING — shard mismatch risk"}`);
+    // Bootstrap igWWWClaim if not stored — make a lightweight GET to get the
+    // fresh x-ig-www-claim header that Instagram returns with every API response.
+    // Without a real claim token, configure may be rejected or return a generic 500.
+    if (igWWWClaim === "0") {
+      try {
+        const MOBILE_APP_ID_EARLY = "567067343352427";
+        const claimRes = await igReq({
+          host: "i.instagram.com",
+          path: "/api/v1/accounts/get_badge_notifications/",
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": this._fullMobileUA,
+            "X-IG-App-ID": MOBILE_APP_ID_EARLY,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-WWW-Claim": "0",
+          },
+          cookieJar: this.mobileCookieJar,
+          proxyUrl: this.proxyUrl,
+          forceNodeTls: true,
+        });
+        const freshClaim = (claimRes.responseHeaders?.["x-ig-www-claim"] ?? claimRes.responseHeaders?.["X-IG-WWW-Claim"]) as string | undefined;
+        if (freshClaim && freshClaim !== "0") {
+          igWWWClaim = freshClaim;
+          console.log(`${TAG}   ✓ igWWWClaim bootstrapped (status=${claimRes.status}): ${igWWWClaim.slice(0, 25)}…`);
+          // Persist the fresh claim back to igDeviceState so future configure calls use it
+          if (this.igDeviceState) {
+            try {
+              const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
+              ds.igWWWClaim = igWWWClaim;
+              this.igDeviceState = JSON.stringify(ds);
+            } catch {}
+          }
+        } else {
+          console.warn(`${TAG}   ⚠ igWWWClaim bootstrap returned no claim header (status=${claimRes.status}) — proceeding with "0"`);
+        }
+      } catch (claimErr: any) {
+        console.warn(`${TAG}   ⚠ igWWWClaim bootstrap call failed (non-fatal): ${claimErr?.message}`);
+      }
+    }
+    console.log(`${TAG}   igWWWClaim: ${igWWWClaim === "0" ? "0 (default — bootstrap failed)" : igWWWClaim.slice(0,25)+"…"}`);
+    console.log(`${TAG}   mobileCookieJar rur=${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓ (from rupload response)" : "✗ absent — mobile API routes by session"}`);
     console.log(`${TAG}   proxyUrl=${this.proxyUrl ?? "NONE (direct)"}`);
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
@@ -4643,12 +4685,16 @@ export class InstagramWebClient {
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
       console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
-      const rurCookie = this.cookieJar.find(c => c.startsWith("rur="));
-      if (rurCookie && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
-        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurCookie]);
-        console.log(`${TAG}   Copied rur from web cookieJar to mobileCookieJar: ${rurCookie.slice(0, 40)}`);
-      } else if (!rurCookie) {
-        console.warn(`${TAG}   ⚠ No rur in web cookieJar either — shard routing may fail`);
+      // Do NOT copy the web-session rur cookie into the mobile jar.
+      // The web rur is a shard-routing token for api.instagram.com (web API).
+      // The mobile API (i.instagram.com) uses its own routing and does not
+      // honour the web rur — injecting it causes configure to hit the wrong
+      // backend shard → generic 500 "something went wrong during media publish".
+      // Strip any rur that may already be in the jar from a previous attempt.
+      const hadRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
+      this.mobileCookieJar = this.mobileCookieJar.filter(c => !c.startsWith("rur="));
+      if (hadRur) {
+        console.log(`${TAG}   Stripped web rur from mobileCookieJar (mobile API has its own shard routing)`);
       }
 
       const uploadId = String(Date.now());

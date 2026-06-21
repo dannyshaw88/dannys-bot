@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.108",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: fixed a 500 error during the publish step. The web session's shard-routing cookie was being incorrectly passed to the mobile API, causing Instagram's backend to look for the uploaded photo on the wrong server and fail. The mobile API now routes on its own." },
+      { category: "Fix", text: "Repost: the app now fetches a fresh session claim token from Instagram immediately before publishing. Accounts that had never stored this token were sending a placeholder value, which may have been contributing to publish failures." },
+      { category: "Fix", text: "HikerAPI scrapes for the Repost tool are now recorded in the Export API Calls log. Both the automated and manual repost flows log each HikerAPI feed fetch with timing and item count." },
+      { category: "Fix", text: "HikerAPI calls are excluded from the metrics pie chart (already enforced at the data layer — this change ensures the calls are in the log but don't affect the chart)." },
+    ],
+  },
+  {
     version: "1.1.107",
     date: "21 Jun 2026",
     items: [

@@ -2937,7 +2937,17 @@ class AutomationEngine {
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI toggled ON but not configured in Global Settings");
               return;
             }
+            const t0Repost = Date.now();
             feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+            storage.createInstagramApiCall({
+              profileId: profile.id,
+              username: profile.username,
+              operationName: "RepostFeedScrape",
+              date: new Date().toISOString(),
+              message: `Scraped feed of @${sourceUsername} via HikerAPI (${feedItems.length} items)`,
+              source: "HikerAPI",
+              durationMs: Date.now() - t0Repost,
+            }).catch(() => {});
           } else {
             feedItems = await client.getUserFeedItems(sourceUsername);
           }
@@ -3995,7 +4005,17 @@ class AutomationEngine {
         if (!hikerClient) {
           return { ok: false, message: "HikerAPI toggled ON but not configured in Global Settings — cannot scrape source feed." };
         }
+        const t0Manual = Date.now();
         feedItems = await hikerClient.getUserFeedItems(sourceUsername);
+        storage.createInstagramApiCall({
+          profileId,
+          username: profile.username,
+          operationName: "RepostFeedScrape",
+          date: new Date().toISOString(),
+          message: `[Manual] Scraped feed of @${sourceUsername} via HikerAPI (${feedItems.length} items)`,
+          source: "HikerAPI",
+          durationMs: Date.now() - t0Manual,
+        }).catch(() => {});
       } else {
         feedItems = await client.getUserFeedItems(sourceUsername);
       }
