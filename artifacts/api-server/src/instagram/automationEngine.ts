@@ -2375,8 +2375,16 @@ class AutomationEngine {
         const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
-        const reelWatchCountMin = Number(s.reelWatchCountMin ?? 0);
-        const reelWatchCountMax = Number(s.reelWatchCountMax ?? 0);
+        const reelChanceMin = Number(s.reelWatchChanceMin ?? 100);
+        const reelChanceMax = Number(s.reelWatchChanceMax ?? 100);
+        const reelChance = randInt(reelChanceMin, reelChanceMax);
+        const reelChanceRoll = Math.random() * 100;
+        const reelsEnabled = reelChanceMax > 0 && reelChanceRoll < reelChance;
+        const reelWatchCountMin = reelsEnabled ? Number(s.reelWatchCountMin ?? 0) : 0;
+        const reelWatchCountMax = reelsEnabled ? Number(s.reelWatchCountMax ?? 0) : 0;
+        if (!reelsEnabled && reelWatchPctMax > 0) {
+          console.log(`[engine] @${profile.username}: 🎲 Reel chance rolled ${reelChanceRoll.toFixed(1)}% vs threshold ${reelChance}% — skipping reels this op`);
+        }
         let viewed = 0;
         let vtfResult: Awaited<ReturnType<typeof client.viewTimelineFeed>> | null = null;
         try {

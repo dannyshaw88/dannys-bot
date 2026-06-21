@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -73,6 +73,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_order",      label: "Execution order",                   settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
         { key: "vtf_chance",     label: "Skip chance %",       settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
         { key: "vtf_like_pct",    label: "% posts to like",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
+        { key: "vtf_reel_chance", label: "Reel Chance % (% chance reels run at all)", settingKeys: ["reelWatchChanceMin","reelWatchChanceMax"] },
         { key: "vtf_reel_count",  label: "Reels/Op (how many reels to watch)", settingKeys: ["reelWatchCountMin","reelWatchCountMax"] },
         { key: "vtf_reel_view",   label: "% of each reel to watch",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
         { key: "vtf_like_delay",  label: "Delay between likes in sec",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
@@ -509,6 +510,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       forceEmulationRandomise: false,
       reelWatchPercentMin: 0,
       reelWatchPercentMax: 100,
+      reelWatchChanceMin: 100,
+      reelWatchChanceMax: 100,
       reelWatchCountMin: 1,
       reelWatchCountMax: 3,
       repostMin: 1,
@@ -568,6 +571,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostDisableComments: false, repostDisableAtPostCount: 0, repostDisableWhenExhausted: true,
       forceEmulationEnabled: false, forceEmulationRandomise: false,
       reelWatchPercentMin: 0, reelWatchPercentMax: 100,
+      reelWatchChanceMin: 100, reelWatchChanceMax: 100,
       reelWatchCountMin: 1, reelWatchCountMax: 3,
       repostMin: 1, repostMax: 3,
     };
@@ -813,17 +817,23 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   </div>
                 </div>
               </div>
-              {/* Reel controls row: Reels/Op count (left) + Reel View% (right) */}
+              {/* Reel Chance% row — gate before Reels/Op */}
+              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
+                <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel Chance%</span>
+              </div>
+              {/* Reels/Op count + Reel View% row */}
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {/* Reels per operation — how many reels get ClipsViewed per session */}
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                  <NumField min={0} max={50} className="w-12 h-7 text-xs"
+                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
                     value={settings.reelWatchCountMin ?? 1}
                     onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
                   />
                   <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                  <NumField min={0} max={50} className="w-12 h-7 text-xs"
+                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
                     value={settings.reelWatchCountMax ?? 3}
                     onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
                   />

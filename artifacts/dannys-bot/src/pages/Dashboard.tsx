@@ -72,8 +72,9 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.103",
     date: "21 Jun 2026",
     items: [
-      { category: "New", text: "View Timeline Feed: added 'Reels/Op' min/max setting to control how many reels are actually clicked and watched (ClipsViewed) per operation — placed to the left of the Reel View% on the same row." },
-      { category: "Fix", text: "View Timeline Feed: all timeline posts are still marked as seen while scrolling (ViewTimelineFeedSeen fires for every post); ClipsViewed now only fires for the capped reel count." },
+      { category: "New", text: "View Timeline Feed: added 'Reel Chance%' min/max — controls the probability (0–100%) that reels are watched at all during an operation. Set to 5–10% for occasional reel activity. Sits above Reels/Op." },
+      { category: "New", text: "View Timeline Feed: added 'Reels/Op' min/max to cap how many reels get ClipsViewed per operation. All posts still get ViewTimelineFeedSeen on scroll." },
+      { category: "New", text: "Both 'Reel Chance%' and 'Reels/Op' are available in Copy Settings under View Timeline Feed." },
       { category: "New", text: "Session log now records each reel watched with its watch percentage and duration in seconds (e.g. 'Watched reel at 73% · 22s')." },
       { category: "Fix", text: "API call log: error messages for common endpoints now show a human-readable description instead of a raw URL path (e.g. 'ERROR: Marking media as seen' instead of 'ERROR: /api/v1/media/seen/')." },
     ],
