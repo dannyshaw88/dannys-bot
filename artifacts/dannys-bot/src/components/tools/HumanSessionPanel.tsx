@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -508,6 +508,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       forceEmulationRandomise: false,
       reelWatchPercentMin: 0,
       reelWatchPercentMax: 100,
+      reelWatchCountMin: 1,
+      reelWatchCountMax: 3,
       repostMin: 1,
       repostMax: 3,
     };
@@ -565,6 +567,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostDisableComments: false, repostDisableAtPostCount: 0, repostDisableWhenExhausted: true,
       forceEmulationEnabled: false, forceEmulationRandomise: false,
       reelWatchPercentMin: 0, reelWatchPercentMax: 100,
+      reelWatchCountMin: 1, reelWatchCountMax: 3,
       repostMin: 1, repostMax: 3,
     };
     setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
@@ -809,11 +812,30 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   </div>
                 </div>
               </div>
-              {/* Reel View% sub-row */}
-              <div className={`flex items-center gap-1.5 pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
-                <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+              {/* Reel controls row: Reels/Op count (left) + Reel View% (right) */}
+              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                {/* Reels per operation — how many reels get ClipsViewed per session */}
+                <div className="flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={0} max={50} className="w-12 h-7 text-xs"
+                    value={settings.reelWatchCountMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={0} max={50} className="w-12 h-7 text-xs"
+                    value={settings.reelWatchCountMax ?? 3}
+                    onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
+                  />
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                {/* Reel watch percentage */}
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
+                  <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+                </div>
               </div>
               {/* ROW 2: Like Delay | Save Liked | Like% — left-aligned */}
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>

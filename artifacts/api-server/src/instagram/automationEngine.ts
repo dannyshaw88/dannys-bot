@@ -2375,10 +2375,12 @@ class AutomationEngine {
         const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
+        const reelWatchCountMin = Number(s.reelWatchCountMin ?? 0);
+        const reelWatchCountMax = Number(s.reelWatchCountMax ?? 0);
         let viewed = 0;
         let vtfResult: Awaited<ReturnType<typeof client.viewTimelineFeed>> | null = null;
         try {
-          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax);
+          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax, reelWatchCountMin, reelWatchCountMax);
           if (vtfResult.sessionExpired) {
             const expReason = vtfResult.reason ?? "session expired (login_required) — viewTimelineFeed";
             console.warn(`[engine] @${profile.username}: viewTimelineFeed — session expired, marking logged_out`);
@@ -2393,6 +2395,14 @@ class AutomationEngine {
           viewed = vtfResult.viewed;
           console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+
+          // Log each reel actually watched (ClipsViewed fired) to the session log
+          if (vtfResult.reelWatches?.length) {
+            for (const reel of vtfResult.reelWatches) {
+              console.log(`[engine] @${profile.username}: 🎬 watched reel @${reel.username || "unknown"} at ${reel.pct}% (${reel.durationSec}s)`);
+              this.logAction(profile.id, tool.id, "view_reel_from_feed", reel.username, reel.shortcode, "post", "ok", `Watched reel at ${reel.pct}% · ${reel.durationSec}s`);
+            }
+          }
 
           // ── Follow from Suggested Users if timeline was empty ───────────────
           if (viewed === 0 && s.followSuggestedUsersIfEmptyEnabled === true) {

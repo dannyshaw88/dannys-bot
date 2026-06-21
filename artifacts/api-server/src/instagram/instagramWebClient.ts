@@ -702,9 +702,21 @@ export class InstagramWebClient {
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
     if (this._inTimedCall || !this.logCallFn) return;
     const PATH_FRIENDLY: Record<string, string> = {
-      "/api/v1/feed/timeline/": "Loading timeline feed",
+      "/api/v1/feed/timeline/":                    "Loading timeline feed",
+      "/api/v1/media/seen/":                        "Marking media as seen",
+      "/api/v1/friendships/create/":               "Follow user",
+      "/api/v1/friendships/destroy/":              "Unfollow user",
+      "/api/v1/clips/user/":                        "Fetching clips",
+      "/api/v1/accounts/account_security_info/":   "Fetching account security info",
+      "/api/v1/challenge/":                         "Challenge response",
+      "/api/v1/qe/sync/":                           "Config sync",
+      "/api/v1/launcher/sync/":                     "Launcher sync",
+      "/api/v1/users/self/banner_dismiss/":         "Dismiss banner",
+      "/api/v1/direct_v2/threads/":                "DM thread action",
+      "/api/v1/tags/":                              "Hashtag sections",
     };
-    const msg = PATH_FRIENDLY[path] ?? path;
+    const basePath = path.split("?")[0];
+    const msg = PATH_FRIENDLY[basePath] ?? basePath;
     this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
   }
 
@@ -2116,7 +2128,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, reelWatchCountMin: number = 0, reelWatchCountMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }>; reelWatches?: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -2151,7 +2163,7 @@ export class InstagramWebClient {
         const accepted = await this._tryAcceptConsent();
         if (accepted) {
           console.log(`[webClient] viewTimelineFeed: retrying after consent acceptance`);
-          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, true);
+          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, reelWatchCountMin, reelWatchCountMax, true);
         }
       }
       return { viewed: 0 };
@@ -2167,6 +2179,16 @@ export class InstagramWebClient {
 
     let viewed = 0;
     const viewedItems: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> = [];
+    const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
+
+    // How many reels to actually click and fire ClipsViewed for this operation.
+    // 0/0 = no limit (watch all reels). Any positive max = cap to randInt(min, max).
+    const safeMin = Math.min(reelWatchCountMin, reelWatchCountMax);
+    const safeMax = Math.max(reelWatchCountMin, reelWatchCountMax);
+    const reelWatchLimit = reelWatchCountMax > 0
+      ? Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin
+      : Infinity;
+    let reelWatchedSoFar = 0;
 
     for (const media of items) {
       const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -2174,9 +2196,11 @@ export class InstagramWebClient {
       const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
       const isReel = media?.media_type === 2 || media?.product_type === "clips";
       let watchDuration = 3;
+      let watchPct = 0;
       if (isReel && reelWatchPercentMax > 0) {
         const reelDuration = Number(media.video_duration ?? 30);
         const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+        watchPct = Math.round(pct);
         watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
       }
       // One seen call per post — matches Jarvee's per-post call pattern and is
@@ -2190,9 +2214,11 @@ export class InstagramWebClient {
         return ++viewed;
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
 
-      // When a reel was actually watched (watch % > 0), also fire clips_viewed —
-      // the real app sends this to tell Instagram the reel played, not just scrolled past.
-      if (isReel && reelWatchPercentMax > 0) {
+      // ClipsViewed — only fires for reels, only when watch% is configured,
+      // and only up to the per-operation reel watch count limit.
+      if (isReel && reelWatchPercentMax > 0 && reelWatchedSoFar < reelWatchLimit) {
+        const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
+        const username = String(media?.user?.username ?? "");
         await this.timed("ClipsViewed", async () => {
           await this.mobileSessionPost(
             `/api/v1/clips/clips_viewed/`,
@@ -2202,7 +2228,9 @@ export class InstagramWebClient {
             }).toString(),
           ).catch(() => {});
           return true;
-        }, "Marked reel as played").catch(() => {});
+        }, `Watched reel at ${watchPct}% (${watchDuration}s)`).catch(() => {});
+        reelWatchedSoFar++;
+        reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
       }
 
       const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
@@ -2210,7 +2238,7 @@ export class InstagramWebClient {
       if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
     }
 
-    return { viewed, items: viewedItems };
+    return { viewed, items: viewedItems, reelWatches };
   }
 
   // ── Open / view a single feed post (simulates tapping into it) ───────────
