@@ -1401,19 +1401,19 @@ export function ProfileDetailsPage() {
                           <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                           <div className="flex flex-wrap gap-2 items-start">
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[50px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[50px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[110px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[110px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
                             <Button
@@ -1421,15 +1421,21 @@ export function ProfileDetailsPage() {
                               variant="outline"
                               className="h-7 text-xs px-2 whitespace-nowrap"
                               onClick={() => {
-                                const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-                                const minMs = toMs(formData.apiLimits.everySecondsMin || 0);
-                                const maxMs = toMs(Math.max(formData.apiLimits.everySecondsMax || 0, formData.apiLimits.everySecondsMin || 0));
                                 const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
                                 const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
-                                const fastestMs = minMs / maxCalls;
-                                const slowestMs = maxMs / minCalls;
-                                const fmt = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
-                                setTimingInfo(Math.abs(fastestMs - slowestMs) < 100 ? `~${fmt(fastestMs)}/call` : `~${fmt(fastestMs)}–${fmt(slowestMs)}/call`);
+                                // Mirror engine's unit conversion: values <1000 are bare seconds,
+                                // values ≥1000 are already milliseconds (same as setApiLimits toMs).
+                                const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+                                const rawMin = Math.max(0, formData.apiLimits.everySecondsMin || 0);
+                                const rawMax = Math.max(rawMin, formData.apiLimits.everySecondsMax || 0);
+                                const minMs = toMs(rawMin);
+                                const maxMs = toMs(rawMax);
+                                const calls = Math.floor(Math.random() * (maxCalls - minCalls + 1)) + minCalls;
+                                const windowMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+                                // Per-call delay = window ÷ calls (matches engine: delayMs = secs/calls * 1000)
+                                const delayMs = Math.max(0, Math.floor(windowMs / Math.max(1, calls)));
+                                const fmt = (v: number) => v >= 60000 ? `${(v / 60000).toFixed(1)}m` : v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}ms`;
+                                setTimingInfo(`${calls} call${calls !== 1 ? "s" : ""} every ${fmt(delayMs)}`);
                               }}
                             >
                               Test Timing

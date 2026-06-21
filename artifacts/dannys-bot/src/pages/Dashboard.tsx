@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.98",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Controls: Test Timing button now correctly converts stored values using the same unit logic as the engine (values under 1000 are treated as seconds, values 1000+ are treated as milliseconds)." },
+      { category: "Fix", text: "API Controls: Test Timing now shows the per-call delay (window ÷ calls) matching what the engine actually uses, not the raw window size." },
+      { category: "UI", text: "API Controls: Min/Max ms fields widened to comfortably fit 6-digit values like 125000." },
+    ],
+  },
+  {
     version: "1.1.97",
     date: "20 Jun 2026",
     items: [
