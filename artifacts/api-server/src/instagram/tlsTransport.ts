@@ -547,7 +547,7 @@ export async function tlsMultipartPost(
    *  Used to keep rupload and configure on the same proxy tunnel so
    *  Instagram routes both to the same backend shard. */
   agentOverride?: any,
-): Promise<any> {
+): Promise<{ json: any; cookies: string[] }> {
   if (!proxyUrl) {
     throw new Error(
       `[IP-LEAK BLOCKED] TLS multipart POST ${host}${path} refused — no proxy configured.`,
@@ -589,7 +589,10 @@ export async function tlsMultipartPost(
         const preview = rawBody.slice(0, 400).replace(/[\r\n]+/g, " ").trim();
         console.warn(`[tls:multipart] POST ${host}${path} status=${resp.status} — non-JSON response: ${preview}`);
       }
-      return json;
+      // Extract Set-Cookie from CycleTLS response headers (may be string or array)
+      const rawCookies = (resp as any).headers?.["set-cookie"] ?? (resp as any).headers?.["Set-Cookie"];
+      const cookies: string[] = Array.isArray(rawCookies) ? rawCookies : rawCookies ? [rawCookies] : [];
+      return { json, cookies };
     } catch (err: any) {
       console.error(`[tls:multipart] POST ${host}${path} FAILED — err=${err?.message ?? err}`);
       throw err;
@@ -605,13 +608,17 @@ export async function tlsMultipartPost(
   const ownedAgent = agentOverride == null;
   const agent = agentOverride ?? new HttpsProxyAgent(proxyUrl, { keepAlive: true, maxSockets: 1 });
   try {
-    const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const res = await new Promise<{ status: number; body: string; cookies: string[] }>((resolve, reject) => {
       const req = https.request(
         { host, port: 443, path, method: "POST", headers, agent },
         (r) => {
           const chunks: Buffer[] = [];
           r.on("data", (chunk: Buffer) => chunks.push(chunk));
-          r.on("end", () => resolve({ status: r.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+          r.on("end", () => resolve({
+            status: r.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+            cookies: (r.headers["set-cookie"] as string[] | undefined) ?? [],
+          }));
           r.on("error", reject);
         },
       );
@@ -630,7 +637,7 @@ export async function tlsMultipartPost(
       const errType = json.error_type ? ` err_type="${json.error_type}"` : "";
       console.log(`[tls:node-https] POST ${host}${path} status=${res.status} json.status="${json.status ?? "?"}" upload_id="${json.upload_id ?? "none"}"${msg}${errType}`);
     }
-    return json;
+    return { json, cookies: res.cookies };
   } finally {
     // Only destroy the agent if we created it; shared agents are destroyed by the caller.
     if (ownedAgent) (agent as any).destroy?.();

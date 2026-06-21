@@ -2456,7 +2456,7 @@ class AutomationEngine {
           const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
           const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
           try {
-            const { liked, watched, likedPosts, sessionExpired, sessionExpiredReason } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax, reelWatchPctMin, reelWatchPctMax);
+            const { liked, watched, likedPosts, sessionExpired, sessionExpiredReason } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax, reelWatchPctMin, effectiveReelPctMax);
             if (sessionExpired) {
               const expReason = sessionExpiredReason ?? "session expired (login_required) — likeTimelinePosts";
               console.warn(`[engine] @${profile.username}: likeTimelinePosts (from viewTimeline) — session expired, marking logged_out`);

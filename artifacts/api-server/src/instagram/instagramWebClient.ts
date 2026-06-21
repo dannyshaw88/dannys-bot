@@ -2182,12 +2182,13 @@ export class InstagramWebClient {
     const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
 
     // How many reels to actually click and fire ClipsViewed for this operation.
-    // 0/0 = no limit (watch all reels). Any positive max = cap to randInt(min, max).
+    // max=0 means "0 reels" (disabled) — matches the global rule that 0 = 0 chance.
+    // Any positive max = cap to randInt(min, max).
     const safeMin = Math.min(reelWatchCountMin, reelWatchCountMax);
     const safeMax = Math.max(reelWatchCountMin, reelWatchCountMax);
     const reelWatchLimit = reelWatchCountMax > 0
       ? Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin
-      : Infinity;
+      : 0;
     let reelWatchedSoFar = 0;
 
     for (const media of items) {
@@ -4012,9 +4013,7 @@ export class InstagramWebClient {
     let json: any;
     let ruploadCookies: string[] = [];
     try {
-      const result = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
-      json = result.json;
-      ruploadCookies = result.cookies ?? [];
+      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true));
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during rupload: ${netErr?.message ?? netErr}`);
       if (netErr?.message?.includes("ECONNREFUSED")) console.error(`${TAG}   ► Proxy refused connection or Instagram unreachable`);

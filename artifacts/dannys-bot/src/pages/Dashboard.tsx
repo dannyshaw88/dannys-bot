@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.107",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: photos now upload correctly. The upload response was being silently discarded — the app received a 200 OK from Instagram but then treated the response as empty and aborted. Both upload paths (primary and fallback) now correctly read the response." },
+      { category: "Fix", text: "Repost: the fallback upload path now correctly captures the shard-routing cookie from Instagram's rupload response so the publish step lands on the same backend server." },
+      { category: "Fix", text: "0 always means 0: when reel chance% fails, reels are now also blocked in the Like Timeline Posts tool (not just View Timeline Feed). The watch percentage is now zeroed out consistently across both tools when the chance roll fails." },
+      { category: "Fix", text: "View Timeline Feed: reel count limit of 0 now correctly means \"watch 0 reels\" instead of \"no limit\" — consistent with the global rule that 0% means disabled." },
+    ],
+  },
+  {
     version: "1.1.106",
     date: "21 Jun 2026",
     items: [
