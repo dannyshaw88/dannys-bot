@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.105",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post: added extensive diagnostics throughout the upload pipeline — session state, cookie presence, rupload request/response, configure signed body, and error-specific diagnoses are now all visible in the log." },
+    ],
+  },
+  {
     version: "1.1.104",
     date: "21 Jun 2026",
     items: [

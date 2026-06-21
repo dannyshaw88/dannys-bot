@@ -3933,35 +3933,52 @@ export class InstagramWebClient {
     buffer: Buffer,
     uploadId: string,
   ): Promise<string | null> {
+    const TAG = `[UPLOAD:rupload @${this.username ?? this.profileId}]`;
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
+
+    // ── PRE-FLIGHT ────────────────────────────────────────────────────────────
+    console.log(`${TAG} ── RUPLOAD PRE-FLIGHT ────────────────────────────────`);
+    console.log(`${TAG}   mediaType=${mediaType} uploadId=${uploadId} bufSize=${buffer.length}B (${(buffer.length/1024).toFixed(1)}KB)`);
+    console.log(`${TAG}   hasMobileSession=${hasMobileSession} (sessionid=${this.mobileCookieJar.some(c => c.startsWith("sessionid=")) ? "✓" : "✗"} authorization=${authorization ? "✓" : "✗"})`);
+    console.log(`${TAG}   mobileCookieJar cookies: [${this.mobileCookieJar.map(c => c.split("=")[0]).join(", ")}]`);
+    const hasRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
+    const hasCsrfJar = this.mobileCookieJar.some(c => c.startsWith("csrftoken="));
+    console.log(`${TAG}   rur=${hasRur ? "✓ present" : "✗ MISSING (will get from response)"} csrftoken=${hasCsrfJar ? "✓" : "✗"} mobileCsrf=${this.mobileCsrf ? `"${this.mobileCsrf.slice(0,8)}…"` : "null"}`);
+    console.log(`${TAG}   proxyUrl=${this.proxyUrl ?? "NONE (direct)"}`);
+
     if (!hasMobileSession) {
-      console.warn(`[webClient] _mobileRupload: no mobile session — run Verify Credentials first`);
+      console.error(`${TAG} ABORT — no mobile session. Run Verify Credentials first (needs sessionid in mobileCookieJar or Authorization header).`);
       return null;
     }
-    if (!this.mobileCsrf) await this._bootstrapMobileCsrf();
+
+    if (!this.mobileCsrf) {
+      console.log(`${TAG} mobileCsrf missing — calling _bootstrapMobileCsrf()`);
+      await this._bootstrapMobileCsrf();
+      console.log(`${TAG} after bootstrap: mobileCsrf=${this.mobileCsrf ? `"${this.mobileCsrf.slice(0,8)}…"` : "STILL NULL"}`);
+    }
 
     const suffix = `${uploadId}_0_${Math.floor(Math.random() * 9000000000) + 1000000000}`;
     const isPhoto = mediaType === "photo";
     const entityType = isPhoto ? "image/jpeg" : "video/mp4";
     const ruploadPath = isPhoto ? `/rupload_igphoto/${suffix}` : `/rupload_igvideo/${suffix}`;
     const waterfallHeader = isPhoto ? "X_FB_PHOTO_WATERFALL_ID" : "X_FB_VIDEO_WATERFALL_ID";
-    const ruploadParams = JSON.stringify({
+    const ruploadParamsObj = {
       retry_context: JSON.stringify({ num_step_auto_retry: 0, num_reupload: 0, num_step_manual_retry: 0 }),
       media_type: isPhoto ? "1" : "2",
       upload_id: uploadId,
       xsharing_user_ids: JSON.stringify([]),
-      image_compression: isPhoto
-        ? JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "80" })
-        : undefined,
-    });
+      ...(isPhoto ? { image_compression: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "80" }) } : {}),
+    };
+    const ruploadParams = JSON.stringify(ruploadParamsObj);
 
     const csrf = this.mobileCsrf || this.csrfToken;
+    const waterfallId = randomUUID();
     const headers: Record<string, string> = {
       "User-Agent": this._fullMobileUA,
       "Accept": "*/*",
       "Accept-Language": "en-US,en;q=0.9",
-      [waterfallHeader]: randomUUID(),
+      [waterfallHeader]: waterfallId,
       "X-Entity-Type": entityType,
       "Offset": "0",
       "X-Instagram-Rupload-Params": ruploadParams,
@@ -3978,26 +3995,77 @@ export class InstagramWebClient {
     };
 
     const proxyHost = this.proxyUrl ? (() => { try { return new URL(this.proxyUrl).host; } catch { return this.proxyUrl; } })() : "none";
-    const hasRurRupload = this.mobileCookieJar.some(c => c.startsWith("rur="));
-    console.log(`[webClient] rupload ${ruploadPath} size=${buffer.length}B csrf=${csrf.slice(0, 8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"} rur=${hasRurRupload ? "present" : "MISSING"} proxy=${proxyHost} [via node-https, raw binary]`);
+    console.log(`${TAG} ── RUPLOAD REQUEST ───────────────────────────────────`);
+    console.log(`${TAG}   POST i.instagram.com${ruploadPath}`);
+    console.log(`${TAG}   X-Entity-Name: ${suffix}`);
+    console.log(`${TAG}   X-Entity-Length: ${buffer.length}`);
+    console.log(`${TAG}   X-Entity-Type: ${entityType}`);
+    console.log(`${TAG}   ${waterfallHeader}: ${waterfallId}`);
+    console.log(`${TAG}   X-IG-App-ID: ${MOBILE_AID}`);
+    console.log(`${TAG}   X-CSRFToken: ${csrf?.slice(0,8)}… (length=${csrf?.length ?? 0})`);
+    console.log(`${TAG}   X-Instagram-Rupload-Params: ${ruploadParams}`);
+    console.log(`${TAG}   Authorization: ${authorization ? authorization.slice(0,20)+"…" : "NONE"}`);
+    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} proxy=${proxyHost}`);
+
     await this.apiThrottle();
-    // forceNodeHttps=true: CycleTLS corrupts binary data (JSON re-encodes bytes >127 as UTF-8).
-    // Node.js req.write(Buffer) sends raw bytes — required for JPEG/MP4 uploads.
-    const { json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
-    if (!json || json.status !== "ok") {
-      console.warn(`[webClient] rupload ${ruploadPath} failed: status="${json?.status ?? "null"}" upload_id="${json?.upload_id ?? "none"}"`);
+
+    let json: any;
+    let ruploadCookies: string[] = [];
+    try {
+      const result = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true);
+      json = result.json;
+      ruploadCookies = result.cookies ?? [];
+    } catch (netErr: any) {
+      console.error(`${TAG} ✗ NETWORK ERROR during rupload: ${netErr?.message ?? netErr}`);
+      if (netErr?.message?.includes("ECONNREFUSED")) console.error(`${TAG}   ► Proxy refused connection or Instagram unreachable`);
+      if (netErr?.message?.includes("ETIMEDOUT"))    console.error(`${TAG}   ► Connection timed out — proxy too slow or blocked`);
+      if (netErr?.message?.includes("ENOTFOUND"))    console.error(`${TAG}   ► DNS resolution failed for i.instagram.com`);
+      if (netErr?.message?.includes("SSL") || netErr?.message?.includes("TLS")) {
+        console.error(`${TAG}   ► TLS error — proxy cert rejected or fingerprint issue`);
+      }
+      console.error(`${TAG}   Stack: ${(netErr?.stack ?? "").split("\n").slice(0,4).join(" | ")}`);
       return null;
     }
-    // Capture rur (shard-routing cookie) from the rupload Set-Cookie response.
-    // rupload and configure MUST land on the same Instagram backend shard.
-    // Without rur in mobileCookieJar, configure hits a different shard and returns HTTP 500.
-    const rurFromRupload = ruploadCookies.find(c => c.startsWith("rur="));
-    if (rurFromRupload && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
-      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurFromRupload]);
-      console.log(`[webClient:${this.profileId}] rupload: captured rur from response Set-Cookie → mobileCookieJar`);
+
+    console.log(`${TAG} ── RUPLOAD RESPONSE ──────────────────────────────────`);
+    console.log(`${TAG}   Set-Cookie from response: [${ruploadCookies.map(c => c.split("=")[0]).join(", ")}]`);
+    if (!json) {
+      console.error(`${TAG} ✗ Response body is null/empty (non-JSON). Instagram may have returned HTML error page.`);
+      console.error(`${TAG}   ► Possible causes: session expired (401), rate limited (429), or endpoint URL changed`);
+      return null;
     }
-    console.log(`[webClient] rupload ${ruploadPath} OK — upload_id="${json.upload_id}"`);
-    return String(json.upload_id ?? uploadId);
+    console.log(`${TAG}   Response JSON: ${JSON.stringify(json).slice(0, 600)}`);
+
+    if (json.status !== "ok") {
+      console.error(`${TAG} ✗ Rupload status="${json.status ?? "null"}" — upload_id="${json.upload_id ?? "none"}"`);
+      const msg = json?.message ?? json?.error_type ?? "unknown";
+      console.error(`${TAG}   message/error_type: "${msg}"`);
+      if (json.status === "fail" && json.message?.includes("login")) {
+        console.error(`${TAG}   ► DIAGNOSIS: Not authenticated. sessionid cookie is invalid or expired.`);
+      } else if (json.status === "fail") {
+        console.error(`${TAG}   ► DIAGNOSIS: Rupload rejected by Instagram. Full response: ${JSON.stringify(json).slice(0, 400)}`);
+      }
+      return null;
+    }
+
+    // Capture rur (shard-routing cookie) — CRITICAL for configure to land on same shard
+    const rurFromRupload = ruploadCookies.find(c => c.startsWith("rur="));
+    if (rurFromRupload) {
+      const alreadyHasRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
+      if (!alreadyHasRur) {
+        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurFromRupload]);
+        console.log(`${TAG} ✓ Captured rur from Set-Cookie → mobileCookieJar: ${rurFromRupload.slice(0, 40)}…`);
+      } else {
+        console.log(`${TAG}   rur already in mobileCookieJar — not overwriting`);
+      }
+    } else {
+      console.warn(`${TAG}   ⚠ No rur cookie in rupload response Set-Cookie. Configure may hit wrong shard → "upload id is missing"`);
+      console.warn(`${TAG}     Response Set-Cookie headers: [${ruploadCookies.join(" | ")}]`);
+    }
+
+    const confirmedId = String(json.upload_id ?? uploadId);
+    console.log(`${TAG} ✓ Rupload OK — confirmed upload_id="${confirmedId}"`);
+    return confirmedId;
   }
 
   // ── Get recent photo posts from a user's feed (with image URLs) ───────────
@@ -4069,14 +4137,19 @@ export class InstagramWebClient {
     isVideo: boolean,
     imgBuffer?: Buffer,
   ): Promise<string | null> {
+    const TAG = `[UPLOAD:configure @${this.username ?? this.profileId}]`;
+    console.log(`${TAG} ── CONFIGURE PRE-FLIGHT ──────────────────────────────`);
+    console.log(`${TAG}   uploadId=${uploadId} isVideo=${isVideo} captionLen=${caption?.length ?? 0}`);
+
     if (!this.igApiCookies) {
-      console.warn(`[webClient] configure ${uploadId}: no igApiCookies — cannot proceed`);
+      console.error(`${TAG} ABORT — igApiCookies is null. Cannot build signed body without csrftoken/ds_user_id.`);
       return null;
     }
 
-    // Extract identity fields directly from stored state (no IgApiClient needed)
+    // Extract identity fields
     const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
     const ownUserId = pairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+    if (!ownUserId) console.error(`${TAG} ✗ ds_user_id is empty — _uid field will be blank, Instagram will reject`);
 
     let uuid = "";
     let deviceId = "";
@@ -4085,17 +4158,30 @@ export class InstagramWebClient {
         const saved = JSON.parse(this.igDeviceState) as { uuid?: string; deviceId?: string };
         uuid = saved.uuid ?? "";
         deviceId = saved.deviceId ?? "";
-      } catch { /* ignore */ }
+        console.log(`${TAG}   uuid from igDeviceState: ${uuid ? uuid.slice(0,8)+"…" : "MISSING"}`);
+        console.log(`${TAG}   deviceId from igDeviceState: ${deviceId || "MISSING"}`);
+      } catch (e: any) {
+        console.error(`${TAG}   igDeviceState parse error: ${e?.message}`);
+      }
     }
-    if (!uuid)     uuid     = this._mobileIgDid ?? randomUUID();
-    if (!deviceId) deviceId = `android-${(this._mobileMid ?? randomUUID()).replace(/-/g, "").slice(0, 16)}`;
+    if (!uuid) {
+      uuid = this._mobileIgDid ?? randomUUID();
+      console.warn(`${TAG}   ⚠ uuid not in igDeviceState — using _mobileIgDid/random: ${uuid.slice(0,8)}…`);
+    }
+    if (!deviceId) {
+      deviceId = `android-${(this._mobileMid ?? randomUUID()).replace(/-/g, "").slice(0, 16)}`;
+      console.warn(`${TAG}   ⚠ deviceId not in igDeviceState — using derived: ${deviceId}`);
+    }
 
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      console.log(`${TAG}   mobileCsrf missing — bootstrapping...`);
       await this._bootstrapMobileCsrf();
+      console.log(`${TAG}   after bootstrap: mobileCsrf=${this.mobileCsrf ? `"${this.mobileCsrf.slice(0,8)}…"` : "STILL NULL"}`);
     }
     const csrf = this.mobileCsrf || this.csrfToken || "";
+    if (!csrf) console.error(`${TAG} ✗ csrf is empty string — X-CSRFToken will be blank, configure WILL fail`);
 
-    // Get image dimensions for edits/extra — required by Instagram v431+
+    // Image dimensions
     let imgWidth  = 1080;
     let imgHeight = 1350;
     if (imgBuffer && !isVideo) {
@@ -4105,33 +4191,44 @@ export class InstagramWebClient {
           const meta = await sharpMod(imgBuffer).metadata();
           if (meta.width)  imgWidth  = meta.width;
           if (meta.height) imgHeight = meta.height;
+          console.log(`${TAG}   Image dimensions from sharp: ${imgWidth}x${imgHeight} format=${meta.format} channels=${meta.channels}`);
+          const ratio = imgWidth / imgHeight;
+          if (ratio < 0.8 || ratio > 1.91) {
+            console.error(`${TAG}   ✗ Aspect ratio ${ratio.toFixed(3)} is OUT OF RANGE [0.8–1.91] — configure will likely be rejected`);
+          } else {
+            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ (valid range 0.8–1.91)`);
+          }
+        } else {
+          console.warn(`${TAG}   sharp not available — using default dims ${imgWidth}x${imgHeight}`);
         }
-      } catch { /* use defaults — non-fatal */ }
+      } catch (e: any) {
+        console.warn(`${TAG}   sharp metadata error (using defaults): ${e?.message}`);
+      }
     }
 
-    // Parse device info from the UA string for the device object
     const devInfo = this._parseUADeviceInfo();
+    console.log(`${TAG}   device: ${devInfo.manufacturer} ${devInfo.model} Android ${devInfo.androidVersion}/${devInfo.androidRelease}`);
 
-    const authorization = this._deviceAuthorization;
+    let igWWWClaim = "0";
+    if (this.igDeviceState) {
+      try {
+        const s = JSON.parse(this.igDeviceState) as { igWWWClaim?: string };
+        if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
+      } catch {}
+    }
+    console.log(`${TAG}   igWWWClaim: ${igWWWClaim === "0" ? "0 (default — may need real claim token)" : igWWWClaim.slice(0,20)+"…"}`);
+    console.log(`${TAG}   mobileCookieJar rur=${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓" : "✗ MISSING — shard mismatch risk"}`);
+    console.log(`${TAG}   proxyUrl=${this.proxyUrl ?? "NONE (direct)"}`);
 
     const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
+    const MOBILE_APP_ID = "567067343352427";
 
-    // Use signBody() format (ig_sig_key_version=4&signed_body=HMAC.JSON) — this matches
-    // what the instagram-private-api library sends via ig.media.configure().
-    // Previous "upload id is missing" failure was a separate issue (CycleTLS TLS stack
-    // mismatch between rupload and configure). Since both now use Node.js HTTPS via
-    // forceNodeTls:true (and rupload also uses Node.js HTTPS), the TLS stacks match.
-    //
-    // Fields must match what the library sends (confirmed by reading its source):
-    //   _uuid, _uid, _csrftoken — device identity
-    //   upload_id, source_type, caption, timezone_offset, date_time_original — upload identity
-    //   media_folder, camera_model, camera_make, scene_capture_type, software — required by IG
-    //   edits (crop_original_size, crop_center, crop_zoom) — no filter_type/filter_name
     const now = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
     const nowFormatted = `${now.slice(0,4)}:${now.slice(4,6)}:${now.slice(6,8)} ${now.slice(8,10)}:${now.slice(10,12)}:${now.slice(12,14)}`;
-    let bodyStr: string;
+
+    let bodyObj: Record<string, any>;
     if (!isVideo) {
-      bodyStr = signBody({
+      bodyObj = {
         _uuid:                        uuid,
         _uid:                         ownUserId,
         _csrftoken:                   csrf,
@@ -4155,9 +4252,9 @@ export class InstagramWebClient {
           crop_center:        [0.0, -0.0],
           crop_zoom:          1.0,
         },
-      });
+      };
     } else {
-      bodyStr = signBody({
+      bodyObj = {
         _uuid:                        uuid,
         _uid:                         ownUserId,
         _csrftoken:                   csrf,
@@ -4170,87 +4267,129 @@ export class InstagramWebClient {
         clips_share_preview_to_feed:  "1",
         device_id:                    deviceId,
         creation_logger_session_id:   randomUUID(),
+      };
+    }
+
+    const bodyStr = signBody(bodyObj);
+    console.log(`${TAG} ── CONFIGURE REQUEST ─────────────────────────────────`);
+    console.log(`${TAG}   POST i.instagram.com${url}`);
+    console.log(`${TAG}   Signed body fields: [${Object.keys(bodyObj).join(", ")}]`);
+    console.log(`${TAG}   Body preview (first 400 chars): ${bodyStr.slice(0, 400)}`);
+    console.log(`${TAG}   upload_id in body: "${uploadId}"`);
+    console.log(`${TAG}   _uid: "${ownUserId || "EMPTY"}" _csrftoken: "${csrf.slice(0,8)}…" _uuid: "${uuid.slice(0,8)}…"`);
+    console.log(`${TAG}   X-IG-WWW-Claim: "${igWWWClaim.slice(0,20)}" ig-u-ds-id: "${ownUserId}" Cookie count: ${this.mobileCookieJar.length}`);
+    console.log(`${TAG}   forceNodeTls=true (MUST match rupload TLS stack)`);
+
+    let res: any;
+    try {
+      res = await igReq({
+        host: "i.instagram.com",
+        path: url,
+        method: "POST",
+        headers: {
+          Host: "i.instagram.com",
+          "User-Agent": this._fullMobileUA,
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-IG-App-ID": MOBILE_APP_ID,
+          "X-CSRFToken": csrf,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+          "X-IG-Bandwidth-TotalBytes-B": "0",
+          "X-IG-Bandwidth-TotalTime-MS": "0",
+          "X-IG-WWW-Claim": igWWWClaim,
+          "ig-u-ds-id": ownUserId,
+          "ig-intended-user-id": ownUserId,
+        },
+        body: bodyStr,
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+        forceNodeTls: true,
       });
+    } catch (netErr: any) {
+      console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);
+      console.error(`${TAG}   Stack: ${(netErr?.stack ?? "").split("\n").slice(0,4).join(" | ")}`);
+      this._lastConfigureError = `Network error: ${netErr?.message}`;
+      return null;
     }
 
-    // Use igReq directly WITHOUT calling apiThrottle() — zero delay between rupload
-    // completing and configure firing. apiThrottle with 10-60s delays between calls
-    // would hold configure back long enough for Instagram to expire the upload ID.
-    const MOBILE_APP_ID = "567067343352427";
-    console.log(`[webClient] configure ${uploadId}: signBody (isVideo=${isVideo} uuid=${uuid.slice(0, 8)}… csrf=${csrf.slice(0, 8)} uid=${ownUserId || "MISSING"} dims=${imgWidth}x${imgHeight})`);
-    console.log(`[webClient] configure ${uploadId}: body preview — ${bodyStr.slice(0, 300)}`);
-
-    // forceNodeTls: true — MUST match the TLS stack used by _mobileRupload.
-    // rupload uses tlsMultipartPost(forceNodeHttps=true) → Node.js HTTPS / OpenSSL.
-    // Without this flag igReq routes through CycleTLS (OkHttp4 JA3 fingerprint).
-    // Instagram associates the upload with the TLS session that performed the rupload.
-    // A configure arriving via a different TLS fingerprint cannot locate the upload
-    // and returns "upload id is missing" (HTTP 500). Same stack = same fingerprint = found.
-    //
-    // Authorization header is intentionally omitted — cookie-based auth is sufficient
-    // for configure and the library (ig.media.configure) does not send Authorization.
-    // Get igWWWClaim from stored device state (sent as X-IG-WWW-Claim header).
-    // ig-u-ds-id and ig-intended-user-id are required by Instagram write endpoints.
-    let igWWWClaim = "0";
-    if (this.igDeviceState) {
-      try {
-        const s = JSON.parse(this.igDeviceState) as { igWWWClaim?: string };
-        if (s.igWWWClaim) igWWWClaim = s.igWWWClaim;
-      } catch {}
-    }
-
-    const res = await igReq({
-      host: "i.instagram.com",
-      path: url,
-      method: "POST",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": this._fullMobileUA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-IG-App-ID": MOBILE_APP_ID,
-        "X-CSRFToken": csrf,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI",
-        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-        "X-IG-Bandwidth-TotalBytes-B": "0",
-        "X-IG-Bandwidth-TotalTime-MS": "0",
-        "X-IG-WWW-Claim": igWWWClaim,
-        "ig-u-ds-id": ownUserId,
-        "ig-intended-user-id": ownUserId,
-      },
-      body: bodyStr,
-      cookieJar: this.mobileCookieJar,
-      proxyUrl: this.proxyUrl,
-      forceNodeTls: true,
-    });
-
-    // Merge any new cookies (keep session fresh)
+    // Merge any new cookies
     if (res.cookies?.length) {
       this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
 
+    console.log(`${TAG} ── CONFIGURE RESPONSE ────────────────────────────────`);
+    console.log(`${TAG}   HTTP status: ${res.status}`);
+    console.log(`${TAG}   Response Set-Cookie: [${(res.cookies ?? []).map((c: string) => c.split("=")[0]).join(", ")}]`);
+
     const json = res.json;
+    if (!json) {
+      const raw = res.rawBody?.slice(0, 800) ?? "(no body)";
+      this._lastConfigureError = `HTTP ${res.status}: non-JSON response`;
+      console.error(`${TAG} ✗ Non-JSON response (HTTP ${res.status}). Raw body: ${raw}`);
+      if (res.status === 403) console.error(`${TAG}   ► DIAGNOSIS: 403 Forbidden — CSRF mismatch or session expired`);
+      if (res.status === 401) console.error(`${TAG}   ► DIAGNOSIS: 401 Unauthorized — sessionid invalid`);
+      if (res.status === 429) console.error(`${TAG}   ► DIAGNOSIS: 429 Rate Limited`);
+      if (res.status === 500) console.error(`${TAG}   ► DIAGNOSIS: 500 Server Error — often "upload id is missing" (shard mismatch) or bad signed body`);
+      if (raw.includes("<html"))  console.error(`${TAG}   ► Got HTML page instead of JSON — Instagram redirected to login or error page`);
+      return null;
+    }
+
+    console.log(`${TAG}   Response JSON: ${JSON.stringify(json).slice(0, 800)}`);
+
     if (json?.media?.id) {
       const mediaId = String(json.media.id);
-      console.log(`[webClient] configure ${uploadId}: OK — media_id=${mediaId}`);
+      console.log(`${TAG} ✓ SUCCESS — media_id=${mediaId}`);
       return mediaId;
     }
     if (json?.status === "ok") {
-      console.log(`[webClient] configure ${uploadId}: OK (no media.id) — returning uploadId`);
+      console.log(`${TAG} ✓ status=ok (no media.id) — returning uploadId=${uploadId}`);
       return uploadId;
     }
-    if (json) {
-      const errDetail = json?.message ?? `HTTP ${res.status}`;
-      this._lastConfigureError = errDetail;
-      console.warn(`[webClient] configure ${uploadId}: unexpected response (HTTP ${res.status}) — ${JSON.stringify(json).slice(0, 600)}`);
-    } else {
-      this._lastConfigureError = `HTTP ${res.status}: no response body`;
-      console.warn(`[webClient] configure ${uploadId}: non-JSON response (HTTP ${res.status}) — ${res.rawBody?.slice(0, 400)}`);
+
+    // Failed — extract all diagnostic info
+    const errMsg   = json?.message ?? "";
+    const errType  = json?.error_type ?? "";
+    const errTitle = json?.feedback_title ?? "";
+    const errUrl   = json?.feedback_url ?? "";
+    this._lastConfigureError = errMsg || errType || `HTTP ${res.status}`;
+
+    console.error(`${TAG} ✗ Configure FAILED (HTTP ${res.status})`);
+    console.error(`${TAG}   status: "${json?.status}" message: "${errMsg}" error_type: "${errType}"`);
+    if (errTitle) console.error(`${TAG}   feedback_title: "${errTitle}"`);
+    if (errUrl)   console.error(`${TAG}   feedback_url: "${errUrl}"`);
+    console.error(`${TAG}   Full response: ${JSON.stringify(json).slice(0, 800)}`);
+
+    // ── Known configure error patterns ──────────────────────────────────────
+    if (errMsg.includes("upload id") || errMsg.includes("upload_id")) {
+      console.error(`${TAG}   ► DIAGNOSIS: "upload id is missing" — rupload succeeded but configure cannot find it.`);
+      console.error(`${TAG}     Cause 1: TLS stack mismatch (rupload used Node.js HTTPS, configure used CycleTLS)`);
+      console.error(`${TAG}     Cause 2: rur cookie was missing → configure landed on different Instagram shard`);
+      console.error(`${TAG}     Cause 3: uploadId expired (configure called too long after rupload)`);
+      console.error(`${TAG}     rur in mobileCookieJar: ${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓ present" : "✗ MISSING"}`);
+    } else if (errMsg.includes("not_authorized") || res.status === 403) {
+      console.error(`${TAG}   ► DIAGNOSIS: not_authorized. Possible CSRF token mismatch.`);
+      console.error(`${TAG}     csrf used: "${csrf.slice(0,12)}…" expected to match csrftoken in cookie jar`);
+      const jarCsrf = this.mobileCookieJar.find(c => c.startsWith("csrftoken="))?.split("=")?.[1];
+      console.error(`${TAG}     csrftoken in mobileCookieJar: "${jarCsrf?.slice(0,12) ?? "MISSING"}…"`);
+      if (jarCsrf && jarCsrf !== csrf) console.error(`${TAG}     ✗ MISMATCH — mobileCsrf field="${csrf.slice(0,12)}…" vs jar="${jarCsrf.slice(0,12)}…"`);
+    } else if (errMsg.includes("login_required") || res.status === 401) {
+      console.error(`${TAG}   ► DIAGNOSIS: login_required. sessionid is invalid or expired. Re-verify account.`);
+    } else if (errType === "sentry_block" || errMsg.includes("feedback_required")) {
+      console.error(`${TAG}   ► DIAGNOSIS: Account is flagged/restricted. feedback_title="${errTitle}" feedback_url="${errUrl}"`);
+    } else if (errMsg.includes("media_not_found") || errType === "media_not_found") {
+      console.error(`${TAG}   ► DIAGNOSIS: media_not_found — rupload ID unknown to this shard. Missing rur cookie.`);
+    } else if (errMsg.includes("sorry") || errMsg.includes("something went wrong")) {
+      console.error(`${TAG}   ► DIAGNOSIS: Generic IG error. Possible unsigned body, wrong signed body format, or image rejection.`);
+    } else if (res.status === 400) {
+      console.error(`${TAG}   ► DIAGNOSIS: HTTP 400 — required field missing or malformed in signed body.`);
+      console.error(`${TAG}     Check: _uid="${ownUserId}" _uuid="${uuid.slice(0,8)}" upload_id="${uploadId}" csrf="${csrf.slice(0,8)}"`);
     }
+
     return null;
   }
 
@@ -4265,14 +4404,55 @@ export class InstagramWebClient {
   // URLSearchParams body is rejected for write actions — the same root cause
   // that was already fixed for follow/like by switching to IgApiClient.
   private async _publishViaIgClient(imageBuffer: Buffer, caption: string): Promise<string | null> {
+    const TAG = `[UPLOAD:igClient @${this.username ?? this.profileId}]`;
+
+    // ── PRE-FLIGHT: dump full session state ──────────────────────────────────
     if (!this.igApiCookies) {
-      console.warn(`[webClient] _publishViaIgClient: no igApiCookies — cannot use IgApiClient`);
+      console.error(`${TAG} ABORT — igApiCookies is null/empty. Account must be verified first.`);
       return null;
     }
 
-    const ig = newIgClient();
+    const igCookiePairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const cookieKeys = igCookiePairs.map(p => p.split("=")[0]);
+    const hasSessionid  = cookieKeys.includes("sessionid");
+    const hasCsrftoken  = cookieKeys.includes("csrftoken");
+    const hasDsUserId   = cookieKeys.includes("ds_user_id");
+    const hasMid        = cookieKeys.includes("mid");
+    const hasIgDid      = cookieKeys.includes("ig_did");
+    console.log(`${TAG} ── SESSION STATE ──────────────────────────────────────`);
+    console.log(`${TAG}   igApiCookies keys present: [${cookieKeys.join(", ")}]`);
+    console.log(`${TAG}   sessionid=${hasSessionid ? "✓" : "✗MISSING"} csrftoken=${hasCsrftoken ? "✓" : "✗MISSING"} ds_user_id=${hasDsUserId ? "✓" : "✗MISSING"} mid=${hasMid ? "✓" : "✗MISSING"} ig_did=${hasIgDid ? "✓" : "✗MISSING"}`);
+    if (!hasSessionid) console.error(`${TAG} ✗ NO sessionid in igApiCookies — upload will fail with 403/401`);
+    if (!hasCsrftoken) console.error(`${TAG} ✗ NO csrftoken in igApiCookies — configure will fail`);
+    if (!hasDsUserId)  console.error(`${TAG} ✗ NO ds_user_id in igApiCookies — _uid field will be empty`);
 
+    console.log(`${TAG}   mobileCookieJar (${this.mobileCookieJar.length} cookies): [${this.mobileCookieJar.map(c => c.split("=")[0]).join(", ")}]`);
+    console.log(`${TAG}   igDeviceState present: ${!!this.igDeviceState}`);
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState) as Record<string, string>;
+        console.log(`${TAG}   igDeviceState keys: [${Object.keys(ds).join(", ")}]`);
+        if (ds.uuid)      console.log(`${TAG}   uuid=${ds.uuid.slice(0,8)}…`);
+        if (ds.deviceId)  console.log(`${TAG}   deviceId=${ds.deviceId}`);
+        if (ds.phoneId)   console.log(`${TAG}   phoneId=${ds.phoneId?.slice(0,8)}…`);
+        if (ds.igDid)     console.log(`${TAG}   igDid=${ds.igDid?.slice(0,8)}…`);
+        if (ds.authorization) console.log(`${TAG}   authorization=${ds.authorization.slice(0,20)}…`);
+        if (!ds.uuid)     console.warn(`${TAG}   ⚠ no uuid in igDeviceState — will use random`);
+      } catch (e: any) {
+        console.error(`${TAG}   igDeviceState parse failed: ${e?.message}`);
+      }
+    } else {
+      console.warn(`${TAG}   ⚠ no igDeviceState — device IDs will be freshly generated (fingerprint mismatch risk)`);
+    }
+    console.log(`${TAG}   proxyUrl=${this.proxyUrl ?? "NONE (direct)"}`);
+    console.log(`${TAG}   imageBuffer size=${imageBuffer.length}B (${(imageBuffer.length/1024).toFixed(1)}KB)`);
+    console.log(`${TAG}   caption length=${caption?.length ?? 0}`);
+    console.log(`${TAG} ────────────────────────────────────────────────────────`);
+
+    // ── BUILD IgApiClient ────────────────────────────────────────────────────
+    const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+
     if (this.igDeviceState) {
       try {
         const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
@@ -4284,14 +4464,19 @@ export class InstagramWebClient {
         if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
         if (saved.authorization) ig.state.authorization = saved.authorization;
         if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
-      } catch { ig.state.generateDevice(deviceSeed); }
+        console.log(`${TAG} IgApiClient device restored — uuid=${ig.state.uuid?.slice(0,8)}… deviceId=${ig.state.deviceId} phoneId=${ig.state.phoneId?.slice(0,8)}…`);
+      } catch (e: any) {
+        ig.state.generateDevice(deviceSeed);
+        console.error(`${TAG} igDeviceState parse error — using freshly generated device: ${e?.message}`);
+      }
     } else {
       ig.state.generateDevice(deviceSeed);
+      console.warn(`${TAG} No igDeviceState — generated fresh device IDs (may cause "unrecognized device")`);
     }
 
-    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    // ── LOAD COOKIES INTO IgApiClient ────────────────────────────────────────
     const now = new Date().toISOString();
-    const cookieEntries = pairs.flatMap(pair => {
+    const cookieEntries = igCookiePairs.flatMap(pair => {
       const eqIdx = pair.indexOf("=");
       if (eqIdx === -1) return [];
       const key = pair.slice(0, eqIdx).trim();
@@ -4302,6 +4487,7 @@ export class InstagramWebClient {
         { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
       ];
     });
+    console.log(`${TAG} Loading ${cookieEntries.length} cookie entries into IgApiClient cookie jar`);
     await ig.state.deserializeCookieJar(JSON.stringify({
       version: "tough-cookie@4.1.3",
       storeType: "MemoryCookieStore",
@@ -4309,34 +4495,89 @@ export class InstagramWebClient {
       cookies: cookieEntries,
     }));
 
+    // Verify cookies landed correctly
+    const csrfAfterLoad = ig.state.cookieCsrfToken;
+    const userIdAfterLoad = ig.state.cookieUserId;
+    console.log(`${TAG} IgApiClient cookie jar loaded — cookieCsrfToken=${csrfAfterLoad?.slice(0,8) ?? "MISSING"} cookieUserId=${userIdAfterLoad ?? "MISSING"}`);
+    if (!csrfAfterLoad)  console.error(`${TAG} ✗ cookieCsrfToken is null after deserialize — HMAC signing will fail`);
+    if (!userIdAfterLoad) console.error(`${TAG} ✗ cookieUserId is null after deserialize — requests will be rejected`);
+
     ig.state.constants.APP_VERSION      = MOBILE_VERSION;
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
     patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    console.log(`${TAG} App version: ${MOBILE_VERSION} (code ${MOBILE_VERSION_CODE})`);
+    console.log(`${TAG} deviceString: ${ig.state.deviceString}`);
+
+    if (this.proxyUrl) {
+      ig.state.proxyUrl = this.proxyUrl;
+      console.log(`${TAG} Proxy set on IgApiClient: ${this.proxyUrl}`);
+    }
     patchIgClientTls(ig, this.proxyUrl);
 
+    // ── CALL ig.publish.photo ────────────────────────────────────────────────
+    console.log(`${TAG} ── CALLING ig.publish.photo ───────────────────────────`);
+    console.log(`${TAG}   uuid=${ig.state.uuid?.slice(0,8)}… csrf=${csrfAfterLoad?.slice(0,8) ?? "NONE"} uid=${userIdAfterLoad ?? "NONE"} buf=${imageBuffer.length}B`);
     try {
-      console.log(`[webClient] _publishViaIgClient: ig.publish.photo (uuid=${ig.state.uuid.slice(0, 8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0, 8) ?? "none"} buf=${imageBuffer.length}B)`);
       const result = await ig.publish.photo({
         file: imageBuffer,
         caption: caption ?? "",
       }) as any;
-      console.log(`[webClient] _publishViaIgClient: raw result —`, JSON.stringify(result).slice(0, 300));
+
+      console.log(`${TAG} ig.publish.photo RAW RESULT:`, JSON.stringify(result).slice(0, 800));
       const mediaId = result?.media?.id ?? result?.media?.pk ?? result?.pk ?? result?.id ?? null;
       if (mediaId) {
-        console.log(`[webClient] _publishViaIgClient: OK — media_id=${mediaId}`);
+        console.log(`${TAG} ✓ SUCCESS — media_id=${mediaId}`);
         return String(mediaId);
       }
-      console.warn(`[webClient] _publishViaIgClient: no media ID in result — ${JSON.stringify(result).slice(0, 200)}`);
+      // Succeeded but no media ID
+      const status = result?.status;
+      console.error(`${TAG} ✗ No media_id in result (status="${status}") — full result: ${JSON.stringify(result).slice(0, 600)}`);
       this._lastConfigureError = "no media ID in IgApiClient publish result";
       return null;
+
     } catch (err: any) {
-      const rawMsg: string = err?.message ?? String(err);
-      const msg: string = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
-      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
-      console.warn(`[webClient] _publishViaIgClient: IgApiClient error — ${rawMsg}`);
-      if (body) console.warn(`[webClient] _publishViaIgClient: raw body —`, JSON.stringify(body)?.slice(0, 600));
-      this._lastConfigureError = msg;
+      const rawMsg: string  = err?.message ?? String(err);
+      const name: string    = err?.name ?? "Error";
+      const stack: string   = err?.stack ?? "";
+      const statusCode: number | undefined = err?.response?.statusCode ?? err?.statusCode;
+      const errBody: any    = err?.response?.body ?? err?.body;
+      const errText: string = typeof errBody === "string" ? errBody : (errBody ? JSON.stringify(errBody) : "");
+
+      console.error(`${TAG} ✗ ig.publish.photo THREW ${name}: ${rawMsg}`);
+      if (statusCode !== undefined) console.error(`${TAG}   HTTP status: ${statusCode}`);
+      if (errText)    console.error(`${TAG}   Response body: ${errText.slice(0, 1000)}`);
+      if (stack)      console.error(`${TAG}   Stack: ${stack.split("\n").slice(0, 6).join(" | ")}`);
+
+      // ── Known error patterns ─────────────────────────────────────────────
+      if (rawMsg.includes("login_required") || statusCode === 401) {
+        console.error(`${TAG}   ► DIAGNOSIS: Session is expired or cookie is invalid. Re-verify the account.`);
+      } else if (rawMsg.includes("challenge_required") || errText.includes("challenge_required")) {
+        console.error(`${TAG}   ► DIAGNOSIS: Instagram is demanding a checkpoint/challenge. The account needs human intervention in the embedded browser.`);
+      } else if (rawMsg.includes("feedback_required") || errText.includes("feedback_required")) {
+        const action = (typeof errBody === "object" ? errBody?.feedback_title : "") || "unknown";
+        console.error(`${TAG}   ► DIAGNOSIS: feedback_required — action="${action}". Account is soft-banned or under restriction.`);
+      } else if (rawMsg.includes("not_authorized") || statusCode === 403) {
+        console.error(`${TAG}   ► DIAGNOSIS: 403 not_authorized. CSRF or session mismatch. Check csrftoken is fresh.`);
+      } else if (rawMsg.includes("upload_error") || rawMsg.includes("upload id") || rawMsg.includes("upload_id")) {
+        console.error(`${TAG}   ► DIAGNOSIS: Upload ID rejected at configure step. TLS stack mismatch between rupload and configure, or rupload silently failed.`);
+      } else if (rawMsg.includes("media_not_found")) {
+        console.error(`${TAG}   ► DIAGNOSIS: media_not_found — the upload ID could not be found by configure. The rupload succeeded but configure landed on a different shard (missing rur cookie?) or the upload expired.`);
+      } else if (rawMsg.includes("sorry") || rawMsg.includes("something went wrong")) {
+        console.error(`${TAG}   ► DIAGNOSIS: Generic Instagram error. Possible causes: aspect ratio out of range, unsigned request body, or rate-limited.`);
+      } else if (statusCode === 400) {
+        console.error(`${TAG}   ► DIAGNOSIS: HTTP 400 Bad Request. Required fields missing in configure body, or image format/dimensions rejected.`);
+      } else if (statusCode === 429) {
+        console.error(`${TAG}   ► DIAGNOSIS: HTTP 429 Rate Limited. Too many upload attempts in short time.`);
+      } else if (rawMsg.includes("ECONNREFUSED") || rawMsg.includes("ETIMEDOUT") || rawMsg.includes("ENOTFOUND")) {
+        console.error(`${TAG}   ► DIAGNOSIS: Network error — ${rawMsg}. Proxy down, DNS issue, or Instagram unreachable.`);
+      } else if (rawMsg.includes("SSL") || rawMsg.includes("TLS") || rawMsg.includes("certificate")) {
+        console.error(`${TAG}   ► DIAGNOSIS: TLS error — ${rawMsg}. Proxy cert issue or TLS fingerprint mismatch.`);
+      } else {
+        console.error(`${TAG}   ► DIAGNOSIS: Unrecognised error — check full message and body above.`);
+      }
+
+      const cleanMsg = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
+      this._lastConfigureError = cleanMsg;
       return null;
     }
   }
@@ -4345,12 +4586,16 @@ export class InstagramWebClient {
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
     this._lastConfigureError = "";
+    const TAG = `[UPLOAD:photo @${this.username ?? this.profileId}]`;
     return this.timed("UploadPhoto", async () => {
+      console.log(`${TAG} ══════════════════════════════════════════════════════`);
+      console.log(`${TAG} START uploadPhoto — buf=${imageBuffer.length}B captionLen=${caption?.length ?? 0}`);
+      console.log(`${TAG}   igApiCookies present: ${!!this.igApiCookies}`);
+      console.log(`${TAG}   mobileCookieJar: [${this.mobileCookieJar.map(c => c.split("=")[0]).join(", ")}]`);
+      console.log(`${TAG}   _mobileIgDid: ${this._mobileIgDid?.slice(0,8) ?? "null"} _mobileMid: ${this._mobileMid?.slice(0,8) ?? "null"}`);
+      console.log(`${TAG}   proxyUrl: ${this.proxyUrl ?? "NONE"}`);
+
       // ── Aspect ratio enforcement ────────────────────────────────────────────
-      // Instagram requires aspect ratio between 0.8 (4:5 portrait) and 1.91
-      // (landscape). Images outside this range are silently accepted by rupload
-      // but rejected at the configure step with "something went wrong".
-      // Crop to the nearest valid boundary before upload.
       try {
         const sharpMod = await import("sharp").then(m => m.default).catch(() => null);
         if (sharpMod) {
@@ -4358,47 +4603,70 @@ export class InstagramWebClient {
           const w = meta.width ?? 1080;
           const h = meta.height ?? 1080;
           const ratio = w / h;
-          const MIN_RATIO = 0.8;   // 4:5 portrait
-          const MAX_RATIO = 1.91;  // landscape
+          const MIN_RATIO = 0.8;
+          const MAX_RATIO = 1.91;
+          console.log(`${TAG}   Input image: ${w}x${h} ratio=${ratio.toFixed(3)} format=${meta.format} size=${imageBuffer.length}B`);
           if (ratio < MIN_RATIO) {
             const newH = Math.floor(w / MIN_RATIO);
             const top  = Math.floor((h - newH) / 2);
-            console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} < 0.8 — cropping ${w}x${h} → ${w}x${newH}`);
+            console.log(`${TAG}   Cropping portrait: ${w}x${h} → ${w}x${newH} (top=${top})`);
             imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).jpeg({ quality: 92 }).toBuffer();
+            console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else if (ratio > MAX_RATIO) {
             const newW  = Math.floor(h * MAX_RATIO);
             const left  = Math.floor((w - newW) / 2);
-            console.log(`[webClient:${this.profileId}] uploadPhoto: aspect ${ratio.toFixed(3)} > 1.91 — cropping ${w}x${h} → ${newW}x${h}`);
+            console.log(`${TAG}   Cropping landscape: ${w}x${h} → ${newW}x${h} (left=${left})`);
             imageBuffer = await sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }).jpeg({ quality: 92 }).toBuffer();
+            console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
+          } else {
+            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed`);
           }
+        } else {
+          console.warn(`${TAG}   ⚠ sharp not available — skipping aspect ratio check`);
         }
       } catch (e: any) {
-        console.warn(`[webClient:${this.profileId}] uploadPhoto: aspect ratio check failed (non-fatal) — ${e?.message}`);
+        console.warn(`${TAG}   Aspect ratio check error (non-fatal): ${e?.message}`);
       }
 
-      // ── Primary path: IgApiClient native publish (Jarvee model) ───────────
-      // ig.publish.photo() handles upload + configure through the library's
-      // native HTTP client with properly signed bodies. This is the correct
-      // approach — both steps use the same client, same session, same TLS stack.
+      // ── Primary path: IgApiClient native publish ────────────────────────────
       if (this.igApiCookies) {
+        console.log(`${TAG} ── PATH A: ig.publish.photo via IgApiClient ──────────`);
         const result = await this._publishViaIgClient(imageBuffer, caption);
-        if (result) return result;
-        console.warn(`[webClient:${this.profileId}] uploadPhoto: IgApiClient publish failed (error="${this._lastConfigureError}") — falling back to hand-rolled rupload+configure`);
+        if (result) {
+          console.log(`${TAG} ✓ PATH A succeeded — media_id=${result}`);
+          return result;
+        }
+        console.error(`${TAG} ✗ PATH A failed — error="${this._lastConfigureError}"`);
+        console.log(`${TAG} Falling back to PATH B (hand-rolled rupload+configure)`);
+      } else {
+        console.warn(`${TAG} Skipping PATH A — no igApiCookies. Going straight to PATH B.`);
       }
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
-      // Used only when igApiCookies is absent. The hand-rolled path uses
-      // plain URLSearchParams (unsigned) and is known to fail on some accounts.
+      console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
       const rurCookie = this.cookieJar.find(c => c.startsWith("rur="));
       if (rurCookie && !this.mobileCookieJar.some(c => c.startsWith("rur="))) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurCookie]);
-        console.log(`[webClient:${this.profileId}] uploadPhoto: added rur to mobileCookieJar from web jar`);
+        console.log(`${TAG}   Copied rur from web cookieJar to mobileCookieJar: ${rurCookie.slice(0, 40)}`);
+      } else if (!rurCookie) {
+        console.warn(`${TAG}   ⚠ No rur in web cookieJar either — shard routing may fail`);
       }
 
       const uploadId = String(Date.now());
+      console.log(`${TAG}   Generated uploadId=${uploadId}`);
       const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
-      if (!confirmedUploadId) return null;
-      return await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
+      if (!confirmedUploadId) {
+        console.error(`${TAG} ✗ PATH B rupload returned null — cannot proceed to configure`);
+        return null;
+      }
+      console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure immediately.`);
+      const mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
+      if (mediaId) {
+        console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
+      } else {
+        console.error(`${TAG} ✗ PATH B configure failed — error="${this._lastConfigureError}"`);
+      }
+      return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
 
@@ -4408,13 +4676,41 @@ export class InstagramWebClient {
    * Uses the rupload binary protocol to /rupload_igvideo/{name}.
    */
   async uploadVideo(videoBuffer: Buffer, caption: string): Promise<string | null> {
+    const TAG = `[UPLOAD:video @${this.username ?? this.profileId}]`;
     return this.timed("UploadVideo", async () => {
+      console.log(`${TAG} ══════════════════════════════════════════════════════`);
+      console.log(`${TAG} START uploadVideo — buf=${videoBuffer.length}B (${(videoBuffer.length/1024/1024).toFixed(2)}MB) captionLen=${caption?.length ?? 0}`);
+      console.log(`${TAG}   igApiCookies present: ${!!this.igApiCookies}`);
+      console.log(`${TAG}   mobileCookieJar: [${this.mobileCookieJar.map(c => c.split("=")[0]).join(", ")}]`);
+      console.log(`${TAG}   proxyUrl: ${this.proxyUrl ?? "NONE"}`);
+
+      // Inspect first 4 bytes of video buffer to verify it's actually MP4
+      const magic = videoBuffer.slice(0, 12).toString("hex");
+      const isMp4 = magic.includes("66747970") || magic.includes("6d6f6f76"); // ftyp or moov
+      console.log(`${TAG}   Video magic bytes: ${magic} — looks like MP4: ${isMp4}`);
+      if (!isMp4) {
+        console.warn(`${TAG}   ⚠ Buffer may not be valid MP4 — rupload may fail. Expected 'ftyp' or 'moov' signature.`);
+      }
+
       const uploadId = String(Date.now());
-      // Step 1 — rupload binary protocol to /rupload_igvideo/{name}
+      console.log(`${TAG}   Generated uploadId=${uploadId}`);
+
+      // Step 1 — rupload binary protocol
       const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
-      if (!confirmedUploadId) return null;
-      // Step 2 — configure fires immediately after rupload with NO apiThrottle delay.
-      return await this._configureViaIgClient(confirmedUploadId, caption, true, undefined);
+      if (!confirmedUploadId) {
+        console.error(`${TAG} ✗ Video rupload failed — cannot proceed to configure`);
+        return null;
+      }
+      console.log(`${TAG}   Video rupload OK — confirmedUploadId=${confirmedUploadId}. Firing configure immediately (no delay).`);
+
+      // Step 2 — configure fires immediately after rupload (no apiThrottle)
+      const mediaId = await this._configureViaIgClient(confirmedUploadId, caption, true, undefined);
+      if (mediaId) {
+        console.log(`${TAG} ✓ uploadVideo succeeded — media_id=${mediaId}`);
+      } else {
+        console.error(`${TAG} ✗ uploadVideo configure failed — error="${this._lastConfigureError}"`);
+      }
+      return mediaId;
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
 
