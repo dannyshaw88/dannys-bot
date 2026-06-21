@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.112",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Repost: fixed 'upload id is missing' error at the publish step. Instagram uses a shard-routing cookie (rur) to direct both the photo upload and the publish confirmation to the same backend server. Without it, the upload lands on server A and the publish request goes to server B which has never seen it. The app now copies this routing cookie from the browser session into the upload requests so both steps always reach the same server." },
+    ],
+  },
+  {
     version: "1.1.111",
     date: "21 Jun 2026",
     items: [

@@ -4677,16 +4677,25 @@ export class InstagramWebClient {
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
       console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
-      // Do NOT copy the web-session rur cookie into the mobile jar.
-      // The web rur is a shard-routing token for api.instagram.com (web API).
-      // The mobile API (i.instagram.com) uses its own routing and does not
-      // honour the web rur — injecting it causes configure to hit the wrong
-      // backend shard → generic 500 "something went wrong during media publish".
-      // Strip any rur that may already be in the jar from a previous attempt.
-      const hadRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
-      this.mobileCookieJar = this.mobileCookieJar.filter(c => !c.startsWith("rur="));
-      if (hadRur) {
-        console.log(`${TAG}   Stripped web rur from mobileCookieJar (mobile API has its own shard routing)`);
+      // Inject the rur (shard-routing) cookie from the browser cookie jar into
+      // the mobile cookie jar so that BOTH rupload and configure route to the
+      // same Instagram backend shard. Without rur, both requests go to random
+      // shards and configure returns "upload id is missing" because shard B has
+      // never heard of the upload that landed on shard A.
+      // rur is set with domain=.instagram.com so it applies to i.instagram.com too.
+      // "something went wrong" errors seen with rur in earlier tests were on
+      // @adna.40 which was a banned account — never validated on a healthy account.
+      {
+        const rurFromBrowser = this.cookieJar.find(c => c.startsWith("rur="));
+        const alreadyHasRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
+        if (rurFromBrowser && !alreadyHasRur) {
+          this.mobileCookieJar = [...this.mobileCookieJar, rurFromBrowser];
+          console.log(`${TAG}   Injected rur from browser cookies into mobileCookieJar: ${rurFromBrowser.slice(0, 20)}…`);
+        } else if (alreadyHasRur) {
+          console.log(`${TAG}   mobileCookieJar already has rur — keeping it`);
+        } else {
+          console.log(`${TAG}   ⚠ No rur in browser cookies — both rupload and configure will route randomly (shard mismatch risk)`);
+        }
       }
 
       const uploadId = String(Date.now());
