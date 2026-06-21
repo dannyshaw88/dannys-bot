@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.106",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "View Timeline Feed: Reel Chance% is now correctly enforced. When the chance roll failed, the count was zeroed but the watch percentage was still passed through, causing all reels in the feed to be watched regardless of the chance setting. Reels are now fully skipped when the chance roll fails." },
+      { category: "Fix", text: "View Timeline Feed: console now logs whether reels are on or off each operation, including the rolled value vs the threshold, making it easy to confirm the chance% is working." },
+    ],
+  },
+  {
     version: "1.1.105",
     date: "21 Jun 2026",
     items: [

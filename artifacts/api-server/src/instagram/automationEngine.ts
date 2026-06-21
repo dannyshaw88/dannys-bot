@@ -2375,16 +2375,25 @@ class AutomationEngine {
         const reelChanceMax = Number(s.reelWatchChanceMax ?? 100);
         const reelChance = randInt(reelChanceMin, reelChanceMax);
         const reelChanceRoll = Math.random() * 100;
+        // reelsEnabled: chance roll must be BELOW the threshold (e.g. roll=12 < threshold=25 → enabled).
+        // If reelChanceMax=0 the feature is fully off — treat as disabled.
         const reelsEnabled = reelChanceMax > 0 && reelChanceRoll < reelChance;
         const reelWatchCountMin = reelsEnabled ? Number(s.reelWatchCountMin ?? 0) : 0;
         const reelWatchCountMax = reelsEnabled ? Number(s.reelWatchCountMax ?? 0) : 0;
+        // When reels are disabled by the chance roll, zero out the watch% too.
+        // viewTimelineFeed treats count max=0 as "no limit" (Infinity), so if we only
+        // zero the count but leave reelWatchPctMax > 0, ALL reels still get watched.
+        // Zeroing pctMax ensures the `isReel && reelWatchPercentMax > 0` guard fires.
+        const effectiveReelPctMax = reelsEnabled ? reelWatchPctMax : 0;
         if (!reelsEnabled && reelWatchPctMax > 0) {
           console.log(`[engine] @${profile.username}: 🎲 Reel chance rolled ${reelChanceRoll.toFixed(1)}% vs threshold ${reelChance}% — skipping reels this op`);
+        } else if (reelsEnabled) {
+          console.log(`[engine] @${profile.username}: 🎲 Reel chance rolled ${reelChanceRoll.toFixed(1)}% vs threshold ${reelChance}% — reels ON (count ${reelWatchCountMin}–${reelWatchCountMax})`);
         }
         let viewed = 0;
         let vtfResult: Awaited<ReturnType<typeof client.viewTimelineFeed>> | null = null;
         try {
-          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax, reelWatchCountMin, reelWatchCountMax);
+          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, effectiveReelPctMax, reelWatchCountMin, reelWatchCountMax);
           if (vtfResult.sessionExpired) {
             const expReason = vtfResult.reason ?? "session expired (login_required) — viewTimelineFeed";
             console.warn(`[engine] @${profile.username}: viewTimelineFeed — session expired, marking logged_out`);
