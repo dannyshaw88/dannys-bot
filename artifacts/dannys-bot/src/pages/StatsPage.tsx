@@ -3,6 +3,7 @@ import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useSelectedProfiles } from "@/contexts/SelectedProfilesContext";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,6 +144,8 @@ function ProfileStatsRow({
   proxies,
   onOpenBrowser,
   onNavigateToProfile,
+  isSelected,
+  onToggleSelect,
 }: {
   profile: Profile;
   visibleCols: Record<ColKey, boolean>;
@@ -152,6 +155,8 @@ function ProfileStatsRow({
   statsData: any[];
   onOpenBrowser: () => void;
   onNavigateToProfile: () => void;
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }) {
   const { data: tools } = useQuery<Tool[]>({ queryKey: [`/api/profiles/${profile.id}/tools`] });
   const updateToolMutation = useUpdateTool();
@@ -181,6 +186,16 @@ function ProfileStatsRow({
             <User className="w-3.5 h-3.5 text-primary" />
           </div>
           <span className="truncate">{displayName}</span>
+        </button>
+      </td>
+
+      {/* Select column */}
+      <td className="px-3 py-3 text-center w-[80px]">
+        <button
+          onClick={onToggleSelect}
+          className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isSelected ? "text-sky-400 hover:text-sky-300" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {isSelected ? "De-select" : "Select"}
         </button>
       </td>
 
@@ -476,9 +491,13 @@ export function StatsPage() {
     return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
 
+  const { selectedProfileIds, toggleProfileId } = useSelectedProfiles();
+
   const makeRowProps = (profile: Profile) => ({
     onOpenBrowser: () => openWindow(profile.id, profile.username ?? "", profile.userAgentEmbedded ?? ""),
     onNavigateToProfile: () => setLocation(`/profiles/${profile.id}`),
+    isSelected: selectedProfileIds.includes(profile.id),
+    onToggleSelect: () => toggleProfileId(profile.id),
   });
 
   // ── Metrics tab state ────────────────────────────────────────────────────────
@@ -628,16 +647,27 @@ export function StatsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-0">
-        <TabsList className="w-fit mb-3">
-          <TabsTrigger value="performance" className="flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5" />
-            Tool Performance
-          </TabsTrigger>
-          <TabsTrigger value="metrics" className="flex items-center gap-1.5">
-            <BarChart2 className="w-3.5 h-3.5" />
-            Metrics
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-3 mb-3">
+          <TabsList className="w-fit">
+            <TabsTrigger value="performance" className="flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5" />
+              Tool Performance
+            </TabsTrigger>
+            <TabsTrigger value="metrics" className="flex items-center gap-1.5">
+              <BarChart2 className="w-3.5 h-3.5" />
+              Metrics
+            </TabsTrigger>
+          </TabsList>
+          {activeTab === "metrics" && selectedProfile && (
+            <button
+              onClick={() => setLocation(`/profiles/${selectedProfile.id}`)}
+              className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              Account Settings
+            </button>
+          )}
+        </div>
 
         {/* ── Tool Performance Tab ────────────────────────────────────────────── */}
         <TabsContent value="performance" className="mt-0">
@@ -739,9 +769,10 @@ export function StatsPage() {
             </CardHeader>
             <CardContent className="p-0 flex flex-col">
               <div className="overflow-x-auto">
-                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
+                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + 80 + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
                   <colgroup>
                     <col style={{ width: colWidths.account }} />
+                    <col style={{ width: 80 }} />
                     {statColOrder.filter(k => visibleCols[k]).map(k => <col key={k} style={{ width: colWidths[k] }} />)}
                   </colgroup>
                   <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
@@ -750,6 +781,9 @@ export function StatsPage() {
                         <button onClick={() => cycleSort("account")} className="flex items-center text-foreground hover:text-primary transition-colors">
                           Account Name
                         </button>
+                      </th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wide text-center w-[80px] text-[10px] text-muted-foreground">
+                        Select
                       </th>
                       {statColOrder.filter(key => visibleCols[key]).map(key => {
                         const isDragTarget = statDragOverCol === key;

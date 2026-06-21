@@ -25,6 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
+import { useSelectedProfiles } from "@/contexts/SelectedProfilesContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 import { api } from "@shared/routes";
@@ -348,7 +349,8 @@ export function ProfilesPage() {
   const [profDragOverCol, setProfDragOverCol] = useState<string | null>(null);
   useScrollRestore("profiles", scrollBodyRef, !isLoading);
 
-  const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
+  const { selectedProfileIds, setSelectedProfileIds, clearSelectedProfileIds } = useSelectedProfiles();
+  useEffect(() => { return () => { clearSelectedProfileIds(); }; }, [clearSelectedProfileIds]);
   const isDragSelecting = useRef(false);
   const dragAddMode = useRef(true);
   const preStoppedStatus = useRef<Map<number, string>>(new Map());

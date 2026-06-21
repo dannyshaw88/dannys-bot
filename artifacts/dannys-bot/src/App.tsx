@@ -21,6 +21,7 @@ import { ToolsPage } from "@/pages/ToolsPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
+import { SelectedProfilesProvider } from "@/contexts/SelectedProfilesContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { EquinoxBot } from "@/components/EquinoxBot";
@@ -322,9 +323,11 @@ function App() {
           <NavigationHistoryProvider>
             <SidebarSlotProvider>
               <BrowserWindowsProvider>
-                <LicenseGate>
-                  <AppInner />
-                </LicenseGate>
+                <SelectedProfilesProvider>
+                  <LicenseGate>
+                    <AppInner />
+                  </LicenseGate>
+                </SelectedProfilesProvider>
               </BrowserWindowsProvider>
             </SidebarSlotProvider>
           </NavigationHistoryProvider>

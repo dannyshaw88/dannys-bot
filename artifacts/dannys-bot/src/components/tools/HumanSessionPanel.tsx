@@ -180,7 +180,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "hf_stopMinutes", label: "Stop duration", settingKeys: ["follow:stopOnBlockMinutes"] },
       ]},
       { key: "hs_followSources", label: "Target Sources", description: "Copy all follow tool target sources to other profiles — adds to their existing sources" },
-      { key: "hs_clearFollowSources", label: "Clear Sources First", description: "Remove all existing sources from destination follow tools before copying" },
     ]},
     { label: "Unfollow Tool Settings", options: [
       { key: "hs_unfollowEnabled", label: "Unfollow Tool Start / Stop", description: "Copy the Unfollow Tool enabled checkbox to other profiles" },
@@ -244,9 +243,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const copyAutoReply        = expandedKeys.includes("hs_autoReplyEnabled");
     const copyContactUsers     = expandedKeys.includes("hs_contactUsersEnabled");
     const copyFollowSources    = expandedKeys.includes("hs_followSources");
-    const clearFollowSources   = expandedKeys.includes("hs_clearFollowSources");
 
-    const SENTINEL_KEYS = ["startStop", "hs_followEnabled", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources", "hs_clearFollowSources"];
+    const SENTINEL_KEYS = ["startStop", "hs_followEnabled", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources"];
     const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k) && !k.includes(":"));
 
     const willRandomise = expandedKeys.includes("randomiseTiming");
@@ -316,30 +314,23 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     }
 
     // ── Copy follow tool target sources ───────────────────────────────────────
-    if ((copyFollowSources || clearFollowSources) && followTool) {
-      const sourcesRes = copyFollowSources
-        ? await fetch(`/api/tools/${followTool.id}/sources`, { credentials: "include" })
-        : null;
+    if (copyFollowSources && followTool) {
+      const sourcesRes = await fetch(`/api/tools/${followTool.id}/sources`, { credentials: "include" });
       const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
         sourcesRes?.ok ? await sourcesRes.json() : [];
-      const payload = copyFollowSources && currentSources.length > 0
+      const payload = currentSources.length > 0
         ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
         : [];
 
-      await Promise.all(
-        targetIds.map(async profileId => {
-          const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
-          if (!toolsRes.ok) return;
-          const profileTools: { id: number; type: string }[] = await toolsRes.json();
-          const targetFollowTool = profileTools.find(t => t.type === "follow");
-          if (!targetFollowTool) return;
+      if (payload.length > 0) {
+        await Promise.all(
+          targetIds.map(async profileId => {
+            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+            if (!toolsRes.ok) return;
+            const profileTools: { id: number; type: string }[] = await toolsRes.json();
+            const targetFollowTool = profileTools.find(t => t.type === "follow");
+            if (!targetFollowTool) return;
 
-          if (clearFollowSources) {
-            await fetch(`/api/tools/${targetFollowTool.id}/sources`, { method: "DELETE", credentials: "include" });
-            queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetFollowTool.id] });
-          }
-
-          if (payload.length > 0) {
             const importRes = await fetch(`/api/tools/${targetFollowTool.id}/sources/import`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -351,9 +342,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             } else {
               console.error(`[copySettings] Sources import failed for profile ${profileId}: ${importRes.status}`);
             }
-          }
-        })
-      );
+          })
+        );
+      }
     }
 
     // ── Copy follow tool settings (prefixed keys "follow:...") ───────────────

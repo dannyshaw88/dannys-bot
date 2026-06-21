@@ -69,6 +69,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.99",
+    date: "21 Jun 2026",
+    items: [
+      { category: "New", text: "Copy Settings dialog: each settings group now has a master checkbox in its header — tick it to select all items in that group at once, or untick to deselect them all." },
+      { category: "Fix", text: "Copy Settings dialog: Group, Status and TrustScore column headers are now centred over their columns, and group values in the account list are centred to match." },
+      { category: "Fix", text: "Copy Settings dialog: TrustScore badge label (e.g. Noob, Warmup) is now centred inside the badge." },
+      { category: "Fix", text: "Human Sessions — Copy Settings: removed the 'Clear Sources First' option from Follow Tool Settings." },
+      { category: "New", text: "Accounts page: selecting accounts now persists across the app — selections made here carry over to the Statistics page tool table." },
+      { category: "New", text: "Statistics page: Account Settings button added next to the Metrics tab — opens the settings page for the currently selected account." },
+      { category: "Fix", text: "Account Settings: API Controls min/max ms input fields narrowed so the layout is tighter." },
+    ],
+  },
+  {
     version: "1.1.98",
     date: "21 Jun 2026",
     items: [

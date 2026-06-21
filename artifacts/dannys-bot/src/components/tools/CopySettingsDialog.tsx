@@ -499,7 +499,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               {([ ["name", "Name", "flex-1"], ["status", "Status", "w-[72px]"], ["group", "Group", "w-[88px]"] ] as [SortBy, string, string][]).map(([key, label, cls]) => {
                 const active = sortBy === key;
                 const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-                const isCentered = key === "status";
+                const isCentered = key !== "name";
                 return (
                   <button
                     key={key}
@@ -570,8 +570,8 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                         </span>
                       )}
                     </div>
-                    <div className="w-[88px] shrink-0 truncate text-[10px] text-muted-foreground">
-                      {groupLabel}
+                    <div className="w-[88px] shrink-0 flex items-center justify-center text-[10px] text-muted-foreground text-center">
+                      <span className="truncate max-w-full">{groupLabel}</span>
                     </div>
                     <div className="w-[88px] shrink-0 flex items-center justify-center">
                       {tsLevel ? (
@@ -589,7 +589,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                           }}
                         >
                           <tsLevel.icon size={10} color={tsLevel.text} fill={tsLevel.text} strokeWidth={2} style={{ flexShrink: 0 }} />
-                          <span style={{ fontSize: 10, fontWeight: 700, color: tsLevel.text, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: tsLevel.text, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0, textAlign: "center" }}>
                             {tsLevel.label}
                           </span>
                         </span>
@@ -640,9 +640,45 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             {filteredOptionGroups.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-6">No settings match.</p>
             )}
-            {filteredOptionGroups.map(group => (
+            {filteredOptionGroups.map(group => {
+              const groupLeafKeys: string[] = [];
+              for (const opt of group.options) {
+                if (opt.subOptions?.length) opt.subOptions.forEach(s => groupLeafKeys.push(s.key));
+                else groupLeafKeys.push(opt.key);
+              }
+              const groupSelCount = groupLeafKeys.filter(k => selected.has(k)).length;
+              const groupAllSel   = groupSelCount === groupLeafKeys.length && groupSelCount > 0;
+              const groupIndeter  = groupSelCount > 0 && groupSelCount < groupLeafKeys.length;
+
+              const toggleGroupAll = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                setSelected(prev => {
+                  const next = new Set(prev);
+                  if (groupAllSel) {
+                    groupLeafKeys.forEach(k => next.delete(k));
+                  } else {
+                    groupLeafKeys.forEach(k => next.add(k));
+                  }
+                  return next;
+                });
+                if (!groupAllSel) {
+                  setExpandedOptions(prev => {
+                    const n = new Set(prev);
+                    group.options.forEach(o => { if (o.subOptions?.length) n.add(o.key); });
+                    return n;
+                  });
+                }
+              };
+
+              return (
               <div key={group.label} className="rounded-lg border border-border overflow-hidden">
-                <div className="px-4 py-2 bg-muted/30 border-b border-border">
+                <div className="px-4 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
+                  <Checkbox
+                    checked={groupIndeter ? "indeterminate" : groupAllSel}
+                    onCheckedChange={() => {}}
+                    onClick={toggleGroupAll}
+                    className="shrink-0"
+                  />
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</span>
                 </div>
                 <div className="divide-y divide-border/40">
@@ -737,7 +773,8 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
             </div>
           </div>
         </div>

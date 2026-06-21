@@ -1409,11 +1409,11 @@ export function ProfileDetailsPage() {
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[110px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[110px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
                             <Button
