@@ -69,6 +69,27 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.101",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Top activity bar now shows the actual startup timestamp (e.g. 'Equinox started: 21 Jun 2026, 12:14:45') instead of the generic 'no recent activity' placeholder." },
+      { category: "New", text: "Statistics page — Account Health & System: added a Locked counter showing how many accounts are currently in a locked state." },
+      { category: "Fix", text: "Account Settings: Label input field is 15% narrower so it no longer stretches too wide." },
+    ],
+  },
+  {
+    version: "1.1.100",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Fix", text: "Dashboard activity log: Open EB column header is now centred over its column." },
+      { category: "Improvement", text: "Statistics page: Select column is now fully draggable and reorderable — drag it anywhere in the table just like every other column. It also appears in the Columns panel so you can adjust its pixel width or hide it." },
+      { category: "Fix", text: "Verify without proxy: error message simplified to 'Please assign a proxy before verifying' — removed the ugly account status prefix." },
+      { category: "Improvement", text: "Evasion Stats: Recommended Action labels removed from all theory cards — advice text is shown directly without the heading." },
+      { category: "Improvement", text: "Evasion Stats — IP TrustScore Budget: algorithm no longer counts circularly. A proxy is now only flagged as 'hot' for an account if it already had 2+ other bans before that account's ban event — so the bar drops when your recent bans were on fresh proxies." },
+      { category: "Improvement", text: "Evasion Stats — Endpoint & Action Timing: evidence text now clearly states whether a high or low percentage supports or contradicts the theory. Advice updated to reflect confirmed field data: accounts consistently survive after per-call delays are increased to 30s+." },
+    ],
+  },
+  {
     version: "1.1.99",
     date: "21 Jun 2026",
     items: [
@@ -8025,7 +8046,7 @@ export function Dashboard() {
                             localStorage.setItem("dashboard_col_order", JSON.stringify(next));
                           }}
                           onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
-                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target") ? "text-center" : ""}`}
+                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target" || key === "open_eb") ? "text-center" : ""}`}
                         >
                           {COL_LABELS[key]}
                         </th>

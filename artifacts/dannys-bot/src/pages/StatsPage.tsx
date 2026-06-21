@@ -20,14 +20,14 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, Monitor, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Globe,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Globe, Lock,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
-type ColKey = StatKey | "open_eb" | "trustscore" | "status" | "proxy_ip";
+type ColKey = StatKey | "open_eb" | "trustscore" | "status" | "proxy_ip" | "select";
 
 const STATUS_DISPLAY: Record<string, { label: string; pill: string }> = {
   pending:              { label: "Pending",         pill: "bg-slate-50 text-slate-600 border-slate-200" },
@@ -124,16 +124,16 @@ function cleanEpName(name: string): string {
 }
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
-  account: 160, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
+  account: 160, select: 80, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
-  status: true, follow: true, unfollow: true, dm: true, like: true,
+  select: true, status: true, follow: true, unfollow: true, dm: true, like: true,
   comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true, proxy_ip: true,
 };
 
-const DEFAULT_STAT_COL_ORDER: ColKey[] = ["status", "open_eb", "trustscore", "proxy_ip", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
+const DEFAULT_STAT_COL_ORDER: ColKey[] = ["select", "status", "open_eb", "trustscore", "proxy_ip", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
 
 function ProfileStatsRow({
   profile,
@@ -189,18 +189,20 @@ function ProfileStatsRow({
         </button>
       </td>
 
-      {/* Select column */}
-      <td className="px-3 py-3 text-center w-[80px]">
-        <button
-          onClick={onToggleSelect}
-          className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isSelected ? "text-sky-400 hover:text-sky-300" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          {isSelected ? "De-select" : "Select"}
-        </button>
-      </td>
-
       {/* All non-account columns — centred */}
       {statColOrder.filter(key => visibleCols[key]).map(key => {
+        if (key === "select") {
+          return (
+            <td key="select" style={{ width: colWidths.select }} className="px-3 py-3 text-center">
+              <button
+                onClick={onToggleSelect}
+                className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isSelected ? "text-sky-400 hover:text-sky-300" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {isSelected ? "De-select" : "Select"}
+              </button>
+            </td>
+          );
+        }
         if (key === "status") {
           return (
             <td key="status" style={{ width: colWidths.status }} className="px-4 py-3 text-center">
@@ -477,6 +479,7 @@ export function StatsPage() {
   const colGroups: [string, string][] = [
     ["account", "Account"],
     ...statColOrder.map(k => {
+      if (k === "select") return ["select", "Select"] as [string, string];
       if (k === "status") return ["status", "Status"] as [string, string];
       if (k === "open_eb") return ["open_eb", "Open EB"] as [string, string];
       if (k === "trustscore") return ["trustscore", "TrustScore"] as [string, string];
@@ -630,6 +633,7 @@ export function StatsPage() {
   const bannedLifetime = getStat("banned", "lifetime");
   const captchaToday    = getStat("captcha", today);
   const captchaLifetime = getStat("captcha", "lifetime");
+  const lockedCount = (profiles ?? []).filter(p => p.accountStatus === "locked").length;
 
   return (
     <AppLayout>
@@ -703,7 +707,8 @@ export function StatsPage() {
                             let icon: React.ReactNode;
                             let label: string;
                             let color: string;
-                            if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
+                            if (key === "select") { icon = null; label = "Select"; color = "text-foreground"; }
+                            else if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
                             else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
                             else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
                             else if (key === "proxy_ip") { icon = <Globe className="w-3.5 h-3.5" />; label = "Proxy IP"; color = "text-muted-foreground"; }
@@ -769,10 +774,9 @@ export function StatsPage() {
             </CardHeader>
             <CardContent className="p-0 flex flex-col">
               <div className="overflow-x-auto">
-                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + 80 + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
+                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
                   <colgroup>
                     <col style={{ width: colWidths.account }} />
-                    <col style={{ width: 80 }} />
                     {statColOrder.filter(k => visibleCols[k]).map(k => <col key={k} style={{ width: colWidths[k] }} />)}
                   </colgroup>
                   <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
@@ -782,13 +786,16 @@ export function StatsPage() {
                           Account Name
                         </button>
                       </th>
-                      <th className="px-3 py-3 font-bold uppercase tracking-wide text-center w-[80px] text-[10px] text-muted-foreground">
-                        Select
-                      </th>
                       {statColOrder.filter(key => visibleCols[key]).map(key => {
                         const isDragTarget = statDragOverCol === key;
                         let thContent: React.ReactNode;
-                        if (key === "status") {
+                        if (key === "select") {
+                          thContent = (
+                            <span className="inline-flex items-center justify-center text-[10px] uppercase tracking-wide font-bold text-foreground">
+                              Select
+                            </span>
+                          );
+                        } else if (key === "status") {
                           thContent = (
                             <span className="inline-flex items-center gap-1 text-foreground">
                               <ShieldAlert className="w-3 h-3" />
@@ -1217,6 +1224,15 @@ export function StatsPage() {
                         </span>
                         <span className="text-2xl font-bold tabular-nums text-foreground">{bannedToday.toLocaleString()}</span>
                         <span className="text-[10px] text-muted-foreground">today · {bannedLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Locked accounts */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 flex items-center gap-1">
+                          <Lock className="w-3 h-3" />Locked
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{lockedCount.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">accounts currently locked</span>
                       </div>
 
                     </div>

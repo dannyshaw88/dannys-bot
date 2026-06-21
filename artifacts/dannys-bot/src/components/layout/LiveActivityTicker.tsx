@@ -111,8 +111,11 @@ export function LiveActivityTicker() {
   const isReady = activities !== undefined;
   const latest = activities?.[0];
   const hasRealActivity = latest && latest.profileId !== 0;
+  const isStartupEvent = latest?.profileId === 0 && latest?.action === "server_started";
 
-  const label = hasRealActivity ? buildLabel(latest!, profiles) : null;
+  const label = hasRealActivity
+    ? buildLabel(latest!, profiles)
+    : (isStartupEvent ? latest!.detail : null);
 
   const ERROR_ACTIONS = new Set([
     "follow_blocked",

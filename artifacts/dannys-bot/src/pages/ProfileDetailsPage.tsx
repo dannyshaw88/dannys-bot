@@ -1060,7 +1060,7 @@ export function ProfileDetailsPage() {
                 </span>
               </div>
             </div>
-            <div className="max-w-[40%]">
+            <div className="max-w-[34%]">
               <Input
                 placeholder="e.g. @Account1"
                 value={formData.accountLabel}

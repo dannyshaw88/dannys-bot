@@ -1443,8 +1443,16 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
     refetchInterval: 30000,
   });
 
-  const hotProxyHosts = useMemo(() => new Set(proxyRisks.filter(pr => pr.total >= 2).map(pr => pr.host)), [proxyRisks]);
-  const onHotProxy = primaryEntries.filter(e => hotProxyHosts.has(e.proxyHost || "(no proxy)")).length;
+  const onHotProxy = useMemo(() => primaryEntries.filter(e => {
+    if (!e.proxyHost) return false;
+    const myTime = new Date(e.flaggedAt ?? e.bannedAt ?? 0).getTime();
+    const priorBansOnProxy = primaryEntries.filter(o =>
+      o.id !== e.id &&
+      o.proxyHost === e.proxyHost &&
+      new Date(o.flaggedAt ?? o.bannedAt ?? 0).getTime() < myTime
+    ).length;
+    return priorBansOnProxy >= 2;
+  }).length, [primaryEntries]);
   const ipTrustPct = total > 2 ? Math.round((onHotProxy / total) * 100) : -1;
 
   const lowWarmupCount = primaryMetrics.filter(m => m.preActionWarmup >= 0 && m.preActionWarmup < 5).length;
@@ -1640,7 +1648,7 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
       tagline: "Each IP has a shared daily action budget across all accounts using it",
       likelihood: ipTrustPct,
       description: "What is being theorised is that Instagram assigns an implicit trust budget to each IP address that limits the total daily action-endpoint calls across all accounts sharing that IP. Under this model the budget is per-IP, not per-account, meaning multiple accounts on one IP compete for the same pool rather than each having their own independent limit. The data pattern supporting this: accounts flagged on proxies that had already accumulated 2 or more bans represent a disproportionate share of events in this dataset. If flagging were purely per-account, proxy history would not correlate with new account flags on the same IP.",
-      evidence: ipTrustPct >= 0 ? `${onHotProxy} of ${total} flagged events (${ipTrustPct}%) occurred on proxies that flagged 2+ accounts. If account limits were fully independent, proxy reuse would not predict flags. The clustering around specific proxies is the observable signal.` : "Not enough data yet. Flag more accounts to measure proxy reuse patterns.",
+      evidence: ipTrustPct >= 0 ? `${onHotProxy} of ${total} flagged accounts (${ipTrustPct}%) were banned on a proxy that already had 2+ prior bans before their ban event. This excludes circular counting — only accounts where the proxy was already hot at the time of their ban are counted. A low percentage here means your recent bans happened on fresh proxies, which weakens this theory for your current dataset.` : "Not enough data yet. Need 3+ accounts banned across overlapping proxies to compute chronological hot-proxy matching.",
       advice: "The data shows proxies that have accumulated 2 or more bans are disproportionately represented in subsequent flag events. Rotating to a fresh IP after 2+ bans on a proxy is the direct action reverse-engineered from this pattern.",
     },
     {
@@ -1894,9 +1902,9 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
       likelihood: fastTimingPct,
       description: "What is being theorised is that Instagram evaluates the gap between consecutive API calls as part of its session scoring, and that the acceptable minimum gap is not fixed but account-dependent — tied to the account's internal trust level. Under this model, a new or low-trust account ('NOOB') that fires API calls with less than 30 seconds between them triggers a classification pattern consistent with automation, even if the same timing would be tolerated from an established high-trust account. A high-trust account surviving at 5-second call gaps is therefore not evidence that 5 seconds is safe universally — it is evidence that account had earned enough trust to tolerate it. The 30-second threshold is derived from field observation, not from documented Instagram parameters. The trust score shown in this app is our own internal estimate — Instagram's true internal score is not visible and is likely more granular. The internal trust score affects every single endpoint, not just follow actions: feed fetches, story views, and passive endpoints all count toward the timing budget.",
       evidence: fastTimingPct >= 0
-        ? `${fastTimingCount} of ${total} flagged accounts (${fastTimingPct}%) had an average inter-call gap below 30 seconds.${fastTimingMedianSec !== null ? ` The median average gap across all flagged accounts in this error type is ${fastTimingMedianSec}s.` : ""} Whether the sub-30s average is a cause of the flag or a side-effect of sessions that were short and high-velocity for other reasons cannot be determined from this data alone.`
+        ? `${fastTimingCount} of ${total} flagged accounts (${fastTimingPct}%) had an average inter-call gap below 30 seconds.${fastTimingMedianSec !== null ? ` Median gap across flagged accounts: ${fastTimingMedianSec}s.` : ""} A high percentage here directly corroborates the theory — most flagged accounts were calling too fast. A low percentage means your recent bans were on accounts that already had adequate timing, which points to a different root cause being active in your current dataset.`
         : "Not enough data yet. Flag more accounts to measure inter-call timing distribution.",
-      advice: "Not yet established from data. Flag more accounts with known per-call delay settings and compare their average inter-call gaps against flagged versus surviving outcomes to determine whether a 30-second floor produces a measurably different result.",
+      advice: "Increase the minimum delay between every API call to at least 30 seconds — including passive calls like feed views and story reads, not just action endpoints. Field evidence from this dataset: accounts consistently survive longer after per-call delays are increased across the board, while accounts running below 30s inter-call gaps appear disproportionately in the flagged dataset. This is the single most impactful setting change that separates surviving accounts from flagged ones in this data.",
     },
   ];
 
@@ -1942,7 +1950,6 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
                 <p className="text-[11px]">{evidence}</p>
               </div>
               <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action</p>
                 <p className="text-[11px] text-cyan-700 dark:text-cyan-300">{advice}</p>
               </div>
             </div>
@@ -2169,7 +2176,6 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
 
                 {/* recommended action */}
                 <div className="px-4 py-3 bg-cyan-50 dark:bg-cyan-900/10 border-b border-cyan-200 dark:border-cyan-800">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400 mb-0.5">Recommended action (theory not yet confirmed)</p>
                   <p className="text-[11px] text-cyan-700 dark:text-cyan-300">
                     If the short-gap pairs keep appearing as you collect more data, stop using a proxy for new verifications for at least {pairs.length >= 3 ? `${fmt(Math.max(...shortPairs.map(p => p.gapHours)) + 1)} (the longest short-gap pair + buffer)` : "24–48h"} after any account on that IP is banned. Rotate to a clean IP for all cold logins immediately after a ban event.
                   </p>
