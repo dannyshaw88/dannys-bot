@@ -73,6 +73,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_order",      label: "Execution order",                   settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
         { key: "vtf_chance",     label: "Skip chance %",       settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
         { key: "vtf_like_pct",    label: "% posts to like",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
+        { key: "vtf_reel_count",  label: "Reels/Op (how many reels to watch)", settingKeys: ["reelWatchCountMin","reelWatchCountMax"] },
         { key: "vtf_reel_view",   label: "% of each reel to watch",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
         { key: "vtf_like_delay",  label: "Delay between likes in sec",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
         { key: "vtf_save_media",  label: "Save liked media",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
@@ -816,8 +817,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {/* Reels per operation — how many reels get ClipsViewed per session */}
                 <div className="flex items-center gap-1.5">
-                  <Film className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
                   <Label className="text-xs text-muted-foreground uppercase">Min</Label>
                   <NumField min={0} max={50} className="w-12 h-7 text-xs"
                     value={settings.reelWatchCountMin ?? 1}
@@ -828,6 +827,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     value={settings.reelWatchCountMax ?? 3}
                     onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
                   />
+                  <Film className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
                 </div>
                 <div className="h-4 w-px bg-border/60 shrink-0" />
                 {/* Reel watch percentage */}
