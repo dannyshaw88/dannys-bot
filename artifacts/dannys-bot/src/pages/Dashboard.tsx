@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.104",
+    date: "21 Jun 2026",
+    items: [
+      { category: "Improvement", text: "View Timeline Feed: Reel Chance%, Reels/Op, and Reel View% are now on a single row instead of two separate rows." },
+      { category: "Fix", text: "Export API Calls: failed verify entries now show a shorter message (e.g. 'Failed, no session cookie after submission') instead of the longer format that included the status label and username." },
+      { category: "Fix", text: "Export API Calls: profile sync rows now show 'Profile Synced' instead of the verbose 'followers=0 following=0 posts=0 Synced' format." },
+    ],
+  },
+  {
     version: "1.1.103",
     date: "21 Jun 2026",
     items: [
@@ -8104,7 +8113,7 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    displayFeed.slice(feedPage * 50, (feedPage + 1) * 50).map((item) => {
+                    displayFeed.slice(feedPage * 100, (feedPage + 1) * 100).map((item) => {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
@@ -8181,10 +8190,10 @@ export function Dashboard() {
               <span className="text-xs text-muted-foreground tabular-nums">
                 {displayFeed.length === 0
                   ? "No rows"
-                  : `${(feedPage * 50 + 1).toLocaleString()}–${Math.min((feedPage + 1) * 50, displayFeed.length).toLocaleString()} of ${displayFeed.length.toLocaleString()}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
+                  : `${(feedPage * 100 + 1).toLocaleString()}–${Math.min((feedPage + 1) * 100, displayFeed.length).toLocaleString()} of ${displayFeed.length.toLocaleString()}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
               </span>
               {(() => {
-                const totalFeedPages = Math.max(1, Math.ceil(displayFeed.length / 50));
+                const totalFeedPages = Math.max(1, Math.ceil(displayFeed.length / 100));
                 return (
                   <div className="flex items-center gap-0.5">
                     <button
@@ -8223,8 +8232,8 @@ export function Dashboard() {
                       )}
                     </div>
                     <button
-                      onClick={() => setFeedPage(p => Math.min(Math.max(0, Math.ceil(displayFeed.length / 50) - 1), p + 1))}
-                      disabled={feedPage >= Math.ceil(displayFeed.length / 50) - 1 || displayFeed.length === 0}
+                      onClick={() => setFeedPage(p => Math.min(Math.max(0, Math.ceil(displayFeed.length / 100) - 1), p + 1))}
+                      disabled={feedPage >= Math.ceil(displayFeed.length / 100) - 1 || displayFeed.length === 0}
                       className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Next page"
                     >

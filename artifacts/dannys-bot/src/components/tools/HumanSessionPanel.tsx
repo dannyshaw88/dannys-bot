@@ -817,15 +817,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   </div>
                 </div>
               </div>
-              {/* Reel Chance% row — gate before Reels/Op */}
+              {/* Reel Chance% | Reels/Op | Reel View% — all on one row */}
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
-                <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel Chance%</span>
-              </div>
-              {/* Reels/Op count + Reel View% row */}
-              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {/* Reels per operation — how many reels get ClipsViewed per session */}
+                {/* Reel Chance% */}
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
+                  <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel Chance%</span>
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                {/* Reels/Op */}
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground uppercase">Min</Label>
                   <NumField min={0} max={50} className="w-16 h-7 text-xs"
@@ -841,7 +842,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
                 </div>
                 <div className="h-4 w-px bg-border/60 shrink-0" />
-                {/* Reel watch percentage */}
+                {/* Reel View% */}
                 <div className="flex items-center gap-1.5">
                   {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
                   <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />

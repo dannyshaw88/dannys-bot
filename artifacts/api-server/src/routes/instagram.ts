@@ -1913,7 +1913,7 @@ export async function registerInstagramRoutes(
         username: profile.username,
         operationName: "VerifyAccount",
         date: new Date().toISOString(),
-        message: `✗ Failed — ${result.accountStatus ?? "failed"}: ${result.message ?? ""}`,
+        message: `✗ Failed, ${(result.message ?? "").replace(/^@\S+\s*[—–-]+\s*(Login failed\s*[—–-]+\s*)?/i, "")}`,
         source: "System",
         durationMs: 0,
       }).catch(() => {});
