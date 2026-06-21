@@ -69,6 +69,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.102",
+    date: "21 Jun 2026",
+    items: [
+      { category: "New", text: "Bulk Import: clicking 'Sort & Add' now parses and adds all accounts in a single step — no separate 'Add to Accounts' button needed." },
+      { category: "New", text: "Bulk Import: newly imported accounts are automatically assigned the Noob trust score level." },
+      { category: "Fix", text: "Bulk Import: token format hint text is larger and easier to read." },
+      { category: "Fix", text: "Proxy Manager: the 'Assign account' dropdown now appears at the top of each proxy's account list instead of the bottom." },
+      { category: "Fix", text: "Proxy Manager: column header titles are explicitly centred over their respective columns." },
+    ],
+  },
+  {
     version: "1.1.101",
     date: "21 Jun 2026",
     items: [

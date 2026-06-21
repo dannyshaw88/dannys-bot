@@ -262,6 +262,30 @@ function ProxyRow({
 
       {/* Account sub-rows — aligned under the same column grid */}
       <div className="border-b border-border/40 bg-accent/10">
+        {/* Assign dropdown — at the top, under the proxy field */}
+        {unassignedProfiles.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1">
+            <div className="flex items-center gap-2 flex-1 justify-center">
+              <div className="shrink-0" style={{ width: colWidths.proxy }}>
+                <select
+                  className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                  value=""
+                  onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
+                  disabled={assignPending}
+                >
+                  <option value="" className="text-muted-foreground">+ Assign account…</option>
+                  {unassignedProfiles.map(p => (
+                    <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
+                  ))}
+                </select>
+              </div>
+              {colOrder.filter(c => c !== "proxy").map(col => (
+                <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />
+              ))}
+              <div className="shrink-0" style={{ width: ACTIONS_COL_WIDTH }} />
+            </div>
+          </div>
+        )}
         {assigned.map(profile => (
           <div key={profile.id} className="flex items-center gap-2 px-3 py-1 group hover:bg-accent/30 transition-colors">
             <div className="flex items-center gap-2 flex-1 justify-center">
@@ -299,30 +323,6 @@ function ProxyRow({
             </div>
           </div>
         ))}
-        {/* Assign dropdown — left-aligned under proxy column */}
-        {unassignedProfiles.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1">
-            <div className="flex items-center gap-2 flex-1 justify-center">
-              <div className="shrink-0" style={{ width: colWidths.proxy }}>
-                <select
-                  className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-                  value=""
-                  onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
-                  disabled={assignPending}
-                >
-                  <option value="" className="text-muted-foreground">+ Assign account…</option>
-                  {unassignedProfiles.map(p => (
-                    <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
-                  ))}
-                </select>
-              </div>
-              {colOrder.filter(c => c !== "proxy").map(col => (
-                <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />
-              ))}
-              <div className="shrink-0" style={{ width: ACTIONS_COL_WIDTH }} />
-            </div>
-          </div>
-        )}
         {assigned.length === 0 && unassignedProfiles.length === 0 && (
           <div className="flex items-center gap-2 px-3 py-1">
             <div className="flex items-center gap-2 flex-1 justify-center">
@@ -807,12 +807,12 @@ export function ProxiesPage() {
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
             const sortable = col === "proxy" || col === "username" || col === "status" || col === "accounts";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center text-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center cursor-default whitespace-nowrap ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center text-center cursor-default whitespace-nowrap ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );

@@ -10,6 +10,7 @@ import {
   Eye, EyeOff, ClipboardPaste,
 } from "lucide-react";
 
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type RowStatus = "pending" | "adding" | "added" | "error";
@@ -125,22 +126,6 @@ export function BulkImportPage() {
   const createProfileMutation = useCreateProfile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Parse ──────────────────────────────────────────────────────────────────
-
-  const handleParse = useCallback(() => {
-    if (!rawText.trim()) {
-      toast({ title: "Nothing to parse", description: "Paste account data above first.", variant: "destructive" });
-      return;
-    }
-    const parsed = parseRaw(rawText);
-    if (parsed.length === 0) {
-      toast({ title: "No accounts found", description: "Check your format: username:password:2fasecret", variant: "destructive" });
-      return;
-    }
-    setRows(parsed);
-    setSelectedIds(new Set(parsed.map(r => r.id)));
-    toast({ title: `Parsed ${parsed.length} account${parsed.length !== 1 ? "s" : ""}`, description: "Review and add to Accounts." });
-  }, [rawText]);
 
   // ── Selection ──────────────────────────────────────────────────────────────
 
@@ -203,6 +188,7 @@ export function BulkImportPage() {
           userAgentEmbedded: ua.embedded,
         });
 
+        localStorage.setItem(`trustscore_v2_${created.id}`, "noob");
         setRows(prev => prev.map(r => r.id === id ? { ...r, status: "added", profileId: created.id } : r));
         setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
         successCount++;
@@ -224,17 +210,64 @@ export function BulkImportPage() {
     }
   }, [rows, createProfileMutation]);
 
-  const handleAddSelected = () => {
-    const pending = [...selectedIds].filter(id => {
-      const row = rows.find(r => r.id === id);
-      return row?.status === "pending";
-    });
-    if (pending.length === 0) {
-      toast({ title: "Nothing to add", description: "Select at least one pending account.", variant: "destructive" });
+  // ── Sort & Add (parse + immediately add all in one click) ──────────────────
+
+  const handleSortAndAdd = useCallback(async () => {
+    if (!rawText.trim()) {
+      toast({ title: "Nothing to sort", description: "Paste account data above first.", variant: "destructive" });
       return;
     }
-    addRows(pending);
-  };
+    const parsed = parseRaw(rawText);
+    if (parsed.length === 0) {
+      toast({ title: "No accounts found", description: "Check your format: username:password:2fasecret", variant: "destructive" });
+      return;
+    }
+    setRows(parsed);
+    setSelectedIds(new Set(parsed.map(r => r.id)));
+    setAdding(true);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of parsed) {
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "adding" } : r));
+      try {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
+        const created = await createProfileMutation.mutateAsync({
+          username: row.username,
+          password: row.password,
+          accountLabel: row.username,
+          twoFASecretKey: row.twoFASecret || null,
+          emailValidationUsername: row.email || null,
+          emailValidationPassword: row.emailPassword || null,
+          proxyHost: "",
+          proxyPort: null,
+          proxyUsername: "",
+          proxyPassword: "",
+          userAgentApi: ua.api,
+          userAgentEmbedded: ua.embedded,
+        });
+        localStorage.setItem(`trustscore_v2_${created.id}`, "noob");
+        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "added", profileId: created.id } : r));
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(row.id); return next; });
+        successCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to create";
+        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", errorMsg: msg } : r));
+        errorCount++;
+      }
+    }
+
+    setAdding(false);
+
+    if (successCount > 0 && errorCount === 0) {
+      toast({ title: `${successCount} account${successCount !== 1 ? "s" : ""} added`, description: "Now visible on the Accounts page." });
+    } else if (successCount > 0) {
+      toast({ title: `${successCount} added, ${errorCount} failed`, description: "Check error rows for details.", variant: "destructive" });
+    } else {
+      toast({ title: "All failed", description: "Check error rows for details.", variant: "destructive" });
+    }
+  }, [rawText, createProfileMutation]);
 
   const handleAddRow = (id: string) => addRows([id]);
 
@@ -279,7 +312,7 @@ export function BulkImportPage() {
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Raw Account Data To Sort
             </label>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret</span>
               <span>or</span>
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret:email:emailpass</span>
@@ -316,11 +349,12 @@ export function BulkImportPage() {
               </Button>
               <Button
                 size="sm"
-                onClick={handleParse}
-                disabled={!rawText.trim()}
+                onClick={handleSortAndAdd}
+                disabled={!rawText.trim() || adding}
                 className="h-8 text-xs gap-1.5"
               >
-                <Upload className="w-3.5 h-3.5" /> Sort Accounts
+                {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                Sort & Add
               </Button>
             </div>
           </div>
@@ -339,21 +373,20 @@ export function BulkImportPage() {
                 />
                 <span className="text-xs text-muted-foreground">
                   {rows.length} account{rows.length !== 1 ? "s" : ""} parsed
-                  {selectedPendingCount > 0 && ` · ${selectedPendingCount} selected`}
                 </span>
               </div>
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                disabled={selectedPendingCount === 0 || adding}
-                onClick={handleAddSelected}
-              >
-                {adding
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <CheckCircle2 className="w-3.5 h-3.5" />
-                }
-                Add {selectedPendingCount > 0 ? `${selectedPendingCount} ` : ""}to Accounts
-              </Button>
+              <div className="flex items-center gap-3 text-xs font-medium">
+                {adding && <span className="flex items-center gap-1 text-blue-600"><Loader2 className="w-3 h-3 animate-spin" />Adding…</span>}
+                {rows.filter(r => r.status === "added").length > 0 && (
+                  <span className="text-green-600"><CheckCircle2 className="w-3 h-3 inline mr-0.5" />{rows.filter(r => r.status === "added").length} added</span>
+                )}
+                {rows.filter(r => r.status === "error").length > 0 && (
+                  <span className="text-red-600">{rows.filter(r => r.status === "error").length} failed</span>
+                )}
+                {pendingRows.length > 0 && !adding && (
+                  <span className="text-muted-foreground">{pendingRows.length} pending</span>
+                )}
+              </div>
             </div>
 
             {/* Column headers */}
@@ -482,7 +515,7 @@ export function BulkImportPage() {
           <div className="rounded-lg border border-dashed border-border bg-card/50 flex flex-col items-center justify-center py-20 text-center">
             <Instagram className="w-10 h-10 text-muted-foreground/30 mb-3" />
             <p className="text-sm font-medium text-muted-foreground">No accounts sorted yet</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Paste credential lines above and click "Sort Accounts"</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Paste credential lines above and click "Sort & Add"</p>
           </div>
         )}
       </div>
