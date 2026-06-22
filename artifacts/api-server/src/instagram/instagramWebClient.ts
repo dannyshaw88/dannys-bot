@@ -691,7 +691,8 @@ export class InstagramWebClient {
     const ms = Date.now() - t0;
     if (didThrow) {
       // Log the call even on failure so it appears in the API call log, then re-throw.
-      this.logCallFn?.(opName, ms, undefined, true);
+      const errText = thrownErr instanceof Error ? thrownErr.message : String(thrownErr ?? "");
+      this.logCallFn?.(opName, ms, errText || undefined, true);
       throw thrownErr;
     }
     if (!shouldLog || shouldLog(result)) {

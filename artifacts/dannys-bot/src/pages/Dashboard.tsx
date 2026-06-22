@@ -69,16 +69,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-      version: "1.1.118",
+      version: "1.1.119",
       date: "22 Jun 2026",
       items: [
-        { category: "Improve", text: "Trust Scores tab redesigned as a vertical list. Each trust score now has a note field on the right that persists across sessions. Click any badge to open its template account settings directly." },
-        { category: "Improve", text: "Trust Scores tab is now positioned before Import in the Tools page tab bar." },
-        { category: "Improve", text: "Opening a trust score's template account now shows a breadcrumb at the top of the account page — click it to return to Trust Scores." },
-        { category: "Fix", text: "GetSuggestedUsers: fixed the API call never appearing in the activity log when the endpoint returned an error. The call was silently swallowed — it now always logs, whether it succeeded or failed." },
-        { category: "Fix", text: "GetSuggestedUsers: added detailed debug logging for injection failures so the exact error from Instagram is visible in the debug log." },
+        { category: "Fix", text: "Account flag icon is now a solid filled flag — no longer appears as an outline." },
+        { category: "Fix", text: "Flag icons now appear in the Copy Settings and Human Session account lists so you can see which accounts are flagged at a glance." },
+        { category: "Fix", text: "GetSuggestedUsers: the activity log now shows the actual error message from Instagram instead of a blank entry, making it much easier to diagnose why the call is failing." },
       ],
     },
+  {
+    version: "1.1.118",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Improve", text: "Trust Scores tab redesigned as a vertical list. Each trust score now has a note field on the right that persists across sessions. Click any badge to open its template account settings directly." },
+      { category: "Improve", text: "Trust Scores tab is now positioned before Import in the Tools page tab bar." },
+      { category: "Improve", text: "Opening a trust score's template account now shows a breadcrumb at the top of the account page — click it to return to Trust Scores." },
+      { category: "Fix", text: "GetSuggestedUsers: fixed the API call never appearing in the activity log when the endpoint returned an error. The call was silently swallowed — it now always logs, whether it succeeded or failed." },
+      { category: "Fix", text: "GetSuggestedUsers: added detailed debug logging for injection failures so the exact error from Instagram is visible in the debug log." },
+    ],
+  },
   {
     version: "1.1.117",
     date: "22 Jun 2026",

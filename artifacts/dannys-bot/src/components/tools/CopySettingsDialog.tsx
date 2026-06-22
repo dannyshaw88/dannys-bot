@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Copy, CheckCircle2, Loader2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { FlagIcon } from "@/components/ui/FlagIcon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -94,6 +95,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const { toast } = useToast();
   const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
+  const [flaggedIds] = useState<Set<number>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]); } catch { return new Set(); }
+  });
   const [settingsSearch, setSettingsSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy]      = useState<SortBy>("name");
@@ -558,8 +562,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                       onClick={e => e.stopPropagation()}
                       className="shrink-0 w-4 h-4 pointer-events-none"
                     />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-semibold truncate block leading-tight">
+                    <div className="flex-1 min-w-0 flex items-center gap-1">
+                      {flaggedIds.has(p.id) && <FlagIcon className="w-2.5 h-2.5 text-red-500 shrink-0" title="Flagged" />}
+                      <span className="text-xs font-semibold truncate leading-tight">
                         {p.accountLabel || p.username}
                       </span>
                     </div>
