@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.113",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: corrected the pre-login bootstrap sequence to use the right Instagram endpoint. The app was calling an account-level endpoint before any session was loaded, which Instagram flags as suspicious. It now calls the correct anonymous device-probe endpoint (the same one real Instagram apps use at startup), matching Jarvee's cold-start pattern exactly." },
+    ],
+  },
+  {
     version: "1.1.112",
     date: "21 Jun 2026",
     items: [

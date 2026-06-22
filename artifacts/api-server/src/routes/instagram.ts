@@ -2397,8 +2397,8 @@ export async function registerInstagramRoutes(
       // Their error messages are replaced with "OK" so the export isn't flooded with
       // alarming-looking errors that have zero operational significance.
       const NOISY_FAILED_OPS = new Set([
-        "GetTokenResult",          // tokens/keyed — 404 on almost every account
-        "GetKeyedTokens",          // alternate name for same endpoint
+        "GetTokenResult",          // zr/token/result — anonymous zero-rating probe, non-fatal
+        "GetKeyedTokens",          // accounts/tokens/keyed — separate authenticated endpoint, non-fatal
         "GetAccountFamily",        // get_account_family — 404 for many account types
         "SuggestedSearches",       // fbsearch/suggested_searches — 404 after IG change
         "LogAttribution",          // loginattribution/log_attribution — 400 not eligible

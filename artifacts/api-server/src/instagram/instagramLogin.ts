@@ -1131,18 +1131,24 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // loginApiThrottle is called before every Phase 0b+ and Phase 2 call so the
         // account's API Control delay setting governs the entire sequence.
 
-        // ── Phase 0a: GetTokenResult (/api/v1/accounts/tokens/keyed/) ─────
+        // ── Phase 0a: GetTokenResult (/api/v1/zr/token/result/) ──────────
         // First call in Jarvee's session-restore sequence — no cookies needed.
+        // This is the zero-rating token endpoint (anonymous, pre-auth device probe).
+        // NOT accounts/tokens/keyed — that is GetKeyedTokens, a different authenticated
+        // account endpoint. Calling the wrong one flags as suspicious pre-auth account access.
         // No throttle before the very first call (nothing to space from).
         try {
           await ig.request.send({
-            url: "/api/v1/accounts/tokens/keyed/",
+            url: "/api/v1/zr/token/result/",
             method: "GET",
-            qs: { expires: "0" },
+            qs: {
+              token_hash_method: "TokenHashMethodHmacSHA256",
+              identifier: "WeakStringAuth",
+            },
           });
-          console.error(`[instagramLogin] @${profile.username} — tokens/keyed (GetTokenResult) OK`);
+          console.error(`[instagramLogin] @${profile.username} — zr/token/result (GetTokenResult) OK`);
         } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — tokens/keyed failed (non-fatal): ${e?.message}`);
+          console.error(`[instagramLogin] @${profile.username} — zr/token/result failed (non-fatal): ${e?.message}`);
         }
 
         // ── Phase 0b: SendMobileConfig (launcher/sync) ────────────────────
@@ -1166,13 +1172,16 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         await loginApiThrottle(apiLimitsRaw);
         try {
           await ig.request.send({
-            url: "/api/v1/accounts/tokens/keyed/",
+            url: "/api/v1/zr/token/result/",
             method: "GET",
-            qs: { expires: "0" },
+            qs: {
+              token_hash_method: "TokenHashMethodHmacSHA256",
+              identifier: "WeakStringAuth",
+            },
           });
-          console.error(`[instagramLogin] @${profile.username} — tokens/keyed #2 (GetTokenResult) OK`);
+          console.error(`[instagramLogin] @${profile.username} — zr/token/result #2 (GetTokenResult) OK`);
         } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — tokens/keyed #2 failed (non-fatal): ${e?.message}`);
+          console.error(`[instagramLogin] @${profile.username} — zr/token/result #2 failed (non-fatal): ${e?.message}`);
         }
 
         // ── Phase 1: Load session cookie ──────────────────────────────────
