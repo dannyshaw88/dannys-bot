@@ -69,6 +69,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.117",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Statistics page — Account Health & System block now appears above Action Totals." },
+      { category: "Improvement", text: "Account Settings — Notes field width increased by 35% for more writing room." },
+      { category: "Improvement", text: "Proxy Manager — assigned account icon is now the cyan filled person icon, matching the Accounts nav style." },
+      { category: "Fix", text: "Proxy Manager — column headers and data cells now align correctly (removed justify-center that caused header/row offset when the Columns button was present)." },
+      { category: "Improvement", text: "Trust Scores — each trust score now shows on its own row with an inline notes field to the right of the badge." },
+      { category: "Fix", text: "Statistics page — flagged accounts now show the red flag icon next to their name, matching the Accounts page." },
+    ],
+  },
+  {
     version: "1.1.116",
     date: "22 Jun 2026",
     items: [
@@ -7736,7 +7748,7 @@ export function Dashboard() {
   const fetchFeed = useCallback(async (isInitial = false) => {
     try {
       const [sessionRes] = await Promise.all([
-        fetch("/api/all-session-actions?limit=500"),
+        fetch(`/api/all-session-actions?limit=${logMaxRowsRef.current}`),
       ]);
       const [sessionRows]: [any[]] = await Promise.all([
         sessionRes.ok ? sessionRes.json() : Promise.resolve([]),

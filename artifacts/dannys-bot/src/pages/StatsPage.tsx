@@ -20,7 +20,7 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, Monitor, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Globe, Lock,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Globe, Lock, Flag,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -146,6 +146,7 @@ function ProfileStatsRow({
   onNavigateToProfile,
   isSelected,
   onToggleSelect,
+  isFlagged,
 }: {
   profile: Profile;
   visibleCols: Record<ColKey, boolean>;
@@ -157,6 +158,7 @@ function ProfileStatsRow({
   onNavigateToProfile: () => void;
   isSelected: boolean;
   onToggleSelect: () => void;
+  isFlagged?: boolean;
 }) {
   const { data: tools } = useQuery<Tool[]>({ queryKey: [`/api/profiles/${profile.id}/tools`] });
   const updateToolMutation = useUpdateTool();
@@ -186,6 +188,7 @@ function ProfileStatsRow({
             <User className="w-3.5 h-3.5 text-primary" />
           </div>
           <span className="truncate">{displayName}</span>
+          {isFlagged && <Flag className="w-3 h-3 text-red-500 shrink-0 ml-0.5" fill="currentColor" title="Flagged account" />}
         </button>
       </td>
 
@@ -496,11 +499,16 @@ export function StatsPage() {
 
   const { selectedProfileIds, toggleProfileId } = useSelectedProfiles();
 
+  const [flaggedIds] = useState<number[]>(() => {
+    try { return JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]; } catch { return []; }
+  });
+
   const makeRowProps = (profile: Profile) => ({
     onOpenBrowser: () => openWindow(profile.id, profile.username ?? "", profile.userAgentEmbedded ?? ""),
     onNavigateToProfile: () => setLocation(`/profiles/${profile.id}`),
     isSelected: selectedProfileIds.includes(profile.id),
     onToggleSelect: () => toggleProfileId(profile.id),
+    isFlagged: flaggedIds.includes(profile.id),
   });
 
   // ── Metrics tab state ────────────────────────────────────────────────────────
@@ -903,7 +911,7 @@ export function StatsPage() {
                                       </button>
                                       {groupIcons[groupKey] && (
                                         <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
-                                          <img src={groupIcons[groupKey]} alt="" className="w-16 h-16 rounded-md object-contain shadow-lg border border-border bg-muted/10" />
+                                          <img src={groupIcons[groupKey]} alt="" className="max-w-[240px] max-h-[240px] w-auto h-auto rounded-md object-contain shadow-lg border border-border bg-background" />
                                         </div>
                                       )}
                                     </div>
@@ -970,7 +978,7 @@ export function StatsPage() {
                 </SelectContent>
               </Select>
               {selectedProfile && (
-                <span className="text-xs text-muted-foreground">@{selectedProfile.username}</span>
+                <TrustScoreBadge profileId={selectedProfile.id} />
               )}
             </div>
 
@@ -1066,6 +1074,67 @@ export function StatsPage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Account health & system data points */}
+                <Card className="desktop-card border-none shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-primary" />
+                      Account Health &amp; System
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {/* Total API calls */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <Webhook className="w-3 h-3" />Total API Calls
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">
+                          {(apiCallCountData?.count ?? 0).toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">all time</span>
+                      </div>
+
+                      {/* ABD dismissed */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-500 flex items-center gap-1">
+                          <ShieldAlert className="w-3 h-3" />ABD Dismissed
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{abdToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {abdLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Captchas encountered */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-500 flex items-center gap-1">
+                          <Activity className="w-3 h-3" />Captchas Hit
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{captchaToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {captchaLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Bans / suspensions detected */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-destructive flex items-center gap-1">
+                          <PhoneOff className="w-3 h-3" />Bans Detected
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{bannedToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">today · {bannedLifetime.toLocaleString()} lifetime</span>
+                      </div>
+
+                      {/* Locked accounts */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 flex items-center gap-1">
+                          <Lock className="w-3 h-3" />Locked
+                        </span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{lockedCount.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">accounts currently locked</span>
+                      </div>
+
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Action data points */}
                 <Card className="desktop-card border-none shadow-sm">
@@ -1178,66 +1247,6 @@ export function StatsPage() {
                   </CardContent>
                 </Card>
 
-                {/* Account health & system data points */}
-                <Card className="desktop-card border-none shadow-sm">
-                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4 text-primary" />
-                      Account Health &amp; System
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {/* Total API calls */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                          <Webhook className="w-3 h-3" />Total API Calls
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">
-                          {(apiCallCountData?.count ?? 0).toLocaleString()}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">all time</span>
-                      </div>
-
-                      {/* ABD dismissed */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-500 flex items-center gap-1">
-                          <ShieldAlert className="w-3 h-3" />ABD Dismissed
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{abdToday.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">today · {abdLifetime.toLocaleString()} lifetime</span>
-                      </div>
-
-                      {/* Captchas encountered */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-500 flex items-center gap-1">
-                          <Activity className="w-3 h-3" />Captchas Hit
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{captchaToday.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">today · {captchaLifetime.toLocaleString()} lifetime</span>
-                      </div>
-
-                      {/* Bans / suspensions detected */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-destructive flex items-center gap-1">
-                          <PhoneOff className="w-3 h-3" />Bans Detected
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{bannedToday.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">today · {bannedLifetime.toLocaleString()} lifetime</span>
-                      </div>
-
-                      {/* Locked accounts */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-500 flex items-center gap-1">
-                          <Lock className="w-3 h-3" />Locked
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{lockedCount.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">accounts currently locked</span>
-                      </div>
-
-                    </div>
-                  </CardContent>
-                </Card>
               </>
             )}
           </div>

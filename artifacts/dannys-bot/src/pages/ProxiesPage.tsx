@@ -1,5 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
+
+function FilledPersonIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <circle fill="currentColor" cx="12" cy="7" r="4.5"/>
+      <path fill="currentColor" d="M20.5 21c0-4.694-3.806-8.5-8.5-8.5S3.5 16.306 3.5 21h17z"/>
+    </svg>
+  );
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/hooks/use-proxies";
@@ -188,7 +197,7 @@ function ProxyRow({
     <>
       {/* Main proxy row */}
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
-        <div className="flex items-center gap-2 flex-1 justify-center">
+        <div className="flex items-center gap-2 flex-1">
           {colOrder.map(col => {
             if (col === "acctStatus" || col === "acctTrustScore") return (
               <div key={col} className="shrink-0" style={{ width: colWidths[col] }} />
@@ -265,7 +274,7 @@ function ProxyRow({
         {/* Assign dropdown — at the top, under the proxy field */}
         {unassignedProfiles.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-1">
-            <div className="flex items-center gap-2 flex-1 justify-center">
+            <div className="flex items-center gap-2 flex-1">
               <div className="shrink-0" style={{ width: colWidths.proxy }}>
                 <select
                   className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
@@ -288,11 +297,11 @@ function ProxyRow({
         )}
         {assigned.map(profile => (
           <div key={profile.id} className="flex items-center gap-2 px-3 py-1 group hover:bg-accent/30 transition-colors">
-            <div className="flex items-center gap-2 flex-1 justify-center">
+            <div className="flex items-center gap-2 flex-1">
               {colOrder.map(col => {
                 if (col === "proxy") return (
                   <div key={col} className="shrink-0 flex items-center gap-1.5" style={{ width: colWidths.proxy }}>
-                    <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+                    <FilledPersonIcon className="w-3.5 h-3.5 shrink-0" style={{ color: "#1AD2F2" }} />
                     <span className="text-[13px] font-medium text-foreground truncate">{profile.username}</span>
                   </div>
                 );
@@ -325,7 +334,7 @@ function ProxyRow({
         ))}
         {assigned.length === 0 && unassignedProfiles.length === 0 && (
           <div className="flex items-center gap-2 px-3 py-1">
-            <div className="flex items-center gap-2 flex-1 justify-center">
+            <div className="flex items-center gap-2 flex-1">
               <div className="shrink-0 flex items-center" style={{ width: colWidths.proxy }}>
                 <span className="text-xs text-muted-foreground italic">All accounts assigned to proxies</span>
               </div>
@@ -780,7 +789,7 @@ export function ProxiesPage() {
 
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
-          <div className="flex items-center gap-2 flex-1 justify-center">
+          <div className="flex items-center gap-2 flex-1">
           {proxyColOrder.map(col => {
             const isDragTarget = proxyDragOverCol === col;
             const dragProps = {

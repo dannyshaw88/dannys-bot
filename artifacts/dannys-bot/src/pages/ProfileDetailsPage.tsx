@@ -1985,7 +1985,7 @@ export function ProfileDetailsPage() {
           </div>{/* end flex-1 left column */}
 
           {/* ── Notes — far right, aligned from Group row ── */}
-          <div className="w-72 shrink-0">
+          <div className="w-[390px] shrink-0">
             <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
               <FileText className="w-3.5 h-3.5" /> Notes
             </Label>
