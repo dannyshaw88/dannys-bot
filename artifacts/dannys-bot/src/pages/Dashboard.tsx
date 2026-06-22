@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.115",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Ban Analytics — Survivors tab now shows a session recipe panel with the actual numbers from surviving accounts: what percentage of their calls were passive, how many passive calls they made per action, how many warmup calls happened before their first follow, and how many had zero follows at all." },
+      { category: "Improvement", text: "Ban Analytics — Survivors tab now includes an endpoint frequency map showing every Instagram endpoint the survivors actually called, how often they called it, and what share of survivor sessions included that endpoint." },
+      { category: "Improvement", text: "Ban Analytics — each surviving account card now shows a visual passive/action split bar and up to 12 colour-coded endpoint chips, replacing the previous 3-chip summary." },
+    ],
+  },
+  {
     version: "1.1.114",
     date: "22 Jun 2026",
     items: [
