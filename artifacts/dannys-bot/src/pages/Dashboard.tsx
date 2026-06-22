@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.116",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ban Analytics — Survivors tab: removed all passive/active/session category labels from the endpoint frequency map and per-account cards. The previous version was colouring and labelling endpoints as passive or active — those are assumptions about what Instagram scores, not facts. The map now shows raw endpoint names, what percentage of survivors called each one, and how many times per session, with no interpretation applied." },
+    ],
+  },
+  {
     version: "1.1.115",
     date: "22 Jun 2026",
     items: [

@@ -2675,94 +2675,46 @@ export function BanAnalyticsPage() {
                   return (
                     <div className="space-y-3">
 
-                      {/* ── Session Recipe Consensus ── */}
+                      {/* ── Endpoint Frequency ── */}
                       {hasPatterns && survivorPatterns.length > 0 && (() => {
-                        const ratios    = survMetrics.filter(m => m.actionCount > 0).map(m => m.sessionPerAction);
-                        const warmups   = survMetrics.map(m => m.preActionWarmup).filter(v => v >= 0);
-                        const noFollows = survMetrics.filter(m => (m.cats.follow ?? 0) === 0).length;
-                        const passivePcts = survMetrics.map(m => {
-                          const actions = (m.cats.follow ?? 0) + (m.cats.unfollow ?? 0) + (m.cats.dm ?? 0) + (m.cats.like ?? 0);
-                          return m.totalCalls > 0 ? ((m.totalCalls - actions) / m.totalCalls * 100) : 0;
-                        });
-                        const medPassive = passivePcts.length > 0 ? median(passivePcts) : 0;
-                        const medRatio   = ratios.length > 0 ? median(ratios) : null;
-                        const medWarmup  = warmups.length > 0 ? median(warmups) : null;
                         const n = survivorPatterns.length;
-
-                        // Endpoint frequency across all survivor sessions
-                        const epFreq = new Map<string, { count: number; sessions: number; label: string | null; category: string }>();
+                        const epFreq = new Map<string, { count: number; sessions: number; label: string | null }>();
                         for (const sp of survivorPatterns) {
                           const eps = filterHiker(parseEps(sp.endpointSnapshot));
                           const seen = new Set<string>();
                           for (const ep of eps) {
                             const ml = matchLabel(ep.operationName);
-                            const d = epFreq.get(ep.operationName) ?? { count: 0, sessions: 0, label: ml?.label ?? null, category: ml?.category ?? "other" };
+                            const d = epFreq.get(ep.operationName) ?? { count: 0, sessions: 0, label: ml?.label ?? null };
                             d.count++;
                             if (!seen.has(ep.operationName)) { d.sessions++; seen.add(ep.operationName); }
                             epFreq.set(ep.operationName, d);
                           }
                         }
                         const epList = Array.from(epFreq.entries())
-                          .map(([name, d]) => ({ name, ...d, pct: Math.round(d.sessions / n * 100), avgPer: +(d.count / n).toFixed(1) }))
+                          .map(([name, d]) => ({ name, label: d.label, pct: Math.round(d.sessions / n * 100), avgPer: +(d.count / n).toFixed(1) }))
                           .filter(e => e.pct >= 5)
-                          .sort((a, b) => b.sessions - a.sessions);
-
-                        const statCells = [
-                          { label: "% passive calls",     value: medPassive > 0 ? `${medPassive.toFixed(0)}%` : "—", sub: "median across survivors",      color: medPassive >= 80 ? "text-green-600 dark:text-green-400" : medPassive >= 50 ? "text-amber-500" : "text-foreground" },
-                          { label: "passive per action",  value: medRatio !== null ? medRatio.toFixed(1) : "—",       sub: "session calls ÷ action calls", color: (medRatio ?? 0) >= 10 ? "text-green-600 dark:text-green-400" : (medRatio ?? 0) >= 3 ? "text-amber-500" : "text-foreground" },
-                          { label: "warmup before follow",value: medWarmup !== null ? medWarmup.toFixed(0) : "—",      sub: "avg calls before each follow",  color: "text-foreground" },
-                          { label: "zero-follow sessions",value: `${noFollows}/${n}`,                                  sub: "pure passive, no follow ops",   color: "text-foreground" },
-                        ];
-
+                          .sort((a, b) => b.pct - a.pct);
+                        if (!epList.length) return null;
                         return (
-                          <>
-                            <div className="border border-border rounded-lg overflow-hidden">
-                              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                                <Gauge className="w-4 h-4 text-green-500" />
-                                <span className="text-sm font-semibold">Session Recipe — What Survivors Actually Did</span>
-                                <span className="text-xs text-muted-foreground ml-auto">{n} account{n !== 1 ? "s" : ""} with session data</span>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border">
-                                {statCells.map(c => (
-                                  <div key={c.label} className="px-4 py-3 text-center">
-                                    <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
-                                    <p className="text-[10px] font-semibold text-foreground mt-0.5">{c.label}</p>
-                                    <p className="text-[9px] text-muted-foreground">{c.sub}</p>
-                                  </div>
-                                ))}
-                              </div>
+                          <div className="border border-border rounded-lg overflow-hidden">
+                            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                              <BarChart2 className="w-4 h-4 text-cyan-500" />
+                              <span className="text-sm font-semibold">Endpoint Frequency Across Survivor Sessions</span>
+                              <span className="text-xs text-muted-foreground ml-auto">{n} account{n !== 1 ? "s" : ""} · % that called each endpoint · avg calls/session</span>
                             </div>
-
-                            {epList.length > 0 && (
-                              <div className="border border-border rounded-lg overflow-hidden">
-                                <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                                  <BarChart2 className="w-4 h-4 text-cyan-500" />
-                                  <span className="text-sm font-semibold">Endpoint Frequency Across Survivor Sessions</span>
-                                  <span className="text-xs text-muted-foreground ml-auto">% of survivors that called each · avg per session</span>
+                            <div className="divide-y divide-border/40 overflow-y-auto" style={{ maxHeight: "340px" }}>
+                              {epList.map(ep => (
+                                <div key={ep.name} className="px-4 py-1.5 flex items-center gap-3">
+                                  <span className="text-[11px] w-44 shrink-0 truncate font-mono">{ep.label ?? ep.name}</span>
+                                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full bg-cyan-500/70" style={{ width: `${ep.pct}%` }} />
+                                  </div>
+                                  <span className="font-bold text-[11px] w-10 text-right shrink-0">{ep.pct}%</span>
+                                  <span className="text-[9px] text-muted-foreground w-24 text-right shrink-0">avg {ep.avgPer}×/session</span>
                                 </div>
-                                <div className="divide-y divide-border/40 overflow-y-auto" style={{ maxHeight: "320px" }}>
-                                  {epList.map(ep => {
-                                    const isAction  = ep.category === "follow" || ep.category === "unfollow" || ep.category === "dm" || ep.category === "like";
-                                    const isPassive = ep.category === "session";
-                                    const isAuth    = ep.category === "auth";
-                                    const barColor  = isAction ? "bg-orange-400" : isPassive ? "bg-green-400" : isAuth ? "bg-blue-400" : "bg-muted-foreground/40";
-                                    const catColor  = isAction ? "text-orange-600 dark:text-orange-400" : isPassive ? "text-green-600 dark:text-green-400" : isAuth ? "text-blue-500" : "text-muted-foreground";
-                                    return (
-                                      <div key={ep.name} className="px-4 py-1.5 flex items-center gap-3">
-                                        <span className={`text-[9px] font-bold w-14 shrink-0 uppercase tracking-wide ${catColor}`}>{ep.category}</span>
-                                        <span className="text-[11px] w-40 shrink-0 truncate">{ep.label ?? ep.name}</span>
-                                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${ep.pct}%` }} />
-                                        </div>
-                                        <span className="font-bold text-[11px] w-10 text-right shrink-0">{ep.pct}%</span>
-                                        <span className="text-[9px] text-muted-foreground w-20 text-right shrink-0 hidden sm:block">avg {ep.avgPer}×/session</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </>
+                              ))}
+                            </div>
+                          </div>
                         );
                       })()}
 
@@ -2828,50 +2780,24 @@ export function BanAnalyticsPage() {
                                       <span>First added: {p.firstDate!.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
                                       {reAdded && <span>Latest: {p.allDates[p.allDates.length - 1].toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>}
                                     </div>
-                                    {sm && (() => {
-                                      const passiveCalls = (sm.cats.session ?? 0) + (sm.cats.auth ?? 0);
-                                      const actionCalls  = (sm.cats.follow ?? 0) + (sm.cats.unfollow ?? 0) + (sm.cats.dm ?? 0) + (sm.cats.like ?? 0);
-                                      const otherCalls   = sm.totalCalls - passiveCalls - actionCalls;
-                                      const passivePct   = sm.totalCalls > 0 ? passiveCalls / sm.totalCalls * 100 : 0;
-                                      const actionPct    = sm.totalCalls > 0 ? actionCalls  / sm.totalCalls * 100 : 0;
-                                      const otherPct     = sm.totalCalls > 0 ? otherCalls   / sm.totalCalls * 100 : 0;
-                                      return (
-                                        <>
-                                          {/* Passive/Action split bar */}
-                                          <div className="mt-2 mb-1">
-                                            <div className="flex h-3 rounded-full overflow-hidden gap-px bg-muted">
-                                              {passivePct > 0 && <div className="bg-green-400 dark:bg-green-500" style={{ width: `${passivePct}%` }} title={`Passive: ${passiveCalls} calls (${passivePct.toFixed(0)}%)`} />}
-                                              {otherPct  > 0 && <div className="bg-slate-400/60"                style={{ width: `${otherPct}%`  }} title={`Other: ${otherCalls} calls (${otherPct.toFixed(0)}%)`} />}
-                                              {actionPct > 0 && <div className="bg-orange-400"                  style={{ width: `${actionPct}%` }} title={`Actions: ${actionCalls} calls (${actionPct.toFixed(0)}%)`} />}
-                                            </div>
-                                            <div className="flex items-center gap-3 mt-0.5 text-[9px] text-muted-foreground">
-                                              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-400 inline-block" />passive {passiveCalls} ({passivePct.toFixed(0)}%)</span>
-                                              {actionCalls > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-orange-400 inline-block" />actions {actionCalls} ({actionPct.toFixed(0)}%)</span>}
-                                              {otherCalls  > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-400/60 inline-block" />other {otherCalls}</span>}
-                                            </div>
-                                          </div>
-                                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
-                                            <div className="flex justify-between gap-2"><span className="text-muted-foreground">Passive per action</span><span className="font-mono font-semibold">{sm.actionCount > 0 ? sm.sessionPerAction.toFixed(1) : "—"}</span></div>
-                                            <div className="flex justify-between gap-2"><span className="text-muted-foreground">Warmup before follow</span><span className="font-mono font-semibold">{sm.preActionWarmup >= 0 ? sm.preActionWarmup : "—"}</span></div>
-                                            <div className="flex justify-between gap-2"><span className="text-muted-foreground">Follow ops</span><span className="font-mono font-semibold">{sm.cats.follow ?? 0}</span></div>
-                                            <div className="flex justify-between gap-2"><span className="text-muted-foreground">Timing CoV</span><span className={`font-mono font-semibold ${spCovColor}`}>{sm.timingCoV >= 0 ? `${sm.timingCoV.toFixed(2)} [${spCovLabel}]` : "—"}</span></div>
-                                            {sm.actionVelocityPerHour > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Action velocity</span><span className="font-mono font-semibold">{sm.actionVelocityPerHour.toFixed(1)}/hr</span></div>}
-                                            {sm.burstCount > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Bursts (≤60s)</span><span className="font-mono font-semibold">{sm.burstCount}</span></div>}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
+                                    {sm && (
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] mt-2">
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Total calls</span><span className="font-mono font-semibold">{sm.totalCalls}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Warmup before follow</span><span className="font-mono font-semibold">{sm.preActionWarmup >= 0 ? sm.preActionWarmup : "—"}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Follow ops</span><span className="font-mono font-semibold">{sm.cats.follow ?? 0}</span></div>
+                                        <div className="flex justify-between gap-2"><span className="text-muted-foreground">Timing CoV</span><span className={`font-mono font-semibold ${spCovColor}`}>{sm.timingCoV >= 0 ? `${sm.timingCoV.toFixed(2)} [${spCovLabel}]` : "—"}</span></div>
+                                        {sm.actionVelocityPerHour > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Action velocity</span><span className="font-mono font-semibold">{sm.actionVelocityPerHour.toFixed(1)}/hr</span></div>}
+                                        {sm.burstCount > 0 && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Bursts (≤60s)</span><span className="font-mono font-semibold">{sm.burstCount}</span></div>}
+                                      </div>
+                                    )}
                                     {sp && (() => {
                                       const allEpsSurv = topEps(filterHiker(parseEps(sp.endpointSnapshot)), 12);
                                       if (!allEpsSurv.length) return null;
                                       return (
                                         <div className="mt-1.5 flex flex-wrap gap-1">
-                                          {allEpsSurv.map(ep => {
-                                            const isAction  = ep.category === "follow" || ep.category === "unfollow" || ep.category === "dm" || ep.category === "like";
-                                            const isPassive = ep.category === "session";
-                                            const chipColor = isAction ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300" : isPassive ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300" : "bg-muted border-border text-muted-foreground";
-                                            return <span key={ep.name} className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded border font-mono ${chipColor}`}>{ep.label ?? ep.name}<span className="opacity-60">×{ep.count}</span></span>;
-                                          })}
+                                          {allEpsSurv.map(ep => (
+                                            <span key={ep.name} className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded border font-mono bg-muted border-border text-muted-foreground">{ep.label ?? ep.name}<span className="opacity-60">×{ep.count}</span></span>
+                                          ))}
                                         </div>
                                       );
                                     })()}
