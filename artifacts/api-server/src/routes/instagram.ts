@@ -431,6 +431,11 @@ export async function registerInstagramRoutes(
     res.json({ perAccount, global });
   });
 
+  app.get("/api/profiles/lifetime-calls", async (_req, res) => {
+    const data = await storage.getLifetimeStatsByProfile();
+    res.json(data);
+  });
+
   app.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
     res.json(data);

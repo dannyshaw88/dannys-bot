@@ -119,11 +119,11 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -289,6 +289,20 @@ export function ProfilesPage() {
     return () => clearInterval(t);
   }, []);
 
+  // ── Lifetime total API calls per profile ──────────────────────────────────
+  const [lifetimeCallsMap, setLifetimeCallsMap] = useState<Record<number, number>>({});
+  useEffect(() => {
+    const fetchLifetimeCalls = async () => {
+      try {
+        const r = await fetch("/api/profiles/lifetime-calls");
+        if (r.ok) setLifetimeCallsMap(await r.json());
+      } catch { /* ignore */ }
+    };
+    fetchLifetimeCalls();
+    const t = setInterval(fetchLifetimeCalls, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
   // ── Verify health per profile (unique Verify-source ops seen) ────────────
   const [verifyHealthMap, setVerifyHealthMap] = useState<Record<number, string[]>>({});
   useEffect(() => {
@@ -343,7 +357,6 @@ export function ProfilesPage() {
     localStorage.setItem("profiles_col_order", JSON.stringify(fullOrder));
   };
   const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
-  const manageProfileColsRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const profDragColRef = useRef<string | null>(null);
   const [profDragOverCol, setProfDragOverCol] = useState<string | null>(null);
@@ -394,9 +407,9 @@ export function ProfilesPage() {
     setActionsOpen(false);
   }, [selectedProfileIds]);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall") ? v as any : "account";
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall" || v === "totalCalls") ? v as any : "account";
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (localStorage.getItem("profiles:sortDir") as "asc" | "desc") === "desc" ? "desc" : "asc"
@@ -549,6 +562,11 @@ export function ProfilesPage() {
         const tb = lastApiCallMap[b.id] ? new Date(lastApiCallMap[b.id]).getTime() : 0;
         return sortDir === "asc" ? ta - tb : tb - ta;
       }
+      if (sortField === "totalCalls") {
+        const na = lifetimeCallsMap[a.id] ?? 0;
+        const nb = lifetimeCallsMap[b.id] ?? 0;
+        return sortDir === "asc" ? na - nb : nb - na;
+      }
       let va = "", vb = "";
       if (sortField === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
@@ -559,7 +577,7 @@ export function ProfilesPage() {
       }
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
-  }, [profiles, filterTokens, sortField, sortDir, stableOrder, lastApiCallMap]);
+  }, [profiles, filterTokens, sortField, sortDir, stableOrder, lastApiCallMap, lifetimeCallsMap]);
 
   // ── Duplicate Instagram username detection ────────────────────────────────
   // Scans ALL profiles (not just the filtered view) so a duplicate is flagged
@@ -596,10 +614,10 @@ export function ProfilesPage() {
     });
   };
 
-  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall") => {
+  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
-      const defaultDir = (field === "sync" || field === "lastApiCall") ? "desc" : "asc";
+      const defaultDir = (field === "sync" || field === "lastApiCall" || field === "totalCalls") ? "desc" : "asc";
       setSortField(field); setSortDir(defaultDir);
       newDir = defaultDir;
       localStorage.setItem("profiles:sortField", field);
@@ -1134,16 +1152,6 @@ export function ProfilesPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB, handleBulkToggle, handleUngroup]);
 
-  // Click-outside handler for the profiles manage-columns popup
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (manageProfileColsRef.current && !manageProfileColsRef.current.contains(e.target as Node)) {
-        setManageProfileColsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   const setSlot = useSidebarSetSlot();
   // Sidebar slot is unused on this page clear it on mount/unmount
@@ -1309,6 +1317,11 @@ export function ProfilesPage() {
                   LAST API CALL
                 </button>
               );
+              if (key === "totalCalls") return (
+                <button key={key} {...dragProps} onClick={() => cycleSort("totalCalls")} style={{ width: profColWidths.totalCalls }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                  TOTAL CALLS
+                </button>
+              );
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
@@ -1412,7 +1425,7 @@ export function ProfilesPage() {
                         {profile.accountLabel || profile.username}
                         {profile.locked && <span title="Locked — excluded from copy targets"><Lock className="w-3 h-3 text-amber-500 shrink-0" /></span>}
                         {isDupUsername && <span title={`Duplicate username: @${profile.username}`} className="text-purple-500 font-bold text-[9px] shrink-0 border border-purple-300 rounded px-0.5 bg-purple-100">DUP</span>}
-                        {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" /></span>}
+                        {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" fill="currentColor" /></span>}
                       </span>
                     </Link>
                     {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "resuming" && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
@@ -1491,6 +1504,15 @@ export function ProfilesPage() {
                       return (
                         <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-foreground truncate">{label}</span>
+                        </div>
+                      );
+                    }
+                    if (key === "totalCalls") {
+                      const count = lifetimeCallsMap[profile.id] ?? 0;
+                      const display = count === 0 ? <span className="text-muted-foreground/40">—</span> : count.toLocaleString();
+                      return (
+                        <div key={key} style={{ width: profColWidths.totalCalls }} className="shrink-0 flex items-center" title={`${count.toLocaleString()} lifetime API calls`} onMouseDown={e => e.stopPropagation()}>
+                          <span className="text-[10px] text-foreground truncate">{display}</span>
                         </div>
                       );
                     }
@@ -1672,7 +1694,7 @@ export function ProfilesPage() {
             >
               Actions <ChevronDown className="w-3.5 h-3.5" />
             </button>
-            <div ref={manageProfileColsRef} className="relative ml-auto">
+            <div className="ml-auto">
               <button
                 onClick={() => setManageProfileColsOpen(o => !o)}
                 className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors"
@@ -1680,53 +1702,62 @@ export function ProfilesPage() {
                 <Settings2 className="w-3.5 h-3.5" /> Columns
               </button>
               {manageProfileColsOpen && (
-                <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Columns</p>
-                  {profColOrder.map((key, idx) => {
-                    const label = PROFILES_COL_LABELS[key];
-                    const isAccount = key === "account";
-                    const isIp = key === "ip";
-                    const isMiddle = !isAccount && !isIp;
-                    const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
-                    const midIdx = reorderable.indexOf(key as any);
-                    const updateCol = (delta: number) => {
-                      const v = Math.max(1, Math.min(600, profColWidths[key] + delta));
-                      const next = { ...profColWidths, [key]: v };
-                      setProfColWidths(next);
-                      localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
-                    };
-                    const isVisible = isAccount || profColVisible[key as keyof typeof DEFAULT_PROFILES_COL_VISIBLE];
-                    return (
-                      <div key={key} className="flex items-center gap-1 mb-2">
-                        <div className="flex flex-col mr-0.5">
-                          <button onClick={() => moveProfCol(key, -1)} disabled={!isMiddle || midIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
-                          <button onClick={() => moveProfCol(key, 1)} disabled={!isMiddle || midIdx === reorderable.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
-                        </div>
-                        <Checkbox
-                          checked={isAccount || isVisible}
-                          disabled={isAccount}
-                          onCheckedChange={checked => {
-                            if (isAccount) return;
-                            const next = { ...profColVisible, [key]: !!checked };
-                            setProfColVisible(next);
-                            localStorage.setItem("profiles_col_visible_v2", JSON.stringify(next));
-                          }}
-                          className="mr-1"
-                        />
-                        <label className="text-xs w-16 text-muted-foreground shrink-0">{label}</label>
-                        <button onClick={() => updateCol(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
-                        <input type="number" min={1} max={600} value={profColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(600, Number(e.target.value))); const next = { ...profColWidths, [key]: v }; setProfColWidths(next); localStorage.setItem("profiles_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
-                        <button onClick={() => updateCol(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
-                      </div>
-                    );
-                  })}
-                  <button
-                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); setProfColVisible(DEFAULT_PROFILES_COL_VISIBLE); localStorage.removeItem("profiles_col_visible_v2"); setProfColOrder(DEFAULT_PROFILES_COL_ORDER); localStorage.removeItem("profiles_col_order"); }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-                  >
-                    Reset to defaults
-                  </button>
-                </div>
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setManageProfileColsOpen(false)} />
+                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[520px] max-h-[80vh] overflow-y-auto">
+                    <div className="px-5 pt-4 pb-3 border-b border-border">
+                      <p className="text-sm font-semibold">Columns</p>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
+                      {profColOrder.map((key, idx) => {
+                        const label = PROFILES_COL_LABELS[key];
+                        const isAccount = key === "account";
+                        const isIp = key === "ip";
+                        const isMiddle = !isAccount && !isIp;
+                        const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
+                        const midIdx = reorderable.indexOf(key as any);
+                        const updateCol = (delta: number) => {
+                          const v = Math.max(1, Math.min(600, profColWidths[key] + delta));
+                          const next = { ...profColWidths, [key]: v };
+                          setProfColWidths(next);
+                          localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                        };
+                        const isVisible = isAccount || profColVisible[key as keyof typeof DEFAULT_PROFILES_COL_VISIBLE];
+                        return (
+                          <div key={key} className="flex items-center gap-1 mb-1">
+                            <div className="flex flex-col mr-0.5">
+                              <button onClick={() => moveProfCol(key, -1)} disabled={!isMiddle || midIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                              <button onClick={() => moveProfCol(key, 1)} disabled={!isMiddle || midIdx === reorderable.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                            </div>
+                            <Checkbox
+                              checked={isAccount || isVisible}
+                              disabled={isAccount}
+                              onCheckedChange={checked => {
+                                if (isAccount) return;
+                                const next = { ...profColVisible, [key]: !!checked };
+                                setProfColVisible(next);
+                                localStorage.setItem("profiles_col_visible_v2", JSON.stringify(next));
+                              }}
+                              className="mr-1"
+                            />
+                            <label className="text-xs w-14 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
+                            <button onClick={() => updateCol(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                            <input type="number" min={1} max={600} value={profColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(600, Number(e.target.value))); const next = { ...profColWidths, [key]: v }; setProfColWidths(next); localStorage.setItem("profiles_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                            <button onClick={() => updateCol(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="px-4 pb-4">
+                      <button
+                        onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); setProfColVisible(DEFAULT_PROFILES_COL_VISIBLE); localStorage.removeItem("profiles_col_visible_v2"); setProfColOrder(DEFAULT_PROFILES_COL_ORDER); localStorage.removeItem("profiles_col_order"); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>

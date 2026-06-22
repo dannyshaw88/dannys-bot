@@ -51,6 +51,7 @@ export interface IStorage {
 
   // Stats
   getStatsByProfile(profileId: number): Promise<any[]>;
+  getLifetimeStatsByProfile(): Promise<Record<number, number>>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
   getDailyAbdStats(): Promise<Record<number, number>>;
 
@@ -356,6 +357,17 @@ export class DatabaseStorage implements IStorage {
 
   async getStatsByProfile(profileId: number): Promise<any[]> {
     return await db.select().from(stats).where(eq(stats.profileId, profileId));
+  }
+
+  async getLifetimeStatsByProfile(): Promise<Record<number, number>> {
+    const rows = await db
+      .select({ profileId: stats.profileId, total: sql<number>`SUM(${stats.count})` })
+      .from(stats)
+      .where(eq(stats.date, 'lifetime'))
+      .groupBy(stats.profileId);
+    const result: Record<number, number> = {};
+    for (const row of rows) result[row.profileId] = Number(row.total ?? 0);
+    return result;
   }
 
   async getInstagramApiCalls(limit: number = 100000): Promise<any[]> {

@@ -32,7 +32,7 @@ type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts" | "acctStatus" | "acctTrustScore";
 const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
 const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS", accounts: "ACCOUNTS", acctStatus: "STATUS", acctTrustScore: "TRUST" };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", status: "Proxy Status", accounts: "Accounts", acctStatus: "Status", acctTrustScore: "Trust" };
 const ACTIONS_COL_WIDTH = 76;
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
@@ -409,7 +409,6 @@ export function ProxiesPage() {
   const proxyDragColRef = useRef<string | null>(null);
   const [proxyDragOverCol, setProxyDragOverCol] = useState<string | null>(null);
   const [manageProxyColsOpen, setManageProxyColsOpen] = useState(false);
-  const manageProxyColsRef = useRef<HTMLDivElement>(null);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -570,15 +569,6 @@ export function ProxiesPage() {
     }
   };
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (manageProxyColsRef.current && !manageProxyColsRef.current.contains(e.target as Node)) {
-        setManageProxyColsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   useEffect(() => {
     if (proxiesLoading || proxies.length === 0 || autoPingedRef.current) return;
@@ -828,35 +818,44 @@ export function ProxiesPage() {
           })}
           <div className="shrink-0 flex items-center justify-center" style={{ width: ACTIONS_COL_WIDTH }}>Actions</div>
           </div>
-          <div ref={manageProxyColsRef} className="relative">
+          <div>
             <button onClick={() => setManageProxyColsOpen(o => !o)} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors">
               <Settings2 className="w-3 h-3" /> Columns
             </button>
             {manageProxyColsOpen && (
-              <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
-                <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Columns</p>
-                {proxyColOrder.map((key, ordIdx) => {
-                  const updateWidth = (delta: number) => {
-                    const v = Math.max(1, Math.min(400, proxyColWidths[key] + delta));
-                    const next = { ...proxyColWidths, [key]: v };
-                    setProxyColWidths(next);
-                    localStorage.setItem("proxies_col_widths_px", JSON.stringify(next));
-                  };
-                  return (
-                    <div key={key} className="flex items-center gap-1 mb-2">
-                      <div className="flex flex-col mr-0.5">
-                        <button onClick={() => moveProxyCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
-                        <button onClick={() => moveProxyCol(key, 1)} disabled={ordIdx === proxyColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
-                      </div>
-                      <label className="text-xs w-20 text-muted-foreground shrink-0">{PROXY_COL_LABELS[key]}</label>
-                      <button onClick={() => updateWidth(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
-                      <input type="number" min={1} max={400} value={proxyColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(400, Number(e.target.value))); const next = { ...proxyColWidths, [key]: v }; setProxyColWidths(next); localStorage.setItem("proxies_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
-                      <button onClick={() => updateWidth(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
-                    </div>
-                  );
-                })}
-                <button onClick={() => { setProxyColWidths(DEFAULT_PROXY_COL_WIDTHS); localStorage.removeItem("proxies_col_widths_px"); setProxyColOrder(DEFAULT_PROXY_COL_ORDER); localStorage.removeItem("proxies_col_order"); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1">Reset to defaults</button>
-              </div>
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setManageProxyColsOpen(false)} />
+                <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto">
+                  <div className="px-5 pt-4 pb-3 border-b border-border">
+                    <p className="text-sm font-semibold">Columns</p>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
+                    {proxyColOrder.map((key, ordIdx) => {
+                      const updateWidth = (delta: number) => {
+                        const v = Math.max(1, Math.min(400, proxyColWidths[key] + delta));
+                        const next = { ...proxyColWidths, [key]: v };
+                        setProxyColWidths(next);
+                        localStorage.setItem("proxies_col_widths_px", JSON.stringify(next));
+                      };
+                      return (
+                        <div key={key} className="flex items-center gap-1 mb-1">
+                          <div className="flex flex-col mr-0.5">
+                            <button onClick={() => moveProxyCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                            <button onClick={() => moveProxyCol(key, 1)} disabled={ordIdx === proxyColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                          </div>
+                          <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={PROXY_COL_LABELS[key]}>{PROXY_COL_LABELS[key]}</label>
+                          <button onClick={() => updateWidth(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                          <input type="number" min={1} max={400} value={proxyColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(400, Number(e.target.value))); const next = { ...proxyColWidths, [key]: v }; setProxyColWidths(next); localStorage.setItem("proxies_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                          <button onClick={() => updateWidth(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="px-4 pb-4">
+                    <button onClick={() => { setProxyColWidths(DEFAULT_PROXY_COL_WIDTHS); localStorage.removeItem("proxies_col_widths_px"); setProxyColOrder(DEFAULT_PROXY_COL_ORDER); localStorage.removeItem("proxies_col_order"); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Reset to defaults</button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>

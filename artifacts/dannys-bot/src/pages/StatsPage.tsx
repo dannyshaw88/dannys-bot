@@ -330,7 +330,6 @@ export function StatsPage() {
   const [statDragOverCol, setStatDragOverCol] = useState<string | null>(null);
 
   const [manageColsOpen, setManageColsOpen] = useState(false);
-  const manageColsRef = useRef<HTMLDivElement>(null);
 
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("stats:groupMode") === "true");
 
@@ -454,15 +453,6 @@ export function StatsPage() {
     return map;
   }, [sortedProfiles, groupMode]);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (manageColsRef.current && !manageColsRef.current.contains(e.target as Node)) {
-        setManageColsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   const toggleVisible = (key: ColKey, val: boolean) => {
     const next = { ...visibleCols, [key]: val };
@@ -700,7 +690,7 @@ export function StatsPage() {
                     />
                     <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Group Accounts</span>
                   </label>
-                  <div ref={manageColsRef} className="relative">
+                  <div>
                     <button
                       onClick={() => setManageColsOpen(o => !o)}
                       className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
@@ -708,73 +698,85 @@ export function StatsPage() {
                       <Settings2 className="w-3.5 h-3.5" /> Columns
                     </button>
                     {manageColsOpen && (
-                      <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
-                        <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Show / Hide &amp; Reorder Columns</p>
-                        <div className="space-y-1.5 mb-3">
-                          {statColOrder.map((key, ordIdx) => {
-                            let icon: React.ReactNode;
-                            let label: string;
-                            let color: string;
-                            if (key === "select") { icon = null; label = "Select"; color = "text-foreground"; }
-                            else if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
-                            else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
-                            else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
-                            else if (key === "proxy_ip") { icon = <Globe className="w-3.5 h-3.5" />; label = "Proxy IP"; color = "text-muted-foreground"; }
-                            else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
-                            return (
-                              <div key={key} className="flex items-center gap-1.5 select-none">
-                                <div className="flex flex-col mr-0.5">
-                                  <button onClick={() => moveStatCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
-                                  <button onClick={() => moveStatCol(key, 1)} disabled={ordIdx === statColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setManageColsOpen(false)} />
+                        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[520px] max-h-[80vh] overflow-y-auto">
+                          <div className="px-5 pt-4 pb-3 border-b border-border">
+                            <p className="text-sm font-semibold">Columns</p>
+                          </div>
+                          <div className="p-4">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Show / Hide &amp; Reorder</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-4">
+                              {statColOrder.map((key, ordIdx) => {
+                                let icon: React.ReactNode;
+                                let label: string;
+                                let color: string;
+                                if (key === "select") { icon = null; label = "Select"; color = "text-foreground"; }
+                                else if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
+                                else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
+                                else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
+                                else if (key === "proxy_ip") { icon = <Globe className="w-3.5 h-3.5" />; label = "Proxy IP"; color = "text-muted-foreground"; }
+                                else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
+                                return (
+                                  <div key={key} className="flex items-center gap-1.5 select-none mb-1">
+                                    <div className="flex flex-col mr-0.5">
+                                      <button onClick={() => moveStatCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                                      <button onClick={() => moveStatCol(key, 1)} disabled={ordIdx === statColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                                    </div>
+                                    <label className="flex items-center gap-1.5 cursor-pointer flex-1 min-w-0">
+                                      <Checkbox checked={visibleCols[key]} onCheckedChange={(val) => toggleVisible(key, !!val)} className="h-3.5 w-3.5 shrink-0" />
+                                      <span className={`flex items-center gap-1 text-xs font-medium truncate ${color}`}>{icon} {label}</span>
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="border-t border-border/50 my-3" />
+
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Column widths (px)</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                              {colGroups.map(([key, label]) => (
+                                <div key={key} className="flex items-center gap-1.5 mb-1">
+                                  <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
+                                  <button
+                                    onClick={() => updateWidth(key as StatKey | "account", -10)}
+                                    className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                                  >
+                                    <ChevronDown className="w-3 h-3" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={colWidths[key as StatKey | "account"]}
+                                    onChange={e => {
+                                      const v = Math.max(1, Number(e.target.value) || 1);
+                                      const next = { ...colWidths, [key]: v };
+                                      setColWidths(next);
+                                      localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
+                                    }}
+                                    className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                                  />
+                                  <button
+                                    onClick={() => updateWidth(key as StatKey | "account", 10)}
+                                    className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                                  >
+                                    <ChevronUp className="w-3 h-3" />
+                                  </button>
                                 </div>
-                                <label className="flex items-center gap-2 cursor-pointer flex-1">
-                                  <Checkbox checked={visibleCols[key]} onCheckedChange={(val) => toggleVisible(key, !!val)} className="h-3.5 w-3.5 shrink-0" />
-                                  <span className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${color}`}>{icon} {label}</span>
-                                </label>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="border-t border-border/50 my-3" />
-
-                        <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Column Widths (px)</p>
-                        {colGroups.map(([key, label]) => (
-                          <div key={key} className="flex items-center gap-1.5 mb-2">
-                            <label className="text-xs w-24 text-muted-foreground shrink-0">{label}</label>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="px-4 pb-4">
                             <button
-                              onClick={() => updateWidth(key as StatKey | "account", -10)}
-                              className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                              onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); setStatColOrder(DEFAULT_STAT_COL_ORDER); localStorage.removeItem("stats_col_order"); }}
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                             >
-                              <ChevronDown className="w-3 h-3" />
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={colWidths[key as StatKey | "account"]}
-                              onChange={e => {
-                                const v = Math.max(1, Number(e.target.value) || 1);
-                                const next = { ...colWidths, [key]: v };
-                                setColWidths(next);
-                                localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
-                              }}
-                              className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                            />
-                            <button
-                              onClick={() => updateWidth(key as StatKey | "account", 10)}
-                              className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                            >
-                              <ChevronUp className="w-3 h-3" />
+                              Reset to defaults
                             </button>
                           </div>
-                        ))}
-                        <button
-                          onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); setStatColOrder(DEFAULT_STAT_COL_ORDER); localStorage.removeItem("stats_col_order"); }}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-                        >
-                          Reset to defaults
-                        </button>
-                      </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>

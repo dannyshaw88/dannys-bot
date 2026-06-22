@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.120",
+    date: "22 Jun 2026",
+    items: [
+      { category: "New", text: "Account Manager: new Total Calls column showing the lifetime API call count for each account — the same figure as Lifetime API Calls in Statistics." },
+      { category: "Improve", text: "Columns dialog on Account Manager, Statistics, Proxy Manager, and Dashboard now opens as a centred square dialog (like Actions) instead of a corner dropdown." },
+      { category: "Improve", text: "Columns dialog now uses a 2-column grid layout for a cleaner, more compact view." },
+      { category: "Fix", text: "Column labels in the Columns dialog now use normal capitalisation instead of all-caps." },
+    ],
+  },
+  {
       version: "1.1.119",
       date: "22 Jun 2026",
       items: [
@@ -7732,7 +7742,6 @@ export function Dashboard() {
   const dashDragColRef = useRef<string | null>(null);
   const [dashDragOverCol, setDashDragOverCol] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const manageColsRef = useRef<HTMLDivElement>(null);
 
   // ── Persist dashboard state across navigation ─────────────────────────────────
   useEffect(() => { sessionStorage.setItem("dashboard:tab", activeTab); }, [activeTab]);
@@ -7932,9 +7941,6 @@ export function Dashboard() {
         setProfilePickerOpen(false);
         setProfileSearch("");
       }
-      if (manageColsRef.current && !manageColsRef.current.contains(e.target as Node)) {
-        setManageColsOpen(false);
-      }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -7981,7 +7987,7 @@ export function Dashboard() {
           </button>
           <div className="ml-auto flex items-center gap-1">
             {activeTab === "api-log" && (
-              <div ref={manageColsRef} className="relative">
+              <div>
                 <button
                   onClick={() => setManageColsOpen(o => !o)}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-2.5 px-2"
@@ -7989,70 +7995,79 @@ export function Dashboard() {
                   <Settings2 className="w-3.5 h-3.5" /> Manage Columns
                 </button>
                 {manageColsOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-64">
-                    <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
-                    {colOrder.map((key, idx) => {
-                      const label = COL_LABELS[key];
-                      const updateCol = (delta: number) => {
-                        const v = Math.max(1, Math.min(600, colWidths[key] + delta));
-                        const next = { ...colWidths, [key]: v };
-                        setColWidths(next);
-                        localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
-                      };
-                      return (
-                        <div key={key} className="flex items-center gap-1 mb-2">
-                          <div className="flex flex-col mr-0.5">
-                            <button
-                              onClick={() => moveCol(key, -1)}
-                              disabled={idx === 0}
-                              className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
-                            >
-                              <ChevronUp className="w-2.5 h-2.5" />
-                            </button>
-                            <button
-                              onClick={() => moveCol(key, 1)}
-                              disabled={idx === colOrder.length - 1}
-                              className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
-                            >
-                              <ChevronDown className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                          <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
-                          <button
-                            onClick={() => updateCol(-10)}
-                            className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                          >
-                            <ChevronDown className="w-3 h-3" />
-                          </button>
-                          <input
-                            type="number"
-                            min={1}
-                            max={600}
-                            value={colWidths[key]}
-                            onChange={e => {
-                              const v = Math.max(1, Math.min(600, Number(e.target.value)));
-                              const next = { ...colWidths, [key]: v };
-                              setColWidths(next);
-                              localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
-                            }}
-                            className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                          />
-                          <button
-                            onClick={() => updateCol(10)}
-                            className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                          >
-                            <ChevronUp className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    <button
-                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths_px"); setColOrder(DEFAULT_COL_ORDER); localStorage.removeItem("dashboard_col_order"); }}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-                    >
-                      Reset to defaults
-                    </button>
-                  </div>
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setManageColsOpen(false)} />
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto">
+                      <div className="px-5 pt-4 pb-3 border-b border-border">
+                        <p className="text-sm font-semibold">Columns</p>
+                      </div>
+                      <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
+                        {colOrder.map((key, idx) => {
+                          const label = COL_LABELS[key];
+                          const updateCol = (delta: number) => {
+                            const v = Math.max(1, Math.min(600, colWidths[key] + delta));
+                            const next = { ...colWidths, [key]: v };
+                            setColWidths(next);
+                            localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
+                          };
+                          return (
+                            <div key={key} className="flex items-center gap-1 mb-1">
+                              <div className="flex flex-col mr-0.5">
+                                <button
+                                  onClick={() => moveCol(key, -1)}
+                                  disabled={idx === 0}
+                                  className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
+                                >
+                                  <ChevronUp className="w-2.5 h-2.5" />
+                                </button>
+                                <button
+                                  onClick={() => moveCol(key, 1)}
+                                  disabled={idx === colOrder.length - 1}
+                                  className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
+                                >
+                                  <ChevronDown className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                              <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
+                              <button
+                                onClick={() => updateCol(-10)}
+                                className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                              >
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                max={600}
+                                value={colWidths[key]}
+                                onChange={e => {
+                                  const v = Math.max(1, Math.min(600, Number(e.target.value)));
+                                  const next = { ...colWidths, [key]: v };
+                                  setColWidths(next);
+                                  localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
+                                }}
+                                className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                              />
+                              <button
+                                onClick={() => updateCol(10)}
+                                className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                              >
+                                <ChevronUp className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="px-4 pb-4">
+                        <button
+                          onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths_px"); setColOrder(DEFAULT_COL_ORDER); localStorage.removeItem("dashboard_col_order"); }}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Reset to defaults
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
