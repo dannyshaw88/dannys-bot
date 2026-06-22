@@ -3353,18 +3353,21 @@ class AutomationEngine {
     // Each injection fires for (pct % of processCount) follows — determined once at session
     // start so the count is predictable and visible in the log rather than a per-follow dice roll.
     const suggestedPct      = randInt(injectSuggestedMin, injectSuggestedMax);
+    // Use Math.max(1, ...) so at least 1 mid-session slot fires when the feature is
+    // enabled. Math.round alone produces 0 when processCount is small (2–3 follows) and
+    // the percentage is low (10–25%) — e.g. Math.round(2 * 17 / 100) = Math.round(0.34) = 0.
     const injectSuggestedSlots = injectSuggestedEnabled
-      ? sampleSlots(Math.round(processCount * suggestedPct / 100), 1, Math.max(1, processCount - 1))
+      ? sampleSlots(Math.max(1, Math.round(processCount * suggestedPct / 100)), 1, Math.max(1, processCount - 1))
       : new Set<number>();
 
     const searchMidPct      = randInt(injectSearchMin, injectSearchMax);
     const injectSearchMidSlots = injectSearchEnabled
-      ? sampleSlots(Math.round(processCount * searchMidPct / 100), 1, Math.max(1, processCount - 1))
+      ? sampleSlots(Math.max(1, Math.round(processCount * searchMidPct / 100)), 1, Math.max(1, processCount - 1))
       : new Set<number>();
 
     const browsePct         = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
     const injectBrowseSlots = (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
-      ? sampleSlots(Math.round(processCount * browsePct / 100), 0, Math.max(0, processCount - 1))
+      ? sampleSlots(Math.max(1, Math.round(processCount * browsePct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
 
     if (injectSuggestedEnabled)
@@ -3378,13 +3381,15 @@ class AutomationEngine {
     // This is unconditional — the real app always loads the suggested-users panel
     // when the user opens the Follow tab.  The checkbox + % control mid-session
     // re-injection (follows 2+), not this initial call.
-    if (candidates.length > 0) {
-      try {
-        await client.getSuggestedUsers();
-        engineLog("INFO", `@${profile.username}: GetSuggestedUsers fired before first follow (always-on)`);
-      } catch (e: any) {
-        engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.message ?? e}`);
-      }
+    // NOTE: do NOT gate this on candidates.length > 0. If the initial scrape returned
+    // all-deduped candidates (empty array) the rescrape loop below will still find users
+    // to follow — but GetSuggestedUsers would have been skipped. Fire it unconditionally
+    // so it always precedes the first follow regardless of how candidates were obtained.
+    try {
+      await client.getSuggestedUsers();
+      engineLog("INFO", `@${profile.username}: GetSuggestedUsers fired before first follow (always-on)`);
+    } catch (e: any) {
+      engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.message ?? e}`);
     }
 
     // Inject /api/v1/users/search/ before the very first follow of every session —

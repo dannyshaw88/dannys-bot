@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.114",
+    date: "22 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify: the automated login window is now completely hidden off-screen and removed from the taskbar and alt-tab list. It was previously appearing as a small browser window in the corner of the screen during every verify run, which could interfere with whatever you were doing." },
+      { category: "Fix", text: "Verify: fixed a bug where the password would be typed incorrectly on roughly 35% of accounts. Each character was being inserted twice internally — once by the key event and once by a separate insert command — causing React to reconcile the input and jump the cursor to the wrong position mid-typing. Passwords now type cleanly every time." },
+      { category: "Fix", text: "GetSuggestedUsers: fixed two silent failures — the initial scrape was being skipped when the first batch of candidates were all already-followed users, and the slot calculator was returning zero on small account lists (2–3 accounts), causing the tool to process no one at all." },
+    ],
+  },
+  {
     version: "1.1.113",
     date: "22 Jun 2026",
     items: [

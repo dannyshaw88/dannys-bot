@@ -1596,7 +1596,7 @@ async function doAutoLogin(
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await delay(100);
-    await typeTextCDP(wc.debugger, password);
+    await typeTextCDP(wc.debugger, password, { androidIme: true });
   } catch (cdpErr: any) {
     console.error(`[doAutoLogin:${profileId}] ${_ts()} CDP form fill FAILED: ${cdpErr?.message}`);
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
@@ -2114,9 +2114,13 @@ export async function openEbWindow(opts: {
       _initX = Math.max(0, sw - ww - 8);
       _initY = Math.max(0, Math.floor((sh - wh) / 2));
     } else {
-      // Verify-mode: bottom-right corner, away from the user's working area.
-      _initX = Math.max(0, sw - ww - 8);
-      _initY = Math.max(0, sh - wh - 8);
+      // Verify-mode: position COMPLETELY OFF-SCREEN to the right so the user
+      // never sees the window or interacts with it accidentally.
+      // DO NOT minimize — Chromium throttles minimized windows (timers fire
+      // seconds late, form-fill breaks, the whole verify sequence hangs).
+      // An off-screen-but-shown window renders normally without throttling.
+      _initX = sw + 10;
+      _initY = Math.max(0, Math.floor((sh - wh) / 2));
     }
   }
   const win = new BrowserWindow({
@@ -2128,6 +2132,9 @@ export async function openEbWindow(opts: {
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
     show:            false,
+    // Verify-mode windows are positioned off-screen so they never appear in the
+    // taskbar or alt-tab switcher — the user should not see or interact with them.
+    skipTaskbar:     verifyMode ? true : false,
     webPreferences: {
       nodeIntegration:  false,
       contextIsolation: true,
@@ -3404,7 +3411,7 @@ export async function openEbWindow(opts: {
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
               await _ms(100);
-              await typeTextCDP(_d, password);
+              await typeTextCDP(_d, password, { androidIme: true });
               for (let _bi = 0; _bi < 20; _bi++) {
                 const _bp = await win.webContents.executeJavaScript(`
                   (() => {
