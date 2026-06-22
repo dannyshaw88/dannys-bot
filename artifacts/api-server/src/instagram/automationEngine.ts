@@ -3385,11 +3385,14 @@ class AutomationEngine {
     // all-deduped candidates (empty array) the rescrape loop below will still find users
     // to follow — but GetSuggestedUsers would have been skipped. Fire it unconditionally
     // so it always precedes the first follow regardless of how candidates were obtained.
+    console.log(`[getSuggestedUsers:pre] @${profile.username} — calling getSuggestedUsers before first follow (logCallFn set=${!!(client as any).logCallFn})`);
     try {
       await client.getSuggestedUsers();
+      console.log(`[getSuggestedUsers:pre] @${profile.username} — OK`);
       engineLog("INFO", `@${profile.username}: GetSuggestedUsers fired before first follow (always-on)`);
     } catch (e: any) {
-      engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.message ?? e}`);
+      console.log(`[getSuggestedUsers:pre] @${profile.username} — FAILED: ${e?.message ?? e}`);
+      engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.name ?? "Error"}: ${e?.message ?? e}`);
     }
 
     // Inject /api/v1/users/search/ before the very first follow of every session —
@@ -3598,12 +3601,15 @@ class AutomationEngine {
         let suggestedFired = false;
 
         if (injectSuggestedEnabled && injectSuggestedSlots.has(followed)) {
+          console.log(`[getSuggestedUsers:mid] @${profile.username} — injecting at follow #${followed + 1}`);
           try {
             await client.getSuggestedUsers();
+            console.log(`[getSuggestedUsers:mid] @${profile.username} — OK`);
             engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
             suggestedFired = true;
           } catch (e: any) {
-            engineLog("WARN", `@${profile.username}: getSuggestedUsers failed (non-critical): ${e?.message ?? e}`);
+            console.log(`[getSuggestedUsers:mid] @${profile.username} — FAILED: ${e?.message ?? e}`);
+            engineLog("WARN", `@${profile.username}: getSuggestedUsers (mid-session) failed (non-critical): ${e?.name ?? "Error"}: ${e?.message ?? e}`);
           }
         }
 

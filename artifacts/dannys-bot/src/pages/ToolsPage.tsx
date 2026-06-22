@@ -3,7 +3,7 @@ import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +23,8 @@ import { getIconByKey } from "@/components/trustscore/iconRegistry";
 
 // ─── Trust Scores Tab ─────────────────────────────────────────────────────────
 
+interface TsTemplate { trustScoreId: string; profileId: number | null; }
+
 function resolveTsIcon(
   base: TrustLevelEntry["icon"],
   iconKey: string
@@ -32,6 +34,15 @@ function resolveTsIcon(
   const lucide = getIconByKey(iconKey);
   if (lucide) return lucide as TrustLevelEntry["icon"];
   return base;
+}
+
+function loadTsNotes(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem("equinox:ts_notes") ?? "{}"); } catch { return {}; }
+}
+function saveTsNote(id: string, note: string) {
+  const all = loadTsNotes();
+  all[id] = note;
+  localStorage.setItem("equinox:ts_notes", JSON.stringify(all));
 }
 
 interface TsEditState {
@@ -48,6 +59,7 @@ function TrustScoresTabContent() {
   const queryClient = useQueryClient();
 
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getTrustLevels());
+  const [notes, setNotes] = useState<Record<string, string>>(() => loadTsNotes());
   const [deleteTarget, setDeleteTarget] = useState<TrustLevelEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -57,7 +69,33 @@ function TrustScoresTabContent() {
   const dragIdxRef = useRef<number | null>(null);
   const dragOverIdxRef = useRef<number | null>(null);
 
+  const { data: templates } = useQuery<TsTemplate[]>({
+    queryKey: ["/api/trust-score-templates"],
+    queryFn: async () => {
+      const r = await fetch("/api/trust-score-templates", { credentials: "include" });
+      if (!r.ok) throw new Error("failed");
+      return r.json();
+    },
+  });
+
+  const templateMap = new Map<string, number>();
+  templates?.forEach(t => { if (t.profileId) templateMap.set(t.trustScoreId, t.profileId); });
+
   const refreshLevels = () => setLevels(getTrustLevels());
+
+  const handleNoteChange = (id: string, val: string) => {
+    setNotes(prev => ({ ...prev, [id]: val }));
+    saveTsNote(id, val);
+  };
+
+  const handleBadgeClick = (level: TrustLevelEntry) => {
+    const profileId = templateMap.get(level.id);
+    if (profileId) {
+      setLocation(`/profiles/${profileId}?fromTrustScore=${level.id}`);
+    } else {
+      setLocation(`/trust-scores/${level.id}`);
+    }
+  };
 
   const handleDeleteClick = (e: React.MouseEvent, level: TrustLevelEntry) => {
     e.stopPropagation();
@@ -142,67 +180,70 @@ function TrustScoresTabContent() {
     setEditState(null);
   };
 
-  const rows: TrustLevelEntry[][] = [];
-  for (let i = 0; i < levels.length; i += 5) {
-    rows.push(levels.slice(i, i + 5));
-  }
-
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Assign and configure trust score levels for your accounts. Drag to reorder, click a badge to view its detail page.</p>
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">Drag to reorder. Click a badge to open its account settings.</p>
 
-      <div className="space-y-1 w-full overflow-x-auto">
-        {rows.map((row, rowIdx) => (
-          <div key={rowIdx} className="flex gap-2 items-center">
-            {row.map((level, colIdx) => {
-              const globalIdx = rowIdx * 5 + colIdx;
-              const Icon = level.icon;
-              return (
-                <div
-                  key={level.id}
-                  draggable
-                  onDragStart={e => onDragStart(e, globalIdx)}
-                  onDragOver={e => onDragOver(e, globalIdx)}
-                  onDragEnd={onDragEnd}
-                  className="group relative flex items-center gap-2 px-2 py-2 rounded-lg border border-transparent hover:border-border hover:bg-accent transition-colors cursor-grab active:cursor-grabbing select-none"
-                  style={{ width: 275 }}
-                >
-                  <GripVertical className="w-3 h-3 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground transition-colors" />
-                  <span className="w-5 text-[11px] font-bold text-muted-foreground shrink-0 text-right">{globalIdx + 1}</span>
-                  <button
-                    onClick={() => setLocation(`/trust-scores/${level.id}`)}
-                    className="flex items-center gap-1.5 rounded-full px-4 py-1.5 shrink-0 hover:opacity-80 transition-opacity"
-                    style={{ background: level.bg, border: `1px solid ${level.border}` }}
-                    onMouseDown={e => e.stopPropagation()}
-                  >
-                    <Icon size={15} color={level.text} fill={level.text} strokeWidth={2} />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>{level.label}</span>
-                  </button>
-                  <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button onClick={e => handleDeleteClick(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete this trust score">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {rowIdx === rows.length - 1 && (
-              <button onClick={() => setShowAdd(true)} className="flex items-center justify-center rounded-lg border border-dashed border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors shrink-0" style={{ width: 44, height: 38 }} title="Add trust score">
-                <Plus className="w-4 h-4" />
+      <div className="space-y-1.5 w-full">
+        {levels.map((level, idx) => {
+          const Icon = level.icon;
+          const note = notes[level.id] ?? "";
+          return (
+            <div
+              key={level.id}
+              draggable
+              onDragStart={e => onDragStart(e, idx)}
+              onDragOver={e => onDragOver(e, idx)}
+              onDragEnd={onDragEnd}
+              className="group flex items-center gap-2 rounded-lg border border-transparent hover:border-border hover:bg-accent/40 transition-colors cursor-grab active:cursor-grabbing select-none px-2 py-1.5"
+            >
+              {/* Left: drag + number + badge + actions */}
+              <GripVertical className="w-3 h-3 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground transition-colors" />
+              <span className="w-5 text-[11px] font-bold text-muted-foreground shrink-0 text-right">{idx + 1}</span>
+              <button
+                onClick={() => handleBadgeClick(level)}
+                onMouseDown={e => e.stopPropagation()}
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 shrink-0 hover:opacity-80 active:scale-95 transition-all"
+                style={{ background: level.bg, border: `1px solid ${level.border}`, minWidth: 100 }}
+                title="Open account settings for this trust score"
+              >
+                <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{level.label}</span>
               </button>
-            )}
-          </div>
-        ))}
-        {levels.length === 0 && (
-          <div className="flex gap-2 items-center">
-            <button onClick={() => setShowAdd(true)} className="flex items-center justify-center rounded-lg border border-dashed border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors" style={{ width: 44, height: 38 }} title="Add trust score">
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button onClick={e => handleDeleteClick(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete this trust score">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* Right: note field */}
+              <textarea
+                value={note}
+                onChange={e => handleNoteChange(level.id, e.target.value)}
+                onMouseDown={e => e.stopPropagation()}
+                placeholder="Add a note…"
+                rows={1}
+                className="flex-1 ml-2 px-2 py-1 text-xs bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40 cursor-text"
+                style={{ minHeight: 28, maxHeight: 72 }}
+                onInput={e => {
+                  const t = e.currentTarget;
+                  t.style.height = "auto";
+                  t.style.height = Math.min(t.scrollHeight, 72) + "px";
+                }}
+              />
+            </div>
+          );
+        })}
+
+        {/* Add button */}
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 ml-8 mt-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add Trust Score
+        </button>
       </div>
 
       {editState && !editState.showIconPicker && (
@@ -539,7 +580,7 @@ function BulkImportTabContent() {
 
 // ─── Tools Page ───────────────────────────────────────────────────────────────
 
-const TOOLS_TABS = ["Evasion Stats", "Ghost Browser", "Import", "Trust Scores"] as const;
+const TOOLS_TABS = ["Evasion Stats", "Ghost Browser", "Trust Scores", "Import"] as const;
 type ToolsTab = typeof TOOLS_TABS[number];
 
 export function ToolsPage() {
@@ -572,13 +613,13 @@ export function ToolsPage() {
 
       {activeTab === "Ghost Browser" && <GhostBrowserTabContent />}
 
-      {activeTab === "Import" && <BulkImportTabContent />}
-
       {activeTab === "Trust Scores" && (
         <div className="desktop-card p-6">
           <TrustScoresTabContent />
         </div>
       )}
+
+      {activeTab === "Import" && <BulkImportTabContent />}
     </AppLayout>
   );
 }

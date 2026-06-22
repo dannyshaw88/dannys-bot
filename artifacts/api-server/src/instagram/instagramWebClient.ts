@@ -678,12 +678,22 @@ export class InstagramWebClient {
     const prevInTimed = this._inTimedCall;
     this._inTimedCall = true;
     let result!: T;
+    let didThrow = false;
+    let thrownErr: unknown;
     try {
       result = await fn();
+    } catch (err) {
+      didThrow = true;
+      thrownErr = err;
     } finally {
       this._inTimedCall = prevInTimed;
     }
     const ms = Date.now() - t0;
+    if (didThrow) {
+      // Log the call even on failure so it appears in the API call log, then re-throw.
+      this.logCallFn?.(opName, ms, undefined, true);
+      throw thrownErr;
+    }
     if (!shouldLog || shouldLog(result)) {
       const msg = typeof message === "function" ? message(result) : message;
       this.logCallFn?.(opName, ms, msg);

@@ -351,6 +351,10 @@ export function ProfileDetailsPage() {
   const [location, navigate] = useLocation();
   const search = useSearch();
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
+  const fromTrustScoreId = new URLSearchParams(search).get("fromTrustScore") ?? null;
+  const fromTrustScoreLevel = fromTrustScoreId
+    ? getTrustLevels().find(l => l.id === fromTrustScoreId) ?? null
+    : null;
 
   // Keyboard shortcuts — number keys 1-7 switch tabs (blocked when typing in inputs)
   useEffect(() => {
@@ -803,6 +807,27 @@ export function ProfileDetailsPage() {
         <div className="w-full">
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1 space-y-1">
+              {/* Row 1 — Trust Score breadcrumb (shown only when arriving from Trust Scores tab) */}
+              {fromTrustScoreLevel && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground pb-0.5">
+                  <button
+                    onClick={() => navigate("/tools")}
+                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                  >
+                    <ChevronLeft className="w-3 h-3" />
+                    <span>Trust Scores</span>
+                  </button>
+                  <span className="text-muted-foreground/40">/</span>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-bold"
+                    style={{ background: fromTrustScoreLevel.bg, border: `1px solid ${fromTrustScoreLevel.border}`, color: fromTrustScoreLevel.text, fontSize: 11 }}
+                  >
+                    {(() => { const Icon = fromTrustScoreLevel.icon; return <Icon size={10} color={fromTrustScoreLevel.text} fill={fromTrustScoreLevel.text} strokeWidth={2} />; })()}
+                    {fromTrustScoreLevel.label}
+                  </span>
+                  <span className="text-muted-foreground/40 ml-1">Template Account</span>
+                </div>
+              )}
               {/* Row 2 — status pill + account picker + trustscore + nav links */}
               <div className="flex items-center gap-1 flex-wrap">
                 {(() => {
