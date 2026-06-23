@@ -913,6 +913,44 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Refresh endpoint snapshots from live instagram_api_calls ─────────────────
+  // Called at export time so automated/captcha/locked entries reflect ALL calls
+  // made after the flag event, not just the frozen snapshot taken at flag time.
+  // Non-fatal per profile — missing/deleted profiles are simply omitted.
+  app.post("/api/analytics/refresh-endpoint-snapshots", async (req, res) => {
+    try {
+      const { profileIds } = req.body as { profileIds: number[] };
+      if (!Array.isArray(profileIds) || profileIds.length === 0) {
+        res.json({ ok: true, results: {} });
+        return;
+      }
+      const results: Record<string, { username: string; endpointSnapshot: string; endpointCount: number }> = {};
+      await Promise.all(profileIds.map(async (profileId) => {
+        try {
+          const profile = await storage.getProfile(profileId).catch(() => null);
+          if (!profile) return;
+          const allCalls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+          const calls = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+          const snapshot = JSON.stringify(calls.map((c: { operationName: string; date: string; source?: string | null }) => ({
+            operationName: c.operationName,
+            date: c.date,
+            source: c.source ?? null,
+          })));
+          results[String(profileId)] = {
+            username: profile.username,
+            endpointSnapshot: snapshot,
+            endpointCount: calls.length,
+          };
+        } catch { /* non-fatal — skip this profile */ }
+      }));
+      req.log.info({ profileCount: Object.keys(results).length }, "[refresh-endpoint-snapshots] done");
+      res.json({ ok: true, results });
+    } catch (err) {
+      req.log.error({ err }, "[refresh-endpoint-snapshots] error");
+      res.status(500).json({ error: "Failed to refresh endpoint snapshots" });
+    }
+  });
+
   // ── Endpoint Risk Analysis: which endpoints correlate most with bans ────────
   // For each account's endpointSnapshot, the last WINDOW calls = "pre-ban window".
   // Pre-ban presence % = how many accounts had this endpoint in their pre-ban window.

@@ -2291,6 +2291,43 @@ export function BanAnalyticsPage() {
     } catch { /* non-fatal — survivors will export without endpoint data */ }
     const survivorPatternMap = new Map<string, SurvivorPattern>(survivorPatternData.map(sp => [sp.username, sp]));
 
+    // Fetch live endpoint snapshots for all flagged entries that still have an
+    // active profile in the DB. This replaces the frozen snapshot taken at flag
+    // time with the full call history including everything after the flag event —
+    // so accounts that resumed after automated/captcha/locked/banned status show
+    // their complete API call picture, not just pre-flag calls.
+    const freshEpsMap = new Map<string, { endpointSnapshot: string; endpointCount: number }>(); // username → live data
+    if (flaggedProfileIds.length > 0) {
+      try {
+        const epsResp = await fetch("/api/analytics/refresh-endpoint-snapshots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ profileIds: flaggedProfileIds }),
+        });
+        if (epsResp.ok) {
+          const epsData = await epsResp.json() as { ok: boolean; results: Record<string, { username: string; endpointSnapshot: string; endpointCount: number }> };
+          for (const val of Object.values(epsData.results ?? {})) {
+            freshEpsMap.set(val.username, { endpointSnapshot: val.endpointSnapshot, endpointCount: val.endpointCount });
+          }
+        }
+      } catch { /* non-fatal — export proceeds with frozen snapshots */ }
+    }
+
+    // Replace frozen endpointSnapshot/endpointCount with live data where available.
+    function applyFreshEps<T extends AnalyticsEntry>(entries: T[]): T[] {
+      return entries.map(e => {
+        const fresh = freshEpsMap.get(e.username);
+        if (!fresh) return e;
+        return { ...e, endpointSnapshot: fresh.endpointSnapshot, endpointCount: fresh.endpointCount };
+      });
+    }
+
+    const freshBanEntries      = applyFreshEps(banEntries);
+    const freshAutoEntries     = applyFreshEps(automatedEntries);
+    const freshCaptchaEntries  = applyFreshEps(captchaEntries);
+    const freshLockedEntries   = applyFreshEps(lockedEntries);
+
     function makeEnrichFn(entries: AnalyticsEntry[]) {
       const cross = computeCrossStats(entries, trustMap, profileMap, profileNotesMap);
       return function enrichEntry(e: AnalyticsEntry) {
@@ -2376,10 +2413,10 @@ export function BanAnalyticsPage() {
         totalFlagged: banEntries.length + automatedEntries.length + captchaEntries.length + lockedEntries.length,
       },
       trustScoreLevels: levels.map((l, i) => ({ rank: i + 1, id: l.id, label: l.label })),
-      banned:    banEntries.map(makeEnrichFn(banEntries)),
-      automated: automatedEntries.map(makeEnrichFn(automatedEntries)),
-      captcha:   captchaEntries.map(makeEnrichFn(captchaEntries)),
-      locked:    lockedEntries.map(makeEnrichFn(lockedEntries)),
+      banned:    freshBanEntries.map(makeEnrichFn(freshBanEntries)),
+      automated: freshAutoEntries.map(makeEnrichFn(freshAutoEntries)),
+      captcha:   freshCaptchaEntries.map(makeEnrichFn(freshCaptchaEntries)),
+      locked:    freshLockedEntries.map(makeEnrichFn(freshLockedEntries)),
       survivors: survivingAccounts.map(p => {
         const id = profileMap.get(p.username) ?? p.id;
         const ti: TrustInfo | undefined = (() => {
@@ -2453,7 +2490,7 @@ export function BanAnalyticsPage() {
       proxyRisks:        proxyRisks.map(pr => ({ proxyHost: pr.host, totalEvents: pr.total, uniqueAccounts: pr.accounts.length, accounts: pr.accounts })),
       concurrencyAlerts: concurrencyAlerts,
       verifyTimeline: (() => {
-        const allEntries = [...banEntries, ...automatedEntries, ...captchaEntries, ...lockedEntries];
+        const allEntries = [...freshBanEntries, ...freshAutoEntries, ...freshCaptchaEntries, ...freshLockedEntries];
         const byProxyDay = new Map<string, { proxy: string; date: string; accounts: { username: string; timestamp: string }[] }>();
         for (const e of allEntries) {
           if (!e.proxyHost || !e.endpointSnapshot) continue;

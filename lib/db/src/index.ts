@@ -328,6 +328,27 @@ if (!colNames.has("resuming_prev_status")) {
 if (!colNames.has("use_home_ip")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN use_home_ip INTEGER DEFAULT 0;`);
 }
+if (!colNames.has("created_at")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN created_at TEXT;`);
+  // Backfill from "Added: YYYY-MM-DD HH:MM:SS UTC" stamps already written to notes
+  sqlite.exec(`
+    UPDATE profiles
+    SET created_at = (
+      CASE
+        WHEN notes LIKE '%Added: ____-__-__ __:__:__ UTC%'
+        THEN replace(
+               replace(
+                 substr(notes, instr(notes, 'Added: ') + 7, 19),
+                 ' ', 'T'
+               ) || 'Z',
+               '',''
+             )
+        ELSE NULL
+      END
+    )
+    WHERE created_at IS NULL;
+  `);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

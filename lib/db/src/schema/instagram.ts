@@ -109,6 +109,7 @@ export const profiles = sqliteTable("profiles", {
   leakSnapshot: text("leak_snapshot"),
   isTemplate: integer("is_template", { mode: "boolean" }).default(false),
   templateId: text("template_id"),
+  createdAt: text("created_at"),
 });
 
 export const tools = sqliteTable("tools", {

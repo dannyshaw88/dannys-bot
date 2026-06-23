@@ -211,6 +211,9 @@ export class DatabaseStorage implements IStorage {
       // Preserve any existing notes (EQX import carries the original stamp); only
       // set the auto-stamp when notes is genuinely absent.
       notes: (profile.notes && String(profile.notes).trim()) ? profile.notes : firstAddedStamp,
+      // Always record when the profile was first added; this drives the "Alive For"
+      // column on the accounts page and never changes for the lifetime of the account.
+      createdAt: now.toISOString(),
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;

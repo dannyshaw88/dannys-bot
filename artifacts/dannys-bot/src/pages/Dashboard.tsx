@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.135",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Feature", text: "New 'Alive For' column on the accounts page shows how long each account has been in the software. Timer starts when the account is first added and only resets if the account is deleted and re-imported. Sortable by clicking the header." },
+      { category: "Fix", text: "Evasion stats export now includes all API calls made after an account was flagged (automated, captcha, locked, or banned) — not just the frozen snapshot taken at flag time. Accounts that resume after a flag now show their full call history in the export." },
+      { category: "UI", text: "All account table columns (Followers, Following, Sync, ABD, Active) now centre-align their data to match the rest of the table." },
+    ],
+  },
+  {
     version: "1.1.134",
     date: "23 Jun 2026",
     items: [

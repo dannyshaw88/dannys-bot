@@ -120,11 +120,11 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, aliveFor: 80, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", aliveFor: "Alive For", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -408,9 +408,9 @@ export function ProfilesPage() {
     setActionsOpen(false);
   }, [selectedProfileIds]);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls" | "aliveFor" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall" || v === "totalCalls") ? v as any : "account";
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall" || v === "totalCalls" || v === "aliveFor") ? v as any : "account";
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (localStorage.getItem("profiles:sortDir") as "asc" | "desc") === "desc" ? "desc" : "asc"
@@ -568,6 +568,11 @@ export function ProfilesPage() {
         const nb = lifetimeCallsMap[b.id] ?? 0;
         return sortDir === "asc" ? na - nb : nb - na;
       }
+      if (sortField === "aliveFor") {
+        const ta = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
+        const tb = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        return sortDir === "asc" ? ta - tb : tb - ta;
+      }
       let va = "", vb = "";
       if (sortField === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
@@ -615,10 +620,10 @@ export function ProfilesPage() {
     });
   };
 
-  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls") => {
+  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls" | "aliveFor") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
-      const defaultDir = (field === "sync" || field === "lastApiCall" || field === "totalCalls") ? "desc" : "asc";
+      const defaultDir = (field === "sync" || field === "lastApiCall" || field === "totalCalls" || field === "aliveFor") ? "desc" : "asc";
       setSortField(field); setSortDir(defaultDir);
       newDir = defaultDir;
       localStorage.setItem("profiles:sortField", field);
@@ -1322,19 +1327,24 @@ export function ProfilesPage() {
                   STATUS
                 </button>
               );
-              if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Active</div>;
+              if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>Active</div>;
+              if (key === "aliveFor") return (
+                <button key={key} {...dragProps} onClick={() => cycleSort("aliveFor")} style={{ width: profColWidths.aliveFor }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer select-none ${sortField === "aliveFor" ? "text-foreground" : ""} ${dragBorder}`}>
+                  ALIVE FOR
+                </button>
+              );
               if (key === "followers") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   FOLLOWERS
                 </button>
               );
               if (key === "following") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   FOLLOWING
                 </button>
               );
               if (key === "sync") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("sync")} style={{ width: profColWidths.sync }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("sync")} style={{ width: profColWidths.sync }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   SYNC
                 </button>
               );
@@ -1356,7 +1366,7 @@ export function ProfilesPage() {
                   TRUSTSCORE
                 </button>
               );
-              if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
+              if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>ABD</div>;
               if (key === "verifyhealth") return <div key={key} {...dragProps} style={{ width: profColWidths.verifyhealth }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>VERIFY</div>;
               return null;
             })}
@@ -1481,15 +1491,35 @@ export function ProfilesPage() {
                         <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" disabled={!hasProxy} title={!hasProxy ? "Assign a proxy before enabling this account" : undefined} />
                       </div>
                     );
+                    if (key === "aliveFor") {
+                      const createdAt = (profile as any).createdAt ? new Date((profile as any).createdAt) : null;
+                      let aliveLabel: React.ReactNode = <span className="text-muted-foreground/40">—</span>;
+                      if (createdAt) {
+                        const diffMs  = Date.now() - createdAt.getTime();
+                        const diffMin = Math.floor(diffMs / 60_000);
+                        const diffHr  = Math.floor(diffMin / 60);
+                        const diffDay = Math.floor(diffHr / 24);
+                        if (diffMin < 1)        aliveLabel = <span>Just now</span>;
+                        else if (diffMin < 60)  aliveLabel = <span>{diffMin}m</span>;
+                        else if (diffHr  < 24)  aliveLabel = <span>{diffHr}h {diffMin % 60}m</span>;
+                        else if (diffDay < 30)  aliveLabel = <span>{diffDay}d {diffHr % 24}h</span>;
+                        else                    aliveLabel = <span>{diffDay}d</span>;
+                      }
+                      return (
+                        <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={createdAt ? `Added to software: ${createdAt.toLocaleString()}` : "Added date unknown"} onMouseDown={e => e.stopPropagation()}>
+                          <span className="text-[10px] font-mono text-foreground truncate">{aliveLabel}</span>
+                        </div>
+                      );
+                    }
                     if (key === "followers") return (
-                      <div key={key} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center" onMouseDown={e => e.stopPropagation()}>
+                      <div key={key} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()}>
                         <span className="text-[11px] font-mono text-foreground/80">
                           {profile.followersCount != null ? profile.followersCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
                         </span>
                       </div>
                     );
                     if (key === "following") return (
-                      <div key={key} style={{ width: profColWidths.following }} className="shrink-0 flex items-center" onMouseDown={e => e.stopPropagation()}>
+                      <div key={key} style={{ width: profColWidths.following }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()}>
                         <span className="text-[11px] font-mono text-foreground/80">
                           {profile.followingCount != null ? profile.followingCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
                         </span>
@@ -1509,7 +1539,7 @@ export function ProfilesPage() {
                         else                    syncLabel = <span>{diffDay}d ago</span>;
                       }
                       return (
-                        <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
+                        <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center justify-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-foreground truncate">{syncLabel}</span>
                         </div>
                       );
