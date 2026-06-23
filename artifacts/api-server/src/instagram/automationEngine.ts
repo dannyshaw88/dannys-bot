@@ -3648,6 +3648,18 @@ class AutomationEngine {
 
       // Browse before follow — fires on pre-calculated slots (browsePct % of processCount).
       if (injectProfileBrowsingEnabled && injectBrowseSlots.has(followed)) {
+        // Re-check global skip immediately before browsing — the inject suggested/search
+        // calls above can take several seconds, during which another profile may have
+        // followed this user and recorded them as globally followed. Checking here ensures
+        // we never browse (or follow) a user who was picked up by another profile in that window.
+        if (globalSkipFollowed && await storage.isGloballyFollowed(user.username)) {
+          const followerLabel = await storage.getGlobalFollowerLabel(user.username);
+          const detail = followerLabel ? `Skipped, followed by @${followerLabel}` : "Skipped, followed by another profile";
+          console.log(`[engine] @${profile.username}: skip browse @${user.username} — ${detail} (caught before browse)`);
+          this.logAction(profile.id, tool.id, "dedup_skip", user.username, source.value, source.type, "skipped", detail);
+          dedupSkipped++;
+          continue;
+        }
         await browseTargetProfile("pre-follow browse", user);
         // Abandon follow after browsing — still uses its own per-instance probability
         if (injectProfileBrowsingAbandonFollow) {

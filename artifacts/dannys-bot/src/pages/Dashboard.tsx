@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.133",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "When inject profile browsing is enabled, the 'already followed by another profile' check now runs immediately before the browse — not just at the top of the loop. Prevents browsing (and following) a user that another account picked up during the inject suggested/search window." },
+    ],
+  },
+  {
     version: "1.1.132",
     date: "23 Jun 2026",
     items: [
