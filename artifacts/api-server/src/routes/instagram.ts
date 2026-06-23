@@ -4075,12 +4075,15 @@ export async function registerInstagramRoutes(
       themeColor: settings.themeColor ?? "blue",
       themeMode: settings.themeMode ?? "dark",
       preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
+      protectAccountsEnabled: settings.protectAccountsEnabled === "true",
+      protectAccountsMinMins: parseInt(settings.protectAccountsMinMins ?? "60", 10),
+      protectAccountsMaxMins: parseInt(settings.protectAccountsMaxMins ?? "120", 10),
     });
   });
 
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -4147,6 +4150,15 @@ export async function registerInstagramRoutes(
     if (typeof preFilledPhoneNumber === "string") {
       await storage.setGlobalSetting("preFilledPhoneNumber", preFilledPhoneNumber);
     }
+    if (typeof protectAccountsEnabled === "boolean") {
+      await storage.setGlobalSetting("protectAccountsEnabled", String(protectAccountsEnabled));
+    }
+    if (typeof protectAccountsMinMins === "number" && protectAccountsMinMins >= 1) {
+      await storage.setGlobalSetting("protectAccountsMinMins", String(Math.round(protectAccountsMinMins)));
+    }
+    if (typeof protectAccountsMaxMins === "number" && protectAccountsMaxMins >= 1) {
+      await storage.setGlobalSetting("protectAccountsMaxMins", String(Math.round(protectAccountsMaxMins)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -4171,6 +4183,9 @@ export async function registerInstagramRoutes(
       themeColor: settings.themeColor ?? "blue",
       themeMode: settings.themeMode ?? "dark",
       preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
+      protectAccountsEnabled: settings.protectAccountsEnabled === "true",
+      protectAccountsMinMins: parseInt(settings.protectAccountsMinMins ?? "60", 10),
+      protectAccountsMaxMins: parseInt(settings.protectAccountsMaxMins ?? "120", 10),
     });
   });
 

@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -454,6 +454,78 @@ export function SettingsPage() {
         </div>
 
 
+
+        {/* Protect Accounts */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+              <ShieldAlert className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Protect Accounts</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            When an account is marked as banned, automatically pause all other accounts on the same proxy for a random window of time. This reduces the risk of Instagram flagging sibling accounts during an IP taint window.
+          </p>
+
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label className="text-sm font-medium cursor-pointer" htmlFor="protect-enabled">
+                  Enable Protect Accounts
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  When enabled, sibling accounts on the same proxy are toggled off and given a countdown timer when a ban is detected. When disabled, nothing happens to other accounts on the proxy.
+                </p>
+              </div>
+              <Switch
+                id="protect-enabled"
+                checked={settings?.protectAccountsEnabled ?? false}
+                onCheckedChange={(v) => mutation.mutate({ protectAccountsEnabled: v })}
+                disabled={isLoading || mutation.isPending}
+                className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+              />
+            </div>
+
+            <div className={`border-t border-border/50 pt-4 space-y-3 transition-opacity ${settings?.protectAccountsEnabled ? "" : "opacity-40 pointer-events-none select-none"}`}>
+              <p className="text-sm font-medium">Pause Duration (minutes)</p>
+              <p className="text-xs text-muted-foreground">A random pause length is picked between the min and max values below.</p>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="protect-min" className="text-sm whitespace-nowrap w-8 text-right">Min</Label>
+                  <Input
+                    id="protect-min"
+                    type="number"
+                    min={1}
+                    max={settings?.protectAccountsMaxMins ?? 120}
+                    defaultValue={settings?.protectAccountsMinMins ?? 60}
+                    key={`pmin-${settings?.protectAccountsMinMins}`}
+                    onBlur={e => {
+                      const v = Math.max(1, parseInt(e.target.value, 10) || 60);
+                      if (v !== settings?.protectAccountsMinMins) mutation.mutate({ protectAccountsMinMins: v });
+                    }}
+                    className="w-24 h-8 text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="protect-max" className="text-sm whitespace-nowrap w-8 text-right">Max</Label>
+                  <Input
+                    id="protect-max"
+                    type="number"
+                    min={settings?.protectAccountsMinMins ?? 1}
+                    defaultValue={settings?.protectAccountsMaxMins ?? 120}
+                    key={`pmax-${settings?.protectAccountsMaxMins}`}
+                    onBlur={e => {
+                      const v = Math.max(settings?.protectAccountsMinMins ?? 1, parseInt(e.target.value, 10) || 120);
+                      if (v !== settings?.protectAccountsMaxMins) mutation.mutate({ protectAccountsMaxMins: v });
+                    }}
+                    className="w-24 h-8 text-sm"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">minutes</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Follow Skip Settings */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>

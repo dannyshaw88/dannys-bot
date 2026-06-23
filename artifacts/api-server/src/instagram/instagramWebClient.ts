@@ -4871,7 +4871,7 @@ export class InstagramWebClient {
   // Called between follows to add natural API variety.
   async getSuggestedUsers(): Promise<void> {
     return this.timed("GetSuggestedUsers", async () => {
-      await this.mobileSessionGet(`/api/v1/discover/ayml/`);
+      await this.mobileSessionPost(`/api/v1/discover/ayml/`);
     }, "Get suggested users");
   }
 
@@ -4881,7 +4881,7 @@ export class InstagramWebClient {
   // and follows them using the mobile API — seeding the feed for future runs.
   async followSuggestedUsers(count: number): Promise<{ followed: number; usernames: string[] }> {
     return this.timed("FollowSuggestedUsers", async () => {
-      const j = await this.mobileSessionGet(`/api/v1/discover/ayml/`);
+      const j = await this.mobileSessionPost(`/api/v1/discover/ayml/`);
       const suggestions: any[] = j?.suggested_users ?? j?.users ?? [];
       const toFollow = suggestions.slice(0, count);
       const followed: string[] = [];

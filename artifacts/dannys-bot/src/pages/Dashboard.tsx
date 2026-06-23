@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.123",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Get Suggested Users no longer fails with \"Method GET not allowed\" — Instagram's discover endpoint now requires POST and the app has been updated to match." },
+      { category: "New", text: "Protect Accounts setting added to Settings → Automation: when enabled, all other accounts on the same proxy are automatically paused for a random window of time when one account is marked as banned." },
+      { category: "New", text: "Protect Accounts pause window is configurable — set your own minimum and maximum minutes so the cooldown period is randomised within your chosen range." },
+    ],
+  },
+  {
     version: "1.1.122",
     date: "23 Jun 2026",
     items: [

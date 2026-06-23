@@ -38,7 +38,7 @@ jobs:
           name: web-builds
           path: |
             artifacts/api-server/dist/
-            artifacts/dannys-bot/dist/
+            artifacts/dannys-bot/dist/public/
           if-no-files-found: error
 
   package-windows:
@@ -56,7 +56,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-builds
-          path: artifacts
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron

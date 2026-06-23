@@ -273,4 +273,7 @@ export type GlobalSettings = {
   backupEnabled: boolean;
   backupIntervalDays: number;
   preFilledPhoneNumber: string;
+  protectAccountsEnabled: boolean;
+  protectAccountsMinMins: number;
+  protectAccountsMaxMins: number;
 };

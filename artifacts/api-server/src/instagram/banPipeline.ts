@@ -1,6 +1,10 @@
 import { storage } from "../storage";
 import { computeAnalyticsContext } from "./analyticsContext";
 
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 /**
  * Full ban pipeline — called automatically whenever Instagram confirms an account
  * is banned/suspended, whether detected during Verify, automation (follow/DM/etc.),
@@ -74,20 +78,32 @@ export async function triggerBanPipeline(profileId: number, source: "auto-detect
 
   if (!profile.proxyId && !proxyHost) return;
 
-  const now90 = new Date(now.getTime() + 90 * 60 * 1000).toISOString();
+  // Check Protect Accounts setting — if disabled, skip proxy taint entirely
+  const globalSettings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
+  const protectEnabled = globalSettings.protectAccountsEnabled === "true";
+  if (!protectEnabled) {
+    console.log(`[ban-pipeline] Protect Accounts disabled — skipping proxy taint for @${profile.username}`);
+    return;
+  }
+
+  const minMins = Math.max(1, parseInt(globalSettings.protectAccountsMinMins ?? "60", 10));
+  const maxMins = Math.max(minMins, parseInt(globalSettings.protectAccountsMaxMins ?? "120", 10));
+  const taintMins = randInt(minMins, maxMins);
+  const taintUntil = new Date(now.getTime() + taintMins * 60 * 1000).toISOString();
+
   const sameProxy = profile.proxyId
     ? await storage.getProfilesByProxyId(profile.proxyId).catch(() => [])
     : await storage.getProfilesByProxyHost(proxyHost).catch(() => []);
-  console.log(`[ban-pipeline] @${profile.username} — found ${sameProxy.length} sibling(s) on proxy ${proxyHost || profile.proxyId}`);
+  console.log(`[ban-pipeline] @${profile.username} — found ${sameProxy.length} sibling(s) on proxy ${proxyHost || profile.proxyId}, taint window=${taintMins}min`);
   let pausedCount = 0;
   for (const sibling of sameProxy) {
     if (sibling.id === profileId || sibling.accountStatus === "banned" || !!sibling.resumingUntil) continue;
     await storage.updateProfile(sibling.id, {
       accountStatus: "stopped",
-      resumingUntil: now90,
+      resumingUntil: taintUntil,
       resumingPrevStatus: sibling.accountStatus,
     });
-    console.log(`[ban-pipeline] Paused @${sibling.username} (proxy taint) — resumes at ${now90}`);
+    console.log(`[ban-pipeline] Paused @${sibling.username} (proxy taint ${taintMins}min) — resumes at ${taintUntil}`);
     pausedCount++;
   }
   console.log(`[ban-pipeline] Proxy taint complete — paused ${pausedCount} account(s) on proxy ${proxyHost || profile.proxyId}`);
