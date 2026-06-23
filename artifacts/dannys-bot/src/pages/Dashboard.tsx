@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.130",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Control throttle no longer stalls between each 'mark seen' call during timeline browsing. Marking 4 posts as seen now takes ~4–12 seconds total instead of 4 × 100–175s. The actual action slots (checkTimelineStories, checkDm, followTool) now fire on schedule." },
+    ],
+  },
+  {
     version: "1.1.129",
     date: "23 Jun 2026",
     items: [
