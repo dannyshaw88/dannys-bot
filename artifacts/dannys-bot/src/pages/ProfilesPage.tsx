@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
@@ -289,12 +290,12 @@ export function ProfilesPage() {
     return () => clearInterval(t);
   }, []);
 
-  // ── Lifetime total API calls per profile ──────────────────────────────────
+  // ── Lifetime total API calls per profile (from instagramApiCalls table) ──
   const [lifetimeCallsMap, setLifetimeCallsMap] = useState<Record<number, number>>({});
   useEffect(() => {
     const fetchLifetimeCalls = async () => {
       try {
-        const r = await fetch("/api/profiles/lifetime-calls");
+        const r = await fetch("/api/profiles/api-call-count-all");
         if (r.ok) setLifetimeCallsMap(await r.json());
       } catch { /* ignore */ }
     };
@@ -1701,7 +1702,7 @@ export function ProfilesPage() {
               >
                 <Settings2 className="w-3.5 h-3.5" /> Columns
               </button>
-              {manageProfileColsOpen && (
+              {manageProfileColsOpen && createPortal(
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setManageProfileColsOpen(false)} />
                   <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[520px] max-h-[80vh] overflow-y-auto">
@@ -1757,7 +1758,8 @@ export function ProfilesPage() {
                       </button>
                     </div>
                   </div>
-                </>
+                </>,
+                document.body,
               )}
             </div>
           </div>

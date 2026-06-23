@@ -68,6 +68,7 @@ export interface IStorage {
   getInstagramApiCalls(limit?: number): Promise<any[]>;
   getInstagramApiCallsByProfile(profileId: number, limit?: number): Promise<any[]>;
   getInstagramApiCallCount(profileId: number): Promise<number>;
+  getInstagramApiCallCountAll(): Promise<Record<number, number>>;
   getApiEndpointCounts(profileId: number, todayPrefix: string): Promise<{ operationName: string; todayCount: number; totalCount: number }[]>;
   getLastValidApiCallByProfile(): Promise<Record<number, string>>;
   getVerifyOpsByProfile(): Promise<Record<number, string[]>>;
@@ -390,6 +391,17 @@ export class DatabaseStorage implements IStorage {
         eq(instagramApiCalls.isError, false),
       ));
     return Number(row?.count ?? 0);
+  }
+
+  async getInstagramApiCallCountAll(): Promise<Record<number, number>> {
+    const rows = await db
+      .select({ profileId: instagramApiCalls.profileId, count: sql<number>`COUNT(*)` })
+      .from(instagramApiCalls)
+      .where(eq(instagramApiCalls.isError, false))
+      .groupBy(instagramApiCalls.profileId);
+    const result: Record<number, number> = {};
+    for (const row of rows) result[row.profileId] = Number(row.count ?? 0);
+    return result;
   }
 
   async getLastValidApiCallByProfile(): Promise<Record<number, string>> {

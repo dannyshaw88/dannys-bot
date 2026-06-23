@@ -436,6 +436,11 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
+  app.get("/api/profiles/api-call-count-all", async (_req, res) => {
+    const data = await storage.getInstagramApiCallCountAll();
+    res.json(data);
+  });
+
   app.get("/api/profiles/last-api-calls", async (_req, res) => {
     const data = await storage.getLastValidApiCallByProfile();
     res.json(data);

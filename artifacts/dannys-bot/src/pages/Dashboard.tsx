@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.121",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Columns dialog on Account Manager now opens perfectly centred on screen — no longer appears at the bottom." },
+      { category: "Fix", text: "Total Calls column on Account Manager now correctly counts individual Instagram API calls, matching exactly what you see under Total API Calls in Statistics." },
+      { category: "Fix", text: "API call activity log now shows the start time of each call instead of the end time, so ViewFeedReel and ClipsViewed correctly appear as separate sequential entries rather than the same timestamp." },
+    ],
+  },
+  {
     version: "1.1.120",
     date: "22 Jun 2026",
     items: [

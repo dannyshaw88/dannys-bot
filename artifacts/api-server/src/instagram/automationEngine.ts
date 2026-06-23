@@ -1677,7 +1677,7 @@ class AutomationEngine {
           profileId: profile.id,
           username: profile.username,
           operationName: op,
-          date: new Date().toISOString(),
+          date: new Date(Date.now() - (durationMs ?? 0)).toISOString(),
           message: message ?? "",
           source: state.client!.apiCallSource,
           durationMs,
