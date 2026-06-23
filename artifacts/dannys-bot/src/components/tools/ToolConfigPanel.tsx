@@ -590,7 +590,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate max-w-[150px]">#{source.value}</p>
+                          <p className="text-sm font-medium truncate max-w-[150px]">{source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}</p>
                           <div className="flex items-center gap-2 flex-wrap">
                             {source.rank != null && (
                               <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">Rank {source.rank}/1000</span>

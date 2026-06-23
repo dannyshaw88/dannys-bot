@@ -324,29 +324,34 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
         : [];
 
-      if (payload.length > 0) {
-        await Promise.all(
-          targetIds.map(async profileId => {
-            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
-            if (!toolsRes.ok) return;
-            const profileTools: { id: number; type: string }[] = await toolsRes.json();
-            const targetFollowTool = profileTools.find(t => t.type === "follow");
-            if (!targetFollowTool) return;
+      await Promise.all(
+        targetIds.map(async profileId => {
+          const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+          if (!toolsRes.ok) return;
+          const profileTools: { id: number; type: string }[] = await toolsRes.json();
+          const targetFollowTool = profileTools.find(t => t.type === "follow");
+          if (!targetFollowTool) return;
 
+          // Always delete existing sources first (replace semantics, never append)
+          await fetch(`/api/tools/${targetFollowTool.id}/sources`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+
+          if (payload.length > 0) {
             const importRes = await fetch(`/api/tools/${targetFollowTool.id}/sources/import`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
               credentials: "include",
             });
-            if (importRes.ok) {
-              queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetFollowTool.id] });
-            } else {
+            if (!importRes.ok) {
               console.error(`[copySettings] Sources import failed for profile ${profileId}: ${importRes.status}`);
             }
-          })
-        );
-      }
+          }
+          queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetFollowTool.id] });
+        })
+      );
     }
 
     // ── Copy follow tool settings (prefixed keys "follow:...") ───────────────

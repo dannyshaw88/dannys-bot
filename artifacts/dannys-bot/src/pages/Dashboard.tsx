@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.126",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Human Session Settings → Target Sources now replaces the destination account's sources instead of adding on top of existing ones — targets are wiped first, then the source account's list is written in full." },
+      { category: "Fix", text: "Followers of Account sources in the Follow Tool sources list were showing with a # prefix (looking like hashtags) — they now correctly display with an @ prefix." },
+    ],
+  },
+  {
     version: "1.1.125",
     date: "23 Jun 2026",
     items: [
