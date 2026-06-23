@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.128",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool — Target Sources tab layout replaced with two separate collapsible sections (Hashtags and Followers of Account). Entries from one source type no longer mix into the other." },
+      { category: "New", text: "Each source section now has its own Clear button — clears only that source type (hashtags or followers), not everything at once." },
+      { category: "Improved", text: "Source sections collapse when unticked. Each list shows a maximum of 10 rows at a time and scrolls beyond that. Input fields are compact. Import and Export buttons moved into the Hashtags section header." },
+    ],
+  },
+  {
     version: "1.1.127",
     date: "23 Jun 2026",
     items: [

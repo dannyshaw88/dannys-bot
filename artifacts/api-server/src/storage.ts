@@ -314,6 +314,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sources).where(eq(sources.toolId, toolId));
   }
 
+  async deleteSourcesByToolAndType(toolId: number, type: string): Promise<void> {
+    await db.delete(sources).where(and(eq(sources.toolId, toolId), eq(sources.type, type)));
+  }
+
   async updateSourceTargetUserId(id: number, targetUserId: string): Promise<void> {
     await db.update(sources).set({ targetUserId }).where(eq(sources.id, id));
   }

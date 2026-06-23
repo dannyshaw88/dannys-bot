@@ -87,6 +87,22 @@ export function useClearSources() {
   });
 }
 
+export function useClearSourcesByType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ toolId, type }: { toolId: number; type: string }) => {
+      const res = await fetch(`/api/tools/${toolId}/sources/type/${encodeURIComponent(type)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to clear sources by type');
+    },
+    onSuccess: (_, { toolId }) => {
+      queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, toolId] });
+    },
+  });
+}
+
 /** Parse a Jarvee hashtag export file (UTF-16LE TSV with BOM). */
 export async function parseJarveeHashtagFile(file: File): Promise<{ value: string; nrPosts: number | null; rank: number | null }[]> {
   return new Promise((resolve, reject) => {

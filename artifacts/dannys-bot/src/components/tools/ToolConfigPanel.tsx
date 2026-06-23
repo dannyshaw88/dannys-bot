@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
-import { useSources, useCreateSource, useDeleteSource, useImportSources, useClearSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
+import { useSources, useCreateSource, useDeleteSource, useImportSources, useClearSources, useClearSourcesByType, parseJarveeHashtagFile } from "@/hooks/use-sources";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const deleteSourceMutation = useDeleteSource();
   const importSourcesMutation = useImportSources();
   const clearSourcesMutation = useClearSources();
+  const clearSourcesByTypeMutation = useClearSourcesByType();
   const importFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,6 +215,10 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const [newSourceValue, setNewSourceValue] = useState("");
   const [sourceSearch, setSourceSearch] = useState("");
   const [showSources, setShowSources] = useState(false);
+  const [newHashtagValue, setNewHashtagValue] = useState("");
+  const [newFollowerValue, setNewFollowerValue] = useState("");
+  const [hashtagSectionOpen, setHashtagSectionOpen] = useState(true);
+  const [followerSectionOpen, setFollowerSectionOpen] = useState(true);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [, startSourcesTransition] = useTransition();
 
@@ -506,6 +511,37 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
   // Sources sub-page for Follow tool
   if (tool.type === 'follow' && showSources) {
+    const hashtags = sources?.filter(s => s.type === 'hashtag') ?? [];
+    const followers = sources?.filter(s => s.type === 'target_followers') ?? [];
+
+    const SourceRow = ({ source }: { source: NonNullable<typeof sources>[number] }) => (
+      <div className="flex items-center justify-between px-2.5 py-1.5 rounded border border-border bg-background hover:bg-accent/30 transition-colors">
+        <div className="flex items-center gap-2 min-w-0">
+          {source.type === 'hashtag'
+            ? <Hash className="w-3.5 h-3.5 text-primary shrink-0" />
+            : <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
+          <span className="text-sm font-medium truncate">
+            {source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}
+          </span>
+          {source.rank != null && <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">Rank {source.rank}/1000</span>}
+          {source.nrPosts != null && (
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
+                : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
+                : source.nrPosts} posts
+            </span>
+          )}
+        </div>
+        <button
+          className="ml-2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 transition-colors"
+          onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
+          disabled={deleteSourceMutation.isPending}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+
     return (
       <div className="animate-in fade-in slide-in-from-right-4 duration-300">
         <div className="flex items-center gap-3 mb-6">
@@ -514,110 +550,133 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             <ArrowLeft className="w-4 h-4" /> Back to Follow Tool
           </Button>
         </div>
-        <div className="desktop-card p-6">
-          <div className="flex gap-3 mb-6 flex-wrap">
-            <form onSubmit={handleAddSource} className="flex gap-3 flex-1 min-w-0">
-              <div className="flex rounded-lg border border-border overflow-hidden text-sm shrink-0">
-                <button type="button"
-                  className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'hashtag' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
-                  onClick={() => setNewSourceType('hashtag')}>
-                  <Hash className="w-3.5 h-3.5" />Hashtag
-                </button>
-                <div className="w-px bg-border" />
-                <button type="button"
-                  className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'target_followers' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
-                  onClick={() => setNewSourceType('target_followers')}>
-                  <Users className="w-3.5 h-3.5" />Followers of Account
-                </button>
-              </div>
-              <Input placeholder={newSourceType === 'hashtag' ? "e.g. #photography" : "e.g. @natgeo"}
-                value={newSourceValue} onChange={(e) => setNewSourceValue(e.target.value)} className="flex-1" />
-              <Button type="submit" disabled={createSourceMutation.isPending || !newSourceValue.trim()}>
-                <Plus className="w-4 h-4 mr-2" /> Add
-              </Button>
-            </form>
-            <input ref={importFileRef} type="file" accept=".txt,.tsv,.csv" className="hidden" onChange={handleImportFile} />
-            <Button type="button" variant="outline" disabled={importSourcesMutation.isPending} onClick={() => importFileRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" />{importSourcesMutation.isPending ? 'Importing…' : 'Import'}
-            </Button>
-            <Button type="button" variant="outline" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" /> Export
-            </Button>
-            <Button type="button" variant="outline"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
-              disabled={clearSourcesMutation.isPending || !sources?.length}
-              onClick={() => clearSourcesMutation.mutate(tool.id)}>
-              <Trash2 className="w-4 h-4 mr-2" />{clearSourcesMutation.isPending ? 'Clearing…' : 'Clear All'}
-            </Button>
-          </div>
-          {(sources?.length ?? 0) > 0 && (
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search sources…"
-                value={sourceSearch}
-                onChange={e => setSourceSearch(e.target.value)}
-                className="pl-9 h-9 text-sm"
+
+        <input ref={importFileRef} type="file" accept=".txt,.tsv,.csv" className="hidden" onChange={handleImportFile} />
+
+        <div className="desktop-card p-5 space-y-5">
+
+          {/* ── Hashtags Section ────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="checkbox"
+                id="hashtagSection"
+                checked={hashtagSectionOpen}
+                onChange={e => setHashtagSectionOpen(e.target.checked)}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
               />
-              {sourceSearch && (
-                <button onClick={() => setSourceSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          )}
-          <div className="space-y-2">
-            {sourcesLoading ? (
-              <div className="text-center py-10 text-muted-foreground text-sm">Loading sources...</div>
-            ) : sources?.length === 0 ? (
-              <div className="text-center py-14 bg-accent/50 rounded-xl border border-border/50 border-dashed">
-                <Users className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm font-medium">No sources added yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Add a hashtag or account above to start targeting followers.</p>
+              <label htmlFor="hashtagSection" className="text-sm font-bold cursor-pointer select-none flex items-center gap-1.5">
+                <Hash className="w-3.5 h-3.5 text-primary" /> Hashtags
+                <span className="text-xs text-muted-foreground font-normal">({hashtags.length})</span>
+              </label>
+              <div className="ml-auto flex gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={importSourcesMutation.isPending} onClick={() => importFileRef.current?.click()}>
+                  <Upload className="w-3.5 h-3.5 mr-1.5" />{importSourcesMutation.isPending ? 'Importing…' : 'Import'}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={handleExport} disabled={!hashtags.length}>
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Export
+                </Button>
               </div>
-            ) : (() => {
-              const q = sourceSearch.trim().toLowerCase().replace(/^[#@]/, "");
-              const filtered = q ? sources!.filter(s => s.value.toLowerCase().includes(q)) : sources!;
-              if (filtered.length === 0) return (
-                <div className="text-center py-8 text-muted-foreground text-sm">No sources match "{sourceSearch}"</div>
-              );
-              return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {filtered.map(source => (
-                    <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                          {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate max-w-[150px]">{source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}</p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {source.rank != null && (
-                              <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">Rank {source.rank}/1000</span>
-                            )}
-                            {source.nrPosts != null && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
-                                  : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
-                                  : source.nrPosts} posts
-                              </span>
-                            )}
-                            {source.rank == null && source.nrPosts == null && (
-                              <span className="text-xs text-muted-foreground capitalize">{source.type.replace('_', ' ')}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                        onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })} disabled={deleteSourceMutation.isPending}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+            </div>
+
+            {hashtagSectionOpen && (
+              <>
+                <form
+                  onSubmit={e => { e.preventDefault(); if (!newHashtagValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'hashtag', value: newHashtagValue.trim().replace(/^#/, '') }, { onSuccess: () => setNewHashtagValue('') }); }}
+                  className="flex gap-2 mb-3"
+                >
+                  <Input
+                    placeholder="#photography"
+                    value={newHashtagValue}
+                    onChange={e => setNewHashtagValue(e.target.value)}
+                    className="w-40 h-8 text-sm"
+                  />
+                  <Button type="submit" size="sm" className="h-8" disabled={!newHashtagValue.trim() || createSourceMutation.isPending}>
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                  </Button>
+                </form>
+
+                {sourcesLoading ? (
+                  <div className="text-center py-6 text-muted-foreground text-sm">Loading…</div>
+                ) : hashtags.length === 0 ? (
+                  <div className="text-center py-5 border border-dashed border-border/60 rounded-lg text-muted-foreground text-xs">No hashtags added yet</div>
+                ) : (
+                  <div className="space-y-1 max-h-[360px] overflow-y-auto pr-0.5 mb-3">
+                    {hashtags.map(s => <SourceRow key={s.id} source={s} />)}
+                  </div>
+                )}
+
+                {hashtags.length > 0 && (
+                  <Button type="button" variant="outline" size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 w-full h-8"
+                    disabled={clearSourcesByTypeMutation.isPending}
+                    onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'hashtag' })}>
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    {clearSourcesByTypeMutation.isPending ? 'Clearing…' : `Clear Hashtags (${hashtags.length})`}
+                  </Button>
+                )}
+              </>
+            )}
           </div>
+
+          <div className="border-t border-border/60" />
+
+          {/* ── Followers of Account Section ────────────────────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="checkbox"
+                id="followerSection"
+                checked={followerSectionOpen}
+                onChange={e => setFollowerSectionOpen(e.target.checked)}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="followerSection" className="text-sm font-bold cursor-pointer select-none flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-primary" /> Followers of Account
+                <span className="text-xs text-muted-foreground font-normal">({followers.length})</span>
+              </label>
+            </div>
+
+            {followerSectionOpen && (
+              <>
+                <form
+                  onSubmit={e => { e.preventDefault(); if (!newFollowerValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'target_followers', value: newFollowerValue.trim().replace(/^@/, '') }, { onSuccess: () => setNewFollowerValue('') }); }}
+                  className="flex gap-2 mb-3"
+                >
+                  <Input
+                    placeholder="@natgeo"
+                    value={newFollowerValue}
+                    onChange={e => setNewFollowerValue(e.target.value)}
+                    className="w-40 h-8 text-sm"
+                  />
+                  <Button type="submit" size="sm" className="h-8" disabled={!newFollowerValue.trim() || createSourceMutation.isPending}>
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                  </Button>
+                </form>
+
+                {sourcesLoading ? (
+                  <div className="text-center py-6 text-muted-foreground text-sm">Loading…</div>
+                ) : followers.length === 0 ? (
+                  <div className="text-center py-5 border border-dashed border-border/60 rounded-lg text-muted-foreground text-xs">No accounts added yet</div>
+                ) : (
+                  <div className="space-y-1 max-h-[360px] overflow-y-auto pr-0.5 mb-3">
+                    {followers.map(s => <SourceRow key={s.id} source={s} />)}
+                  </div>
+                )}
+
+                {followers.length > 0 && (
+                  <Button type="button" variant="outline" size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 w-full h-8"
+                    disabled={clearSourcesByTypeMutation.isPending}
+                    onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'target_followers' })}>
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    {clearSourcesByTypeMutation.isPending ? 'Clearing…' : `Clear Followers (${followers.length})`}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+
         </div>
       </div>
     );

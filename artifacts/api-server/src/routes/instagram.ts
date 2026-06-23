@@ -2271,6 +2271,13 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  app.delete('/api/tools/:toolId/sources/type/:type', async (req, res) => {
+    const toolId = Number(req.params.toolId);
+    const type = req.params.type;
+    await storage.deleteSourcesByToolAndType(toolId, type);
+    res.status(204).end();
+  });
+
   app.delete(api.sources.delete.path, async (req, res) => {
     await storage.deleteSource(Number(req.params.id));
     res.status(204).end();
