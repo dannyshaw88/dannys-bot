@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.129",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Improved", text: "Tools icon in the sidebar now fills with cyan." },
+      { category: "Improved", text: "Last Call and Total Calls column data is now centred under its header." },
+      { category: "Renamed", text: "Column header 'Last API Call' is now 'Last Call'." },
+      { category: "New", text: "Clicking the Last Call column header sorts accounts newest-to-oldest, then oldest-to-newest on a second click, with an arrow indicator showing the active sort direction." },
+    ],
+  },
+  {
     version: "1.1.128",
     date: "23 Jun 2026",
     items: [

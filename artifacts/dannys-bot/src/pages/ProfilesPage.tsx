@@ -1334,12 +1334,17 @@ export function ProfilesPage() {
                 </button>
               );
               if (key === "lastApiCall") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("lastApiCall")} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  LAST API CALL
+                <button key={key} {...dragProps} onClick={() => cycleSort("lastApiCall")} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer select-none ${sortField === "lastApiCall" ? "text-foreground" : ""} ${dragBorder}`}>
+                  LAST CALL
+                  {sortField === "lastApiCall"
+                    ? sortDir === "desc"
+                      ? <ChevronDown className="w-3 h-3 shrink-0" />
+                      : <ChevronUp className="w-3 h-3 shrink-0" />
+                    : <ChevronDown className="w-3 h-3 shrink-0 opacity-20" />}
                 </button>
               );
               if (key === "totalCalls") return (
-                <button key={key} {...dragProps} onClick={() => cycleSort("totalCalls")} style={{ width: profColWidths.totalCalls }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                <button key={key} {...dragProps} onClick={() => cycleSort("totalCalls")} style={{ width: profColWidths.totalCalls }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   TOTAL CALLS
                 </button>
               );
@@ -1523,7 +1528,7 @@ export function ProfilesPage() {
                         else                   label = <span>{diffDay}d ago</span>;
                       }
                       return (
-                        <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
+                        <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center justify-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-foreground truncate">{label}</span>
                         </div>
                       );
@@ -1532,7 +1537,7 @@ export function ProfilesPage() {
                       const count = lifetimeCallsMap[profile.id] ?? 0;
                       const display = count === 0 ? <span className="text-muted-foreground/40">—</span> : count.toLocaleString();
                       return (
-                        <div key={key} style={{ width: profColWidths.totalCalls }} className="shrink-0 flex items-center" title={`${count.toLocaleString()} lifetime API calls`} onMouseDown={e => e.stopPropagation()}>
+                        <div key={key} style={{ width: profColWidths.totalCalls }} className="shrink-0 flex items-center justify-center" title={`${count.toLocaleString()} lifetime API calls`} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-foreground truncate">{display}</span>
                         </div>
                       );
