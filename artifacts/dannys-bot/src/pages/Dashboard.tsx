@@ -69,6 +69,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.122",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Total API Calls column header is now clickable — click once to sort smallest to largest, click again for largest to smallest." },
+      { category: "Fix", text: "Randomise Timing in Copy Settings no longer makes accounts execute instantly — it now just schedules each account's next session at a different time without restarting anything." },
+      { category: "Improve", text: "TrustScore notes in Tools: only the badge handle triggers drag — the notes text field no longer accidentally starts dragging when you try to type." },
+      { category: "Improve", text: "TrustScore notes are now all the same width with right-aligned text so they line up neatly regardless of badge label length." },
+      { category: "Improve", text: "Tools sidebar icon changed to a hammer for a cleaner look." },
+      { category: "Fix", text: "Proxy Manager bin icon now shows the correct trash can with vertical lines." },
+      { category: "Improve", text: "Keep Accounts Valid checkbox moved to sit directly under the Split Now button for easier access." },
+      { category: "Fix", text: "Keep Accounts Valid now actually works — when unchecked and you reassign a proxy, the account drops to Pending so it gets re-verified. When checked, the account stays Valid." },
+    ],
+  },
+  {
     version: "1.1.121",
     date: "23 Jun 2026",
     items: [

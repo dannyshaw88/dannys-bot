@@ -536,6 +536,9 @@ export async function registerInstagramRoutes(
       delete body.preserveAccountStatus;
       if (preserveAccountStatus) {
         delete body.accountStatus;
+      } else if ("proxyId" in body && current && body.proxyId !== current.proxyId && current.accountStatus === "valid") {
+        // Proxy changed without "Keep accounts valid" — reset to pending so the account gets re-verified
+        body.accountStatus = "pending";
       } else if ("username" in body || "password" in body) {
         const usernameChanged = current && "username" in body && body.username !== current.username;
         const passwordChanged = current && "password" in body && body.password !== current.password;

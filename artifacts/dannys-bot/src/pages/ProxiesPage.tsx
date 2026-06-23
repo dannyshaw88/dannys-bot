@@ -263,7 +263,7 @@ function ProxyRow({
               {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
@@ -935,10 +935,21 @@ export function ProxiesPage() {
                     className="w-20 h-8 text-sm"
                   />
                 </div>
-                <Button onClick={handleSplitEvenly} disabled={splitting || !splitCandidates.length} className="shrink-0">
-                  {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  {splitting ? "Splitting…" : "Split Now"}
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <Button onClick={handleSplitEvenly} disabled={splitting || !splitCandidates.length} className="shrink-0">
+                    {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    {splitting ? "Splitting…" : "Split Now"}
+                  </Button>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={keepValid}
+                      onChange={e => { setKeepValid(e.target.checked); localStorage.setItem("proxies:keepAccountsValid", String(e.target.checked)); }}
+                      className="w-3.5 h-3.5 accent-sky-500"
+                    />
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Keep accounts valid</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -968,16 +979,6 @@ export function ProxiesPage() {
             {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5 fill-red-500 text-red-500" />}
             {deletingAll ? "Deleting…" : "Delete All"}
           </button>
-          <span className="text-border">|</span>
-          <label className="flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={keepValid}
-              onChange={e => { setKeepValid(e.target.checked); localStorage.setItem("proxies:keepAccountsValid", String(e.target.checked)); }}
-              className="w-3.5 h-3.5 accent-sky-500"
-            />
-            <span className="text-[13px] font-bold uppercase tracking-wide text-foreground">Keep accounts valid</span>
-          </label>
         </div>
       </div>
       </div>

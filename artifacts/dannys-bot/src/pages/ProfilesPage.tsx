@@ -661,6 +661,26 @@ export function ProfilesPage() {
         const rb = tsB !== null ? lvls.findIndex(l => l.id === tsB) : Infinity;
         return newDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
       }
+      if (field === "totalCalls") {
+        const na = lifetimeCallsMap[a.id] ?? 0;
+        const nb = lifetimeCallsMap[b.id] ?? 0;
+        return newDir === "asc" ? na - nb : nb - na;
+      }
+      if (field === "followers") {
+        const na = (a as any).followerCount ?? 0;
+        const nb = (b as any).followerCount ?? 0;
+        return newDir === "asc" ? na - nb : nb - na;
+      }
+      if (field === "following") {
+        const na = (a as any).followingCount ?? 0;
+        const nb = (b as any).followingCount ?? 0;
+        return newDir === "asc" ? na - nb : nb - na;
+      }
+      if (field === "sync" || field === "lastApiCall") {
+        const na = (a as any).lastSyncAt ?? 0;
+        const nb = (b as any).lastSyncAt ?? 0;
+        return newDir === "asc" ? na - nb : nb - na;
+      }
       let va = "", vb = "";
       if (field === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
