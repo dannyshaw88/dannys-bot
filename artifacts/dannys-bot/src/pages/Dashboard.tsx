@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.132",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Timeline browsing now marks all viewed posts as seen in a single API call (1 throttle) instead of one call per post. Same fix for user feed browsing and reel seen marks before likes." },
+    ],
+  },
+  {
     version: "1.1.131",
     date: "23 Jun 2026",
     items: [

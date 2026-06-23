@@ -2193,14 +2193,16 @@ export class InstagramWebClient {
     const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
 
     // How many reels to actually click and fire ClipsViewed for this operation.
-    // max=0 means "0 reels" (disabled) — matches the global rule that 0 = 0 chance.
-    // Any positive max = cap to randInt(min, max).
     const safeMin = Math.min(reelWatchCountMin, reelWatchCountMax);
     const safeMax = Math.max(reelWatchCountMin, reelWatchCountMax);
     const reelWatchLimit = reelWatchCountMax > 0
       ? Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin
       : 0;
     let reelWatchedSoFar = 0;
+
+    // Build seen entries and reel impressions without any API calls in the loop.
+    const seenEntries: string[] = [];
+    const clipImpressions: Array<{ clip_id: string; view_state: string }> = [];
 
     for (const media of items) {
       const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -2215,32 +2217,12 @@ export class InstagramWebClient {
         watchPct = Math.round(pct);
         watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
       }
-      // One seen call per post — matches Jarvee's per-post call pattern and is
-      // more authentic than batching (real app reports seen as user scrolls past).
-      await this.timed("ViewTimelineFeedSeen", async () => {
-        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: `${mediaId}_${takenAt}_${takenAt + watchDuration}`,
-          live_vods_skipped: "",
-          nuxes_skipped: "",
-        }).toString());
-        return ++viewed;
-      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+      seenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
+      viewed++;
 
-      // ClipsViewed — only fires for reels, only when watch% is configured,
-      // and only up to the per-operation reel watch count limit.
       if (isReel && reelWatchPercentMax > 0 && reelWatchedSoFar < reelWatchLimit) {
-        const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
         const username = String(media?.user?.username ?? "");
-        await this.timed("ClipsViewed", async () => {
-          await this.mobileSessionPost(
-            `/api/v1/clips/clips_viewed/`,
-            new URLSearchParams({
-              clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
-              is_clips_creation_page: "false",
-            }).toString(),
-          ).catch(() => {});
-          return true;
-        }, `Watched reel at ${watchPct}% (${watchDuration}s)`).catch(() => {});
+        clipImpressions.push({ clip_id: mediaId, view_state: "initial_impression" });
         reelWatchedSoFar++;
         reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
       }
@@ -2248,6 +2230,32 @@ export class InstagramWebClient {
       const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
       const username = String(media?.user?.username ?? "");
       if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
+    }
+
+    // 1 media/seen call for all posts — 1 throttle total instead of N.
+    if (seenEntries.length) {
+      await this.timed("ViewTimelineFeedSeen", async () => {
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: seenEntries.join(","),
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString());
+        return seenEntries.length;
+      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+    }
+
+    // 1 clips_viewed call for all watched reels — 1 throttle total instead of N.
+    if (clipImpressions.length) {
+      await this.timed("ClipsViewed", async () => {
+        await this.mobileSessionPost(
+          `/api/v1/clips/clips_viewed/`,
+          new URLSearchParams({
+            clips_viewed_impressions: JSON.stringify(clipImpressions),
+            is_clips_creation_page: "false",
+          }).toString(),
+        ).catch(() => {});
+        return clipImpressions.length;
+      }, (n) => `Watched ${n} reel${n === 1 ? "" : "s"}`).catch(() => {});
     }
 
     return { viewed, items: viewedItems, reelWatches };
@@ -2320,25 +2328,32 @@ export class InstagramWebClient {
     }, (n) => `Viewed user feed: ${n} posts`);
 
     const result: Array<{ mediaId: string; shortcode: string; username: string }> = [];
-    let seen = 0;
+    const seenEntries: string[] = [];
+
     for (const media of rawItems) {
       const mediaId = String(media?.id ?? media?.pk ?? "");
       if (!mediaId) continue;
       const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-      await this.timed("ViewFeedPost", async () => {
-        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
-          live_vods_skipped: "",
-          nuxes_skipped: "",
-        }).toString()).catch(() => {});
-        return ++seen;
-      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+      seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
       result.push({
         mediaId,
         shortcode: this.mediaIdToShortcode(mediaId),
         username: String(media?.user?.username ?? ""),
       });
     }
+
+    // 1 media/seen call for all posts — 1 throttle total instead of N.
+    if (seenEntries.length) {
+      await this.timed("ViewFeedPost", async () => {
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: seenEntries.join(","),
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString()).catch(() => {});
+        return seenEntries.length;
+      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+    }
+
     return result;
   }
 
@@ -2832,6 +2847,36 @@ export class InstagramWebClient {
     let watched = 0;
     const likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> = [];
 
+    // Batch all reel seen marks into 1 call upfront — 1 throttle instead of N.
+    // Instagram's home feed is now predominantly Reels, so we must mark them seen
+    // before liking (same as a real user scrolling past). The dedicated Watch Reels
+    // tool uses /api/v1/clips/home/ (a separate endpoint) — no overlap.
+    const reelSeenEntries: string[] = [];
+    for (const media of toProcess) {
+      const isReel = media?.media_type === 2 || media?.product_type === "clips";
+      if (!isReel) continue;
+      const mediaId = String(media?.id ?? media?.pk ?? "");
+      if (!mediaId) continue;
+      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+      let watchDuration = 4;
+      if (reelWatchPercentMax > 0) {
+        const reelDuration = Number(media.video_duration ?? 30);
+        const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+        watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+      }
+      reelSeenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
+    }
+    if (reelSeenEntries.length) {
+      try {
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: reelSeenEntries.join(","),
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString());
+        watched = reelSeenEntries.length;
+      } catch (_) { /* best-effort */ }
+    }
+
     for (let i = 0; i < toProcess.length; i++) {
       const media = toProcess[i];
       const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -2841,33 +2886,6 @@ export class InstagramWebClient {
         const delaySec = delayMinSec + Math.random() * Math.max(0, delayMaxSec - delayMinSec);
         console.log(`[webClient] likeTimelinePosts: waiting ${delaySec.toFixed(1)}s before next like`);
         await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
-      }
-
-      const isReel = media?.media_type === 2 || media?.product_type === "clips";
-
-      if (isReel) {
-        // Mark the reel as seen first (natural scroll behaviour before liking).
-        // Instagram's home feed is now predominantly Reels, so skipping them entirely
-        // results in 0 likes. We watch then like — exactly what a real user does.
-        // The dedicated Watch Reels tool uses /api/v1/clips/home/ (a separate endpoint),
-        // so there is no overlap.
-        try {
-          const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-          let watchDuration = 4;
-          if (reelWatchPercentMax > 0) {
-            const reelDuration = Number(media.video_duration ?? 30);
-            const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
-            watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
-          }
-          const seenBody = new URLSearchParams({
-            reels: `${mediaId}_${takenAt}_${takenAt + watchDuration}`,
-            live_vods_skipped: "",
-            nuxes_skipped: "",
-          }).toString();
-          await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
-          watched++;
-        } catch (_) { /* best-effort */ }
-        // Fall through to like the reel below (no continue).
       }
 
       const result = await this.likeMedia(mediaId);
