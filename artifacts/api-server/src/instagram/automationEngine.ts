@@ -3340,10 +3340,6 @@ class AutomationEngine {
     const injectProfileBrowsingFeedMax            = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
     const injectProfileBrowsingPostPctMin         = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
     const injectProfileBrowsingPostPctMax         = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
-    const injectProfileBrowsingBeforeFollow       = !!(s.injectProfileBrowsingBeforeFollow);
-    // Dedicated before-follow chance — falls back to the general browsing chance if not set
-    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? 1));
-    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? 1));
     // Abandon-follow after browsing
     const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
@@ -3394,7 +3390,7 @@ class AutomationEngine {
       : new Set<number>();
 
     const browsePct         = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
-    const injectBrowseSlots = (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+    const injectBrowseSlots = injectProfileBrowsingEnabled
       ? sampleSlots(Math.max(1, Math.round(processCount * browsePct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
 
@@ -3402,8 +3398,8 @@ class AutomationEngine {
       engineLog("INFO", `@${profile.username}: getSuggestedUsers scheduled for ${injectSuggestedSlots.size}/${processCount} follow slots (${suggestedPct}%)`);
     if (injectSearchEnabled)
       engineLog("INFO", `@${profile.username}: searchByUsername mid-session scheduled for ${injectSearchMidSlots.size}/${processCount} follow slots (${searchMidPct}%)`);
-    if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
-      engineLog("INFO", `@${profile.username}: browse-before-follow scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
+    if (injectProfileBrowsingEnabled)
+      engineLog("INFO", `@${profile.username}: inject profile browsing scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
 
     // GetSuggestedUsers always fires before the very first follow of every session.
     // This is unconditional — the real app always loads the suggested-users panel
@@ -3651,7 +3647,7 @@ class AutomationEngine {
       }
 
       // Browse before follow — fires on pre-calculated slots (browsePct % of processCount).
-      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow && injectBrowseSlots.has(followed)) {
+      if (injectProfileBrowsingEnabled && injectBrowseSlots.has(followed)) {
         await browseTargetProfile("pre-follow browse", user);
         // Abandon follow after browsing — still uses its own per-instance probability
         if (injectProfileBrowsingAbandonFollow) {

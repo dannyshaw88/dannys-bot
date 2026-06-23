@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.127",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Inject Browsing — Browse X Y % now works correctly. Previously the setting was ignored unless 'Browse Before Follow' was also ticked; now it fires on the configured percentage of follow slots whenever Inject Browsing is enabled." },
+      { category: "Fix", text: "Removed the dead 'Browse Before Follow %' fields from the Inject Browsing popup — those values were never read by the engine. The Abandon Follow option is now always visible when browsing is enabled." },
+    ],
+  },
+  {
     version: "1.1.126",
     date: "23 Jun 2026",
     items: [

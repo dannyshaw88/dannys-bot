@@ -1038,30 +1038,16 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                             <div className="flex flex-col gap-1.5 pt-1.5 mt-0.5 border-t border-border/40">
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="flex items-center gap-1.5 w-[160px] shrink-0">
-                                  <input type="checkbox" id="injectProfileBrowsingBeforeFollow" checked={!!(settings as any).injectProfileBrowsingBeforeFollow} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollow: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                                  <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Browse Before Follow</label>
+                                  <input type="checkbox" id="injectProfileBrowsingAbandonFollow" checked={!!(settings as any).injectProfileBrowsingAbandonFollow} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollow: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
+                                  <label htmlFor="injectProfileBrowsingAbandonFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Abandon Follow</label>
                                 </div>
-                                <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}>
-                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: v, injectProfileBrowsingBeforeFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100) } as any)} />
+                                <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingAbandonFollow ? 'opacity-40 pointer-events-none' : ''}`}>
+                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)} />
                                   <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: v, injectProfileBrowsingBeforeFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)} />
+                                  <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)} />
                                   <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                                 </div>
                               </div>
-                              {!!(settings as any).injectProfileBrowsingBeforeFollow && (
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <div className="flex items-center gap-1.5 w-[160px] shrink-0">
-                                    <input type="checkbox" id="injectProfileBrowsingAbandonFollow" checked={!!(settings as any).injectProfileBrowsingAbandonFollow} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingAbandonFollow: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                                    <label htmlFor="injectProfileBrowsingAbandonFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Abandon Follow</label>
-                                  </div>
-                                  <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingAbandonFollow ? 'opacity-40 pointer-events-none' : ''}`}>
-                                    <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)} />
-                                    <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                                    <NumField min={0} max={100} className="w-10 h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)} />
-                                    <span className="text-[10px] text-muted-foreground shrink-0">%</span>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                             {((settings as any).injectProfileBrowsingCommentPctMax ?? 0) > 0 && (
                               <div className="flex flex-col gap-1 pt-1.5 border-t border-border/40">
