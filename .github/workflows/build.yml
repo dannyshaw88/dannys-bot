@@ -1,6 +1,6 @@
 name: Build and Package
 
-  on:
+  "on":
     push:
       branches: [main]
 
