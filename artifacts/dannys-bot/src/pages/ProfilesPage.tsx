@@ -676,10 +676,15 @@ export function ProfilesPage() {
         const nb = (b as any).followingCount ?? 0;
         return newDir === "asc" ? na - nb : nb - na;
       }
-      if (field === "sync" || field === "lastApiCall") {
-        const na = (a as any).lastSyncAt ?? 0;
-        const nb = (b as any).lastSyncAt ?? 0;
+      if (field === "sync") {
+        const na = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0;
+        const nb = b.lastSyncedAt ? new Date(b.lastSyncedAt).getTime() : 0;
         return newDir === "asc" ? na - nb : nb - na;
+      }
+      if (field === "lastApiCall") {
+        const ta = lastApiCallMap[a.id] ? new Date(lastApiCallMap[a.id]).getTime() : 0;
+        const tb = lastApiCallMap[b.id] ? new Date(lastApiCallMap[b.id]).getTime() : 0;
+        return newDir === "asc" ? ta - tb : tb - ta;
       }
       let va = "", vb = "";
       if (field === "account") {
@@ -1336,11 +1341,6 @@ export function ProfilesPage() {
               if (key === "lastApiCall") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("lastApiCall")} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer select-none ${sortField === "lastApiCall" ? "text-foreground" : ""} ${dragBorder}`}>
                   LAST CALL
-                  {sortField === "lastApiCall"
-                    ? sortDir === "desc"
-                      ? <ChevronDown className="w-3 h-3 shrink-0" />
-                      : <ChevronUp className="w-3 h-3 shrink-0" />
-                    : <ChevronDown className="w-3 h-3 shrink-0 opacity-20" />}
                 </button>
               );
               if (key === "totalCalls") return (

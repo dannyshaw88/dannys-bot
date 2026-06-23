@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.134",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Last Call column on the accounts page now sorts correctly by actual last API call time (was incorrectly sorting by sync date). Clicking the header toggles oldest-first / newest-first." },
+      { category: "Fix", text: "Removed the unnecessary down-arrow icon from the Last Call column header." },
+    ],
+  },
+  {
     version: "1.1.133",
     date: "23 Jun 2026",
     items: [
