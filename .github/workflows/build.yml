@@ -1,71 +1,86 @@
-name: Build and Package
+name: Build and Package Windows Installer
 
-  "on":
-    push:
-      branches: [main]
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-  jobs:
-    build-web:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-        - uses: pnpm/action-setup@v4
-          with:
-            version: 10
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
-        - name: Install workspace deps
-          run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
-        - name: Build API server
-          run: pnpm --filter @workspace/api-server run build
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-        - name: Build frontend
-          env:
-            REPL_ID: ci
-          run: pnpm --filter @workspace/dannys-bot run build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
 
-        - name: Upload web builds
-          uses: actions/upload-artifact@v4
-          with:
-            name: web-builds
-            path: |
-              artifacts/api-server/dist/
-              artifacts/dannys-bot/dist/public/
-            if-no-files-found: error
+      - name: Build frontend
+        run: pnpm --filter @workspace/dannys-bot run build
+        env:
+          REPL_ID: ci
 
-    package-windows:
-      runs-on: windows-latest
-      needs: build-web
-      steps:
-        - uses: actions/checkout@v4
+      - name: Upload web builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-builds
+          path: |
+            artifacts/api-server/dist/
+            artifacts/dannys-bot/dist/public/
+          if-no-files-found: error
 
-        - name: Download web builds
-          uses: actions/download-artifact@v4
-          with:
-            name: web-builds
-            path: artifacts
+  package-windows:
+    runs-on: windows-2022
+    needs: build-web
+    steps:
+      - uses: actions/checkout@v4
 
-        - name: Install Electron deps
-          working-directory: artifacts/electron
-          run: npm install
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
-        - name: Build Electron app
-          working-directory: artifacts/electron
-          env:
-            DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-          run: node build.mjs
+      - name: Download web builds
+        uses: actions/download-artifact@v4
+        with:
+          name: web-builds
+          path: artifacts
 
-        - name: Package Windows installer
-          working-directory: artifacts/electron
-          env:
-            GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-          run: npx electron-builder --win --publish always
+      - name: Install Electron dependencies
+        working-directory: artifacts/electron
+        run: npm install
 
-        - name: Upload installer to Actions artifacts
-          uses: actions/upload-artifact@v4
-          with:
-            name: Equinox-Windows-Installer
-            path: artifacts/electron/release/*.exe
-            if-no-files-found: error
-  
+      - name: Rebuild native modules for Electron
+        working-directory: artifacts/electron
+        run: npx electron-builder install-app-deps
+
+      - name: Build Electron bundle
+        working-directory: artifacts/electron
+        run: node build.mjs
+        env:
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
+      - name: Package Windows installer
+        working-directory: artifacts/electron
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
+      - name: Upload installer to Actions artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Equinox-Windows-Installer
+          path: artifacts/electron/release/*.exe
+          if-no-files-found: error
