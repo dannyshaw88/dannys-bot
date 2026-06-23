@@ -2217,14 +2217,12 @@ export class InstagramWebClient {
       }
       // One seen call per post — matches Jarvee's per-post call pattern and is
       // more authentic than batching (real app reports seen as user scrolls past).
-      // noThrottle=true: these are lightweight ACK calls; they must NOT consume
-      // an API Control slot or the session stalls between each seen mark.
       await this.timed("ViewTimelineFeedSeen", async () => {
         await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
           reels: `${mediaId}_${takenAt}_${takenAt + watchDuration}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
-        }).toString(), true);
+        }).toString());
         return ++viewed;
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
 
@@ -2240,7 +2238,6 @@ export class InstagramWebClient {
               clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
               is_clips_creation_page: "false",
             }).toString(),
-            true, // noThrottle — same reasoning as media/seen above
           ).catch(() => {});
           return true;
         }, `Watched reel at ${watchPct}% (${watchDuration}s)`).catch(() => {});
@@ -2333,7 +2330,7 @@ export class InstagramWebClient {
           reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
-        }).toString(), true).catch(() => {}); // noThrottle — ACK only, not an API Control slot
+        }).toString()).catch(() => {});
         return ++seen;
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
       result.push({
@@ -3400,11 +3397,7 @@ export class InstagramWebClient {
   // Used for write actions (follow, unfollow) where i.instagram.com strictly requires
   // a proper mobile-originated session — web cookies return login_required on those.
   // If no igApiCookies session is available, returns null immediately (no fallback).
-  // noThrottle=true: skip the full API Control wait. Used for lightweight
-  // acknowledgment calls (media/seen, clips_viewed) that hit Instagram's server
-  // once per post but should not consume an API Control slot — only a small
-  // human-paced delay (1-3s) is applied so the calls still look natural.
-  private async mobileSessionPost(path: string, body = "", noThrottle = false): Promise<any> {
+  private async mobileSessionPost(path: string, body = ""): Promise<any> {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
@@ -3417,13 +3410,7 @@ export class InstagramWebClient {
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    if (noThrottle) {
-      // Lightweight human-paced gap only — does NOT consume an API Control slot.
-      const smallDelayMs = 1000 + Math.random() * 2000;
-      await new Promise<void>(r => setTimeout(r, smallDelayMs));
-    } else {
-      await this.apiThrottle();
-    }
+    await this.apiThrottle();
     const _t0 = Date.now();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || this.csrfToken || "missing";

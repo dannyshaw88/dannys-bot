@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.131",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Reverted", text: "Restored full API Control throttle on all calls including media/seen and clips_viewed — every call goes through the configured delay without exception." },
+    ],
+  },
+  {
     version: "1.1.130",
     date: "23 Jun 2026",
     items: [
