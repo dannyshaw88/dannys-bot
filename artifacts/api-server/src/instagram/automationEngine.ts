@@ -3066,9 +3066,17 @@ class AutomationEngine {
         "followSkipMin", "followSkipMax",
         "followOrderMin", "followOrderMax",
         async () => {
-          if (!followTool) return;
+          // Re-read enabled state at execution time — the user may have toggled
+          // the Follow Tool checkbox after the queue was built but before this
+          // slot executed. Without this second gate the follow runs regardless.
+          const execTools = await storage.getToolsByProfile(profile.id);
+          const execFollowTool = execTools.find(t => t.type === "follow");
+          if (!execFollowTool?.enabled) {
+            console.log(`[engine] @${profile.username}: HS follow — skipped (disabled at execution time)`);
+            return;
+          }
           try {
-            await this.runSession(profile, followTool, state);
+            await this.runSession(profile, execFollowTool, state);
           } catch (e: any) {
             if (await checkSessionErr(e, "followTool")) return;
             console.warn(`[engine] @${profile.username}: follow tool error in HS: ${e?.message}`);
@@ -3083,9 +3091,15 @@ class AutomationEngine {
         "unfollowSkipMin", "unfollowSkipMax",
         "unfollowOrderMin", "unfollowOrderMax",
         async () => {
-          if (!unfollowTool) return;
+          // Re-read enabled state at execution time.
+          const execTools = await storage.getToolsByProfile(profile.id);
+          const execUnfollowTool = execTools.find(t => t.type === "unfollow");
+          if (!execUnfollowTool?.enabled) {
+            console.log(`[engine] @${profile.username}: HS unfollow — skipped (disabled at execution time)`);
+            return;
+          }
           try {
-            await this.runUnfollowSession(profile, unfollowTool, state);
+            await this.runUnfollowSession(profile, execUnfollowTool, state);
           } catch (e: any) {
             if (await checkSessionErr(e, "unfollowTool")) return;
             console.warn(`[engine] @${profile.username}: unfollow tool error in HS: ${e?.message}`);
@@ -3095,25 +3109,31 @@ class AutomationEngine {
 
       // ── Contact Tool (run as full session within the HS) ──────────────────
       const contactTool = hsTools.find(t => t.type === "contact");
-      const cSett = (contactTool?.settings ?? {}) as any;
-      const contactAnyEnabled = !!(contactTool && (
-        contactTool.enabled ||
-        cSett.contactNewFollowersEnabled ||
-        cSett.autoReplyEnabled ||
-        cSett.contactUsersEnabled
-      ));
+      const contactAnyEnabled = !!(contactTool && (() => {
+        const cs = (contactTool.settings ?? {}) as any;
+        return contactTool.enabled || cs.contactNewFollowersEnabled || cs.autoReplyEnabled || cs.contactUsersEnabled;
+      })());
       enqueue("contactTool",
         contactAnyEnabled,
         "contactSkipMin", "contactSkipMax",
         "contactOrderMin", "contactOrderMax",
         async () => {
-          if (!contactTool) return;
+          // Re-read enabled state at execution time.
+          const execTools = await storage.getToolsByProfile(profile.id);
+          const execContactTool = execTools.find(t => t.type === "contact");
+          if (!execContactTool) return;
+          const execCS = (execContactTool.settings ?? {}) as any;
+          const execAnyEnabled = execContactTool.enabled || execCS.contactNewFollowersEnabled || execCS.autoReplyEnabled || execCS.contactUsersEnabled;
+          if (!execAnyEnabled) {
+            console.log(`[engine] @${profile.username}: HS contact — skipped (disabled at execution time)`);
+            return;
+          }
           try {
-            if (cSett.contactNewFollowersEnabled) {
-              await this.runContactNewFollowersSession(profile, contactTool, state);
+            if (execCS.contactNewFollowersEnabled) {
+              await this.runContactNewFollowersSession(profile, execContactTool, state);
             }
-            if (cSett.contactUsersEnabled) {
-              await this.runContactUsersSession(profile, contactTool, state);
+            if (execCS.contactUsersEnabled) {
+              await this.runContactUsersSession(profile, execContactTool, state);
             }
           } catch (e: any) {
             if (await checkSessionErr(e, "contactTool")) return;

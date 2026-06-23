@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.124",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool no longer runs inside a Human Session when it is set to STOPPED — the engine now re-checks the enabled state at the moment the follow slot executes, so toggling the checkbox off is guaranteed to take effect even if a session was already in progress." },
+      { category: "Fix", text: "Same execution-time enabled re-check applied to the Unfollow Tool and Contact Tool when running inside the Human Session, preventing them from firing after being disabled mid-session." },
+    ],
+  },
+  {
     version: "1.1.123",
     date: "23 Jun 2026",
     items: [
