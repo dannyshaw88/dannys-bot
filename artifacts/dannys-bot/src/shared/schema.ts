@@ -276,4 +276,15 @@ export type GlobalSettings = {
   protectAccountsEnabled: boolean;
   protectAccountsMinMins: number;
   protectAccountsMaxMins: number;
+  hikerFollowHashtag: boolean;
+  hikerFollowGetFollowers: boolean;
+  hikerFollowByUsername: boolean;
+  hikerUnfollowByUsername: boolean;
+  hikerContactGetFollowers: boolean;
+  hikerContactByUsername: boolean;
+  hikerDmByUsername: boolean;
+  hikerDmGetFollowers: boolean;
+  hikerRepostGetFeed: boolean;
+  hikerSyncProfile: boolean;
+  hikerGlobalByUsername: boolean;
 };

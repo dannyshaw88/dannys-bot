@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.125",
+    date: "23 Jun 2026",
+    items: [
+      { category: "New", text: "Settings → Scraping now has per-tool HikerAPI endpoint controls: each scraping endpoint (Hashtag Search, Get Followers, Get By Username, Get New Media Info, etc.) can be individually enabled or disabled for each tool." },
+      { category: "New", text: "Follow Tool: separate checkboxes for Hashtag Search, Get Followers, and Get By Username endpoints." },
+      { category: "New", text: "Unfollow, Contact, DM, Repost, and Profile Sync tools each have their own HikerAPI endpoint checkboxes — unticking one routes just that call through the account session instead." },
+      { category: "New", text: "Other section adds global Get By Username / User ID toggle and a Sync API toggle for profile stats lookups." },
+    ],
+  },
+  {
     version: "1.1.124",
     date: "23 Jun 2026",
     items: [

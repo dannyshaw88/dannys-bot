@@ -4078,12 +4078,23 @@ export async function registerInstagramRoutes(
       protectAccountsEnabled: settings.protectAccountsEnabled === "true",
       protectAccountsMinMins: parseInt(settings.protectAccountsMinMins ?? "60", 10),
       protectAccountsMaxMins: parseInt(settings.protectAccountsMaxMins ?? "120", 10),
+      hikerFollowHashtag: settings.hikerFollowHashtag !== "false",
+      hikerFollowGetFollowers: settings.hikerFollowGetFollowers !== "false",
+      hikerFollowByUsername: settings.hikerFollowByUsername !== "false",
+      hikerUnfollowByUsername: settings.hikerUnfollowByUsername !== "false",
+      hikerContactGetFollowers: settings.hikerContactGetFollowers !== "false",
+      hikerContactByUsername: settings.hikerContactByUsername !== "false",
+      hikerDmByUsername: settings.hikerDmByUsername !== "false",
+      hikerDmGetFollowers: settings.hikerDmGetFollowers !== "false",
+      hikerRepostGetFeed: settings.hikerRepostGetFeed !== "false",
+      hikerSyncProfile: settings.hikerSyncProfile !== "false",
+      hikerGlobalByUsername: settings.hikerGlobalByUsername !== "false",
     });
   });
 
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins, hikerFollowHashtag, hikerFollowGetFollowers, hikerFollowByUsername, hikerUnfollowByUsername, hikerContactGetFollowers, hikerContactByUsername, hikerDmByUsername, hikerDmGetFollowers, hikerRepostGetFeed, hikerSyncProfile, hikerGlobalByUsername } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -4159,6 +4170,22 @@ export async function registerInstagramRoutes(
     if (typeof protectAccountsMaxMins === "number" && protectAccountsMaxMins >= 1) {
       await storage.setGlobalSetting("protectAccountsMaxMins", String(Math.round(protectAccountsMaxMins)));
     }
+    const hikerBoolKeys: Array<[string, unknown]> = [
+      ["hikerFollowHashtag", hikerFollowHashtag],
+      ["hikerFollowGetFollowers", hikerFollowGetFollowers],
+      ["hikerFollowByUsername", hikerFollowByUsername],
+      ["hikerUnfollowByUsername", hikerUnfollowByUsername],
+      ["hikerContactGetFollowers", hikerContactGetFollowers],
+      ["hikerContactByUsername", hikerContactByUsername],
+      ["hikerDmByUsername", hikerDmByUsername],
+      ["hikerDmGetFollowers", hikerDmGetFollowers],
+      ["hikerRepostGetFeed", hikerRepostGetFeed],
+      ["hikerSyncProfile", hikerSyncProfile],
+      ["hikerGlobalByUsername", hikerGlobalByUsername],
+    ];
+    for (const [key, val] of hikerBoolKeys) {
+      if (typeof val === "boolean") await storage.setGlobalSetting(key, String(val));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -4186,6 +4213,17 @@ export async function registerInstagramRoutes(
       protectAccountsEnabled: settings.protectAccountsEnabled === "true",
       protectAccountsMinMins: parseInt(settings.protectAccountsMinMins ?? "60", 10),
       protectAccountsMaxMins: parseInt(settings.protectAccountsMaxMins ?? "120", 10),
+      hikerFollowHashtag: settings.hikerFollowHashtag !== "false",
+      hikerFollowGetFollowers: settings.hikerFollowGetFollowers !== "false",
+      hikerFollowByUsername: settings.hikerFollowByUsername !== "false",
+      hikerUnfollowByUsername: settings.hikerUnfollowByUsername !== "false",
+      hikerContactGetFollowers: settings.hikerContactGetFollowers !== "false",
+      hikerContactByUsername: settings.hikerContactByUsername !== "false",
+      hikerDmByUsername: settings.hikerDmByUsername !== "false",
+      hikerDmGetFollowers: settings.hikerDmGetFollowers !== "false",
+      hikerRepostGetFeed: settings.hikerRepostGetFeed !== "false",
+      hikerSyncProfile: settings.hikerSyncProfile !== "false",
+      hikerGlobalByUsername: settings.hikerGlobalByUsername !== "false",
     });
   });
 

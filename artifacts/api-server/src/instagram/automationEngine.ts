@@ -473,7 +473,8 @@ class AutomationEngine {
     const useHiker = !!(
       profile.syncUseHiker &&
       globalSettings.hikerApiEnabled === "true" &&
-      globalSettings.hikerApiToken
+      globalSettings.hikerApiToken &&
+      globalSettings.hikerSyncProfile !== "false"
     );
 
     let stats: { followersCount: number; followingCount: number; postsCount: number } | null = null;
@@ -1226,13 +1227,15 @@ class AutomationEngine {
       && globalSettings.hikerApiEnabled === "true"
       && !!globalSettings.hikerApiToken;
     const source = useHiker ? "HikerAPI" : "account";
+    const useHikerContactByUsername   = useHiker && globalSettings.hikerContactByUsername !== "false";
+    const useHikerContactGetFollowers = useHiker && globalSettings.hikerContactGetFollowers !== "false";
 
     const hikerClient = useHiker ? new HikerApiClient(globalSettings.hikerApiToken!) : null;
 
     // When HikerAPI is enabled, resolve own user ID through HikerAPI (no account API call).
     // Otherwise fall back to account client.
     let ownUserId: string | null = null;
-    if (hikerClient) {
+    if (useHikerContactByUsername && hikerClient) {
       // Use cached pk if available — avoids a redundant v1/user/by/username call every run.
       // Only resolve once; Jarvee does the same (1 call per check cycle, not 2).
       const cached = this.ownUserIdCache.get(profile.id);
@@ -1275,7 +1278,7 @@ class AutomationEngine {
     client.setApiCallSource("Contact Tool");
 
     let followers: { pk: string; username: string; fullName: string }[] = [];
-    if (hikerClient) {
+    if (useHikerContactGetFollowers && hikerClient) {
       const t1 = Date.now();
       followers = await hikerClient.getFollowers(ownUserId!, usersToCheck);
       storage.createInstagramApiCall({
@@ -1950,7 +1953,7 @@ class AutomationEngine {
     // Resolve HikerAPI client once (used only when pk is missing — never use Instagram session for lookup)
     const globalSettings = await storage.getGlobalSettings();
     let hikerClientForLookup: import("./hikerApiClient").HikerApiClient | null = null;
-    if (globalSettings.hikerApiEnabled === "true" && globalSettings.hikerApiToken) {
+    if (globalSettings.hikerApiEnabled === "true" && globalSettings.hikerApiToken && globalSettings.hikerUnfollowByUsername !== "false") {
       const { HikerApiClient } = await import("./hikerApiClient");
       hikerClientForLookup = new HikerApiClient(globalSettings.hikerApiToken);
     }
@@ -2061,6 +2064,8 @@ class AutomationEngine {
     const hikerEnabled = globalSettings.hikerApiEnabled === "true";
     const hikerToken   = globalSettings.hikerApiToken ?? "";
     const hikerClient: HikerApiClient | null = (hikerEnabled && hikerToken) ? new HikerApiClient(hikerToken) : null;
+    const useHikerDmByUsername   = !!(hikerClient && globalSettings.hikerDmByUsername !== "false");
+    const useHikerDmGetFollowers = !!(hikerClient && globalSettings.hikerDmGetFollowers !== "false");
 
     const logHikerDM = (op: string, message: string, durationMs: number) => {
       storage.createInstagramApiCall({
@@ -2079,9 +2084,9 @@ class AutomationEngine {
     let targetUserId = source.targetUserId ?? "";
     if (!targetUserId) {
       let resolved: { pk: string; username: string } | null = null;
-      if (hikerClient) {
+      if (useHikerDmByUsername) {
         const t0 = Date.now();
-        resolved = await hikerClient.getUserByUsername(source.value.replace(/^@/, ""));
+        resolved = await hikerClient!.getUserByUsername(source.value.replace(/^@/, ""));
         logHikerDM("GetUserByUsername", `Resolved @${source.value.replace(/^@/, "")} via HikerAPI (cached)`, Date.now() - t0);
       } else {
         resolved = await client.searchUserByUsername(source.value.replace(/^@/, ""));
@@ -2092,9 +2097,9 @@ class AutomationEngine {
       }
     }
     if (targetUserId) {
-      if (hikerClient) {
+      if (useHikerDmGetFollowers) {
         const t0 = Date.now();
-        candidates = await hikerClient.getFollowers(targetUserId, processCount * 3);
+        candidates = await hikerClient!.getFollowers(targetUserId, processCount * 3);
         logHikerDM("FollowersScrape", `Scraped followers of @${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
         candidates = await client.getFollowers(targetUserId, processCount * 3);
@@ -2926,7 +2931,7 @@ class AutomationEngine {
         if (!repostUsernameSourceActive) return;
         const sourceUsername = repostSourceUsername;
         try {
-          const useHiker = !!s.repostUseHikerApi;
+          const useHiker = !!s.repostUseHikerApi && gs_repost.hikerRepostGetFeed !== "false";
 
           // Toggle ON → HikerAPI only, hard fail if not configured (no fallback to account).
           // Toggle OFF → account's own session does the scrape.
@@ -3187,6 +3192,9 @@ class AutomationEngine {
     const hikerEnabled = globalSettings.hikerApiEnabled === "true";
     const hikerToken   = globalSettings.hikerApiToken ?? "";
     const hikerClient: HikerApiClient | null = (hikerEnabled && hikerToken) ? new HikerApiClient(hikerToken) : null;
+    const useHikerFollowHashtag      = !!(hikerClient && globalSettings.hikerFollowHashtag !== "false");
+    const useHikerFollowGetFollowers = !!(hikerClient && globalSettings.hikerFollowGetFollowers !== "false");
+    const useHikerFollowByUsername   = !!(hikerClient && globalSettings.hikerFollowByUsername !== "false");
     if (hikerClient) engineLog("INFO", `@${profile.username}: using HikerAPI for scrape calls`);
     else engineLog("WARN", `@${profile.username}: HikerAPI disabled/no token — no scraping fallback, session will abort`);
 
@@ -3243,10 +3251,10 @@ class AutomationEngine {
 
     try {
       if (source.type === "hashtag") {
-        if (hikerClient) {
+        if (useHikerFollowHashtag) {
           const t0 = Date.now();
           const globalCursor = await storage.getHashtagCursor(source.value);
-          const result = await hikerClient.getHashtagUsers(source.value, Math.max(processCount * 3, 20), globalCursor);
+          const result = await hikerClient!.getHashtagUsers(source.value, Math.max(processCount * 3, 20), globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
             await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
@@ -3278,9 +3286,9 @@ class AutomationEngine {
         let targetPk = source.targetUserId ?? "";
         if (!targetPk) {
           let resolved: { pk: string; username: string } | null = null;
-          if (hikerClient) {
+          if (useHikerFollowByUsername) {
             const t0 = Date.now();
-            resolved = await hikerClient.getUserByUsername(targetName);
+            resolved = await hikerClient!.getUserByUsername(targetName);
             logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI (cached for future runs)`, Date.now() - t0);
           } else {
             resolved = await client.searchUserByUsername(targetName);
@@ -3289,9 +3297,9 @@ class AutomationEngine {
           targetPk = resolved.pk;
           await storage.updateSourceTargetUserId(source.id, targetPk);
         }
-        if (hikerClient) {
+        if (useHikerFollowGetFollowers) {
           const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(targetPk, Math.max(processCount * 3, 20));
+          candidates = await hikerClient!.getFollowers(targetPk, Math.max(processCount * 3, 20));
           if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
             const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
             const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
@@ -4026,10 +4034,10 @@ class AutomationEngine {
     try {
       // Toggle ON → HikerAPI only, hard fail if not configured (no fallback to account).
       // Toggle OFF → account's own session does the scrape.
-      const useHiker = !!s.repostUseHikerApi;
+      const gs_now = await storage.getGlobalSettings();
+      const useHiker = !!s.repostUseHikerApi && gs_now.hikerRepostGetFeed !== "false";
       let feedItems: Awaited<ReturnType<HikerApiClient["getUserFeedItems"]>>;
       if (useHiker) {
-        const gs_now = await storage.getGlobalSettings();
         const hikerClient = (gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken)
           ? new HikerApiClient(gs_now.hikerApiToken)
           : null;

@@ -453,6 +453,184 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* HikerAPI Per-Tool Endpoint Settings */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "scraping" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+              <Shield className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">HikerAPI Per-Tool Endpoints</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Control exactly which endpoints use HikerAPI for each tool. Unticking an endpoint forces that specific call through the account's own session instead of HikerAPI. Requires HikerAPI to be globally enabled above.
+          </p>
+
+          <div className={`space-y-6 transition-opacity ${!(settings?.hikerApiEnabled) ? "opacity-40 pointer-events-none select-none" : ""}`}>
+
+            {/* FOLLOW TOOL */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Follow Tool</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerFollowHashtag" as const, label: "Hashtag Search", endpoint: "/v1|v2/hashtag/medias/recent", desc: "Scrapes users from hashtag pages for the follow target list." },
+                  { key: "hikerFollowGetFollowers" as const, label: "Get Followers", endpoint: "/v1|v2/user/followers", desc: "Fetches followers of a target account as follow candidates." },
+                  { key: "hikerFollowByUsername" as const, label: "Get By Username", endpoint: "/v1/user/by/username", desc: "Resolves a target account's user ID from their username." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* UNFOLLOW TOOL */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Unfollow Tool</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerUnfollowByUsername" as const, label: "Get By Username", endpoint: "/v1/user/by/username", desc: "Looks up a user's ID when the stored pk is missing from the unfollow list." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* CONTACT TOOL */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Contact Tool</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerContactGetFollowers" as const, label: "Get New Followers", endpoint: "/v1|v2/user/followers", desc: "Fetches your account's latest followers to queue for a DM." },
+                  { key: "hikerContactByUsername" as const, label: "Get By Username", endpoint: "/v1/user/by/username", desc: "Resolves your own account's user ID to retrieve its follower list." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* DM TOOL */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">DM Tool</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerDmByUsername" as const, label: "Get By Username", endpoint: "/v1/user/by/username", desc: "Resolves the DM source account's user ID from its username." },
+                  { key: "hikerDmGetFollowers" as const, label: "Get Followers", endpoint: "/v1|v2/user/followers", desc: "Scrapes followers of the DM source account as message recipients." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* MAKE A POST / REPOST TOOL */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Make a Post / Repost Tool</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerRepostGetFeed" as const, label: "Get New Media Info", endpoint: "/v1/user/medias", desc: "Fetches the source account's recent media list to pick a post to repost." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* OTHER */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Other</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerSyncProfile" as const, label: "Sync API Endpoints", endpoint: "/v1/user/by/username (stats)", desc: "Profile sync — fetches follower, following, and post counts." },
+                  { key: "hikerGlobalByUsername" as const, label: "Get By Username / User ID", endpoint: "/v1/user/by/username", desc: "Global user lookup used across multiple tools when resolving account IDs." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
 
 
         {/* Protect Accounts */}
