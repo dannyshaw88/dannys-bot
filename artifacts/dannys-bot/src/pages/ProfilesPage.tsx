@@ -671,6 +671,11 @@ export function ProfilesPage() {
         const nb = lifetimeCallsMap[b.id] ?? 0;
         return newDir === "asc" ? na - nb : nb - na;
       }
+      if (field === "aliveFor") {
+        const ta = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
+        const tb = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        return newDir === "asc" ? ta - tb : tb - ta;
+      }
       if (field === "followers") {
         const na = (a as any).followerCount ?? 0;
         const nb = (b as any).followerCount ?? 0;
@@ -1507,7 +1512,7 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={createdAt ? `Added to software: ${createdAt.toLocaleString()}` : "Added date unknown"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] font-mono text-foreground truncate">{aliveLabel}</span>
+                          <span className="text-[10px] text-foreground truncate">{aliveLabel}</span>
                         </div>
                       );
                     }
