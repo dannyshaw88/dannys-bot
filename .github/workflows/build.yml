@@ -7,66 +7,123 @@ on:
 
 jobs:
   build-web:
+    name: Build Web (Ubuntu)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: '24'
+          version: 10.26.1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          version: 10
+          node-version: 24
+          cache: pnpm
 
       - name: Install workspace dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
+      - name: Build lib/db
+        run: pnpm --filter @workspace/db run build
+
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
 
-      - name: Build frontend
+      - name: Build React frontend
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
+
+      - name: Archive build outputs
+        run: tar -czf web-builds.tar.gz artifacts/api-server/dist artifacts/dannys-bot/dist
 
       - name: Upload web builds
         uses: actions/upload-artifact@v4
         with:
           name: web-builds
-          path: |
-            artifacts/api-server/dist/
-            artifacts/dannys-bot/dist/public/
+          path: web-builds.tar.gz
           if-no-files-found: error
 
   package-windows:
-    runs-on: windows-2022
+    name: Package Windows Installer
+    runs-on: windows-latest
     needs: build-web
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: 24
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: artifacts/electron/node_modules
+          key: ${{ runner.os }}-electron-npm-${{ hashFiles('artifacts/electron/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-npm-
 
       - name: Download web builds
         uses: actions/download-artifact@v4
         with:
           name: web-builds
-          path: artifacts
+
+      - name: Extract build outputs
+        run: tar -xzf web-builds.tar.gz
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron
         run: npm install
 
-      - name: Rebuild native modules for Electron
-        working-directory: artifacts/electron
-        run: npx electron-builder install-app-deps
+      - name: Fetch WDA IPA (best-effort — creates placeholder if unavailable)
+        shell: pwsh
+        run: |
+          $dest = "artifacts/electron/resources/WebDriverAgent.ipa"
+          New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
 
-      - name: Build Electron bundle
+          $apiUrls = @()
+          try {
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/appium/WebDriverAgent/releases?per_page=10" -Headers @{Accept="application/vnd.github+json"} -TimeoutSec 15
+            foreach ($rel in $releases) {
+              foreach ($asset in $rel.assets) {
+                if ($asset.name -match "\.ipa$") {
+                  $apiUrls += $asset.browser_download_url
+                }
+              }
+            }
+          } catch {
+            Write-Host "GitHub API lookup failed: $_"
+          }
+
+          $staticUrls = @(
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.4.0/WebDriverAgent.ipa",
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.3.3/WebDriverAgent.ipa",
+            "https://github.com/appium/WebDriverAgent/releases/download/v9.2.0/WebDriverAgent.ipa"
+          )
+
+          $urls = $apiUrls + $staticUrls
+          $ok = $false
+          foreach ($url in $urls) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 60 -ErrorAction Stop
+              $bytes = [System.IO.File]::ReadAllBytes($dest)
+              if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b) {
+                Write-Host "Downloaded real IPA ($($bytes.Length) bytes)"
+                $ok = $true
+                break
+              } else {
+                Remove-Item $dest -Force -ErrorAction SilentlyContinue
+              }
+            } catch {
+              Write-Host "Failed: $_"
+            }
+          }
+          if (-not $ok) {
+            Set-Content -Path $dest -Value "PLACEHOLDER_NO_IPA" -NoNewline
+          }
+
+      - name: Bundle Electron main process
         working-directory: artifacts/electron
         run: node build.mjs
         env:
@@ -74,9 +131,9 @@ jobs:
 
       - name: Package Windows installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+        run: ./node_modules/.bin/electron-builder --win --publish always
 
       - name: Upload installer to Actions artifacts
         uses: actions/upload-artifact@v4

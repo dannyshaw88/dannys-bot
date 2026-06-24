@@ -7,8 +7,27 @@ export function useProfiles() {
     queryKey: [api.profiles.list.path, "automation"],
     queryFn: async () => {
       const res = await fetch(api.profiles.list.path + "?creatorMode=0", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch profiles");
-      return api.profiles.list.responses[200].parse(await res.json());
+      if (!res.ok) {
+        console.error("[DEBUG useProfiles] fetch failed:", res.status, res.statusText);
+        throw new Error("Failed to fetch profiles");
+      }
+      let raw: unknown;
+      try { raw = await res.json(); } catch (e) {
+        console.error("[DEBUG useProfiles] JSON parse error:", e);
+        throw e;
+      }
+      console.log("[DEBUG useProfiles] raw response type:", Array.isArray(raw) ? "array" : typeof raw, "length:", Array.isArray(raw) ? (raw as any[]).length : "N/A");
+      if (Array.isArray(raw) && (raw as any[]).length > 0) {
+        const s = (raw as any[])[0];
+        console.log("[DEBUG useProfiles] sample[0] isTemplate:", s.isTemplate, "creatorMode:", s.creatorMode, "accountStatus:", s.accountStatus, "id:", s.id);
+      }
+      let parsed: any;
+      try { parsed = api.profiles.list.responses[200].parse(raw); } catch (e) {
+        console.error("[DEBUG useProfiles] Zod parse error:", e);
+        throw e;
+      }
+      console.log("[DEBUG useProfiles] parsed length:", Array.isArray(parsed) ? parsed.length : "N/A");
+      return parsed;
     },
     refetchInterval: 5000,
   });

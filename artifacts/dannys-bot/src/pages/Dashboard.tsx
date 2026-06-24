@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.144",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Debug", text: "Added detailed diagnostic logging to the accounts list — the API server now logs row counts and field values, and the frontend logs what it receives and how filtering works. This helps trace why accounts may not appear." },
+    ],
+  },
+  {
     version: "1.1.143",
     date: "24 Jun 2026",
     items: [

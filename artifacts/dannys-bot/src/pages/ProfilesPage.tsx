@@ -163,8 +163,15 @@ function _pageFingerprint(ua: string, _apiUA?: string | null): { batteryPct: num
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function ProfilesPage() {
-  const { data: allProfilesRaw, isLoading } = useProfiles();
+  const { data: allProfilesRaw, isLoading, error: profilesError } = useProfiles();
+  if (profilesError) console.error("[DEBUG ProfilesPage] useProfiles error:", profilesError);
+  console.log("[DEBUG ProfilesPage] allProfilesRaw length:", allProfilesRaw?.length ?? "undefined", "isLoading:", isLoading);
+  if (allProfilesRaw && allProfilesRaw.length > 0) {
+    const s = allProfilesRaw[0] as any;
+    console.log("[DEBUG ProfilesPage] before filter sample[0] isTemplate:", s.isTemplate, "typeof:", typeof s.isTemplate);
+  }
   const profiles = allProfilesRaw?.filter(p => !p.isTemplate);
+  console.log("[DEBUG ProfilesPage] after !isTemplate filter length:", profiles?.length ?? "undefined");
   const createProfileMutation = useCreateProfile();
   const deleteProfileMutation = useDeleteProfile();
   const updateAccountStatus   = useUpdateAccountStatus();
