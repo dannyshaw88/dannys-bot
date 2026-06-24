@@ -123,6 +123,82 @@ function releaseSilentVerifySlot(): void {
   if (next) { next(); } else { _silentVerifySlotFree = true; }
 }
 
+// On startup: any account still in "verifying" was mid-bootstrap when the
+// server was killed.  Two cases:
+//   • igApiCookies present  → EB login already completed; just redo the 3
+//     mobile API calls (Path 2 — no browser needed).  Resumes seamlessly.
+//   • igApiCookies absent   → EB login never finished; reset to "pending" so
+//     the user knows to press Verify again.
+async function resumeStuckVerifyingAccounts(): Promise<void> {
+  // Wait for the server to fully settle before firing API calls.
+  await new Promise(resolve => setTimeout(resolve, 3000));
+
+  let allProfiles: Awaited<ReturnType<typeof storage.getProfiles>>;
+  try { allProfiles = await storage.getProfiles(); }
+  catch (err) {
+    console.warn("[startup:resume] Could not load profiles:", err);
+    return;
+  }
+
+  const stuck = allProfiles.filter(p => p.accountStatus === "verifying");
+  if (stuck.length === 0) return;
+
+  const withCookies    = stuck.filter(p => p.igApiCookies && p.igApiCookies.includes("sessionid="));
+  const withoutCookies = stuck.filter(p => !p.igApiCookies || !p.igApiCookies.includes("sessionid="));
+
+  // No cookies → EB login never completed; reset so user can try again.
+  for (const p of withoutCookies) {
+    await storage.updateProfile(p.id, { accountStatus: "pending" } as any).catch(() => {});
+    console.warn(`[startup:resume] @${p.username} — no igApiCookies → reset to pending`);
+  }
+
+  if (withCookies.length === 0) return;
+  console.log(`[startup:resume] ${withCookies.length} account(s) resuming mobile API bootstrap`);
+
+  for (let i = 0; i < withCookies.length; i++) {
+    const profile = withCookies[i];
+    // Stagger between accounts (6–10 s) to avoid bursting the mobile API.
+    if (i > 0) await new Promise(resolve => setTimeout(resolve, 6000 + Math.floor(Math.random() * 4000)));
+
+    await acquireSilentVerifySlot();
+    try {
+      console.log(`[startup:resume] @${profile.username} — running verifyInstagramCredentials (Path 2)`);
+      let apiResult: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+      try {
+        apiResult = await verifyInstagramCredentials(profile as any);
+      } catch (verifyErr: any) {
+        console.error(`[startup:resume] threw for @${profile.username}:`, verifyErr?.message);
+        await storage.updateProfile(profile.id, { accountStatus: "pending" } as any).catch(() => {});
+        continue;
+      }
+
+      const finalStatus = apiResult.accountStatus ?? (apiResult.ok ? "valid" : "pending");
+      await storage.updateProfile(profile.id, {
+        accountStatus: finalStatus,
+        ...(finalStatus === "valid" ? { credentialsDirty: false } : {}),
+        ...(apiResult.igDeviceState ? { igDeviceState: apiResult.igDeviceState } : {}),
+        ...("igApiCookies" in apiResult && apiResult.igApiCookies ? { igApiCookies: apiResult.igApiCookies } : {}),
+      } as any).catch(() => {});
+
+      await storage.createSessionAction({
+        profileId: profile.id,
+        toolId: 0,
+        action: apiResult.ok ? "verified" : "verification_failed",
+        targetUsername: profile.username,
+        sourceValue: "",
+        sourceType: "startup_resume",
+        result: finalStatus,
+        detail: apiResult.message ?? (apiResult.ok ? "Auto-resumed after restart" : "Auto-resume failed"),
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
+
+      console.log(`[startup:resume] @${profile.username} → ${finalStatus}`);
+    } finally {
+      releaseSilentVerifySlot();
+    }
+  }
+}
+
 // Persisted across restarts within the same calendar day so the dashboard
 // always shows when the bot was FIRST started today, not the latest restart.
 let SERVER_START = new Date().toISOString();
@@ -226,10 +302,10 @@ export async function registerInstagramRoutes(
     timestamp: SERVER_START,
   }).catch(() => {});
 
-  // Reset any accounts stuck in "verifying" from a previous crashed/restarted server.
-  // A "verifying" status only makes sense while the server is actively running the
-  // verify call — on startup there can be no such call in flight.
-  storage.resetStuckVerifyingAccounts().catch(() => {});
+  // On startup: resume any accounts that were mid-verify when the server was killed.
+  // Accounts whose EB login completed (igApiCookies saved) just need the 3 mobile API
+  // calls re-run — no browser required.  Those with no cookies get reset to "pending".
+  void resumeStuckVerifyingAccounts();
 
   automationEngine.start();
 

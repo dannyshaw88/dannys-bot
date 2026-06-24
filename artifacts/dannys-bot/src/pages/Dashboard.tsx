@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.137",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Feature", text: "If Equinox is restarted while an account is mid-verify (during the API bootstrap calls), it now automatically completes the verify on the next startup — no need to press Verify again. Only applies when the embedded browser login had already finished before the restart (cookies were already saved). Accounts restarted before that point are reset to Pending as before." },
+    ],
+  },
+  {
     version: "1.1.136",
     date: "23 Jun 2026",
     items: [
