@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.146",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Alive For column is no longer blank after updating. Existing accounts that were already Valid had no start date recorded (the column was new), so they now get their 'Added' date as the Alive For starting point instead of showing a dash." },
+    ],
+  },
+  {
     version: "1.1.145",
     date: "24 Jun 2026",
     items: [

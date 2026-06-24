@@ -352,6 +352,14 @@ if (!colNames.has("created_at")) {
 if (!colNames.has("valid_since")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN valid_since TEXT;`);
 }
+// Backfill: any account currently "valid" with no valid_since gets created_at as the
+// starting point (falls back to NOW if created_at is also null).  Runs every startup
+// but only touches rows that still have a null valid_since, so it's fully idempotent.
+sqlite.exec(`
+  UPDATE profiles
+  SET valid_since = COALESCE(created_at, datetime('now'))
+  WHERE account_status = 'valid' AND (valid_since IS NULL OR valid_since = '');
+`);
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];
