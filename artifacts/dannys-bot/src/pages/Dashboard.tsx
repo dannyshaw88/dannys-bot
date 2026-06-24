@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.149",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed the hard crash that kept happening when multiple browser windows opened at startup. The previous fix (running setup steps one at a time) was not enough — the underlying Chromium command that sets the mobile screen size was itself crashing the process. That command has now been removed entirely: instead, each browser window is created at the correct mobile screen size from the start, so no crash-prone override is needed." },
+    ],
+  },
+  {
     version: "1.1.148",
     date: "24 Jun 2026",
     items: [

@@ -2122,6 +2122,37 @@ export async function openEbWindow(opts: {
   // at the default center-of-screen position first, then jump — the flash is
   // visible to the user even though show:false is set.  Passing x/y directly
   // to the constructor locks the position from creation time.
+  // ── Resolve browser UA and API UA — BEFORE BrowserWindow creation ─────────
+  // Moved here (was after STEP-12) so we can compute the mobile device profile
+  // BEFORE new BrowserWindow() and pass the correct dims to the constructor.
+  // This eliminates Emulation.setDeviceMetricsOverride entirely — that CDP call
+  // was crashing Chromium (SIGSEGV) in Electron 33 on Windows even when only
+  // one window called it.  Creating the window at the correct physical dimensions
+  // means Chromium's layout engine sees a real mobile-sized viewport from the
+  // start, so @media queries evaluate correctly without any CDP override at all.
+  const _isApiFormat = !!userAgent && isApiFormatUA(userAgent);
+  const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(userAgent!) : null;
+  const _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
+  const _resolvedApiUA = _isApiFormat ? userAgent! : (apiUA ?? null);
+  const _androidVer  = _apiParsed?.androidVersion ?? (
+    _browserUA?.match(/Android\s+(\d+)/i)?.[1] ?? "14"
+  );
+  const _deviceModel = _apiParsed?.deviceModel ?? (
+    _browserUA?.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? ""
+  );
+  if (_isApiFormat) {
+    console.log(`[ebManager:${profileId}] API-format UA converted → browserUA="${_browserUA}" apiUA="${userAgent}"`);
+  }
+  const _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
+  const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+  const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
+  const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
+  // Mobile profile for BrowserWindow dimensions — only for real account EBs
+  // (ghost and verify windows always use 430×700).
+  const _mobileProfile = (!isGhostBrowser && !verifyMode && _fpIsMobile)
+    ? getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null)
+    : null;
+
   _ebCrashLog(profileId, "STEP-11: creating BrowserWindow");
   let _initX: number | undefined;
   let _initY: number | undefined;
@@ -2143,8 +2174,8 @@ export async function openEbWindow(opts: {
     }
   }
   const win = new BrowserWindow({
-    width:           (isGhostBrowser || verifyMode) ? 430 : 1280,
-    height:          (isGhostBrowser || verifyMode) ? 700 : 820,
+    width:           (isGhostBrowser || verifyMode) ? 430 : (_mobileProfile?.width ?? 1280),
+    height:          (isGhostBrowser || verifyMode) ? 700 : (_mobileProfile?.height ?? 820),
     x:               _initX,
     y:               _initY,
     title:           `@${username} — Equinox Browser`,
@@ -2287,29 +2318,6 @@ export async function openEbWindow(opts: {
   // No UTC default — a timezone mismatch between Intl and Date.now() is an
   // instant bot signal.
 
-  // ── Resolve browser UA and API UA ─────────────────────────────────────────
-  // The Ghost Browser may receive an API-format UA ("34/14; 420dpi; ...")
-  // instead of a proper mobile Chrome UA ("Mozilla/5.0 (Linux; Android ...").
-  // Always ensure the BrowserWindow uses the correct mobile Chrome UA format.
-  const _isApiFormat = !!userAgent && isApiFormatUA(userAgent);
-  const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(userAgent!) : null;
-  const _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
-  const _resolvedApiUA = _isApiFormat ? userAgent! : (apiUA ?? null);
-  const _androidVer  = _apiParsed?.androidVersion ?? (
-    _browserUA?.match(/Android\s+(\d+)/i)?.[1] ?? "14"
-  );
-  const _deviceModel = _apiParsed?.deviceModel ?? (
-    _browserUA?.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? ""
-  );
-  if (_isApiFormat) {
-    console.log(`[ebManager:${profileId}] API-format UA converted → browserUA="${_browserUA}" apiUA="${userAgent}"`);
-  }
-
-  const _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
-  const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
-  const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
-  const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
-
   // ── Fire-and-forget: script injection (Page commands CAN hang in packaged build) ─
   // Page.enable and addScriptToEvaluateOnNewDocument are kept fire-and-forget
   // because they can hang in the packaged app on some Windows builds.
@@ -2391,81 +2399,30 @@ export async function openEbWindow(opts: {
   await new Promise(r => setTimeout(r, 100));
   if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1b: window destroyed after UA CDP — returning early"); return; }
 
-  if (_fpIsMobile) {
-    // ── Mobile device metrics override ──────────────────────────────────────
-    // CRITICAL for anti-detect: without this, Chromium's C++ layout engine uses
-    // the real BrowserWindow size (1280×820) even though the JS fingerprint
-    // overrides screen.width/innerWidth.  JS overrides only affect JS reads —
-    // they cannot change how Chromium evaluates CSS @media queries, computes
-    // layout, or classifies input events (PointerEvent.pointerType stays "mouse").
-    //
-    // setDeviceMetricsOverride with mobile:true makes Chromium:
-    //   • evaluate @media (pointer:coarse) and (max-width:Xpx) against mobile dims
-    //   • render the Instagram mobile SPA layout (not desktop)
-    //   • report PointerEvent.pointerType="touch" for native touch input
-    //   • apply the correct devicePixelRatio at the compositor level
-    //
-    // setTouchEmulationEnabled enables Chromium's native touch input stack so that
-    // Input.synthesizeTapGesture produces real touchstart/touchend events (not
-    // mouse events with a wrong pointer type).
-    const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
-    if (_mobileProfile) {
-      // Serialise across all concurrent EB windows: concurrent Emulation.* CDP
-      // calls crash the Chromium renderer on Windows (Electron 33 SIGSEGV).
-      // Each window waits its turn before issuing the emulation commands.
-      await _acquireCdpEmuLock();
-      try {
-        if (win.isDestroyed()) {
-          _ebCrashLog(profileId, "STEP-20: window destroyed while waiting for CDP emu lock — skipping");
-        } else {
-          _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
-          try {
-            // mobile:false — "mobile" is a required field in the CDP schema (omitting it
-            // causes "Invalid parameters" which corrupts the debugger session state and
-            // makes all subsequent Emulation.* commands hang for their full 3-second
-            // timeouts, leaving the user looking at a blank window for 7-8 s).
-            // mobile:true was previously removed because it triggered a Chromium renderer
-            // SIGSEGV in Electron 33 on Windows; mobile:false satisfies the schema
-            // requirement without crashing.  The mobile UA (set above) + small viewport
-            // + setTouchEmulationEnabled still makes Instagram serve the mobile SPA.
-            await Promise.race([
-              win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-                width:             _mobileProfile.width,
-                height:            _mobileProfile.height,
-                deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
-                mobile:            false,
-              }),
-              new Promise<void>(r => setTimeout(r, 3000)),
-            ]);
-            _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride done");
-          } catch (dmErr) {
-            _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dmErr as any)?.message}`);
-          }
-
-          // Drain delay + guard before touch emulation
-          await new Promise(r => setTimeout(r, 100));
-
-          if (!win.isDestroyed()) {
-            _ebCrashLog(profileId, "STEP-21: setTouchEmulationEnabled");
-            try {
-              await Promise.race([
-                win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-                  enabled:        true,
-                  maxTouchPoints: 10,
-                }),
-                new Promise<void>(r => setTimeout(r, 3000)),
-              ]);
-              _ebCrashLog(profileId, "STEP-21b: touch emulation enabled");
-            } catch (teErr) {
-              _ebCrashLog(profileId, `STEP-21b: touch emulation FAILED: ${(teErr as any)?.message}`);
-            }
-          } else {
-            _ebCrashLog(profileId, "GUARD-1c: window destroyed before touch — skipping");
-          }
-        }
-      } finally {
-        _releaseCdpEmuLock();
-      }
+  // ── Touch emulation — setDeviceMetricsOverride REMOVED ───────────────────
+  // setDeviceMetricsOverride was crashing Chromium (SIGSEGV) in Electron 33 on
+  // Windows even when only one window called it.  The fix: BrowserWindow is now
+  // created at the correct mobile dimensions (width×height from _mobileProfile
+  // above), so Chromium's layout engine sees a real mobile-sized viewport from
+  // creation time.  @media queries, CSS layout, and pointer classification all
+  // work correctly without any CDP viewport override.
+  // Only setTouchEmulationEnabled remains — it enables Chromium's native touch
+  // input stack so Input.synthesizeTapGesture produces real touchstart/touchend
+  // events (not mouse events).  This call does NOT touch the rendering pipeline
+  // and does not cause a SIGSEGV.
+  if (_fpIsMobile && !win.isDestroyed()) {
+    _ebCrashLog(profileId, `STEP-20: setTouchEmulationEnabled (native dims ${_mobileProfile?.width ?? "?"}x${_mobileProfile?.height ?? "?"} — no setDeviceMetricsOverride)`);
+    try {
+      await Promise.race([
+        win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+          enabled:        true,
+          maxTouchPoints: 10,
+        }),
+        new Promise<void>(r => setTimeout(r, 3000)),
+      ]);
+      _ebCrashLog(profileId, "STEP-20b: touch emulation enabled");
+    } catch (teErr) {
+      _ebCrashLog(profileId, `STEP-20b: touch emulation FAILED: ${(teErr as any)?.message}`);
     }
   }
 
