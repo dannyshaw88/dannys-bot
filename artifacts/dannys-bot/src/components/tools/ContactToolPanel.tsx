@@ -15,6 +15,7 @@ interface Props {
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
   embedded?: boolean;
+  overrideProfiles?: Profile[];
 }
 
 const RANDOMISE_DESC = "Spread each account's session start times across the wait window so they don't all fire simultaneously";
@@ -56,13 +57,13 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, embedded }: Props) {
+export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, embedded, overrideProfiles }: Props) {
   const [copyOpen, _setCopyOpen] = useState(false);
   const _copyOpen = copyOpenProp ?? copyOpen;
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
+  const otherProfiles = overrideProfiles ?? allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
 
   const START_STOP_KEYS = ["contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"];
 

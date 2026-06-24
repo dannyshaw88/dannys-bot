@@ -34,9 +34,10 @@ interface HumanSessionPanelProps {
   followTool?: Tool;
   unfollowTool?: Tool;
   contactTool?: Tool;
+  overrideProfiles?: Profile[];
 }
 
-export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, followTool, unfollowTool, contactTool }: HumanSessionPanelProps) {
+export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, followTool, unfollowTool, contactTool, overrideProfiles }: HumanSessionPanelProps) {
   const updateToolMutation = useUpdateTool();
   const embeddedUpdateTool = useUpdateTool();
   const { navigateTo } = useBrowserWindows();
@@ -51,8 +52,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [repostingNow, setRepostingNow] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
-  const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
+  const otherProfiles = overrideProfiles ?? allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
+  const hasOtherProfiles = overrideProfiles ? overrideProfiles.length > 0 : allProfiles.some(p => p.id !== tool.profileId);
 
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [

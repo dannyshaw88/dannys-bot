@@ -224,6 +224,7 @@ export function getTrustScore(profileId: number): string | null {
 export function setTrustScore(profileId: number, id: string | null) {
   if (id === null) localStorage.removeItem(lsKey(profileId));
   else localStorage.setItem(lsKey(profileId), id);
+  window.dispatchEvent(new CustomEvent("trustscore_changed", { detail: { profileId, id } }));
 }
 
 // ── Badge component ────────────────────────────────────────────────────────────
@@ -239,6 +240,15 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
 
   useEffect(() => {
     setScore(getTrustScore(profileId));
+  }, [profileId]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { profileId: changedId } = (e as CustomEvent).detail;
+      if (changedId === profileId) setScore(getTrustScore(profileId));
+    };
+    window.addEventListener("trustscore_changed", handler);
+    return () => window.removeEventListener("trustscore_changed", handler);
   }, [profileId]);
 
   useEffect(() => {

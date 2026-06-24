@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useProfile, useUpdateProfile } from "@/hooks/use-profiles";
+import { useProfile, useUpdateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useTools } from "@/hooks/use-tools";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
@@ -57,6 +57,10 @@ export function TrustScoreDetailPage() {
 
   const { data: profile } = useProfile(profileId || 0);
   const { data: tools } = useTools(profileId || 0);
+  const { data: allProfiles = [] } = useProfiles();
+  const otherTrustProfiles = templates
+    ? allProfiles.filter(p => templates.some(t => t.profileId === p.id && t.trustScoreId !== trustScoreId))
+    : [];
   const updateProfileMutation = useUpdateProfile();
 
   const getTool = (type: string) => tools?.find(t => t.type === type);
@@ -281,7 +285,7 @@ export function TrustScoreDetailPage() {
       {/* Follow Tool */}
       <Tabs.Content value="follow" className="outline-none animate-in fade-in duration-300">
         {profile && getTool("follow")
-          ? <ToolConfigPanel tool={getTool("follow")!} profile={profile} />
+          ? <ToolConfigPanel tool={getTool("follow")!} profile={profile} overrideProfiles={otherTrustProfiles} />
           : <div className="flex items-center gap-2 text-muted-foreground p-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
         }
       </Tabs.Content>
@@ -289,7 +293,7 @@ export function TrustScoreDetailPage() {
       {/* Unfollow Tool */}
       <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
         {profile && getTool("unfollow")
-          ? <UnfollowToolPanel tool={getTool("unfollow")!} profile={profile} />
+          ? <UnfollowToolPanel tool={getTool("unfollow")!} profile={profile} overrideProfiles={otherTrustProfiles} />
           : <div className="flex items-center gap-2 text-muted-foreground p-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
         }
       </Tabs.Content>
@@ -297,7 +301,7 @@ export function TrustScoreDetailPage() {
       {/* Contact Tool */}
       <Tabs.Content value="contact" className="outline-none animate-in fade-in duration-300">
         {profile && getTool("contact")
-          ? <ContactToolPanel tool={getTool("contact")!} profile={profile} />
+          ? <ContactToolPanel tool={getTool("contact")!} profile={profile} overrideProfiles={otherTrustProfiles} />
           : <div className="flex items-center gap-2 text-muted-foreground p-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
         }
       </Tabs.Content>
@@ -305,7 +309,7 @@ export function TrustScoreDetailPage() {
       {/* Human Session */}
       <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
         {profile && getTool("human_sessions")
-          ? <HumanSessionPanel tool={getTool("human_sessions")!} profile={profile} />
+          ? <HumanSessionPanel tool={getTool("human_sessions")!} profile={profile} overrideProfiles={otherTrustProfiles} />
           : <div className="flex items-center gap-2 text-muted-foreground p-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
         }
       </Tabs.Content>

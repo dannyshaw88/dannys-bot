@@ -28,10 +28,11 @@ interface ToolConfigPanelProps {
   skipChanceMax?: number;
   executeEveryMin?: number;
   executeEveryMax?: number;
+  overrideProfiles?: Profile[];
 }
 
 
-export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax, executeEveryMin, executeEveryMax }: ToolConfigPanelProps) {
+export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax, executeEveryMin, executeEveryMax, overrideProfiles }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
@@ -248,7 +249,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const _copyOpen = copyOpenProp ?? showCopyModal;
   const _setCopyOpen = onCopyOpenChange ?? _setShowCopyModal;
   const { data: allProfiles = [] } = useProfiles();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
+  const otherProfiles = overrideProfiles ?? allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   // ── Follow Tool copy option groups ──────────────────────────────

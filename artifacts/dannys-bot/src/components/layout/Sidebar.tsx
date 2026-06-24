@@ -80,7 +80,7 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
 
 function FilledHammerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#06b6d4">
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
       <path d="M9.06 1.93C7.17 1.92 5.33 2.65 3.91 4.03a.75.75 0 0 0 .06 1.09l2.29 1.87-.96.97-2.29-1.87a.75.75 0 0 0-1.02.05C.61 7.52 0 9.25 0 11c0 3.87 3.13 7 7 7 1.27 0 2.46-.36 3.47-.97l8.56 5.55c1.03.66 2.38.55 3.29-.28l.96-.87c.95-.86 1.05-2.33.22-3.31L16.59 11l2.35-2.35a2 2 0 0 0 0-2.83l-2.76-2.76a2 2 0 0 0-2.83 0L12 4.41l-.88-.88A6.91 6.91 0 0 0 9.06 1.93zM7 14a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
     </svg>
   );

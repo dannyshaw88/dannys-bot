@@ -21,6 +21,7 @@ interface UnfollowToolPanelProps {
   hideEnableToggle?: boolean;
   skipChanceMin?: number;
   skipChanceMax?: number;
+  overrideProfiles?: Profile[];
 }
 
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
@@ -51,7 +52,7 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax }: UnfollowToolPanelProps) {
+export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax, overrideProfiles }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();  // settings saves
   const toggleMutation     = useUpdateTool();  // enable/disable toggle separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
@@ -63,7 +64,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const [hikerFetchMin, setHikerFetchMin] = useState(50);
   const [hikerFetchMax, setHikerFetchMax] = useState(200);
   const engineStatus = useProfileEngineStatus(tool.profileId);
-  const otherProfiles = allProfiles.filter(p => p.id !== profile.id && !p.locked && !p.isTemplate);
+  const otherProfiles = overrideProfiles ?? allProfiles.filter(p => p.id !== profile.id && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== profile.id);
 
   const [settings, setSettings] = useState(() => {

@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.143",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Tools icon in the sidebar now matches the correct cyan colour used everywhere else in the app." },
+      { category: "Fix", text: "Copy Settings in TrustScore tool tabs now only lists other TrustScore tier accounts — regular accounts from the accounts manager no longer appear." },
+      { category: "Fix", text: "TrustScore badge at the top of an account now syncs immediately when a score is assigned anywhere in the app, without needing a page refresh." },
+    ],
+  },
+  {
     version: "1.1.142",
     date: "24 Jun 2026",
     items: [
