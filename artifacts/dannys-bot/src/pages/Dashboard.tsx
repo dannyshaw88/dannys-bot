@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.140",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browsers no longer show a blank white screen when the assigned proxy times out or refuses the connection. A clear error card now appears explaining the failure and prompting you to check the proxy, then press Reload." },
+      { category: "Fix", text: "Alive For column now counts only from the first time an account was verified as Valid — not from when it was added to the software. Accounts that have never been verified show a dash." },
+      { category: "Improvement", text: "Alive For timer format changed to DDDD:HH:MM (e.g. 0014:08:32 = 14 days, 8 hours, 32 minutes)." },
+    ],
+  },
+  {
     version: "1.1.139",
     date: "24 Jun 2026",
     items: [

@@ -238,6 +238,15 @@ export class DatabaseStorage implements IStorage {
           );
         }
       } catch (_e) { /* non-fatal */ }
+      // Auto-stamp validSince the first time an account reaches "valid" status
+      if (updates.accountStatus === "valid" && !updates.validSince) {
+        try {
+          const row = sqlite.prepare("SELECT valid_since FROM profiles WHERE id = ?").get(id) as { valid_since: string | null } | undefined;
+          if (!row?.valid_since) {
+            updates = { ...updates, validSince: new Date().toISOString() };
+          }
+        } catch (_e) { /* non-fatal */ }
+      }
     }
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
     if ("accountStatus" in updates) {

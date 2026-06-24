@@ -110,6 +110,7 @@ export const profiles = sqliteTable("profiles", {
   isTemplate: integer("is_template", { mode: "boolean" }).default(false),
   templateId: text("template_id"),
   createdAt: text("created_at"),
+  validSince: text("valid_since"),
 });
 
 export const tools = sqliteTable("tools", {

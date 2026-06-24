@@ -3078,6 +3078,18 @@ export async function openEbWindow(opts: {
         body:    JSON.stringify({ code, desc, url }),
       }).catch(() => {});
     }
+    // Show a friendly error page instead of a blank white screen when the proxy
+    // times out or refuses the connection.  Without this the browser stays completely
+    // white — Chromium's own error page is suppressed by the proxy layer.
+    // Codes: -7 ERR_TIMED_OUT, -102 ERR_CONNECTION_REFUSED, -118 ERR_CONNECTION_TIMED_OUT,
+    //        -130 ERR_PROXY_CONNECTION_FAILED, -138 ERR_PROXY_AUTH_UNSUPPORTED, -106 ERR_INTERNET_DISCONNECTED
+    const PROXY_ERR_CODES = new Set([-7, -102, -106, -118, -130, -138]);
+    if (PROXY_ERR_CODES.has(code) && url && url.includes("instagram.com")) {
+      const safeDesc = String(desc).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const safeUrl  = String(url).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const errPage  = `data:text/html;charset=utf-8,<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{background:%231e293b;color:%23e2e8f0;font-family:-apple-system,Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center}.card{background:%230f172a;border:1px solid %23334155;border-radius:12px;padding:32px;max-width:480px;width:100%}h2{color:%23f87171;font-size:18px;margin-bottom:12px}p.desc{color:%2394a3b8;font-size:13px;margin-bottom:8px;font-family:monospace}p.url{color:%2364748b;font-size:11px;word-break:break-all;margin-bottom:20px}p.hint{color:%2364748b;font-size:12px;line-height:1.6}</style></head><body><div class="card"><h2>&#9888; Connection Failed</h2><p class="desc">${safeDesc}</p><p class="url">${safeUrl}</p><p class="hint">Check that this account&apos;s proxy is reachable and the credentials are correct, then press <strong>Reload</strong> in the toolbar above.</p></div></body></html>`;
+      if (!win.isDestroyed()) win.webContents.loadURL(errPage).catch(() => {});
+    }
     // ERR_TOO_MANY_REDIRECTS on scraping_warning — Instagram's anti-bot redirect loop
     // between /accounts/scraping_warning/ and /consent/?flow=user_cookie_choice_v2.
     // After successful 2FA the sessionid cookie already exists, so navigating directly

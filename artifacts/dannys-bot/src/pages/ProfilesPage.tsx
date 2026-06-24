@@ -569,8 +569,8 @@ export function ProfilesPage() {
         return sortDir === "asc" ? na - nb : nb - na;
       }
       if (sortField === "aliveFor") {
-        const ta = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
-        const tb = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        const ta = (a as any).validSince ? new Date((a as any).validSince).getTime() : 0;
+        const tb = (b as any).validSince ? new Date((b as any).validSince).getTime() : 0;
         return sortDir === "asc" ? ta - tb : tb - ta;
       }
       let va = "", vb = "";
@@ -672,8 +672,8 @@ export function ProfilesPage() {
         return newDir === "asc" ? na - nb : nb - na;
       }
       if (field === "aliveFor") {
-        const ta = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
-        const tb = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        const ta = (a as any).validSince ? new Date((a as any).validSince).getTime() : 0;
+        const tb = (b as any).validSince ? new Date((b as any).validSince).getTime() : 0;
         return newDir === "asc" ? ta - tb : tb - ta;
       }
       if (field === "followers") {
@@ -1497,21 +1497,22 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "aliveFor") {
-                      const createdAt = (profile as any).createdAt ? new Date((profile as any).createdAt) : null;
+                      const validSince = (profile as any).validSince ? new Date((profile as any).validSince) : null;
                       let aliveLabel: React.ReactNode = <span className="text-muted-foreground/40">—</span>;
-                      if (createdAt) {
-                        const diffMs  = Date.now() - createdAt.getTime();
-                        const diffMin = Math.floor(diffMs / 60_000);
-                        const diffHr  = Math.floor(diffMin / 60);
-                        const diffDay = Math.floor(diffHr / 24);
-                        if (diffMin < 1)        aliveLabel = <span>Just now</span>;
-                        else if (diffMin < 60)  aliveLabel = <span>{diffMin}m</span>;
-                        else if (diffHr  < 24)  aliveLabel = <span>{diffHr}h {diffMin % 60}m</span>;
-                        else if (diffDay < 30)  aliveLabel = <span>{diffDay}d {diffHr % 24}h</span>;
-                        else                    aliveLabel = <span>{diffDay}d</span>;
+                      if (validSince) {
+                        const diffMs   = Date.now() - validSince.getTime();
+                        const totalMin = Math.floor(diffMs / 60_000);
+                        const totalHr  = Math.floor(totalMin / 60);
+                        const days     = Math.floor(totalHr / 24);
+                        const hrs      = totalHr % 24;
+                        const mins     = totalMin % 60;
+                        const dddd     = String(days).padStart(4, "0");
+                        const hh       = String(hrs).padStart(2, "0");
+                        const mm       = String(mins).padStart(2, "0");
+                        aliveLabel = <span className="font-mono">{dddd}:{hh}:{mm}</span>;
                       }
                       return (
-                        <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={createdAt ? `Added to software: ${createdAt.toLocaleString()}` : "Added date unknown"} onMouseDown={e => e.stopPropagation()}>
+                        <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={validSince ? `Valid since: ${validSince.toLocaleString()}` : "Not yet verified as valid"} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-foreground truncate">{aliveLabel}</span>
                         </div>
                       );
