@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.139",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser windows no longer open blank. A missing required field in Chrome's device-metrics command was causing it to fail immediately, which put the browser session into a bad state and made the two commands after it each hang for 3 seconds. The window was sitting blank for 7-8 seconds before the page started loading — it now loads as expected." },
+      { category: "Fix", text: "Added a direct User-Agent setter as a fallback so the correct mobile UA reaches Instagram's servers even if the CDP path is slow or degraded. Instagram serves a genuinely blank HTML page when it sees a desktop UA, so this ensures that can never happen." },
+    ],
+  },
+  {
     version: "1.1.138",
     date: "23 Jun 2026",
     items: [

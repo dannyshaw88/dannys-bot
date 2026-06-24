@@ -2314,6 +2314,15 @@ export async function openEbWindow(opts: {
   // desktop UA → serves <html><head></head><body></body></html> (blank screen).
   // Each command is wrapped in Promise.race with a 1500 ms timeout so a slow CDP
   // response never blocks openEbWindow indefinitely.
+  //
+  // Belt-and-suspenders: also call the Electron WebContents API directly so the
+  // correct UA is set for HTTP request headers even if CDP is slow or degraded.
+  // Electron's setUserAgent() is synchronous and takes effect on the VERY NEXT
+  // request — no CDP dependency, no timeout risk.
+  if (_browserUA) {
+    win.webContents.setUserAgent(_browserUA);
+    _ebCrashLog(profileId, `STEP-17b: Electron setUserAgent applied (${_browserUA.slice(0, 60)})`);
+  }
   _ebCrashLog(profileId, `STEP-18: UA override — browserUA=${_browserUA ? _browserUA.slice(0,60) : "none"} mobile=${_fpIsMobile}`);
   if (_browserUA) {
     try {
@@ -2384,15 +2393,26 @@ export async function openEbWindow(opts: {
     if (_mobileProfile) {
       _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
       try {
-        // mobile:true removed — it triggers a Chromium renderer SIGSEGV in Electron 33
-        // on Windows when called shortly after Emulation.setUserAgentOverride.
-        // The small viewport + setTouchEmulationEnabled below still gets Instagram's
-        // mobile layout via UA-based detection without crashing the process.
+        // mobile:false — "mobile" is a required field in the CDP schema (omitting it
+        // causes "Invalid parameters" which corrupts the debugger session state and
+        // makes all subsequent Emulation.* commands hang for their full 3-second
+        // timeouts, leaving the user looking at a blank window for 7-8 s).
+        // mobile:true was previously removed because it triggered a Chromium renderer
+        // SIGSEGV in Electron 33 on Windows; mobile:false satisfies the schema
+        // requirement without crashing.  The mobile UA (set above) + small viewport
+        // + setTouchEmulationEnabled still makes Instagram serve the mobile SPA.
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
             width:             _mobileProfile.width,
             height:            _mobileProfile.height,
             deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
+            // mobile is a required field in the CDP schema — omitting it causes
+            // "Invalid parameters" which corrupts the debugger session and makes
+            // all subsequent CDP commands (touch, locale) hang for their full
+            // 3-second timeouts, showing the user a blank window for 7-8 s.
+            // mobile:true caused a Chromium SIGSEGV in Electron 33 on Windows;
+            // mobile:false satisfies the schema without crashing the renderer.
+            mobile:            false,
           }),
           new Promise<void>(r => setTimeout(r, 3000)),
         ]);
