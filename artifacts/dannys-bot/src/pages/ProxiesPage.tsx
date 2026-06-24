@@ -120,7 +120,10 @@ function ProxyRow({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [hostPort, setHostPort] = useState(`${proxy.host}:${proxy.port}`);
+  // Show blank when the proxy was just added with the default sentinel values
+  const [hostPort, setHostPort] = useState(
+    proxy.host === "0.0.0.0" && proxy.port === 8080 ? "" : `${proxy.host}:${proxy.port}`
+  );
   const [username, setUsername] = useState(proxy.username ?? "");
   const [password, setPassword] = useState(proxy.password ?? "");
   const [proxyType, setProxyType] = useState<"http" | "socks5">((proxy.proxyType as "http" | "socks5") ?? "http");
@@ -556,8 +559,19 @@ export function ProxiesPage() {
   const handlePingAll = async () => {
     if (!proxies.length) return;
     setPingingAll(true);
+    // Clear all previous results upfront so the summary shows only THIS run's data.
+    setPingResults({});
     try {
-      const results = await Promise.all(proxies.map(p => pingOne(p.id)));
+      // Run pings with a concurrency cap of 5 to avoid TCP starvation that
+      // produces false "dead" results when many proxies are pinged at once.
+      const CONCURRENCY = 5;
+      const all = [...proxies];
+      const results: PingResult[] = [];
+      while (all.length > 0) {
+        const batch = all.splice(0, CONCURRENCY);
+        const batchResults = await Promise.all(batch.map(p => pingOne(p.id)));
+        results.push(...batchResults);
+      }
       const alive = results.filter(r => r?.alive).length;
       const dead = results.length - alive;
       toast({

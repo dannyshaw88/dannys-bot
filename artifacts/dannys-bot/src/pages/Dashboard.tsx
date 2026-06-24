@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.138",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: Ping All no longer shows stale 'dead' badges from a previous run. All results are cleared before each new ping run so the summary only reflects the current test." },
+      { category: "Fix", text: "Proxy Manager: Ping All now runs proxies in batches of 5 instead of all at once. Firing 20+ simultaneous TCP connections was starving the OS socket pool and causing healthy proxies to time out and appear dead." },
+      { category: "Fix", text: "Proxy Manager: clicking Add Proxy now shows all fields blank instead of pre-filling 0.0.0.0:8080." },
+    ],
+  },
+  {
     version: "1.1.137",
     date: "23 Jun 2026",
     items: [
