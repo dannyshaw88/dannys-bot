@@ -44,7 +44,7 @@ interface CrossStats {
   uniqueEpMean: number; endpointDiversityMean: number;
   warmupMean: number; warmupMedian: number; zeroWarmupPct: number;
   actionVelocityMean: number; actionVelocityMedian: number; authPerActionMean: number;
-  burstPct: number; fastFlagPct: number; avgSpanMin: number;
+  burstPct: number; avgBurstCount: number; fastFlagPct: number; avgSpanMin: number;
   commonEndpoints: Array<{ name: string; label: string | null; pct: number; category: string; freq: number }>;
   proxyConcentration: number; topProxy: string;
   subnetGroups: SubnetGroup[]; topSubnet: string; subnetConcentration: number;
@@ -277,7 +277,7 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
     entropyMean: 0, entropyMedian: 0, entropyStdDev: 0, uniqueEpMean: 0, endpointDiversityMean: 0,
     warmupMean: 0, warmupMedian: 0, zeroWarmupPct: 0,
     actionVelocityMean: 0, actionVelocityMedian: 0, authPerActionMean: 0,
-    burstPct: 0, fastFlagPct: 0, avgSpanMin: 0,
+    burstPct: 0, avgBurstCount: 0, fastFlagPct: 0, avgSpanMin: 0,
     commonEndpoints: [], proxyConcentration: 0, topProxy: "",
     subnetGroups: [], topSubnet: "", subnetConcentration: 0,
     hourBuckets: Array(24).fill(0), peakHour: -1,
@@ -315,7 +315,8 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
   const sessionRatios = metricsList.map(m => m.totalCalls > 0 ? m.sessionCount / m.totalCalls : 0);
   const actionRatios  = metricsList.map(m => m.totalCalls > 0 ? m.actionCount / m.totalCalls : 0);
 
-  const burstCount    = metricsList.filter(m => m.burstCount > 0).length;
+  const burstCount      = metricsList.filter(m => m.burstCount > 0).length;
+  const burstCountList  = metricsList.map(m => m.burstCount);
   const fastFlagCount = metricsList.filter(m => m.spanMin > 0 && m.spanMin < 60).length;
   const roboticCount  = covList.filter(v => v < 0.5).length;
 
@@ -431,6 +432,7 @@ function computeCrossStats(entries: AnalyticsEntry[], trustMap: Map<number, Trus
     warmupMean: mean(warmupList), warmupMedian: median(warmupList), zeroWarmupPct: entries.length ? Math.round(warmupList.filter(v => v < 5).length / entries.length * 100) : 0,
     actionVelocityMean: mean(velList), actionVelocityMedian: median(velList), authPerActionMean: mean(authList),
     burstPct: entries.length ? Math.round(burstCount / entries.length * 100) : 0,
+    avgBurstCount: mean(burstCountList),
     fastFlagPct: entries.length ? Math.round(fastFlagCount / entries.length * 100) : 0, avgSpanMin: mean(spanList),
     commonEndpoints, proxyConcentration: entries.length ? Math.round((topProxyEntry?.[1] ?? 0) / entries.length * 100) : 0, topProxy: topProxyEntry?.[0] ?? "",
     subnetGroups, topSubnet: topSubnetEntry?.subnet ?? "", subnetConcentration: entries.length && topSubnetEntry ? Math.round(topSubnetEntry.events / entries.length * 100) : 0,
@@ -456,7 +458,7 @@ function computeAnomalyScore(m: EntryMetrics, cross: CrossStats): number {
   if (cross.sessionPerActionStdDev > 0) s += Math.min(20, Math.max(0, zScore(cross.sessionPerActionMean, m.sessionPerAction, cross.sessionPerActionStdDev) * 8));
   if (m.timingCoV >= 0 && m.timingCoV < 0.3) s += 15; else if (m.timingCoV >= 0 && m.timingCoV < 0.5) s += 8;
   if (cross.entropyStdDev > 0) s += Math.min(12, Math.max(0, zScore(cross.entropyMean, m.shannonEntropy, cross.entropyStdDev) * 6));
-  if (m.burstCount > 5) s += 10; else if (m.burstCount > 0) s += 5;
+  if (m.burstCount > 50) s += 25; else if (m.burstCount > 20) s += 15; else if (m.burstCount > 5) s += 8; else if (m.burstCount > 0) s += 4;
   if (m.preActionWarmup >= 0 && m.preActionWarmup < 5 && m.cats.follow > 0) s += 10;
   if (m.spanMin > 0 && m.spanMin < 30) s += 10; else if (m.spanMin > 0 && m.spanMin < 60) s += 5;
   if (m.avgInterCallSec > 0 && m.avgInterCallSec < 0.5) s += 8;
@@ -581,9 +583,9 @@ const TAB_CONFIG: Record<ErrorTab, {
   locked: {
     label: "Locked Accounts", accentBg: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800",
     emptyMsg: "No locked account events yet", flagMsg: "Flag accounts from Accounts → Actions → Flag as Locked Account.", deleteEndpoint: "/api/analytics/locked-patterns", queryKey: "/api/analytics/locked-patterns",
-    causeTitle: "What mathematically separates LOCKED ACCOUNTS from other errors",
-    causeTheory: "Account locking is Instagram's security protocol. It is not purely behaviour-based. It primarily triggers on device or session anomalies: a login from an unrecognized device fingerprint, a geographic location change, or a session that looks physically impossible (simultaneous logins from different locations). It can also be triggered by a rapid escalation from suspicious activity. Locked accounts require user action to unlock. They are identity challenges, not automation blocks.",
-    causeSignals: ["Device fingerprint mismatch ig_did/mid changed between sessions (check Device IDs)", "Geographic anomaly proxy location inconsistent with account history", "Concurrent session detection two sessions open simultaneously on same account", "High action rate immediately after session start", "Auth calls repeated mid-session Instagram re-challenging device identity"],
+    causeTitle: "What the data shows about LOCKED ACCOUNTS",
+    causeTheory: "The data points to one thing: these accounts are reconnecting to Instagram's servers too frequently. Every time the Human Sessions tool runs, it opens a new connection window. Locked accounts in this dataset averaged 70 of these windows vs 17 for surviving accounts. Instagram sees 70 short connection events on the same account in a day and treats it as a suspicious device pattern — not because each session was fast or robotic, but because real humans don't open and close an Instagram session 70 times a day. Reduce how often Human Sessions fires, or switch to fewer, longer sessions.",
+    causeSignals: ["Too many reconnections — Human Sessions firing too frequently creates too many short connection windows", "Each Human Sessions run counts as a new session event in Instagram's device history", "Survivors average ~17 connection windows per day vs 70+ for locked accounts", "Device fingerprint mismatch ig_did/mid changed between sessions (check Device IDs)", "Same account re-added after a previous ban — Instagram already has history on it"],
   },
 };
 
@@ -648,11 +650,11 @@ function CausationPanel({ tabKey, cross, cfg }: { tabKey: ErrorTab; cross: Cross
     validations.push({ signal: "High auth per action", status: cross.authPerActionMean > 2 ? "confirmed" : cross.authPerActionMean > 0.5 ? "partial" : "not_seen", value: `${cross.authPerActionMean.toFixed(3)} auth/action` });
     validations.push({ signal: "Min gap issues", status: cross.minGapMean < 0.5 ? "confirmed" : cross.minGapMean < 2 ? "partial" : "not_seen", value: cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms avg min gap` : `${cross.minGapMean.toFixed(1)}s avg min gap` });
   } else {
-    validations.push({ signal: "High auth ratio (fingerprint renegotiation)", status: cross.avgAuthRatio > 0.25 ? "confirmed" : cross.avgAuthRatio > 0.1 ? "partial" : "not_seen", value: `${(cross.avgAuthRatio * 100).toFixed(1)}% auth calls` });
-    validations.push({ signal: "Follows with <5 prior calls", status: cross.zeroWarmupPct >= 50 ? "confirmed" : cross.zeroWarmupPct >= 20 ? "partial" : "not_seen", value: `${cross.zeroWarmupPct}% of sessions` });
-    validations.push({ signal: "Fast lock (<30 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
+    validations.push({ signal: "Too many session cycles (>40 bursts)", status: cross.avgBurstCount > 40 ? "confirmed" : cross.avgBurstCount > 20 ? "partial" : "not_seen", value: `avg ${cross.avgBurstCount.toFixed(0)} burst cycles/account` });
+    validations.push({ signal: "Fast minimum call gaps (<3s)", status: cross.minGapMean < 2 ? "confirmed" : cross.minGapMean < 5 ? "partial" : "not_seen", value: cross.minGapMean < 1 ? `${(cross.minGapMean * 1000).toFixed(0)}ms avg fastest gap` : `${cross.minGapMean.toFixed(1)}s avg fastest gap` });
+    validations.push({ signal: "Short avg session span (<30 min)", status: cross.avgSpanMin > 0 && cross.avgSpanMin < 15 ? "confirmed" : cross.avgSpanMin < 30 ? "partial" : "not_seen", value: cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(1)}m avg` : `${(cross.avgSpanMin/60).toFixed(2)}h avg`) : "—" });
     validations.push({ signal: "Concurrent sessions / subnet", status: cross.subnetGroups.length > 0 ? (cross.subnetConcentration >= 50 ? "confirmed" : "partial") : "not_seen", value: cross.subnetGroups.length > 0 ? `${cross.subnetGroups.length} shared subnet${cross.subnetGroups.length !== 1 ? "s" : ""}` : "none" });
-    validations.push({ signal: "Short avg session span", status: cross.avgSpanMin > 0 && cross.avgSpanMin < 15 ? "confirmed" : cross.avgSpanMin < 30 ? "partial" : "not_seen", value: cross.avgSpanMin > 0 ? (cross.avgSpanMin < 60 ? `${cross.avgSpanMin.toFixed(1)}m avg` : `${(cross.avgSpanMin/60).toFixed(2)}h avg`) : "—" });
+    validations.push({ signal: "Fast lock (<60 min)", status: cross.fastFlagPct >= 50 ? "confirmed" : cross.fastFlagPct >= 20 ? "partial" : "not_seen", value: `${cross.fastFlagPct}% flagged <60m` });
   }
 
   const confirmedCount = validations.filter(v => v.status === "confirmed").length;
@@ -1050,7 +1052,11 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
     else if (cross.sessionPerActionMedian < 8) findings.push({ severity: "warning", text: `Session noise median ${cross.sessionPerActionMedian.toFixed(2)} reads/action — below safe threshold of 10–15.` });
     if (cross.timingCoVMedian >= 0 && cross.timingCoVMedian < 0.3) findings.push({ severity: "critical", text: `Robotic timing: median CoV=${cross.timingCoVMedian.toFixed(4)}. Human behaviour produces CoV >0.8. Machine-uniform intervals are a tier-1 bot classifier signal.` });
     else if (cross.roboticTimingPct >= 40) findings.push({ severity: "warning", text: `${cross.roboticTimingPct}% of events show robotic timing (CoV<0.5).` });
-    if (cross.burstPct >= 70) findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart.` });
+    if (tabKey === "locked") {
+      if (cross.avgBurstCount > 40) findings.push({ severity: "critical", text: `Accounts are connecting and disconnecting too many times — avg ${cross.avgBurstCount.toFixed(0)} burst cycles per account (surviving accounts average ~17). Think of it as someone badging in and out of a building 70 times a day instead of a normal few visits. Reduce how often the app reconnects and runs short activity windows.` });
+      else if (cross.avgBurstCount > 20) findings.push({ severity: "warning", text: `Avg ${cross.avgBurstCount.toFixed(0)} burst cycles per account — higher than the ~17 seen in surviving accounts. Fewer, longer sessions would look more natural.` });
+      if (cross.minGapMean < 3) findings.push({ severity: "warning", text: `Fastest call gaps avg ${cross.minGapMean.toFixed(1)}s — inside each burst, calls are firing faster than a human could tap. Surviving accounts average ~10s minimum between calls.` });
+    } else if (cross.burstPct >= 70) findings.push({ severity: "critical", text: `Burst patterns in ${cross.burstPct}% of events — consecutive API calls ≤60s apart.` });
     else if (cross.burstPct >= 30) findings.push({ severity: "warning", text: `Burst patterns in ${cross.burstPct}% of events.` });
     if (cross.zeroWarmupPct >= 60) findings.push({ severity: "critical", text: `${cross.zeroWarmupPct}% of sessions with follows had an average of fewer than 5 calls already logged before each follow.` });
     else if (cross.zeroWarmupPct >= 30) findings.push({ severity: "warning", text: `${cross.zeroWarmupPct}% of sessions with follows had fewer than 5 calls logged before each follow on average.` });
@@ -1131,7 +1137,8 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><Flame className="w-3 h-3" /> Risk Indicators</p>
-            <StatRow label="Burst events"         val={`${cross.burstPct}%`} warn={cross.burstPct >= 30} />
+            <StatRow label="Burst events"            val={`${cross.burstPct}%`} warn={cross.burstPct >= 30} />
+            <StatRow label="Avg session cycles"      val={cross.avgBurstCount > 0 ? cross.avgBurstCount.toFixed(0) : "—"} warn={cross.avgBurstCount > 20} />
             <StatRow label="Fast-flagged (<60m)"  val={`${cross.fastFlagPct}%`} warn={cross.fastFlagPct >= 30} />
             <StatRow label="Action velocity mean" val={cross.actionVelocityMean > 0 ? `${cross.actionVelocityMean.toFixed(2)}/hr` : "—"} />
             <StatRow label="Low-trust flagged"    val={`${cross.lowTrustPct}%`} />

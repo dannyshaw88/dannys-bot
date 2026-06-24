@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.152",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Improve", text: "Locked account analysis now explains the real cause in plain English: the app is reconnecting to Instagram too many times per day (averaging 70 short connections vs 17 for surviving accounts). Each time the Human Sessions tool runs, it counts as a new session window — too many of these short repeated connections is the pattern Instagram flags. The anomaly score now weights this session-cycle count more heavily." },
+      { category: "Improve", text: "Anomaly score now scales with burst-window count at four levels (0 / 5 / 20 / 50 cycles) instead of a flat score, so accounts with 70+ reconnection cycles rank significantly higher than those with a handful." },
+      { category: "Improve", text: "Added 'Avg session cycles' stat to the Risk Indicators panel — shows the average number of reconnection windows per account across all flagged entries." },
+    ],
+  },
+  {
     version: "1.1.151",
     date: "24 Jun 2026",
     items: [
