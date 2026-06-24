@@ -69,10 +69,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.148",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed crash when opening multiple browser windows at once. Simultaneous browser setup was hitting a Chromium bug that causes a hard crash on Windows — the setup steps now run one at a time instead of all at once." },
+      { category: "Fix", text: "All accounts are now visible again. A database flag was incorrectly set on every account, causing the accounts page to show nothing. This is now corrected automatically on startup." },
+    ],
+  },
+  {
     version: "1.1.147",
     date: "24 Jun 2026",
     items: [
-      { category: "Fix", text: "Opening more than 3 browser windows at once no longer crashes the app. A limit of 3 simultaneous browsers is now enforced with a clear warning dialog instead of a silent crash." },
       { category: "Improvement", text: "Alive For column now shows a clean format like '10d 8h' or '8h 32m' instead of '0010:08:32'. The fixed-width monospace font has also been removed to match the rest of the table." },
     ],
   },

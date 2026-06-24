@@ -316,6 +316,13 @@ if (!colNames.has("leak_snapshot")) {
 if (!colNames.has("is_template")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN is_template INTEGER DEFAULT 0;`);
 }
+// Correct data: real accounts (no template_id) that somehow got is_template=1 are not
+// TrustScore templates — reset them so they show up in the accounts page.
+sqlite.exec(`
+  UPDATE profiles
+  SET is_template = 0
+  WHERE is_template = 1 AND (template_id IS NULL OR template_id = '');
+`);
 if (!colNames.has("template_id")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
 }

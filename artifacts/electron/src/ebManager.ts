@@ -221,6 +221,25 @@ interface EbEntry {
 }
 export const ebMap = new Map<number, EbEntry>();
 
+// ── CDP emulation serialization lock ────────────────────────────────────────
+// Concurrent Emulation.setDeviceMetricsOverride / setTouchEmulationEnabled
+// calls across multiple BrowserWindow instances cause a Chromium SIGSEGV crash
+// on Windows in Electron 33 (same root cause as mobile:true crashing single
+// windows — the emulation subsystem is not thread-safe at the Chromium level).
+// Serialising the emulation-setup block (steps 20-21) means each window waits
+// its turn before issuing the CDP commands, preventing simultaneous calls.
+let _cdpEmuLocked = false;
+const _cdpEmuQueue: (() => void)[] = [];
+async function _acquireCdpEmuLock(): Promise<void> {
+  if (!_cdpEmuLocked) { _cdpEmuLocked = true; return; }
+  await new Promise<void>(resolve => _cdpEmuQueue.push(resolve));
+}
+function _releaseCdpEmuLock(): void {
+  const next = _cdpEmuQueue.shift();
+  if (next) next();
+  else _cdpEmuLocked = false;
+}
+
 // Return the Electron session partition name for a profile.
 // For regular accounts this is always 'persist:eb-{pid}'.
 // For the Ghost (pid=-1) it varies per session — look it up in ebMap.
@@ -2391,52 +2410,61 @@ export async function openEbWindow(opts: {
     // mouse events with a wrong pointer type).
     const _mobileProfile = getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null);
     if (_mobileProfile) {
-      _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
+      // Serialise across all concurrent EB windows: concurrent Emulation.* CDP
+      // calls crash the Chromium renderer on Windows (Electron 33 SIGSEGV).
+      // Each window waits its turn before issuing the emulation commands.
+      await _acquireCdpEmuLock();
       try {
-        // mobile:false — "mobile" is a required field in the CDP schema (omitting it
-        // causes "Invalid parameters" which corrupts the debugger session state and
-        // makes all subsequent Emulation.* commands hang for their full 3-second
-        // timeouts, leaving the user looking at a blank window for 7-8 s).
-        // mobile:true was previously removed because it triggered a Chromium renderer
-        // SIGSEGV in Electron 33 on Windows; mobile:false satisfies the schema
-        // requirement without crashing.  The mobile UA (set above) + small viewport
-        // + setTouchEmulationEnabled still makes Instagram serve the mobile SPA.
-        await Promise.race([
-          win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-            width:             _mobileProfile.width,
-            height:            _mobileProfile.height,
-            deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
-            // mobile is a required field in the CDP schema — omitting it causes
-            // "Invalid parameters" which corrupts the debugger session and makes
-            // all subsequent CDP commands (touch, locale) hang for their full
-            // 3-second timeouts, showing the user a blank window for 7-8 s.
-            // mobile:true caused a Chromium SIGSEGV in Electron 33 on Windows;
-            // mobile:false satisfies the schema without crashing the renderer.
-            mobile:            false,
-          }),
-          new Promise<void>(r => setTimeout(r, 3000)),
-        ]);
-        _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride done");
-      } catch (dmErr) {
-        _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dmErr as any)?.message}`);
-      }
+        if (win.isDestroyed()) {
+          _ebCrashLog(profileId, "STEP-20: window destroyed while waiting for CDP emu lock — skipping");
+        } else {
+          _ebCrashLog(profileId, `STEP-20: setDeviceMetricsOverride ${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr}`);
+          try {
+            // mobile:false — "mobile" is a required field in the CDP schema (omitting it
+            // causes "Invalid parameters" which corrupts the debugger session state and
+            // makes all subsequent Emulation.* commands hang for their full 3-second
+            // timeouts, leaving the user looking at a blank window for 7-8 s).
+            // mobile:true was previously removed because it triggered a Chromium renderer
+            // SIGSEGV in Electron 33 on Windows; mobile:false satisfies the schema
+            // requirement without crashing.  The mobile UA (set above) + small viewport
+            // + setTouchEmulationEnabled still makes Instagram serve the mobile SPA.
+            await Promise.race([
+              win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+                width:             _mobileProfile.width,
+                height:            _mobileProfile.height,
+                deviceScaleFactor: Math.round(_mobileProfile.dpr * 100) / 100,
+                mobile:            false,
+              }),
+              new Promise<void>(r => setTimeout(r, 3000)),
+            ]);
+            _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride done");
+          } catch (dmErr) {
+            _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dmErr as any)?.message}`);
+          }
 
-      // Drain delay + guard before touch emulation
-      await new Promise(r => setTimeout(r, 100));
-      if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1c: window destroyed before touch — returning early"); return; }
+          // Drain delay + guard before touch emulation
+          await new Promise(r => setTimeout(r, 100));
 
-      _ebCrashLog(profileId, "STEP-21: setTouchEmulationEnabled");
-      try {
-        await Promise.race([
-          win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-            enabled:        true,
-            maxTouchPoints: 10,
-          }),
-          new Promise<void>(r => setTimeout(r, 3000)),
-        ]);
-        _ebCrashLog(profileId, "STEP-21b: touch emulation enabled");
-      } catch (teErr) {
-        _ebCrashLog(profileId, `STEP-21b: touch emulation FAILED: ${(teErr as any)?.message}`);
+          if (!win.isDestroyed()) {
+            _ebCrashLog(profileId, "STEP-21: setTouchEmulationEnabled");
+            try {
+              await Promise.race([
+                win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+                  enabled:        true,
+                  maxTouchPoints: 10,
+                }),
+                new Promise<void>(r => setTimeout(r, 3000)),
+              ]);
+              _ebCrashLog(profileId, "STEP-21b: touch emulation enabled");
+            } catch (teErr) {
+              _ebCrashLog(profileId, `STEP-21b: touch emulation FAILED: ${(teErr as any)?.message}`);
+            }
+          } else {
+            _ebCrashLog(profileId, "GUARD-1c: window destroyed before touch — skipping");
+          }
+        }
+      } finally {
+        _releaseCdpEmuLock();
       }
     }
   }
