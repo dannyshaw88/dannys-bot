@@ -49,6 +49,25 @@ export function useDeleteSource() {
   });
 }
 
+export function useUpdateSource() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, toolId, ...data }: { id: number; toolId: number; rank?: number | null; enabled?: boolean }) => {
+      const res = await fetch(`/api/sources/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to update source');
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, variables.toolId] });
+    },
+  });
+}
+
 export function useImportSources() {
   const queryClient = useQueryClient();
   return useMutation({

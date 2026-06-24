@@ -325,7 +325,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
         sourcesRes?.ok ? await sourcesRes.json() : [];
       const payload = currentSources.length > 0
-        ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
+        ? currentSources
+            .filter((s: any) => s.enabled !== false)
+            .map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
         : [];
 
       await Promise.all(
@@ -1686,6 +1688,24 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     onChange={(v) => setSettings({ ...settings, followSkipMax: v } as any)}
                   />
                 </div>
+                {(() => {
+                  const fs = (followTool.settings as any) ?? {};
+                  const avgExecuteEvery    = ((settings.delayMin ?? 30) + (settings.delayMax ?? 60)) / 2;
+                  const avgUsersPerSession = ((fs.processMin ?? 5) + (fs.processMax ?? 15)) / 2;
+                  const avgMaxPerDay       = ((fs.maxPerDayMin ?? 0) + (fs.maxPerDayMax ?? 0)) / 2;
+                  const avgSkip            = (((settings as any).followSkipMin ?? 0) + ((settings as any).followSkipMax ?? 0)) / 2;
+                  const executionChance    = Math.max(0, 1 - avgSkip / 100);
+                  const sessionsPerHour    = avgExecuteEvery > 0 ? 60 / avgExecuteEvery : 0;
+                  const perHour            = Math.round(sessionsPerHour * avgUsersPerSession * executionChance);
+                  const perDayRaw          = perHour * 24;
+                  const perDay             = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
+                  return perHour > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Est. Rate</span>
+                      <span className="text-xs font-bold text-foreground">{perHour}/hr · {perDay}/day</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
             </div>
             {followTool.enabled && <div className="p-4">

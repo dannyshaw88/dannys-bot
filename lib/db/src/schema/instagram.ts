@@ -128,6 +128,7 @@ export const sources = sqliteTable("sources", {
   value: text("value").notNull(),
   rank: integer("rank"),
   nrPosts: integer("nr_posts"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   targetUserId: text("target_user_id").notNull().default(""),
   hashtagCursor: text("hashtag_cursor").notNull().default(""),
 });

@@ -3998,13 +3998,16 @@ class AutomationEngine {
 
   // ── Weighted source picker ────────────────────────────────────────────────
   private pickSource(sources: Source[]): Source {
-    const total = sources.reduce((s, x) => s + (x.rank ?? 100), 0);
+    const active = sources.filter(s => s.enabled !== false);
+    const pool = active.length > 0 ? active : sources;
+    const total = pool.reduce((s, x) => s + (x.rank ?? 100), 0);
+    if (total === 0) return pool[pool.length - 1];
     let r = Math.random() * total;
-    for (const src of sources) {
+    for (const src of pool) {
       r -= src.rank ?? 100;
       if (r <= 0) return src;
     }
-    return sources[sources.length - 1];
+    return pool[pool.length - 1];
   }
 
   // ── Dedup check ───────────────────────────────────────────────────────────

@@ -2410,6 +2410,13 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  app.patch('/api/sources/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    const { rank, enabled } = req.body as { rank?: number | null; enabled?: boolean };
+    await storage.updateSource(id, { rank, enabled });
+    res.json({ ok: true });
+  });
+
   app.get("/api/profiles/:profileId/followed-users", async (req, res) => {
     const data = await storage.getFollowedUsersByProfile(Number(req.params.profileId));
     res.json(data);

@@ -372,7 +372,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
       const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
         sourcesRes?.ok ? await sourcesRes.json() : [];
       const payload = copySources && currentSources.length > 0
-        ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
+        ? currentSources
+            .filter((s: any) => s.enabled !== false)
+            .map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
         : [];
 
       await Promise.all(

@@ -1428,19 +1428,19 @@ export function ProfileDetailsPage() {
                           <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                           <div className="flex flex-wrap gap-2 items-start">
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[50px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[50px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
                             <Button

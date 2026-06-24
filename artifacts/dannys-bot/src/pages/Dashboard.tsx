@@ -528,6 +528,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.153",
+    date: "24 Jun 2026",
+    items: [
+      { category: "UI", text: "Accounts page: Alive For, Last Call, IP:Port, Sync, Total Calls, Followers, and Following columns now use the same font size and weight as the Account Name column." },
+      { category: "New", text: "Follow Tool sources: each source now has an enable/disable toggle and a percentage chance field — disabled sources are skipped by the automation engine and excluded from copy operations." },
+    ],
+  },
+  {
     version: "1.1.98",
     date: "21 Jun 2026",
     items: [

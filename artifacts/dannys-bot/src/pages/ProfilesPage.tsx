@@ -1521,20 +1521,20 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={validSince ? `Valid since: ${validSince.toLocaleString()}` : "Not yet verified as valid"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-foreground truncate">{aliveLabel}</span>
+                          <span className="text-xs font-semibold text-foreground truncate">{aliveLabel}</span>
                         </div>
                       );
                     }
                     if (key === "followers") return (
                       <div key={key} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()}>
-                        <span className="text-[11px] font-mono text-foreground/80">
+                        <span className="text-xs font-semibold text-foreground">
                           {profile.followersCount != null ? profile.followersCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
                         </span>
                       </div>
                     );
                     if (key === "following") return (
                       <div key={key} style={{ width: profColWidths.following }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()}>
-                        <span className="text-[11px] font-mono text-foreground/80">
+                        <span className="text-xs font-semibold text-foreground">
                           {profile.followingCount != null ? profile.followingCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
                         </span>
                       </div>
@@ -1554,7 +1554,7 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center justify-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-foreground truncate">{syncLabel}</span>
+                          <span className="text-xs font-semibold text-foreground truncate">{syncLabel}</span>
                         </div>
                       );
                     }
@@ -1573,7 +1573,7 @@ export function ProfilesPage() {
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center justify-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-foreground truncate">{label}</span>
+                          <span className="text-xs font-semibold text-foreground truncate">{label}</span>
                         </div>
                       );
                     }
@@ -1582,7 +1582,7 @@ export function ProfilesPage() {
                       const display = count === 0 ? <span className="text-muted-foreground/40">—</span> : count.toLocaleString();
                       return (
                         <div key={key} style={{ width: profColWidths.totalCalls }} className="shrink-0 flex items-center justify-center" title={`${count.toLocaleString()} lifetime API calls`} onMouseDown={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-foreground truncate">{display}</span>
+                          <span className="text-xs font-semibold text-foreground truncate">{display}</span>
                         </div>
                       );
                     }
@@ -1676,7 +1676,7 @@ export function ProfilesPage() {
                     }
                     return (
                       <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2 ml-auto" title={ip || "No proxy"}>
-                        <span className="text-[11px] font-mono text-foreground/80 truncate block">{ip || " "}</span>
+                        <span className="text-xs font-semibold text-foreground truncate block">{ip || " "}</span>
                       </div>
                     );
                   })()}
