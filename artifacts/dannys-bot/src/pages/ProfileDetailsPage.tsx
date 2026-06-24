@@ -282,6 +282,16 @@ export function ProfileDetailsPage() {
   const [cookieInjectStatus, setCookieInjectStatus] = useState<"idle" | "injecting" | "ok" | "error">("idle");
   const [clearCookiesStatus, setClearCookiesStatus] = useState<"idle" | "clearing" | "ok" | "error">("idle");
 
+  // Admin check — admin accounts always see sensitive fields (password, TOTP key) as plain text.
+  // Non-admin accounts see those fields masked behind stars by default.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    fetch("/api/license/me", { credentials: "include" })
+      .then(r => r.json())
+      .then((d: any) => { if (d?.isAdmin) setIsAdmin(true); })
+      .catch(() => {});
+  }, []);
+
   const handleInjectCookies = async () => {
     const raw = cookieInput.trim();
     if (!raw) return;
@@ -1115,23 +1125,41 @@ export function ProfileDetailsPage() {
                       </div>
                       <div className="space-y-1.5 flex-1 max-w-[260px]">
                         <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
-                        <PasswordInput
-                          value={formData.password}
-                          onChange={e => updateField({ password: e.target.value })}
-                          data-testid="input-password"
-                        />
+                        {isAdmin ? (
+                          <Input
+                            value={formData.password}
+                            onChange={e => updateField({ password: e.target.value })}
+                            data-testid="input-password"
+                          />
+                        ) : (
+                          <PasswordInput
+                            value={formData.password}
+                            onChange={e => updateField({ password: e.target.value })}
+                            data-testid="input-password"
+                          />
+                        )}
                       </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><KeyRound className="w-3.5 h-3.5" /> 2FA Secret Key</Label>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Input
-                          className="max-w-[370px]"
-                          placeholder=""
-                          value={formData.twoFASecretKey}
-                          onChange={e => { updateField({ twoFASecretKey: e.target.value }); setTotpCode(null); setTotpError(null); }}
-                          data-testid="input-2fa-secret"
-                        />
+                        {isAdmin ? (
+                          <Input
+                            className="max-w-[370px]"
+                            placeholder=""
+                            value={formData.twoFASecretKey}
+                            onChange={e => { updateField({ twoFASecretKey: e.target.value }); setTotpCode(null); setTotpError(null); }}
+                            data-testid="input-2fa-secret"
+                          />
+                        ) : (
+                          <PasswordInput
+                            className="max-w-[370px]"
+                            placeholder=""
+                            value={formData.twoFASecretKey}
+                            onChange={e => { updateField({ twoFASecretKey: e.target.value }); setTotpCode(null); setTotpError(null); }}
+                            data-testid="input-2fa-secret"
+                          />
+                        )}
                         <button
                           type="button"
                           disabled={!formData.twoFASecretKey?.trim()}

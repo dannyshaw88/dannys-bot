@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.141",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Security", text: "Account Settings: Password and 2FA Secret Key fields are now hidden behind stars by default for non-admin accounts. Admin accounts always see these fields as plain readable text." },
+      { category: "Fix", text: "Copy Settings dialog: each account status now has its own unique colour — Pending is grey, Verifying is blue, Valid is green, Logged Out is yellow, Locked/Bad Password/Action Blocked are red, Banned is rose, Captcha/2FA/Email/Phone challenges are amber, and Stopped is zinc." },
+    ],
+  },
+  {
     version: "1.1.140",
     date: "24 Jun 2026",
     items: [

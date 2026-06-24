@@ -51,12 +51,15 @@ function storageSortKey(title: string)     { return `copyDialog:${titleSlug(titl
 
 function statusBadgeClass(status: string) {
   const s = (status ?? "").toLowerCase().replace(/_/g, " ");
-  if (s === "valid")                                        return "bg-green-500/15 text-green-700 border-green-500/30";
-  if (s === "pending" || s === "verifying")                 return "bg-yellow-500/15 text-yellow-700 border-yellow-500/30";
-  if (s === "locked" || s === "account disabled")           return "bg-red-500/15 text-red-700 border-red-500/30";
-  if (s === "captcha" || s === "2fa verification" || s === "email confirmation") return "bg-orange-500/15 text-orange-700 border-orange-500/30";
-  if (s === "stopped" || s === "disabled" || s === "inactive") return "bg-zinc-500/15 text-zinc-500 border-zinc-500/30";
-  if (s === "banned" || s === "restricted" || s === "suspended") return "bg-red-500/15 text-red-700 border-red-500/30";
+  if (s === "valid")                                                               return "bg-green-500/15 text-green-700 border-green-500/30";
+  if (s === "pending")                                                             return "bg-slate-500/15 text-slate-500 border-slate-400/30";
+  if (s === "verifying")                                                           return "bg-blue-500/15 text-blue-600 border-blue-400/30";
+  if (s === "stopped" || s === "disabled" || s === "inactive" || s === "captcha disabled") return "bg-zinc-500/15 text-zinc-500 border-zinc-500/30";
+  if (s === "logged out")                                                          return "bg-yellow-500/15 text-yellow-700 border-yellow-400/30";
+  if (s === "locked" || s === "account disabled" || s === "bad password" || s === "action blocked" || s === "api block" || s === "post deleted" || s === "compromised") return "bg-red-500/15 text-red-700 border-red-500/30";
+  if (s === "banned" || s === "restricted" || s === "suspended")                  return "bg-rose-500/15 text-rose-700 border-rose-500/30";
+  if (s === "captcha" || s === "2fa verification" || s === "email confirmation" || s === "phone verification" || s === "action required") return "bg-amber-500/15 text-amber-700 border-amber-400/30";
+  if (s === "password reset")                                                      return "bg-violet-500/15 text-violet-700 border-violet-400/30";
   return "bg-muted/60 text-muted-foreground border-border";
 }
 
