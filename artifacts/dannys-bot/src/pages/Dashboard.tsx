@@ -528,6 +528,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.155",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser: fixed a bug where opening multiple browsers with a failing proxy showed a blank blue page with '&' in red instead of the proper connection error message. The proxy error page was being silently truncated by Chromium's URL parser treating the '#' inside the HTML entity as a fragment separator." },
+    ],
+  },
+  {
     version: "1.1.154",
     date: "24 Jun 2026",
     items: [
