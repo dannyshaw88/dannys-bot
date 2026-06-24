@@ -1513,10 +1513,11 @@ export function ProfilesPage() {
                         const days     = Math.floor(totalHr / 24);
                         const hrs      = totalHr % 24;
                         const mins     = totalMin % 60;
-                        const dddd     = String(days).padStart(4, "0");
-                        const hh       = String(hrs).padStart(2, "0");
-                        const mm       = String(mins).padStart(2, "0");
-                        aliveLabel = <span className="font-mono">{dddd}:{hh}:{mm}</span>;
+                        let label: string;
+                        if (days > 0)      label = `${days}d ${hrs}h`;
+                        else if (hrs > 0)  label = `${hrs}h ${mins}m`;
+                        else               label = `${totalMin}m`;
+                        aliveLabel = <span>{label}</span>;
                       }
                       return (
                         <div key={key} style={{ width: profColWidths.aliveFor }} className="shrink-0 flex items-center justify-center" title={validSince ? `Valid since: ${validSince.toLocaleString()}` : "Not yet verified as valid"} onMouseDown={e => e.stopPropagation()}>

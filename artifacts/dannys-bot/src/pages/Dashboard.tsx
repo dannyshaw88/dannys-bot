@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.147",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Opening more than 3 browser windows at once no longer crashes the app. A limit of 3 simultaneous browsers is now enforced with a clear warning dialog instead of a silent crash." },
+      { category: "Improvement", text: "Alive For column now shows a clean format like '10d 8h' or '8h 32m' instead of '0010:08:32'. The fixed-width monospace font has also been removed to match the rest of the table." },
+    ],
+  },
+  {
     version: "1.1.146",
     date: "24 Jun 2026",
     items: [

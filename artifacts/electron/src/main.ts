@@ -803,9 +803,29 @@ function setupBackupHandlers() {
   // open-browser-window: opens a NATIVE Electron BrowserWindow that loads
   // Instagram directly — no Puppeteer, no screencasting, no canvas.
   // This is the Jarvee-style CEF embedded browser approach.
+  // Hard cap on simultaneously open user-facing EB windows.  Each window is a full
+  // Chromium instance; opening too many at once crashes Electron on low-RAM machines.
+  const MAX_CONCURRENT_EB = 3;
+
   ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
     if (!profileId) return;
     if (pendingEbOpens.has(profileId)) return; // second click arrived before first window opened
+
+    // Count currently open (non-destroyed) EB windows, excluding the ghost browser (-1).
+    const openCount = [...ebMap.entries()]
+      .filter(([pid, e]) => pid !== -1 && !e.win.isDestroyed())
+      .length;
+    if (openCount >= MAX_CONCURRENT_EB) {
+      console.warn(`[EB] Max concurrent EB windows (${MAX_CONCURRENT_EB}) already open — ignoring open request for profile ${profileId}`);
+      void dialog.showMessageBox({
+        type: "warning",
+        title: "Too many browsers open",
+        message: `You already have ${openCount} browser windows open.\n\nClose one before opening another to avoid crashes.`,
+        buttons: ["OK"],
+      });
+      return;
+    }
+
     pendingEbOpens.add(profileId);
     // Fire-and-forget — do NOT await openEbWindow here.  ipcRenderer.invoke
     // waits for the handle() callback to return before resolving, so awaiting
