@@ -1676,11 +1676,18 @@ class AutomationEngine {
       state.currentProxyUrl = proxyUrl;
       // Log every API call — no filtering.
       state.client.setLogger((op, durationMs, message, isError) => {
+        // Always use the CURRENT time as the log timestamp so every entry
+        // shows when the API call actually completed (i.e. when Instagram
+        // was last contacted), not when the enclosing function was entered.
+        // The previous formula (Date.now() - durationMs) produced pre-throttle
+        // timestamps for timed() entries, making paired operations appear to
+        // fire simultaneously in the API call log even when the full
+        // inter-action delay had been respected.
         storage.createInstagramApiCall({
           profileId: profile.id,
           username: profile.username,
           operationName: op,
-          date: new Date(Date.now() - (durationMs ?? 0)).toISOString(),
+          date: new Date().toISOString(),
           message: message ?? "",
           source: state.client!.apiCallSource,
           durationMs,

@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.151",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed the API call log timestamps — entries now always show when the call actually completed (when Instagram was contacted), not when the surrounding operation started. Previously, some entries showed a timestamp from before the inter-action delay, making the log look like rapid consecutive calls even when your rate settings were being respected." },
+      { category: "Fix", text: "Fixed profile web lookups (web_profile_info) not going through the throttle. Every Instagram endpoint — including the web-session profile fetch used internally — now respects the rate limit set in your account's API Limits & Control settings." },
+    ],
+  },
+  {
     version: "1.1.150",
     date: "24 Jun 2026",
     items: [

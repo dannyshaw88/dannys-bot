@@ -1222,6 +1222,7 @@ export class InstagramWebClient {
   // ── Common authenticated request helper ────────────────────────────────────
   // web session GET (www.instagram.com)
   private async webGet(path: string): Promise<any> {
+    await this.apiThrottle();
     const _t0 = Date.now();
     const res = await igReq({
       path,
