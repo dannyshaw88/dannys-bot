@@ -1829,6 +1829,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         profiles={otherProfiles}
         optionGroups={HUMAN_COPY_GROUPS}
         onCopy={handleHumanCopy}
+        sharedTargetsStorageKey="copyDialog:shared:targets"
       />
 
       <ImageSettingsDialog

@@ -37,6 +37,7 @@ interface Props {
   profiles: Profile[];
   optionGroups: CopyOptionGroup[];
   onCopy: (targetIds: number[], expandedKeys: string[]) => Promise<void>;
+  sharedTargetsStorageKey?: string;
 }
 
 type SortBy  = "name" | "status" | "group" | "trustscore";
@@ -94,7 +95,8 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
   return result;
 }
 
-export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
+export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy, sharedTargetsStorageKey }: Props) {
+  const _targetsKey = sharedTargetsStorageKey ?? storageTargetsKey(title);
   const { toast } = useToast();
   const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
@@ -165,7 +167,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       hasEverBeenOpenRef.current = true;
       // Restore target accounts
       try {
-        const raw = localStorage.getItem(storageTargetsKey(title));
+        const raw = localStorage.getItem(_targetsKey);
         if (raw) {
           const ids: number[] = JSON.parse(raw);
           const validIds = new Set(profiles.map(p => p.id));
@@ -221,7 +223,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       // (avoids remount-on-close wipe from the key={open?"open":"closed"} trick).
       if (!hasEverBeenOpenRef.current) return;
       try {
-        localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targetsRef.current]));
+        localStorage.setItem(_targetsKey, JSON.stringify([...targetsRef.current]));
         sessionStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));
         localStorage.setItem(storageSortKey(title), JSON.stringify({ by: sortByRef.current, dir: sortDirRef.current }));
       } catch {}
@@ -444,13 +446,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
                 onClick={handleSelectAllFiltered}
               >
-                ALL
+                Select All
               </button>
               <button
                 className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
                 onClick={handleSelectNoneFiltered}
               >
-                NONE
+                Select None
               </button>
               {targets.size > 0 && (
                 <span className="text-[11px] text-primary font-bold">

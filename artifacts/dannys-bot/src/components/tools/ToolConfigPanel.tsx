@@ -1513,6 +1513,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
         profiles={otherProfiles}
         optionGroups={FOLLOW_TOOL_COPY_GROUPS}
         onCopy={handleFollowToolCopy}
+        sharedTargetsStorageKey="copyDialog:shared:targets"
       />
     </div>
   );

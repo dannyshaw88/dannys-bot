@@ -528,6 +528,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.154",
+    date: "24 Jun 2026",
+    items: [
+      { category: "UI", text: "Copy Settings dialog: 'ALL' and 'NONE' account buttons renamed to 'Select All' and 'Select None' to match the settings panel." },
+      { category: "UI", text: "Accounts page group header: 'All' / 'None' toggle renamed to 'Select All' / 'Select None'." },
+      { category: "New", text: "Copy Settings: selected accounts are now shared between the Account Settings copy dialog and the Human Session copy dialog — tick accounts in one and they carry over to the other." },
+      { category: "New", text: "Copy Settings: selected settings in the Human Session copy dialog are now remembered across opens (resets only on manual click, Select None, or app restart)." },
+    ],
+  },
+  {
     version: "1.1.153",
     date: "24 Jun 2026",
     items: [

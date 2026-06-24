@@ -1730,7 +1730,7 @@ export function ProfilesPage() {
                         }}
                         className="text-[10px] text-primary hover:underline shrink-0 font-medium"
                       >
-                        {allInGroupSelected ? "None" : "All"}
+                        {allInGroupSelected ? "Select None" : "Select All"}
                       </button>
                     </div>
                     {!isCollapsed && groupProfiles.map((p, i) => renderProfileRow(p, i))}
