@@ -258,10 +258,12 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         delayMin + Math.floor(Math.random() * (delayMax - delayMin + 1))
       );
     }
+    const copyErrors: string[] = [];
     try {
       await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
     } catch (err) {
       console.error("[copySettings] Failed to copy human session settings:", err);
+      copyErrors.push("Human session settings");
     }
 
     // ── Copy follow tool enabled state ───────────────────────────────────────
@@ -312,6 +314,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         await copyToolSettingsToProfiles(contactSrc, "contact", targetIds, Object.keys(contactSrc));
       } catch (err) {
         console.error("[copySettings] Failed to copy contact settings:", err);
+        copyErrors.push("Contact tool settings");
       }
     }
 
@@ -366,6 +369,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         );
       } catch (err) {
         console.error("[copySettings] Failed to copy follow tool settings:", err);
+        copyErrors.push("Follow tool settings");
       }
     }
 
@@ -381,6 +385,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         );
       } catch (err) {
         console.error("[copySettings] Failed to copy unfollow tool settings:", err);
+        copyErrors.push("Unfollow tool settings");
       }
     }
 
@@ -396,8 +401,21 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         );
       } catch (err) {
         console.error("[copySettings] Failed to copy contact tool settings:", err);
+        copyErrors.push("Contact tool settings");
       }
     }
+
+    if (copyErrors.length > 0) {
+      throw new Error(`Failed to copy: ${copyErrors.join(", ")}. Check the browser console for details.`);
+    }
+
+    // Invalidate React Query caches for every target profile so navigating to
+    // them immediately shows the new settings rather than stale cached data.
+    targetIds.forEach(profileId => {
+      queryClient.invalidateQueries({ queryKey: [api.tools.listByProfile.path, profileId] });
+      queryClient.invalidateQueries({ queryKey: [api.profiles.get.path, profileId] });
+    });
+    queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
 
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };

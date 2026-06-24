@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.136",
+    date: "23 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copying settings from the Human Session tool to other accounts now correctly applies to accounts that have not yet been verified (pending/error status). Previously the settings were saved but the display did not refresh, making it look like nothing had copied." },
+      { category: "Fix", text: "If any part of a settings copy fails, the dialog now shows a clear error message instead of silently claiming success." },
+    ],
+  },
+  {
     version: "1.1.135",
     date: "23 Jun 2026",
     items: [

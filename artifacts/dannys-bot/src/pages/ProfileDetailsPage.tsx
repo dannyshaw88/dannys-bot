@@ -470,12 +470,13 @@ export function ProfileDetailsPage() {
           merged.loginMakePostChanceMin     = srcLimits.loginMakePostChanceMin ?? 5;
           merged.loginMakePostChanceMax     = srcLimits.loginMakePostChanceMax ?? 10;
         }
-        await fetch(`/api/profiles/${id}`, {
+        const r = await fetch(`/api/profiles/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ apiLimits: merged }),
           credentials: "include",
         });
+        if (!r.ok) throw new Error(`Failed to update profile ${id}`);
       }));
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
       targetIds.forEach(id => {
