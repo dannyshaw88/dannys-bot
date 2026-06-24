@@ -349,6 +349,9 @@ if (!colNames.has("created_at")) {
     WHERE created_at IS NULL;
   `);
 }
+if (!colNames.has("valid_since")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN valid_since TEXT;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

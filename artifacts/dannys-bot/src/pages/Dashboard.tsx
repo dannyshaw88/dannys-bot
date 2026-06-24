@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.145",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed a crash that caused all accounts to disappear. A new database column (valid_since) was added to the schema but its setup step was missing, causing every account-related API call to fail with a database error on startup." },
+    ],
+  },
+  {
     version: "1.1.144",
     date: "24 Jun 2026",
     items: [
