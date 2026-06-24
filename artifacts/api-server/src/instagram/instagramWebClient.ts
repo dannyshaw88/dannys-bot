@@ -2232,15 +2232,18 @@ export class InstagramWebClient {
       if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
     }
 
-    // 1 media/seen call for all posts — 1 throttle total instead of N.
-    if (seenEntries.length) {
+    // Instagram's real mobile app sends at most 4 posts per media/seen/ call.
+    // Chunk seenEntries into batches of 4 and fire one ViewTimelineFeedSeen
+    // timed call per batch so the log matches what a real session produces.
+    for (let i = 0; i < seenEntries.length; i += 4) {
+      const batch = seenEntries.slice(i, i + 4);
       await this.timed("ViewTimelineFeedSeen", async () => {
         await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: seenEntries.join(","),
+          reels: batch.join(","),
           live_vods_skipped: "",
           nuxes_skipped: "",
         }).toString());
-        return seenEntries.length;
+        return batch.length;
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
     }
 

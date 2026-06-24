@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.150",
+    date: "24 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed ViewTimelineFeedSeen to match Instagram's real mobile app behaviour. The real app sends at most 4 posts per seen call — previously the app was bundling all posts into one call regardless of count. Now if 5 posts are viewed, the log correctly shows two separate calls (4 + 1) exactly as a real phone would." },
+    ],
+  },
+  {
     version: "1.1.149",
     date: "24 Jun 2026",
     items: [
