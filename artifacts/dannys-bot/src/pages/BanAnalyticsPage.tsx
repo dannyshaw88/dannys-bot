@@ -1917,6 +1917,44 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
 
   return (
     <div className="space-y-4">
+      {/* ── The Recipe — pinned at top of every Theories tab ── */}
+      <div className="border border-emerald-300 dark:border-emerald-700 rounded-lg overflow-hidden bg-emerald-50/60 dark:bg-emerald-950/30">
+        <div className="px-4 py-3 border-b border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
+          <span className="text-base">🧪</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-bold text-emerald-800 dark:text-emerald-200">The Recipe</span>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">The settings that the dataset points to for surviving accounts — confirmed findings and active experiments.</p>
+          </div>
+        </div>
+        <div className="divide-y divide-emerald-100 dark:divide-emerald-900">
+          <div className="px-4 py-3 flex items-start gap-3">
+            <span className="text-base mt-0.5 shrink-0">✅</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-foreground">Slow API calls — 99–250 s between every call</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Confirmed by dataset. Survivors averaged one call every 204 s (active time only). Banned accounts averaged one call every 78 s or faster.
+                This applies to <em>all</em> calls — passive feed reads, story views, and action endpoints alike.
+                Setting your minimum delay to 99 s and maximum to 250 s puts you squarely inside the survivor band.
+              </p>
+              <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">Confirmed</span>
+            </div>
+          </div>
+          <div className="px-4 py-3 flex items-start gap-3">
+            <span className="text-base mt-0.5 shrink-0">🟠</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-foreground">Warmup accounts for 3 days before the first follow</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Session interval: <strong>90–250 min</strong> between Human Sessions.
+                Each session: feed <strong>3–5 posts</strong>, stories <strong>3–5</strong>, DMs <strong>1–3</strong>.
+                Human Session sub-actions (like, comment, save) each at <strong>25–50% chance</strong> — not 100%.
+                Survivors in the dataset accumulated 114–185 passive ops before their first follow; most banned accounts had 0.
+              </p>
+              <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/50 px-2 py-0.5 rounded-full">Being tested</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {total === 0 && (
         <div className="border border-border rounded-lg p-10 text-center">
           <FlaskConical className="w-8 h-8 text-muted-foreground mx-auto mb-2" />

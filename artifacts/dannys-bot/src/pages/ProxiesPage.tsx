@@ -287,7 +287,7 @@ function ProxyRow({
                 >
                   <option value="" className="text-muted-foreground">+ Assign account…</option>
                   {unassignedProfiles.map(p => (
-                    <option key={p.id} value={p.id} className="text-foreground bg-background">{p.username}</option>
+                    <option key={p.id} value={p.id} style={{ color: '#0f172a', backgroundColor: '#ffffff' }}>{p.accountLabel || p.username}</option>
                   ))}
                 </select>
               </div>

@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.157",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Feature", text: "Evasion Stats — Theories tab: 'The Recipe' card is now pinned at the top of every error tab. It shows the two current survivor findings: slow API calls (99–250s, confirmed) and the 3-day warmup protocol (session interval 90–250min, feed/stories/DMs at low-probability sub-actions, being tested)." },
+      { category: "Fix", text: "Proxy manager assign dropdown: account names are now visible — the option text was appearing white-on-white in some system themes. Inline colour is now forced so the text always shows correctly." },
+    ],
+  },
+  {
     version: "1.1.156",
     date: "25 Jun 2026",
     items: [
