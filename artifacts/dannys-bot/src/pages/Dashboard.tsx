@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.162",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post / Repost: images with a valid aspect ratio were being sent to Instagram without re-encoding — now all images are sanitised to baseline sRGB JPEG before upload, fixing a transcode failure that caused posts to silently fail." },
+      { category: "Fix", text: "Device fingerprint: Chrome's cookie jar is now asserted against the database-stored mid and ig_did every time the embedded browser opens — prevents stale or wrong device IDs (from a previous Chrome session or a re-added account) from overwriting the authoritative device identity and triggering Instagram's 'unrecognised device' check." },
+    ],
+  },
+  {
     version: "1.1.161",
     date: "25 Jun 2026",
     items: [

@@ -2973,6 +2973,60 @@ export async function getOrCreateSession(
       }
     } catch { /* non-fatal */ }
   }
+
+  // ── DB device token assertion — FINAL STEP, always wins ─────────────────────
+  // JSON file and Chrome userDataDir can both hold stale/wrong device tokens if
+  // the account was re-added, imported, or if Chrome started fresh on a previous
+  // session and wrote a new mid/ig_did before we could stop it.  The DB values
+  // (igApiCookies.mid, igDeviceState.igDid) are written exclusively by the verified
+  // Jarvee two-stage handshake and are therefore the authoritative source of truth.
+  //
+  // We stamp them into Chrome's cookie jar LAST — after JSON load AND after
+  // udirDeviceTokens re-application — so they always win regardless of what any
+  // earlier step loaded.  If there is no DB value (brand-new account) we leave
+  // whatever the earlier steps loaded untouched.
+  try {
+    const dbProfileForDeviceCheck = await storage.getProfile(profileId);
+    const dbApiCookies: string = (dbProfileForDeviceCheck as any)?.igApiCookies ?? "";
+    const dbDeviceStateRaw: string = (dbProfileForDeviceCheck as any)?.igDeviceState ?? "{}";
+    const dbDeviceState = (() => { try { return JSON.parse(dbDeviceStateRaw); } catch { return {}; } })();
+
+    const parsedDbCookies: Record<string, string> = {};
+    for (const part of dbApiCookies.split(";")) {
+      const eqIdx = part.indexOf("=");
+      if (eqIdx < 1) continue;
+      parsedDbCookies[part.slice(0, eqIdx).trim()] = part.slice(eqIdx + 1).trim();
+    }
+
+    const dbMid   = parsedDbCookies["mid"]   ?? "";
+    const dbIgDid = dbDeviceState.igDid       ?? parsedDbCookies["ig_did"] ?? "";
+
+    // Read what Chrome currently has so we can log divergences
+    const nowInChrome: any[] = await (page as any).cookies(
+      "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com",
+    ).catch(() => []);
+    const chromeMid   = nowInChrome.find((c: any) => c.name === "mid")?.value    ?? "";
+    const chromeIgDid = nowInChrome.find((c: any) => c.name === "ig_did")?.value ?? "";
+
+    const toAssert: any[] = [];
+    if (dbMid && dbMid !== chromeMid) {
+      log(`[cookies:${profileId}] ⚠ DB mid (${dbMid.slice(0,10)}…) ≠ Chrome mid (${chromeMid.slice(0,10)||"absent"}) — asserting DB value (device fingerprint authority)`, "browser");
+      toAssert.push({ name: "mid", value: dbMid, domain: ".instagram.com", path: "/", secure: true, httpOnly: false, sameSite: "Lax", expires: Math.floor(Date.now() / 1000) + 365 * 24 * 3600 * 10 });
+    }
+    if (dbIgDid && dbIgDid !== chromeIgDid) {
+      log(`[cookies:${profileId}] ⚠ DB ig_did (${dbIgDid.slice(0,8)}…) ≠ Chrome ig_did (${chromeIgDid.slice(0,8)||"absent"}) — asserting DB value (device fingerprint authority)`, "browser");
+      toAssert.push({ name: "ig_did", value: dbIgDid, domain: ".instagram.com", path: "/", secure: true, httpOnly: false, sameSite: "Lax", expires: Math.floor(Date.now() / 1000) + 365 * 24 * 3600 * 10 });
+    }
+    if (toAssert.length) {
+      await (page as any).setCookie(...toAssert).catch(() => null);
+      log(`[cookies:${profileId}] ✓ DB device tokens asserted into Chrome (${toAssert.map(c => c.name).join(", ")})`, "browser");
+    } else if (dbMid || dbIgDid) {
+      log(`[cookies:${profileId}] ✓ Chrome device tokens already match DB — no assertion needed`, "browser");
+    }
+  } catch (e: any) {
+    log(`[cookies:${profileId}] DB device token assertion failed (non-fatal): ${e?.message}`, "browser");
+  }
+
   const cachedCheckpointUrl = checkpointUrlCache.get(profileId);
   if (cachedCheckpointUrl) {
     checkpointUrlCache.delete(profileId);

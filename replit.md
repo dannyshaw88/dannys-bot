@@ -309,3 +309,12 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 82. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
+
+## Image Upload (Make-a-Post / Repost) Fix Log — READ THIS BEFORE TOUCHING UPLOAD CODE
+
+### Failure: ProcessingFailedError — Image upload transcode non-retryable failure (25 Jun 2026)
+- **Symptom**: Both PATH A (`ig.publish.photo` via IgApiClient) and PATH B (hand-rolled rupload+configure) fail with HTTP 400 `ProcessingFailedError: Image upload transcode non-retryable failure` (`retriable: false`). Seen on profile @gazpixewik (id 3614) reposting from @IMLISABERRY.
+- **Image at time of failure**: 910x910 JPEG, 150343B, aspect ratio 1.000 (within bounds).
+- **Root cause**: When the aspect ratio is within Instagram's allowed bounds (0.8–1.91), the code skipped re-encoding and passed the raw downloaded buffer straight to Instagram's rupload endpoint. Instagram's server-side transcoder rejected it — likely because the source image was a **progressive JPEG**, had a non-sRGB color space (CMYK/Adobe RGB), or had corrupt/exotic EXIF data. The crop paths already re-encoded via `sharp().jpeg()` so they were safe; the no-crop path was not.
+- **Fix (v1.0.751+)**: In `uploadPhoto()` in `instagramWebClient.ts`, the `else` branch (ratio OK, no crop) now always re-encodes through sharp: `.flatten({ background: white }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false })`. The two crop paths were also updated to use the same sanitization flags (flatten, sRGB, non-progressive). This ensures every image sent to Instagram is a clean baseline sRGB JPEG regardless of what the source image looks like.
+- **What is FORBIDDEN**: Sending a downloaded image buffer to rupload without running it through sharp first. Always normalize: flatten alpha → force sRGB → baseline JPEG.

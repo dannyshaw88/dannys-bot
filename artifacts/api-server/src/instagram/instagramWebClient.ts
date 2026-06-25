@@ -4709,16 +4709,18 @@ export class InstagramWebClient {
             const newH = Math.floor(w / MIN_RATIO);
             const top  = Math.floor((h - newH) / 2);
             console.log(`${TAG}   Cropping portrait: ${w}x${h} → ${w}x${newH} (top=${top})`);
-            imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).jpeg({ quality: 92 }).toBuffer();
+            imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
             console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else if (ratio > MAX_RATIO) {
             const newW  = Math.floor(h * MAX_RATIO);
             const left  = Math.floor((w - newW) / 2);
             console.log(`${TAG}   Cropping landscape: ${w}x${h} → ${newW}x${h} (left=${left})`);
-            imageBuffer = await sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }).jpeg({ quality: 92 }).toBuffer();
+            imageBuffer = await sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
             console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else {
-            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed`);
+            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed. Re-encoding to baseline sRGB JPEG…`);
+            imageBuffer = await sharpMod(imageBuffer).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
+            console.log(`${TAG}   After re-encode: ${imageBuffer.length}B`);
           }
         } else {
           console.warn(`${TAG}   ⚠ sharp not available — skipping aspect ratio check`);
