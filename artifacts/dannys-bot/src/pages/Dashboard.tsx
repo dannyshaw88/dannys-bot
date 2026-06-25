@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.158",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Feature", text: "Human Session — View Timeline Feed: the 'If 0 Posts' fallback now visits the Instagram Explore page instead of following suggested users. When the timeline returns 0 posts the account browses the Explore feed and can scroll posts, click into them, like at a set percentage, visit author profiles, scroll their feed, and click their posts — all configurable with Min/Max fields." },
+      { category: "Feature", text: "Human Session — 'If 0 Posts → Visit Explore Page' settings block moved to its own row directly below the View Profile's Feed section, with six new setting rows: Posts to Scroll on Explore, Posts to Click On, % to Like, % to Visit Author's Profile, Posts to Scroll on Profile, and Posts to Click on Profile." },
+    ],
+  },
+  {
     version: "1.1.157",
     date: "25 Jun 2026",
     items: [

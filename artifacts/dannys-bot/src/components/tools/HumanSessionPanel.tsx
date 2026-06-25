@@ -83,7 +83,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_view_profile",     label: "Visit profile %",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
         { key: "vtf_profile_feed",     label: "View profile feed % + count", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
         { key: "vtf_profile_posts",    label: "Open profile posts count + %",settingKeys: ["viewProfilePostsCountMin","viewProfilePostsCountMax","viewProfilePostsPercentMin","viewProfilePostsPercentMax"] },
-        { key: "vtf_follow_suggested", label: "If 0 Posts → Follow Suggested", settingKeys: ["followSuggestedUsersIfEmptyEnabled","followSuggestedUsersIfEmptyMin","followSuggestedUsersIfEmptyMax"] },
+        { key: "vtf_follow_suggested", label: "If 0 Posts → Visit Explore Page", settingKeys: ["followSuggestedUsersIfEmptyEnabled","exploreScrollMin","exploreScrollMax","exploreClickMin","exploreClickMax","exploreLikePctMin","exploreLikePctMax","exploreVisitProfilePctMin","exploreVisitProfilePctMax","exploreProfileScrollMin","exploreProfileScrollMax","exploreProfileClickMin","exploreProfileClickMax"] },
       ]},
       { key: "humanSession", label: "Human Session", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled",      label: "Enabled",                                      settingKeys: ["humanSessionEnabled"] },
@@ -507,6 +507,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       followSuggestedUsersIfEmptyEnabled: false,
       followSuggestedUsersIfEmptyMin: 1,
       followSuggestedUsersIfEmptyMax: 3,
+      exploreScrollMin: 5,
+      exploreScrollMax: 15,
+      exploreClickMin: 1,
+      exploreClickMax: 3,
+      exploreLikePctMin: 0,
+      exploreLikePctMax: 30,
+      exploreVisitProfilePctMin: 0,
+      exploreVisitProfilePctMax: 20,
+      exploreProfileScrollMin: 3,
+      exploreProfileScrollMax: 8,
+      exploreProfileClickMin: 1,
+      exploreProfileClickMax: 3,
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
@@ -583,6 +595,12 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       unfollowOrderMin: 0, unfollowOrderMax: 0, unfollowSkipMin: 0, unfollowSkipMax: 0,
       contactOrderMin: 0, contactOrderMax: 0, contactSkipMin: 0, contactSkipMax: 0,
       followSuggestedUsersIfEmptyEnabled: false, followSuggestedUsersIfEmptyMin: 1, followSuggestedUsersIfEmptyMax: 3,
+      exploreScrollMin: 5, exploreScrollMax: 15,
+      exploreClickMin: 1, exploreClickMax: 3,
+      exploreLikePctMin: 0, exploreLikePctMax: 30,
+      exploreVisitProfilePctMin: 0, exploreVisitProfilePctMax: 20,
+      exploreProfileScrollMin: 3, exploreProfileScrollMax: 8,
+      exploreProfileClickMin: 1, exploreProfileClickMax: 3,
       repostEnabled: false, repostUseHikerApi: false, repostSourceUsername: "",
       repostDisableUsernameSource: false, repostLocalFolderEnabled: false,
       repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
@@ -793,27 +811,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                         onChange={(v) => setSettings({ ...settings, viewTimelineFeedMax: v })}
                       />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <UserPlus className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">If 0 Posts → Follow Suggested</span>
-                      <input type="checkbox" id="followSuggestedUsersIfEmptyEnabled"
-                        checked={!!settings.followSuggestedUsersIfEmptyEnabled}
-                        onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyEnabled: e.target.checked })}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                      />
-                      <div className={`flex items-center gap-1.5 transition-opacity ${!settings.followSuggestedUsersIfEmptyEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Label className="text-xs text-muted-foreground">Min</Label>
-                        <NumField min={1} max={10} className="w-12 h-7 text-xs"
-                          value={settings.followSuggestedUsersIfEmptyMin ?? 1}
-                          onChange={(v) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: v })}
-                        />
-                        <Label className="text-xs text-muted-foreground">Max</Label>
-                        <NumField min={1} max={10} className="w-12 h-7 text-xs"
-                          value={settings.followSuggestedUsersIfEmptyMax ?? 3}
-                          onChange={(v) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: v })}
-                        />
-                      </div>
-                    </div>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
@@ -945,7 +942,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE'S FEED%</span>
                 {(settings.viewProfileFeedPercentMax ?? 0) > 0 && (
                   <>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL ON</span>
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
                     <NumField min={1} max={20} className="w-14 h-7 text-xs"
                       value={settings.viewProfilePostsCountMin ?? 1}
@@ -961,6 +958,119 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance</span>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* ── If 0 Timeline Posts → Visit Explore Page ── */}
+            <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
+              <UserPlus className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">If 0 Posts → Visit Explore Page</span>
+              <input type="checkbox" id="followSuggestedUsersIfEmptyEnabled"
+                checked={!!settings.followSuggestedUsersIfEmptyEnabled}
+                onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+            </div>
+            {!!settings.followSuggestedUsersIfEmptyEnabled && (
+              <div className="space-y-1.5 pl-5">
+                {/* Row 1: Posts to scroll on Explore page */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Scroll on Explore</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreScrollMin ?? 5}
+                    onChange={(v) => setSettings({ ...settings, exploreScrollMin: v } as any)}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreScrollMax ?? 15}
+                    onChange={(v) => setSettings({ ...settings, exploreScrollMax: v } as any)}
+                  />
+                </div>
+                {/* Row 2: Posts to click on */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Click On</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreClickMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, exploreClickMin: v } as any)}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreClickMax ?? 3}
+                    onChange={(v) => setSettings({ ...settings, exploreClickMax: v } as any)}
+                  />
+                </div>
+                {/* Row 3: % to like */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">% to Like</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <div className="relative">
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs pr-5"
+                      value={(settings as any).exploreLikePctMin ?? 0}
+                      onChange={(v) => setSettings({ ...settings, exploreLikePctMin: v } as any)}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <div className="relative">
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs pr-5"
+                      value={(settings as any).exploreLikePctMax ?? 30}
+                      onChange={(v) => setSettings({ ...settings, exploreLikePctMax: v } as any)}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                </div>
+                {/* Row 4: % to click on author's profile */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <User className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">% to Visit Author's Profile</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <div className="relative">
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs pr-5"
+                      value={(settings as any).exploreVisitProfilePctMin ?? 0}
+                      onChange={(v) => setSettings({ ...settings, exploreVisitProfilePctMin: v } as any)}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <div className="relative">
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs pr-5"
+                      value={(settings as any).exploreVisitProfilePctMax ?? 20}
+                      onChange={(v) => setSettings({ ...settings, exploreVisitProfilePctMax: v } as any)}
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                </div>
+                {/* Row 5: Posts to scroll on author's profile */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Scroll on Profile</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreProfileScrollMin ?? 3}
+                    onChange={(v) => setSettings({ ...settings, exploreProfileScrollMin: v } as any)}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreProfileScrollMax ?? 8}
+                    onChange={(v) => setSettings({ ...settings, exploreProfileScrollMax: v } as any)}
+                  />
+                </div>
+                {/* Row 6: Posts to click on author's profile */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Click on Profile</span>
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={0} max={20} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreProfileClickMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, exploreProfileClickMin: v } as any)}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={0} max={20} className="w-14 h-7 text-xs"
+                    value={(settings as any).exploreProfileClickMax ?? 3}
+                    onChange={(v) => setSettings({ ...settings, exploreProfileClickMax: v } as any)}
+                  />
+                </div>
               </div>
             )}
           </div>

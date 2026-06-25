@@ -4897,6 +4897,53 @@ export class InstagramWebClient {
     }, "Get suggested users");
   }
 
+  // ── Visit the Explore page and return up to `scrollCount` post items ───────
+  // Used by the Human Session engine when the timeline returns 0 posts.
+  // Calls the mobile API topical explore endpoint (equivalent to tapping the
+  // Search/Explore tab in the app), simulating natural discovery browsing.
+  async visitExplorePage(scrollCount: number): Promise<Array<{ mediaId: string; shortcode: string; username: string; userId: string }>> {
+    return this.timed("VisitExplorePage", async () => {
+      const items: Array<{ mediaId: string; shortcode: string; username: string; userId: string }> = [];
+      try {
+        // Primary endpoint: topical explore (Search & Explore tab)
+        const j = await this.mobileSessionGet(`/api/v1/discover/topical_explore/?is_prefetch=false&omit_cover_media=false&use_sectional_payload=true&timezone_offset=0&session_id=${Date.now()}&include_fixed_destinations=false`);
+        const sections: any[] = j?.sectional_items ?? j?.items ?? [];
+        for (const section of sections) {
+          const medias: any[] = section?.layout_content?.medias ?? section?.layout_content?.fill_items ?? [];
+          for (const m of medias) {
+            const media = m?.media ?? m;
+            const mediaId = String(media?.pk ?? media?.id ?? "");
+            const shortcode = String(media?.code ?? media?.shortcode ?? mediaId);
+            const owner = media?.user ?? media?.owner ?? {};
+            const username = String(owner?.username ?? "");
+            const userId = String(owner?.pk ?? owner?.id ?? "");
+            if (mediaId) items.push({ mediaId, shortcode, username, userId });
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[webClient] visitExplorePage topical_explore failed: ${e?.message}`);
+      }
+      // Fallback: ayml discover if topical_explore returned nothing
+      if (items.length === 0) {
+        try {
+          const j2 = await this.mobileSessionGet(`/api/v1/discover/ayml/?max_id=&module=explore_popular&is_nonpersonalized=false`);
+          const users: any[] = j2?.suggested_users ?? j2?.users ?? [];
+          for (const item of users) {
+            const media = item?.media_infos?.[0] ?? item?.media ?? null;
+            if (!media) continue;
+            const mediaId = String(media?.pk ?? media?.id ?? "");
+            const shortcode = String(media?.code ?? media?.shortcode ?? mediaId);
+            const owner = media?.user ?? item?.user ?? {};
+            const username = String(owner?.username ?? "");
+            const userId = String(owner?.pk ?? owner?.id ?? "");
+            if (mediaId) items.push({ mediaId, shortcode, username, userId });
+          }
+        } catch {}
+      }
+      return items.slice(0, scrollCount);
+    }, `Visit explore page (scroll ${scrollCount})`);
+  }
+
   // ── Follow X users from the Suggested Users page ──────────────────────────
   // Used by the Human Session engine when the timeline returns 0 posts.
   // Fetches the discover/ayml endpoint, picks the first `count` suggestions,
