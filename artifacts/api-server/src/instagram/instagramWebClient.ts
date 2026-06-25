@@ -4705,21 +4705,30 @@ export class InstagramWebClient {
           const MIN_RATIO = 0.8;
           const MAX_RATIO = 1.91;
           console.log(`${TAG}   Input image: ${w}x${h} ratio=${ratio.toFixed(3)} format=${meta.format} size=${imageBuffer.length}B`);
+          // NOTE: Do NOT call .toColorspace("srgb") — it embeds a 3-4KB sRGB ICC profile
+          // into the JPEG output (an APP2 marker). Instagram's rupload transcoder rejects
+          // JPEGs with embedded ICC profiles with ProcessingFailedError (retriable:false).
+          // sharp's default jpeg() output converts to sRGB internally WITHOUT embedding
+          // the ICC profile — this is the correct behaviour for Instagram uploads.
+          // Quality 80 matches the image_compression rupload header claim (lib_name:"moz",quality:"80").
+          const encodeJpeg = (pipeline: import("sharp").Sharp) =>
+            pipeline.flatten({ background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 80, progressive: false, chromaSubsampling: "4:2:0" }).toBuffer();
+
           if (ratio < MIN_RATIO) {
             const newH = Math.floor(w / MIN_RATIO);
             const top  = Math.floor((h - newH) / 2);
             console.log(`${TAG}   Cropping portrait: ${w}x${h} → ${w}x${newH} (top=${top})`);
-            imageBuffer = await sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
+            imageBuffer = await encodeJpeg(sharpMod(imageBuffer).extract({ left: 0, top, width: w, height: newH }));
             console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else if (ratio > MAX_RATIO) {
             const newW  = Math.floor(h * MAX_RATIO);
             const left  = Math.floor((w - newW) / 2);
             console.log(`${TAG}   Cropping landscape: ${w}x${h} → ${newW}x${h} (left=${left})`);
-            imageBuffer = await sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
+            imageBuffer = await encodeJpeg(sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }));
             console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else {
-            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed. Re-encoding to baseline sRGB JPEG…`);
-            imageBuffer = await sharpMod(imageBuffer).flatten({ background: { r: 255, g: 255, b: 255 } }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false }).toBuffer();
+            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed. Re-encoding to baseline JPEG (no ICC profile)…`);
+            imageBuffer = await encodeJpeg(sharpMod(imageBuffer));
             console.log(`${TAG}   After re-encode: ${imageBuffer.length}B`);
           }
         } else {

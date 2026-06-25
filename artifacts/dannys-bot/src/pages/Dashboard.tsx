@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.163",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post / Repost: removed the sRGB ICC profile embedded by the re-encoder — Instagram's rupload transcoder rejects JPEGs with embedded ICC profiles, which was causing the non-retryable ProcessingFailedError after the previous fix." },
+      { category: "Fix", text: "Make a Post / Repost: changed JPEG encode quality from 92 to 80 and added 4:2:0 chroma subsampling to match the image_compression header sent in the rupload request, aligning our output with what the real Instagram Android client produces." },
+    ],
+  },
+  {
     version: "1.1.162",
     date: "25 Jun 2026",
     items: [

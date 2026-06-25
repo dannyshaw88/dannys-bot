@@ -1756,14 +1756,26 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     </div>
                     <div className="overflow-y-auto max-h-[7.5rem] px-2.5 py-1.5 space-y-1.5 font-mono">
 
-                      {/* ── ENTRY: ATTEMPT 2 (2026-06-25) ── */}
+                      {/* ── ENTRY: ATTEMPT 3 (2026-06-25) ── */}
                       <div className="text-[10px] leading-relaxed text-amber-200/80">
-                        <span className="text-amber-400 font-bold">2026-06-25 ATTEMPT 2 &nbsp;</span>
+                        <span className="text-amber-400 font-bold">2026-06-25 ATTEMPT 3 &nbsp;</span>
                         <span className="text-amber-300/60">[IN BUILD — UNCONFIRMED]</span>
-                        {" "}Switched PATH B (rupload + configure) from Node.js HTTPS (forceNodeTls=true) to CycleTLS (forceNodeTls=false).
-                        Theory: rupload and configure must share the same TLS stack or Instagram shards them apart — CycleTLS mimics Android TLS fingerprint better.
-                        The previous forceNodeTls=true Node.js stack had never worked. If this also fails, the issue is NOT the TLS stack.
-                        Files changed: instagramWebClient.ts lines ~4063 (rupload) and ~4359 (configure).
+                        {" "}ROOT CAUSE: sharp's .toColorspace("srgb") embeds a 3-4KB sRGB ICC profile (APP2 marker) into the JPEG.
+                        Instagram's rupload transcoder rejects JPEGs with embedded ICC profiles → ProcessingFailedError (retriable:false).
+                        FIX: removed .toColorspace() from all 3 encode paths — sharp's jpeg() converts to sRGB internally WITHOUT embedding the ICC profile.
+                        Also changed quality 92→80 to match the image_compression rupload header (lib_name:"moz",quality:"80").
+                        Added chromaSubsampling:"4:2:0" to match the real Instagram Android client JPEG structure.
+                        Evidence: PATH A + PATH B both failed identically after Attempt 2 re-encode — the only new factor introduced was the ICC profile.
+                      </div>
+
+                      {/* ── ENTRY: ATTEMPT 2 (2026-06-25) ── */}
+                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
+                        <span className="text-amber-400 font-bold">2026-06-25 ATTEMPT 2 &nbsp;</span>
+                        <span className="text-amber-300/50">[FAILED — introduced ICC profile bug]</span>
+                        {" "}Added re-encoding via sharp (.flatten → .toColorspace("srgb") → .jpeg(q92, progressive:false)) to all 3 aspect-ratio paths.
+                        Theory: raw downloaded JPEG was progressive/CMYK causing transcode failure.
+                        Result: STILL ProcessingFailedError. Re-encode worked (173124B→186505B) but toColorspace embedded sRGB ICC profile which the transcoder rejected.
+                        Also switched PATH B from Node.js HTTPS to CycleTLS (v1.1.160) — no effect.
                       </div>
 
                       {/* ── ENTRY: ATTEMPT 1 (all prior sessions) ── */}
@@ -1771,27 +1783,27 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                         <span className="text-amber-400 font-bold">PRE-2026-06-25 ~20 ATTEMPTS &nbsp;</span>
                         <span className="text-amber-300/50">[ALL FAILED]</span>
                         {" "}Agent cycled through: fix media upload endpoint → fix configure step → add retry logic → change Content-Type headers → repeat.
-                        PATH A (instagram-private-api ig.publish.photo) fails. PATH B (hand-rolled rupload+configure, forceNodeTls=true) fails.
-                        Error shown in activity log: "Upload failed for @X will retry next session" (automationEngine.ts line 3131, uploadAttempted{">"  }0 branch).
-                        CONFIRMED: follows/unfollows WORK on same session, so igApiCookies and session are valid. Upload-specific failure only.
+                        PATH A (ig.publish.photo) fails. PATH B (hand-rolled rupload+configure) fails.
+                        CONFIRMED: follows/unfollows WORK on same session — upload-specific failure only.
                       </div>
 
                       {/* ── ENTRY: CONFIRMED DEAD ENDS ── */}
                       <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
                         <span className="text-amber-400 font-bold">CONFIRMED DEAD ENDS &nbsp;</span>
-                        (1) www.instagram.com endpoints for automated actions — blocked (returns 302 for DMs; architecture forbids it).
-                        (2) Puppeteer/EB automation — architecture explicitly forbids it (no automated EB actions).
-                        (3) Node.js HTTPS (forceNodeTls=true) for PATH B rupload+configure — NEVER worked.
-                        (4) ig.publish.photo() via instagram-private-api (PATH A) — NEVER worked.
+                        (1) www.instagram.com endpoints — blocked (architecture forbids it).
+                        (2) Puppeteer/EB automation — architecture forbids automated EB actions.
+                        (3) Node.js HTTPS for PATH B — NEVER worked.
+                        (4) .toColorspace("srgb") in sharp — embeds ICC profile, transcoder rejects it. DO NOT add back.
+                        (5) quality:92 in sharp encode — use quality:80 to match image_compression rupload header claim.
                       </div>
 
-                      {/* ── ENTRY: NEXT STEPS IF ATTEMPT 2 FAILS ── */}
+                      {/* ── ENTRY: IF ATTEMPT 3 FAILS → NEXT STEPS ── */}
                       <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">IF ATTEMPT 2 FAILS → NEXT &nbsp;</span>
-                        (1) Check the ACTUAL error from _lastConfigureError in rupload/configure response — it tells us exactly what Instagram rejects.
-                        The detail column in the activity log shows the error string. Read it before trying anything else.
-                        (2) Check if isMobileLoggedIn() is still true immediately before the upload fires (not just at session start).
-                        (3) The API throttle (99-250s per call) means uploads are VERY slow. Check if the session expires during the throttle wait.
+                        <span className="text-amber-400 font-bold">IF ATTEMPT 3 FAILS → NEXT &nbsp;</span>
+                        (1) Remove image_compression param entirely from rupload headers — maybe the "moz" claim itself causes the transcoder to apply MozJPEG decompression and fail on a non-MozJPEG file.
+                        (2) Log first 4 bytes of the image buffer BEFORE re-encoding: JPEG=FFD8FFE0, WebP=52494646, PNG=89504E47. Confirm the source format.
+                        (3) Try a known-good synthetic 1080x1080 sRGB JPEG (0 metadata) to isolate image vs protocol.
+                        (4) If all fail: the issue is account-level, not image format — re-verify the account and retry.
                       </div>
 
                       {/* ── ADD NEW ENTRIES ABOVE THIS LINE, NEWEST AT TOP ── */}
