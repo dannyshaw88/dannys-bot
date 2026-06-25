@@ -4735,6 +4735,21 @@ class AutomationEngine {
     return [];
   }
 
+  // Called by the verify route after a successful re-verify so the next DM/inbox
+  // call gets a fresh cold-start bootstrap (FetchConfig etc.) with the new session.
+  // Does NOT bust on normal cookie rotation — that's handled inside setDeviceInfo.
+  invalidateWarmedClientCache(profileId: number): void {
+    const maps = [this.states, this.unfollowStates, this.dmStates, this.contactStates, this.humanSessionStates];
+    for (const map of maps) {
+      const state = map.get(profileId);
+      if (state?.client) {
+        state.client.resetWarmedClient();
+        console.log(`[engine] invalidateWarmedClientCache: cleared for profileId=${profileId}`);
+        return;
+      }
+    }
+  }
+
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
     const allIds = new Set<number>([

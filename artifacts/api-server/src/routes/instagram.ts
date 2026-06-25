@@ -2031,6 +2031,11 @@ export async function registerInstagramRoutes(
         // can restore the session on Path 2 without re-logging in.
         ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
       });
+      // Reset the automation engine's warmed IgApiClient cache so the next DM/inbox
+      // call gets a fresh cold-start bootstrap with the new session cookies.
+      // This prevents the double-FetchConfig: verify runs FetchConfig in Phase 2b,
+      // then the old stale cache would have caused _buildWarmedIgClient to run it again.
+      automationEngine.invalidateWarmedClientCache(profile.id);
     }
 
     // Log verify result as a session action so the LiveActivityTicker can surface it

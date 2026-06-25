@@ -449,15 +449,23 @@ export class InstagramWebClient {
     this.userAgentApi  = userAgentApi  ?? undefined;
     const newCookies   = igApiCookies  ?? undefined;
 
-    // Invalidate the warmed IgApiClient cache whenever igApiCookies changes
-    // (e.g. after a re-verify). The cache key is the sessionid portion so minor
-    // cookie order differences don't cause unnecessary re-bootstraps.
+    // Track the sessionid portion of igApiCookies so we know when Instagram
+    // rotates it.  When rotation is detected we preserve the existing cached
+    // ig client (it already has the fresh in-memory cookies from prior
+    // Set-Cookie responses — persistSessionCookies just flushed them to DB).
+    // Busting the cache on every rotation was causing FetchConfig to re-fire
+    // on every automation cycle after the first DM check, inflating the
+    // FetchConfig count from the expected 1× per verify to 3–4× per session.
+    //
+    // The cache is only explicitly cleared by resetWarmedClient(), which the
+    // verify route calls after a successful full re-verify so the new session
+    // gets a proper cold-start bootstrap.
     const newCookieKey = newCookies?.split(";").find(s => s.trim().toLowerCase().startsWith("sessionid="))?.trim() ?? "";
     if (newCookieKey !== this._warmedIgClientCookieKey) {
       if (this._warmedIgClientCache) {
-        console.log(`[webClient:${this.profileId}] setDeviceInfo: igApiCookies changed — invalidating warmed IgApiClient cache`);
+        console.log(`[webClient:${this.profileId}] setDeviceInfo: sessionid rotated by Instagram — preserving warmed client (FetchConfig not re-run)`);
       }
-      this._warmedIgClientCache   = null;
+      // Update the key so we detect future rotations, but do NOT null the cache.
       this._warmedIgClientCookieKey = newCookieKey;
     }
 
@@ -472,6 +480,18 @@ export class InstagramWebClient {
     // Fast path 2: igDeviceState has a Bearer authorization token saved from verify
     //              (used when proxy strips all Set-Cookie so sessionid is unavailable).
     this._restoreMobileFromApiCookies() || this._restoreMobileFromAuthorization();
+  }
+
+  // Explicitly bust the warmed IgApiClient cache.  Called by the automation
+  // engine after a successful full re-verify so the new session gets a proper
+  // cold-start bootstrap (FetchConfig, etc.) on its first DM/inbox call.
+  // NOT called on normal cookie rotation — see setDeviceInfo comments above.
+  resetWarmedClient(): void {
+    if (this._warmedIgClientCache) {
+      console.log(`[webClient:${this.profileId}] resetWarmedClient: cache cleared (re-verify completed)`);
+    }
+    this._warmedIgClientCache    = null;
+    this._warmedIgClientCookieKey = "";
   }
 
   // Returns the saved ig_did from igDeviceState (most authoritative source — written by

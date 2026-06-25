@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.161",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "FetchConfig cold-start: fixed a bug where the warmed mobile client cache was being thrown away every time Instagram rotated the session cookie, causing FetchConfig to re-fire on every automation cycle after the first DM check — it now only fires once per verify." },
+      { category: "Fix", text: "After Verify Credentials completes, the automation engine now explicitly resets the warm client so the new session gets a proper cold-start on its next DM check — this prevents the double-FetchConfig that was happening in the first session after a verify." },
+    ],
+  },
+  {
     version: "1.1.160",
     date: "25 Jun 2026",
     items: [
