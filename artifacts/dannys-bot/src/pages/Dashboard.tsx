@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.160",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post: switched the upload and configure steps to use CycleTLS (Android TLS fingerprint) instead of Node.js HTTPS — both steps now use the same TLS stack so Instagram routes them to the same backend shard." },
+      { category: "Fix", text: "Human Session — Follow Tool: removed the Est. Rate display from below Skip Chance, as it is already visible next to the Followed Users button." },
+      { category: "Feature", text: "Make a Post: added a README-REPLIT log panel directly below the 'Delete from PC after upload' checkbox — a scrollable dated record of every fix attempt so future sessions always know what has and hasn't been tried." },
+    ],
+  },
+  {
     version: "1.1.159",
     date: "25 Jun 2026",
     items: [

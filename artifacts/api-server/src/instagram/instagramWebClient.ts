@@ -4052,7 +4052,12 @@ export class InstagramWebClient {
     let json: any;
     let ruploadCookies: string[] = [];
     try {
-      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true));
+      // CycleTLS (no forceNodeTls) — mimics Android TLS fingerprint, same stack configure uses below.
+      // Previously forceNodeTls=true (Node.js HTTPS) was used here. Switched 2026-06-25:
+      // rupload and configure MUST share the same TLS stack or Instagram routes them to
+      // different backend shards and configure returns "upload id is missing". Using
+      // CycleTLS for both gives the Android TLS fingerprint that Instagram expects.
+      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, false));
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during rupload: ${netErr?.message ?? netErr}`);
       if (netErr?.message?.includes("ECONNREFUSED")) console.error(`${TAG}   ► Proxy refused connection or Instagram unreachable`);
@@ -4346,7 +4351,9 @@ export class InstagramWebClient {
         body: bodyStr,
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
-        forceNodeTls: true,
+        // CycleTLS (no forceNodeTls) — must match rupload's TLS stack (also CycleTLS since 2026-06-25).
+        // Both steps share the same TLS fingerprint so Instagram routes them to the same backend shard.
+        forceNodeTls: false,
       });
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);
