@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.164",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post / Repost: photo and video uploads now send the raw binary buffer via Node.js HTTPS instead of CycleTLS. CycleTLS re-encodes the binary body through JSON, corrupting bytes above 127 — this caused the non-retryable ProcessingFailedError on every upload attempt. The shard-routing problem that originally motivated the CycleTLS switch is handled by the rur cookie already injected from the browser session, so both the upload and publish steps still land on the same Instagram backend server." },
+    ],
+  },
+  {
     version: "1.1.163",
     date: "25 Jun 2026",
     items: [

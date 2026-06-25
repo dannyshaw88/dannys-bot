@@ -4072,12 +4072,18 @@ export class InstagramWebClient {
     let json: any;
     let ruploadCookies: string[] = [];
     try {
-      // CycleTLS (no forceNodeTls) — mimics Android TLS fingerprint, same stack configure uses below.
-      // Previously forceNodeTls=true (Node.js HTTPS) was used here. Switched 2026-06-25:
-      // rupload and configure MUST share the same TLS stack or Instagram routes them to
-      // different backend shards and configure returns "upload id is missing". Using
-      // CycleTLS for both gives the Android TLS fingerprint that Instagram expects.
-      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, false));
+      // Node.js HTTPS (forceNodeHttps=true) is REQUIRED for binary uploads.
+      // CycleTLS serialises the body through JSON, re-encoding Latin-1 bytes > 127
+      // as multi-byte UTF-8 sequences — this corrupts the JPEG/MP4 buffer and causes
+      // Instagram to return ProcessingFailedError (retriable:false) at the rupload step.
+      // Node.js req.write(Buffer) sends raw bytes without any re-encoding.
+      // Shard routing (the old reason to match TLS stacks) is handled by the rur cookie
+      // injected from the browser session into mobileCookieJar before this call —
+      // both rupload and configure send that cookie and land on the same backend shard.
+      // NOTE: we post via the mobile private API only. The embedded browser is NEVER
+      // used as an upload path — the EB exists solely for session establishment and
+      // challenge recovery, not for automated posting actions.
+      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true));
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during rupload: ${netErr?.message ?? netErr}`);
       if (netErr?.message?.includes("ECONNREFUSED")) console.error(`${TAG}   ► Proxy refused connection or Instagram unreachable`);
@@ -4371,9 +4377,10 @@ export class InstagramWebClient {
         body: bodyStr,
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
-        // CycleTLS (no forceNodeTls) — must match rupload's TLS stack (also CycleTLS since 2026-06-25).
-        // Both steps share the same TLS fingerprint so Instagram routes them to the same backend shard.
-        forceNodeTls: false,
+        // Node.js HTTPS (forceNodeTls=true) — must match rupload's TLS stack (also Node.js HTTPS).
+        // Shard routing is handled by the rur cookie in mobileCookieJar; TLS stack must match
+        // so Instagram routes both rupload and configure to the same backend shard.
+        forceNodeTls: true,
       });
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);
