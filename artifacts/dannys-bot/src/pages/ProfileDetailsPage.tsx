@@ -428,8 +428,17 @@ export function ProfileDetailsPage() {
     }
   };
 
-  const otherProfiles = allProfiles?.filter(p => p.id !== profileId && !p.locked && !p.isTemplate) ?? [];
-  const hasOtherProfiles = (allProfiles?.filter(p => p.id !== profileId && !p.isTemplate) ?? []).length > 0;
+  // When viewing a TrustScore template profile, scope pickers to other templates only.
+  // When viewing a regular account, exclude all templates (existing behaviour).
+  const currentIsTemplate = profile?.isTemplate === true;
+  const otherProfiles = allProfiles?.filter(p => {
+    if (p.id === profileId || p.locked) return false;
+    return currentIsTemplate ? p.isTemplate === true : !p.isTemplate;
+  }) ?? [];
+  const hasOtherProfiles = (allProfiles?.filter(p => {
+    if (p.id === profileId) return false;
+    return currentIsTemplate ? p.isTemplate === true : !p.isTemplate;
+  }) ?? []).length > 0;
 
   const handleAccountCopy = async (targetIds: number[], expandedKeys: string[]) => {
     if (!formData) return;
@@ -789,8 +798,10 @@ export function ProfileDetailsPage() {
 
   const getTool = (type: string) => tools?.find(t => t.type === type);
 
-  // Profile switcher helpers — exclude TrustScore base (template) profiles
-  const sortedProfiles = [...(allProfiles ?? [])].filter(p => !p.isTemplate).sort((a, b) =>
+  // Profile switcher helpers — when viewing a template, only show other templates; else only show non-templates
+  const sortedProfiles = [...(allProfiles ?? [])].filter(p =>
+    currentIsTemplate ? p.isTemplate === true : !p.isTemplate
+  ).sort((a, b) =>
     (a.accountLabel || a.username).toLowerCase().localeCompare((b.accountLabel || b.username).toLowerCase())
   );
   const switcherProfiles = profileSearch.trim()
@@ -1029,6 +1040,7 @@ export function ProfileDetailsPage() {
             profiles={otherProfiles}
             optionGroups={ACCOUNT_COPY_GROUPS}
             onCopy={handleAccountCopy}
+            sharedTargetsStorageKey="copyDialog:shared:targets"
           />
 
           <div className="flex gap-6 items-start">
@@ -2042,6 +2054,7 @@ export function ProfileDetailsPage() {
                 followTool={getTool('follow') ?? undefined}
                 unfollowTool={getTool('unfollow') ?? undefined}
                 contactTool={getTool('contact') ?? undefined}
+                overrideProfiles={currentIsTemplate ? otherProfiles : undefined}
               />
             : <p className="text-sm text-muted-foreground py-8">Human sessions tool not found for this profile.</p>
           }

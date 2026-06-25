@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.156",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "TrustScore badge at the top of each TrustScore tier now shows the correct custom colour and icon you set on the TrustScores page — it was previously always showing the default cyan." },
+      { category: "Fix", text: "Account switcher dropdown inside a TrustScore tier now only shows other TrustScore tiers, not regular accounts from the Accounts Manager." },
+      { category: "Fix", text: "Copy Settings inside a TrustScore tier now only lists other TrustScore tiers as copy targets — regular accounts no longer appear." },
+      { category: "Fix", text: "Human Session tool inside a TrustScore tier: Copy Settings dialog now correctly shows only other TrustScore tiers." },
+    ],
+  },
+  {
     version: "1.1.152",
     date: "24 Jun 2026",
     items: [

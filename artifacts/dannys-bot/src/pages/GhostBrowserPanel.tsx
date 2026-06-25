@@ -1038,7 +1038,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
 
           {/* ── ROW 1: Proxy | Device Identity | Fingerprint ── */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Each column is 247 px — same width as Proxy, reduced 10% from the original 274.7 px (840 px ÷ 3 cols). */}
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(3, 247px)" }}>
 
             {/* Proxy */}
             <div className="desktop-card p-2.5 space-y-1.5">

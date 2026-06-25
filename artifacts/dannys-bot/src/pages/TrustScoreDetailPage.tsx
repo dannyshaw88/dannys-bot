@@ -138,10 +138,10 @@ export function TrustScoreDetailPage() {
           </button>
           <div
             className="flex items-center gap-1.5 rounded-full px-3 py-1"
-            style={{ background: CYAN }}
+            style={{ background: level.bg, border: `1px solid ${level.border}` }}
           >
-            <Icon size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>
+            <Icon size={12} color={level.text} fill={level.text} strokeWidth={2} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>
               {level.label}
             </span>
           </div>
