@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.159",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Calls export and pie chart: every Instagram endpoint hit is now logged — cold-start warm-up calls (UserInfo, NotificationsBadge, FetchConfig), CSRF bootstrap calls (FetchHeaders, GetCurrentUser), follow pre-warm (UserInfo + FollowUser), like pre-warm (MediaInfo + LikePost), and repost pre-warm + publish (UserInfo + PublishPhoto) all appear as individual rows in the export." },
+    ],
+  },
+  {
     version: "1.1.158",
     date: "25 Jun 2026",
     items: [

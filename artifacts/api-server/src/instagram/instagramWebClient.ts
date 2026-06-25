@@ -1485,7 +1485,7 @@ export class InstagramWebClient {
     // returns "missing" and Instagram rejects the write with "We're sorry..."
     let preWarmHadChallenge = false;
     try {
-      await ig.user.info(userId);
+      await this.timed("UserInfo", async () => { await ig.user.info(userId); return true; }, "Follow pre-warm");
       console.log(`[webClient] follow ${userId}: pre-warm GET /users/${userId}/info OK — csrftoken: ${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
     } catch (preErr: any) {
       const preMsg: string = preErr?.message ?? "";
@@ -1496,7 +1496,7 @@ export class InstagramWebClient {
 
     try {
       console.log(`[webClient] follow ${userId}: via IgApiClient friendship.create (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      const result = await ig.friendship.create(userId) as any;
+      const result = await this.timed("FollowUser", () => ig.friendship.create(userId) as Promise<any>, "Follow via IgApiClient");
       console.log(`[webClient] follow ${userId}: IgApiClient raw result:`, JSON.stringify(result).slice(0, 300));
 
       if (result?.following || result?.outgoing_request) {
@@ -1687,25 +1687,28 @@ export class InstagramWebClient {
     // ── Phase 2: Authenticated warm-up ───────────────────────────────────────
     if (ownUserId) {
       try {
-        await ig.user.info(ownUserId);
+        await this.timed("UserInfo", async () => { await ig.user.info(ownUserId); return true; }, "Cold-start warm-up");
         console.log(`[webClient] _buildWarmedIgClient: Phase 2 — user.info OK (csrf=${ig.state.cookieCsrfToken?.slice(0, 8) ?? "none"})`);
       } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: user.info (non-fatal): ${e?.message}`); }
     }
     try {
-      await ig.news.inbox();
+      await this.timed("NotificationsBadge", async () => { await ig.news.inbox(); return true; }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: news/inbox (non-fatal): ${e?.message}`); }
     try {
-      await ig.request.send({
-        url: "/api/v1/qe/sync/",
-        method: "POST",
-        form: ig.request.sign({
-          id: ig.state.uuid,
-          server_config_retrieval: "1",
-          _csrftoken: ig.state.cookieCsrfToken,
-          _uuid: ig.state.uuid,
-        }),
-      });
+      await this.timed("FetchConfig", async () => {
+        await ig.request.send({
+          url: "/api/v1/qe/sync/",
+          method: "POST",
+          form: ig.request.sign({
+            id: ig.state.uuid,
+            server_config_retrieval: "1",
+            _csrftoken: ig.state.cookieCsrfToken,
+            _uuid: ig.state.uuid,
+          }),
+        });
+        return true;
+      }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: qe/sync (non-fatal): ${e?.message}`); }
 
@@ -1796,7 +1799,7 @@ export class InstagramWebClient {
     // Pre-warm: GET /media/info/ sets a fresh csrftoken cookie before the like POST.
     // Without this, cookieCsrfToken is "missing" and Instagram rejects the write.
     try {
-      await ig.media.info(mediaId);
+      await this.timed("MediaInfo", async () => { await ig.media.info(mediaId); return true; }, "Like pre-warm");
       console.log(`[webClient] like ${mediaId}: pre-warm media.info OK — csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
     } catch (preErr: any) {
       console.warn(`[webClient] like ${mediaId}: pre-warm media.info failed (${preErr?.message}) — continuing`);
@@ -1804,7 +1807,10 @@ export class InstagramWebClient {
 
     try {
       console.log(`[webClient] like ${mediaId}: IgApiClient media.like (uuid=${ig.state.uuid.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
+      await this.timed("LikePost", async () => {
+        await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
+        return true;
+      }, "Like via IgApiClient");
       return { ok: true };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
@@ -3322,7 +3328,7 @@ export class InstagramWebClient {
       const midCookie   = this.mobileCookieJar.find(c => c.startsWith("mid="))
         ?? `mid=${Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
       const anonJar = [igDidCookie, midCookie];
-      const res = await igReq({
+      const res = await this.timed("FetchHeaders", () => igReq({
         host: "i.instagram.com",
         path: `/api/v1/si/fetch_headers/?challenge_type=signup&guid=${guid}`,
         method: "GET",
@@ -3340,7 +3346,7 @@ export class InstagramWebClient {
         },
         cookieJar: anonJar,
         proxyUrl: this.proxyUrl,
-      });
+      }), "CSRF bootstrap");
       // Merge response cookies (csrftoken, mid updates, etc.) back into the FULL
       // mobileCookieJar — this preserves the sessionid while adding the new token.
       if (res.cookies.length) {
@@ -3365,7 +3371,7 @@ export class InstagramWebClient {
     // ── Strategy 2: current_user ──────────────────────────────────────────────
     // Authenticated endpoint — sometimes echoes csrftoken when session is fresh.
     try {
-      const res = await igReq({
+      const res = await this.timed("GetCurrentUser", () => igReq({
         host: "i.instagram.com",
         path: "/api/v1/accounts/current_user/?edit=true",
         method: "GET",
@@ -3383,7 +3389,7 @@ export class InstagramWebClient {
         },
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
-      });
+      }), "CSRF bootstrap fallback");
       if (res.cookies.length) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       }
@@ -4557,7 +4563,7 @@ export class InstagramWebClient {
     if (ownUserIdForWarm) {
       try {
         console.log(`${TAG} ── PRE-WARM: ig.user.info(${ownUserIdForWarm}) to prime CSRF + igWWWClaim ──`);
-        await ig.user.info(ownUserIdForWarm as any);
+        await this.timed("UserInfo", async () => { await ig.user.info(ownUserIdForWarm as any); return true; }, "Publish pre-warm");
         const freshClaim = ig.state.igWWWClaim;
         const freshCsrf  = ig.state.cookieCsrfToken;
         console.log(`${TAG}   Pre-warm OK — csrf=${freshCsrf?.slice(0,8) ?? "none"} igWWWClaim=${freshClaim ? freshClaim.slice(0,25)+"…" : "NONE"}`);
@@ -4584,10 +4590,10 @@ export class InstagramWebClient {
     console.log(`${TAG} ── CALLING ig.publish.photo ───────────────────────────`);
     console.log(`${TAG}   uuid=${ig.state.uuid?.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "NONE"} uid=${userIdAfterLoad ?? "NONE"} buf=${imageBuffer.length}B`);
     try {
-      const result = await ig.publish.photo({
+      const result = await this.timed("PublishPhoto", () => ig.publish.photo({
         file: imageBuffer,
         caption: caption ?? "",
-      }) as any;
+      }) as Promise<any>, "Repost: publish photo");
 
       console.log(`${TAG} ig.publish.photo RAW RESULT:`, JSON.stringify(result).slice(0, 800));
       const mediaId = result?.media?.id ?? result?.media?.pk ?? result?.pk ?? result?.id ?? null;
