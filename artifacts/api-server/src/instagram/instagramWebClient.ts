@@ -3992,6 +3992,7 @@ export class InstagramWebClient {
     mediaType: "photo" | "video",
     buffer: Buffer,
     uploadId: string,
+    sharedAgent?: any,
   ): Promise<string | null> {
     const TAG = `[UPLOAD:rupload @${this.username ?? this.profileId}]`;
     const authorization = this._deviceAuthorization;
@@ -4083,7 +4084,7 @@ export class InstagramWebClient {
       // NOTE: we post via the mobile private API only. The embedded browser is NEVER
       // used as an upload path — the EB exists solely for session establishment and
       // challenge recovery, not for automated posting actions.
-      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true));
+      ({ json, cookies: ruploadCookies } = await tlsMultipartPost("i.instagram.com", ruploadPath, headers, buffer, this.proxyUrl, true, sharedAgent));
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during rupload: ${netErr?.message ?? netErr}`);
       if (netErr?.message?.includes("ECONNREFUSED")) console.error(`${TAG}   ► Proxy refused connection or Instagram unreachable`);
@@ -4117,18 +4118,18 @@ export class InstagramWebClient {
       return null;
     }
 
-    // Capture rur (shard-routing cookie) — CRITICAL for configure to land on same shard
+    // Capture rur (shard-routing cookie) — CRITICAL for configure to land on same shard.
+    // ALWAYS overwrite: the rupload response may return a DIFFERENT rur than what was
+    // in the jar (Instagram re-assigns the shard based on the actual upload destination).
+    // Keeping the old stale rur causes configure to hit the wrong shard → "upload id is missing".
     const rurFromRupload = ruploadCookies.find(c => c.startsWith("rur="));
     if (rurFromRupload) {
-      const alreadyHasRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
-      if (!alreadyHasRur) {
-        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [rurFromRupload]);
-        console.log(`${TAG} ✓ Captured rur from Set-Cookie → mobileCookieJar: ${rurFromRupload.slice(0, 40)}…`);
-      } else {
-        console.log(`${TAG}   rur already in mobileCookieJar — not overwriting`);
-      }
+      const oldRur = this.mobileCookieJar.find(c => c.startsWith("rur=")) ?? "(none)";
+      this.mobileCookieJar = this.mobileCookieJar.filter(c => !c.startsWith("rur="));
+      this.mobileCookieJar = [...this.mobileCookieJar, rurFromRupload];
+      console.log(`${TAG} ✓ rur updated from rupload response (old=${oldRur.slice(0,20)} new=${rurFromRupload.slice(0,40)}…)`);
     } else {
-      console.warn(`${TAG}   ⚠ No rur cookie in rupload response Set-Cookie. Configure may hit wrong shard → "upload id is missing"`);
+      console.warn(`${TAG}   ⚠ No rur in rupload Set-Cookie — shared agent is the shard-routing safety net`);
       console.warn(`${TAG}     Response Set-Cookie headers: [${ruploadCookies.join(" | ")}]`);
     }
 
@@ -4205,6 +4206,7 @@ export class InstagramWebClient {
     caption: string,
     isVideo: boolean,
     imgBuffer?: Buffer,
+    sharedAgent?: any,
   ): Promise<string | null> {
     const TAG = `[UPLOAD:configure @${this.username ?? this.profileId}]`;
     console.log(`${TAG} ── CONFIGURE PRE-FLIGHT ──────────────────────────────`);
@@ -4351,7 +4353,7 @@ export class InstagramWebClient {
     // "upload id is missing" (500) because configure lands on a different shard
     // that has no record of the rupload. Confirmed on @anais.23164 v1.1.110.
     const authorization = this._deviceAuthorization;
-    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} auth=${authorization ? "✓ Bearer" : "✗ none"} TLS=NodeHTTPS(mustMatchRupload)`);
+    console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} auth=${authorization ? "✓ Bearer" : "✗ none"} TLS=NodeHTTPS(mustMatchRupload) sharedAgent=${sharedAgent ? "✓" : "✗"}`);
 
     let res: any;
     try {
@@ -4378,9 +4380,10 @@ export class InstagramWebClient {
         cookieJar: this.mobileCookieJar,
         proxyUrl: this.proxyUrl,
         // Node.js HTTPS (forceNodeTls=true) — must match rupload's TLS stack (also Node.js HTTPS).
-        // Shard routing is handled by the rur cookie in mobileCookieJar; TLS stack must match
-        // so Instagram routes both rupload and configure to the same backend shard.
+        // agentOverride shares the same HttpsProxyAgent (proxy tunnel) with rupload so
+        // Instagram routes configure to the exact same backend shard as the rupload.
         forceNodeTls: true,
+        agentOverride: sharedAgent,
       });
     } catch (netErr: any) {
       console.error(`${TAG} ✗ NETWORK ERROR during configure: ${netErr?.message ?? netErr}`);
@@ -4761,40 +4764,38 @@ export class InstagramWebClient {
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
       console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
-      // Inject the rur (shard-routing) cookie from the browser cookie jar into
-      // the mobile cookie jar so that BOTH rupload and configure route to the
-      // same Instagram backend shard. Without rur, both requests go to random
-      // shards and configure returns "upload id is missing" because shard B has
-      // never heard of the upload that landed on shard A.
-      // rur is set with domain=.instagram.com so it applies to i.instagram.com too.
-      // "something went wrong" errors seen with rur in earlier tests were on
-      // @adna.40 which was a banned account — never validated on a healthy account.
-      {
-        const rurFromBrowser = this.cookieJar.find(c => c.startsWith("rur="));
-        const alreadyHasRur = this.mobileCookieJar.some(c => c.startsWith("rur="));
-        if (rurFromBrowser && !alreadyHasRur) {
-          this.mobileCookieJar = [...this.mobileCookieJar, rurFromBrowser];
-          console.log(`${TAG}   Injected rur from browser cookies into mobileCookieJar: ${rurFromBrowser.slice(0, 20)}…`);
-        } else if (alreadyHasRur) {
-          console.log(`${TAG}   mobileCookieJar already has rur — keeping it`);
-        } else {
-          console.log(`${TAG}   ⚠ No rur in browser cookies — both rupload and configure will route randomly (shard mismatch risk)`);
-        }
-      }
+      // Shard-routing strategy (two-layer defence):
+      //  PRIMARY — Shared HttpsProxyAgent: rupload and configure reuse the same
+      //    proxy tunnel so Instagram's load balancer routes both requests to the
+      //    same backend shard. Without this, the two requests hit different shards
+      //    and configure returns "upload id is missing" even though rupload returned ok.
+      //  SECONDARY — rur cookie: _mobileRupload now ALWAYS overwrites the rur
+      //    entry in mobileCookieJar if the rupload response Set-Cookie contains one
+      //    (fixed the stale-rur bug where we skipped the update if one was already present).
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      const sharedAgent = new HttpsProxyAgent(this.proxyUrl!, { keepAlive: true, maxSockets: 1 });
+      console.log(`${TAG}   Created shared HttpsProxyAgent for rupload+configure tunnel`);
 
       const uploadId = String(Date.now());
       console.log(`${TAG}   Generated uploadId=${uploadId}`);
-      const confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId);
-      if (!confirmedUploadId) {
-        console.error(`${TAG} ✗ PATH B rupload returned null — cannot proceed to configure`);
-        return null;
-      }
-      console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure immediately.`);
-      const mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer);
-      if (mediaId) {
-        console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
-      } else {
-        console.error(`${TAG} ✗ PATH B configure failed — error="${this._lastConfigureError}"`);
+      let confirmedUploadId: string | null = null;
+      let mediaId: string | null = null;
+      try {
+        confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId, sharedAgent);
+        if (!confirmedUploadId) {
+          console.error(`${TAG} ✗ PATH B rupload returned null — cannot proceed to configure`);
+          return null;
+        }
+        console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure immediately.`);
+        mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
+        if (mediaId) {
+          console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
+        } else {
+          console.error(`${TAG} ✗ PATH B configure failed — error="${this._lastConfigureError}"`);
+        }
+      } finally {
+        (sharedAgent as any).destroy?.();
+        console.log(`${TAG}   Destroyed shared HttpsProxyAgent`);
       }
       return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
@@ -4825,20 +4826,31 @@ export class InstagramWebClient {
       const uploadId = String(Date.now());
       console.log(`${TAG}   Generated uploadId=${uploadId}`);
 
-      // Step 1 — rupload binary protocol
-      const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId);
-      if (!confirmedUploadId) {
-        console.error(`${TAG} ✗ Video rupload failed — cannot proceed to configure`);
-        return null;
-      }
-      console.log(`${TAG}   Video rupload OK — confirmedUploadId=${confirmedUploadId}. Firing configure immediately (no delay).`);
+      // Shared agent ensures rupload and configure hit the same backend shard.
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      const sharedAgent = new HttpsProxyAgent(this.proxyUrl!, { keepAlive: true, maxSockets: 1 });
+      console.log(`${TAG}   Created shared HttpsProxyAgent for video rupload+configure tunnel`);
 
-      // Step 2 — configure fires immediately after rupload (no apiThrottle)
-      const mediaId = await this._configureViaIgClient(confirmedUploadId, caption, true, undefined);
-      if (mediaId) {
-        console.log(`${TAG} ✓ uploadVideo succeeded — media_id=${mediaId}`);
-      } else {
-        console.error(`${TAG} ✗ uploadVideo configure failed — error="${this._lastConfigureError}"`);
+      let mediaId: string | null = null;
+      try {
+        // Step 1 — rupload binary protocol
+        const confirmedUploadId = await this._mobileRupload("video", videoBuffer, uploadId, sharedAgent);
+        if (!confirmedUploadId) {
+          console.error(`${TAG} ✗ Video rupload failed — cannot proceed to configure`);
+          return null;
+        }
+        console.log(`${TAG}   Video rupload OK — confirmedUploadId=${confirmedUploadId}. Firing configure immediately (no delay).`);
+
+        // Step 2 — configure fires immediately after rupload (no apiThrottle)
+        mediaId = await this._configureViaIgClient(confirmedUploadId, caption, true, undefined, sharedAgent);
+        if (mediaId) {
+          console.log(`${TAG} ✓ uploadVideo succeeded — media_id=${mediaId}`);
+        } else {
+          console.error(`${TAG} ✗ uploadVideo configure failed — error="${this._lastConfigureError}"`);
+        }
+      } finally {
+        (sharedAgent as any).destroy?.();
+        console.log(`${TAG}   Destroyed shared HttpsProxyAgent`);
       }
       return mediaId;
     }, `Upload video (${videoBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);

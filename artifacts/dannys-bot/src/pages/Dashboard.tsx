@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.165",
+    date: "25 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make a Post / Repost: rupload and configure now share the same proxy tunnel (HttpsProxyAgent) so Instagram routes both requests to the same backend shard. Previously they used separate connections which caused configure to return 'upload id is missing' even though the rupload succeeded. Also fixed a bug where the rur shard-routing cookie was never updated from the rupload response if one was already present in the session." },
+    ],
+  },
+  {
     version: "1.1.164",
     date: "25 Jun 2026",
     items: [

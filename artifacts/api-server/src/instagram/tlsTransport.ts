@@ -141,6 +141,15 @@ export async function tlsRequest(opts: {
    * trigger Instagram's bot detection when paired with a non-Android User-Agent.
    */
   forceNodeTls?: boolean;
+  /**
+   * Pre-created HttpsProxyAgent to reuse for this request.
+   * When supplied the agent is NOT destroyed after the request — the caller
+   * owns the lifecycle and must destroy it when done.
+   * Used to share the same proxy tunnel between rupload and configure so
+   * Instagram routes both to the same backend shard.
+   * Only honoured when forceNodeTls=true (Node.js HTTPS path).
+   */
+  agentOverride?: any;
 }): Promise<{
   status: number;
   cookies: string[];
@@ -157,6 +166,7 @@ export async function tlsRequest(opts: {
     cookieJar = [],
     proxyUrl,
     forceNodeTls = false,
+    agentOverride,
   } = opts;
 
   // ── IP-LEAK PREVENTION ──────────────────────────────────────────────────────
@@ -278,7 +288,10 @@ export async function tlsRequest(opts: {
   const https = await import("node:https");
   const zlib = await import("node:zlib");
 
-  const agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+  // Use caller-supplied agent when provided (rupload/configure shared-tunnel mode).
+  // When we own the agent we destroy it in finally; when borrowed we leave it alive.
+  const ownedAgent = agentOverride == null;
+  const agent = agentOverride ?? new HttpsProxyAgent(proxyUrl, { keepAlive: true, maxSockets: 1 });
   const t0 = Date.now();
   try {
     const res = await new Promise<{
@@ -330,7 +343,7 @@ export async function tlsRequest(opts: {
     );
     throw err;
   } finally {
-    agent.destroy();
+    if (ownedAgent) (agent as any).destroy?.();
   }
 }
 
