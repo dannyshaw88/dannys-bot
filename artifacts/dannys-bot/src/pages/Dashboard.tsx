@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.169",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Removed media.info scraping call from ViewFeedPost — the action is still logged but no longer hits an endpoint HikerAPI uses for scraping." },
+      { category: "Fix", text: "Removed media.info scraping call from ViewFeedReel — only clips_viewed (the meaningful watch signal) is now sent." },
+      { category: "Fix", text: "Removed users.info scraping call from VisitUserProfile — profile visit is logged without hitting the scraping endpoint." },
+    ],
+  },
+  {
     version: "1.1.168",
     date: "26 Jun 2026",
     items: [

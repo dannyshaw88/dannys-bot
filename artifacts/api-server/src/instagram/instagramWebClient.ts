@@ -2262,28 +2262,19 @@ export class InstagramWebClient {
   }
 
   // ── Open / view a single feed post (simulates tapping into it) ───────────
-  // Fetches the media info endpoint — the same call the app makes when a user
-  // taps a post to open the detail view.
+  // Previously called media/{id}/info/ — that endpoint is identical to what
+  // scrapers use and adds no value for emulation. The media/seen POST
+  // (fired in bulk by the caller) is sufficient to register the view.
   async viewFeedPost(mediaId: string): Promise<boolean> {
-    return this.timed("ViewFeedPost", async () => {
-      try {
-        await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
-        return true;
-      } catch { return false; }
-    }, "Viewed feed post");
+    return this.timed("ViewFeedPost", async () => true, "Viewed feed post");
   }
 
   // ── Open and play a reel from the feed (simulates tapping + watching) ────
-  // When a feed item is a reel, the real app fires two calls:
-  //   1. media/{id}/info/ — fetches reel metadata (tap to open)
-  //   2. clips/clips_viewed/ — tells Instagram the reel played (not just scrolled past)
-  // This is distinct from viewFeedPost which only fires the info call.
+  // Previously called media/{id}/info/ before clips_viewed — removed because
+  // media.info is a scraping endpoint. clips_viewed is the meaningful signal.
   async viewFeedReel(mediaId: string): Promise<boolean> {
     return this.timed("ViewFeedReel", async () => {
-      try {
-        await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
-      } catch { return false; }
-      // Fire clips_viewed separately — a failure here should not fail the whole action
+      // Fire clips_viewed — a failure here should not fail the whole action
       await this.timed("ClipsViewed", async () => {
         await this.mobileSessionPost(
           `/api/v1/clips/clips_viewed/`,
@@ -2299,18 +2290,11 @@ export class InstagramWebClient {
   }
 
   // ── Visit a user's profile page ──────────────────────────────────────────
-  // Fetches user info — equivalent to tapping a username to open their profile.
-  // `fromModule` matches the `from_module` query param the real Instagram app
-  // sends to indicate navigation context (e.g. "followers", "feed_timeline",
-  // "discover_people").  Omitting it produces a bare endpoint with no context
-  // which looks anomalous in Instagram's traffic logs.
-  async visitUserProfile(userId: string, fromModule: string = "profile"): Promise<boolean> {
-    return this.timed("VisitUserProfile", async () => {
-      try {
-        await this.mobileSessionGet(`/api/v1/users/${userId}/info/?from_module=${encodeURIComponent(fromModule)}`);
-        return true;
-      } catch { return false; }
-    }, "Visited user profile");
+  // Previously called users/{id}/info/ — removed because that endpoint is
+  // identical to what scrapers use. The logged action is still recorded.
+  // Callers that follow this with viewUserFeed still generate the feed fetch.
+  async visitUserProfile(_userId: string, _fromModule: string = "profile"): Promise<boolean> {
+    return this.timed("VisitUserProfile", async () => true, "Visited user profile");
   }
 
   // ── Scroll through a user's post feed (profile grid) ────────────────────
