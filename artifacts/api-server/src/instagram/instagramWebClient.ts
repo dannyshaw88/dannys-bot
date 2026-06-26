@@ -2980,81 +2980,19 @@ export class InstagramWebClient {
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
 
-    // Apply the per-account API throttle before making any Instagram API call.
-    // _sendDmViaIgClient creates its own IgApiClient (no attachRequestLogger),
-    // so apiThrottle() MUST be called here to honour the API Control setting.
+    // Use _buildWarmedIgClient() instead of constructing a cold IgApiClient.
+    // _buildWarmedIgClient runs the Jarvee cold-start sequence (news/inbox) which
+    // lifts the 4415001 "Prompt has contribution" gate on broadcastText — a cold
+    // client that skips this warm-up call gets 4415001 on every DM attempt.
+    // The warmed client is cached per-session so this is cheap after the first call.
+    const built = await this._buildWarmedIgClient();
+    if (!built) return false;
+    const { ig } = built;
+
     await this.apiThrottle();
 
-    const ig = newIgClient();
-
-    // Restore device fingerprint — use username-scoped seed for uniqueness
-    const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
-    if (this.igDeviceState) {
-      try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
-        ig.state.generateDevice(dmDeviceSeed);
-        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
-        if (saved.uuid)         ig.state.uuid         = saved.uuid;
-        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
-        if (saved.adid)         ig.state.adid         = saved.adid;
-        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-      } catch {
-        ig.state.generateDevice(dmDeviceSeed);
-      }
-    } else {
-      ig.state.generateDevice(dmDeviceSeed);
-    }
-
-    // Restore cookies from igApiCookies (Jarvee semicolon-separated format)
-    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
-    const now = new Date().toISOString();
-    const cookieEntries = pairs.flatMap(pair => {
-      const eqIdx = pair.indexOf("=");
-      if (eqIdx === -1) return [];
-      const key = pair.slice(0, eqIdx).trim();
-      let value = pair.slice(eqIdx + 1).trim();
-      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
-      return [
-        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
-        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
-      ];
-    });
-    await ig.state.deserializeCookieJar(JSON.stringify({
-      version: "tough-cookie@4.1.3",
-      storeType: "MemoryCookieStore",
-      rejectPublicSuffixes: true,
-      cookies: cookieEntries,
-    }));
-
-    // Patch IgApiClient app version constants to match our current MOBILE_UA.
-    // The library ships with an old version (222.x) that Instagram rejects
-    // with checkpoint_required → unsupported_version.
-    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
-    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
-    patchIgClientTls(ig, this.proxyUrl);
-
     try {
-      console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
-
-      // Validate session: call a lightweight read-only endpoint first.
-      // If this returns login_required the igApiCookies are expired and the
-      // engine must re-run Verify Credentials before retrying DMs.
-      try {
-        const meRes = await ig.account.currentUser() as any;
-        const meId = meRes?.pk ?? meRes?.user?.pk;
-        console.log(`[webClient] sendDM ${userId}: session validated — logged in as pk=${meId}`);
-      } catch (sessErr: any) {
-        const sessBody = sessErr?.response?.body ?? sessErr?.text;
-        console.warn(`[webClient] sendDM ${userId}: session validation FAILED —`, sessErr?.message ?? String(sessErr));
-        if (sessBody) console.warn(`[webClient] sendDM ${userId}: session-check body —`, JSON.stringify(sessBody)?.slice(0, 400));
-        // Treat any auth error as expired — engine will force mobileLogin again
-        if (/login_required|401|403|checkpoint|Bad Request/i.test(String(sessErr?.message ?? ""))) {
-          return "session_expired";
-        }
-      }
+      console.log(`[webClient] sendDM ${userId}: via warmed IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
 
       const thread = ig.entity.directThread([userId]);
       const resp = await thread.broadcastText(text) as any;
@@ -3064,7 +3002,6 @@ export class InstagramWebClient {
       return { threadId, itemId };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
-      // Log the full response body from IgApiClient (IgResponseError.response.body or .text)
       const body = err?.response?.body ?? err?.text ?? err?.response?.text;
       console.warn(`[webClient] sendDM ${userId}: IgApiClient error —`, msg);
       if (body) console.warn(`[webClient] sendDM ${userId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 600));
