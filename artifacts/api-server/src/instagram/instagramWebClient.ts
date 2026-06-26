@@ -1851,7 +1851,7 @@ export class InstagramWebClient {
       await this.timed("LikePost", async () => {
         await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
         return true;
-      }, "Like via IgApiClient");
+      }, "like-successfull");
       return { ok: true };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
@@ -2625,27 +2625,24 @@ export class InstagramWebClient {
   // Simulates a user opening the DM inbox, then tapping into `count` threads.
   // Produces N+1 API call log entries: 1 × GetDirectMessages (inbox overview)
   // + N × GetDirectMessageThread (one per thread opened).
-  // Uses _buildWarmedIgClient (Jarvee cold-start) so Instagram does not gate
-  // direct_v2/inbox/ with 4415001. The warmed client is reused for all calls
-  // so we only pay the probe-sequence cost once per checkDm run.
-  // Only logs calls that Instagram's server genuinely answered (ok=true).
+  // Calls GetDirectMessages directly — no NotificationsBadge warm-up.
   // Returns the full mapped inbox thread list so auto-reply can reuse it
-  // without a second warm-up or second inbox fetch.
+  // without a second inbox fetch.
   async getDirectMessagesInternal(count: number = 5): Promise<{
     count: number;
     ok: boolean;
     threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
   }> {
-    // ── Step 1: build warmed client (Phase 0-2 probe sequence) ──────────────
-    const built = await this._buildWarmedIgClient();
-    if (!built) {
-      console.warn("[webClient] getDirectMessagesInternal: no igApiCookies — skipping DM check");
+    // Check a mobile session is available before making any calls.
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!this._deviceAuthorization;
+    if (!hasMobileSession && !this.igApiCookies) {
+      console.warn("[webClient] getDirectMessagesInternal: no mobile session — skipping DM check");
       return { count: 0, ok: false, threads: [] };
     }
-    const { ig } = built;
 
-    // Own user ID — used to distinguish our sent messages from incoming ones.
-    const myUserId = String(ig.state.cookieUserId ?? "");
+    // Extract own user ID from igApiCookies (ds_user_id=…) for fromMe detection.
+    const dsMatch = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/);
+    const myUserId = dsMatch ? dsMatch[1].trim() : "";
 
     // Helper: map a raw inbox thread to the format auto-reply expects.
     const mapThread = (thread: any) => {
@@ -2902,14 +2899,17 @@ export class InstagramWebClient {
       reelSeenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
     }
     if (reelSeenEntries.length) {
-      try {
-        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: reelSeenEntries.join(","),
-          live_vods_skipped: "",
-          nuxes_skipped: "",
-        }).toString());
-        watched = reelSeenEntries.length;
-      } catch (_) { /* best-effort */ }
+      await this.timed("ViewTimelineFeedSeen", async () => {
+        try {
+          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: reelSeenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString());
+          watched = reelSeenEntries.length;
+        } catch (_) { /* best-effort */ }
+        return reelSeenEntries.length;
+      }, (n) => `Marked ${n} reel${n === 1 ? "" : "s"} as seen`).catch(() => {});
     }
 
     for (let i = 0; i < toProcess.length; i++) {

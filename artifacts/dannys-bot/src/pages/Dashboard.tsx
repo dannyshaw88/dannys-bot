@@ -69,6 +69,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.181",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Check Direct Messages: removed the NotificationsBadge (news/inbox warm-up) call that was firing before every DM check and causing it to fail. DM check now goes straight to GetDirectMessages then opens each thread — no warm-up call." },
+      { category: "Fix", text: "Like Timeline Posts: the 'mark reels seen' call inside the Like tool was logging as 'ERROR: Marking media as seen' in API Calls when Instagram returned a non-200. The call is now wrapped in a proper timed block so it appears as a named entry and errors are handled silently." },
+      { category: "Fix", text: "Like via IgApiClient log message changed to 'like-successfull'." },
+      { category: "Fix", text: "No-proxy verify error message changed from 'Please assign a proxy before verifying.' to 'Failed, Please assign a proxy'." },
+    ],
+  },
+  {
     version: "1.1.180",
     date: "26 Jun 2026",
     items: [

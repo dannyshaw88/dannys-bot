@@ -676,7 +676,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   if (!resolved) {
     return {
       ok: false,
-      message: `Please assign a proxy before verifying.`,
+      message: `Failed, Please assign a proxy`,
       accountStatus: "pending",
     };
   }
