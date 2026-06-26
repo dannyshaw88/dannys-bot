@@ -1500,20 +1500,6 @@ export class InstagramWebClient {
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     patchIgClientTls(ig, this.proxyUrl);
 
-    // Pre-warm the cookie jar so Instagram sets a fresh csrftoken cookie
-    // before we make the friendship.create POST. Without this, cookieCsrfToken
-    // returns "missing" and Instagram rejects the write with "We're sorry..."
-    let preWarmHadChallenge = false;
-    try {
-      await this.timed("UserInfo", async () => { await ig.user.info(userId); return true; }, "Follow pre-warm");
-      console.log(`[webClient] follow ${userId}: pre-warm GET /users/${userId}/info OK — csrftoken: ${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
-    } catch (preErr: any) {
-      const preMsg: string = preErr?.message ?? "";
-      if (/challenge_required/i.test(preMsg)) preWarmHadChallenge = true;
-      // Non-fatal — if the info call fails, try the follow anyway
-      console.warn(`[webClient] follow ${userId}: pre-warm GET /users/info failed (${preMsg}) — continuing`);
-    }
-
     try {
       console.log(`[webClient] follow ${userId}: via IgApiClient friendship.create (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
       const result = await this.timed("FollowUser", () => ig.friendship.create(userId) as Promise<any>, "Follow via IgApiClient");
@@ -1541,11 +1527,10 @@ export class InstagramWebClient {
         const url = body?.checkpoint_url ?? "";
         return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url };
       }
-      // 404 after a challenge_required pre-warm = account session blocked by challenge, not a missing user
+      if (/challenge_required/i.test(msg)) {
+        return { ok: false, status: "checkpoint_required", reason: "Session has an unresolved Instagram security challenge — verify account in the embedded browser" };
+      }
       if (/404|Not Found/i.test(msg)) {
-        if (preWarmHadChallenge) {
-          return { ok: false, status: "checkpoint_required", reason: "Session has an unresolved Instagram security challenge — verify account in the embedded browser" };
-        }
         return { ok: false, status: "follow_blocked", reason: `Instagram returned 404 on friendship.create — ${msg}` };
       }
       if (/spam/i.test(msg))                           return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
@@ -1705,12 +1690,6 @@ export class InstagramWebClient {
     console.log(`[webClient] _buildWarmedIgClient: Phase 1 — cookies loaded (userId=${ownUserId || "unknown"})`);
 
     // ── Phase 2: Authenticated warm-up ───────────────────────────────────────
-    if (ownUserId) {
-      try {
-        await this.timed("UserInfo", async () => { await ig.user.info(ownUserId); return true; }, "Cold-start warm-up");
-        console.log(`[webClient] _buildWarmedIgClient: Phase 2 — user.info OK (csrf=${ig.state.cookieCsrfToken?.slice(0, 8) ?? "none"})`);
-      } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: user.info (non-fatal): ${e?.message}`); }
-    }
     try {
       await this.timed("NotificationsBadge", async () => { await ig.news.inbox(); return true; }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
@@ -4590,38 +4569,6 @@ export class InstagramWebClient {
       console.log(`${TAG} Proxy set on IgApiClient: ${this.proxyUrl}`);
     }
     patchIgClientTls(ig, this.proxyUrl);
-
-    // ── PRE-WARM: fire user.info to get fresh CSRF + igWWWClaim ─────────────
-    // Same pattern as _followViaIgClient. Without this, cookieCsrfToken is
-    // "missing" and ig.state.igWWWClaim is empty — both cause configure to
-    // fail with a generic 500. The fresh claim is also persisted to
-    // igDeviceState so that PATH B's hand-rolled configure can read it.
-    const ownUserIdForWarm = igCookiePairs.find(p => p.startsWith("ds_user_id="))?.split("=")[1] ?? "";
-    if (ownUserIdForWarm) {
-      try {
-        console.log(`${TAG} ── PRE-WARM: ig.user.info(${ownUserIdForWarm}) to prime CSRF + igWWWClaim ──`);
-        await this.timed("UserInfo", async () => { await ig.user.info(ownUserIdForWarm as any); return true; }, "Publish pre-warm");
-        const freshClaim = ig.state.igWWWClaim;
-        const freshCsrf  = ig.state.cookieCsrfToken;
-        console.log(`${TAG}   Pre-warm OK — csrf=${freshCsrf?.slice(0,8) ?? "none"} igWWWClaim=${freshClaim ? freshClaim.slice(0,25)+"…" : "NONE"}`);
-        // Persist the fresh claim so PATH B configure can read it from igDeviceState
-        if (freshClaim && freshClaim !== "0" && this.igDeviceState) {
-          try {
-            const ds = JSON.parse(this.igDeviceState) as Record<string, unknown>;
-            ds.igWWWClaim = freshClaim;
-            this.igDeviceState = JSON.stringify(ds);
-            console.log(`${TAG}   igWWWClaim persisted to igDeviceState — PATH B configure will use it`);
-          } catch {}
-        } else if (!freshClaim) {
-          console.warn(`${TAG}   Pre-warm returned no igWWWClaim — PATH B will attempt its own bootstrap`);
-        }
-      } catch (preErr: any) {
-        // Non-fatal — if info call fails, try publish anyway
-        console.warn(`${TAG}   Pre-warm ig.user.info failed (non-fatal, will try publish): ${preErr?.message}`);
-      }
-    } else {
-      console.warn(`${TAG}   No ds_user_id found — skipping pre-warm (PATH B bootstrap will handle igWWWClaim)`);
-    }
 
     // ── CALL ig.publish.photo ────────────────────────────────────────────────
     console.log(`${TAG} ── CALLING ig.publish.photo ───────────────────────────`);

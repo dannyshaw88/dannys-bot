@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.167",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow tool: removed the UserInfo API call that was fired before every follow action. It served no purpose and is a high-signal scraping endpoint that Instagram watches closely. Challenge detection now works directly from the follow response itself." },
+      { category: "Fix", text: "Removed UserInfo calls from cold-start warm-up and publish pre-warm as well — UserInfo is no longer called anywhere in the automation engine." },
+    ],
+  },
+  {
     version: "1.1.166",
     date: "26 Jun 2026",
     items: [
