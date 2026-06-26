@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.184",
+    date: "26 Jun 2026",
+    items: [
+      { category: "New", text: "Accounts page: added a Human Session column with the same on/off toggle as the Active column. Toggling it enables or disables the Human Session tool for that account without needing to open the account and navigate to the tool." },
+      { category: "Fix", text: "Tools → Trust Scores: note text fields are now left-aligned instead of right-aligned." },
+    ],
+  },
+  {
     version: "1.1.183",
     date: "26 Jun 2026",
     items: [

@@ -120,11 +120,11 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, aliveFor: 80, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, humanSession: 68, aliveFor: 80, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, humanSession: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "humanSession", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", aliveFor: "Alive For", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", humanSession: "Human Session", aliveFor: "Alive For", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -187,6 +187,23 @@ export function ProfilesPage() {
   const { toast } = useToast();
   const { openWindow, closeWindow } = useBrowserWindows();
   const { data: proxies } = useProxies();
+
+  const { data: hsStatusMap = {}, refetch: refetchHsStatus } = useQuery<Record<number, boolean>>({
+    queryKey: ["/api/profiles/human-session-enabled"],
+    queryFn: async () => { const r = await fetch("/api/profiles/human-session-enabled", { credentials: "include" }); return r.json(); },
+    staleTime: 30_000,
+  });
+
+  const toggleHumanSession = useCallback(async (id: number, current: boolean) => {
+    const enabled = !current;
+    await fetch(`/api/profiles/${id}/human-session-enabled`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ enabled }),
+    });
+    refetchHsStatus();
+  }, [refetchHsStatus]);
 
   // Per-account in-flight tracking.
   // verifyingInProgress ref: guards against double-submit with no stale-closure risk
@@ -1340,6 +1357,7 @@ export function ProfilesPage() {
                 </button>
               );
               if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>Active</div>;
+              if (key === "humanSession") return <div key={key} {...dragProps} style={{ width: (profColWidths as any).humanSession }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>HS</div>;
               if (key === "aliveFor") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("aliveFor")} style={{ width: profColWidths.aliveFor }} className={`shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer select-none ${sortField === "aliveFor" ? "text-foreground" : ""} ${dragBorder}`}>
                   ALIVE FOR
@@ -1503,6 +1521,14 @@ export function ProfilesPage() {
                         <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" disabled={!hasProxy} title={!hasProxy ? "Assign a proxy before enabling this account" : undefined} />
                       </div>
                     );
+                    if (key === "humanSession") {
+                      const hsEnabled = hsStatusMap[profile.id] !== false;
+                      return (
+                        <div key={key} style={{ width: (profColWidths as any).humanSession }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
+                          <Switch checked={hsEnabled} onCheckedChange={() => toggleHumanSession(profile.id, hsEnabled)} className="data-[state=checked]:bg-green-500" title="Toggle Human Session tool on/off" />
+                        </div>
+                      );
+                    }
                     if (key === "aliveFor") {
                       const validSince = (profile as any).validSince ? new Date((profile as any).validSince) : null;
                       let aliveLabel: React.ReactNode = <span className="text-muted-foreground/40">—</span>;

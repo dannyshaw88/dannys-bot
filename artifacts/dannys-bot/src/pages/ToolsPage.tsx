@@ -202,7 +202,7 @@ function TrustScoresTabContent() {
                 className="flex items-center gap-1 cursor-grab active:cursor-grabbing shrink-0"
               >
                 <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                <span className="w-5 text-[11px] font-bold text-muted-foreground text-right">{idx + 1}</span>
+                <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
                 <button
                   onClick={() => handleBadgeClick(level)}
                   onMouseDown={e => e.stopPropagation()}
@@ -231,7 +231,7 @@ function TrustScoresTabContent() {
                 placeholder="Add a note…"
                 rows={1}
                 className="ml-2 px-2 py-1 text-xs bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40 cursor-text"
-                style={{ minHeight: 28, maxHeight: 72, flex: "1 1 0", minWidth: 0, textAlign: "right", direction: "ltr" }}
+                style={{ minHeight: 28, maxHeight: 72, flex: "1 1 0", minWidth: 0, textAlign: "left", direction: "ltr" }}
                 onInput={e => {
                   const t = e.currentTarget;
                   t.style.height = "auto";

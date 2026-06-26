@@ -9,7 +9,7 @@ import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
 import { generateEbFingerprint } from "../instagram/browserFingerprint";
 import { db } from "@workspace/db";
-import { proxies } from "@workspace/db";
+import { proxies, tools } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -545,6 +545,30 @@ export async function registerInstagramRoutes(
   app.get("/api/profiles/verify-health", async (_req, res) => {
     const data = await storage.getVerifyOpsByProfile();
     res.json(data);
+  });
+
+  // Returns {[profileId]: boolean} for the humanSessionEnabled setting across all profiles.
+  // Must be before /:id routes so Express doesn't treat "human-session-enabled" as an ID.
+  app.get("/api/profiles/human-session-enabled", async (_req, res) => {
+    const rows = await db.select().from(tools).where(eq(tools.type, "human_sessions"));
+    const result: Record<number, boolean> = {};
+    for (const row of rows) {
+      const s = (row.settings ?? {}) as Record<string, unknown>;
+      result[row.profileId] = s.humanSessionEnabled !== false;
+    }
+    res.json(result);
+  });
+
+  app.patch("/api/profiles/:id/human-session-enabled", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const { enabled } = req.body as { enabled: boolean };
+    const rows = await db.select().from(tools).where(eq(tools.profileId, profileId));
+    const tool = rows.find(t => t.type === "human_sessions");
+    if (!tool) { res.status(404).json({ error: "human_sessions tool not found" }); return; }
+    const newSettings = { ...(tool.settings as Record<string, unknown> ?? {}), humanSessionEnabled: enabled };
+    const updated = await storage.updateTool(tool.id, { settings: newSettings });
+    if (enabled) automationEngine.triggerHumanSession(profileId);
+    res.json({ ok: true, settings: updated.settings });
   });
 
   app.post("/api/profiles/:id/move-to-accounts", async (req, res) => {
