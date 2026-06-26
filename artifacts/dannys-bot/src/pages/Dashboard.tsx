@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.177",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Contact Tool DMs: fixed the real root cause of the 4415001 error — the warm-up call was silently failing due to a proxy/network drop (connection reset), but the code was still caching the broken state and sending the DM anyway. Now falls back to a second warm-up call (currentUser) and only retries the DM if at least one warm-up succeeds." },
+      { category: "Fix", text: "Contact Tool DMs: when 4415001 fires, the warm-up cache is now invalidated so the next session retries the full warm-up sequence instead of re-using the broken cached state." },
+      { category: "Fix", text: "Make-a-Post / Repost: when the upload is rejected with session expired, the account is now automatically marked for re-verify — so it re-establishes its session without you needing to manually intervene." },
+    ],
+  },
+  {
     version: "1.1.176",
     date: "26 Jun 2026",
     items: [

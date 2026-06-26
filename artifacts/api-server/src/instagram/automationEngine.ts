@@ -3193,9 +3193,10 @@ class AutomationEngine {
               // We found new posts but the upload itself failed.
               if (client.lastUploadLoginRequired) {
                 // Session expired — rupload returned 403 login_required.
-                // Do NOT retry without re-verifying; the session cookie is dead.
-                console.warn(`[engine] @${profile.username}: 🔁 repost skipped — upload rejected (session expired / login_required). Re-verify this account to resume reposting.`);
-                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed: session expired — re-verify account to resume reposting`);
+                // Mark account as logged_out so the engine triggers re-verify.
+                console.warn(`[engine] @${profile.username}: 🔁 repost — upload rejected (session expired / login_required), marking logged_out`);
+                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed: session expired — account marked for re-verify`);
+                await this.applyAccountLevelError(profile.id, "login_required", state, tool.id);
               } else {
                 // Generic upload failure — session/network issue, not exhausted.
                 // Do NOT auto-disable; the next session will retry.

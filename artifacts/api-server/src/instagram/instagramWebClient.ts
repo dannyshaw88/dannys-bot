@@ -40,12 +40,15 @@
 // ║      logs a re-verify warning. The account needs re-verification before     ║
 // ║      the next repost attempt. Do NOT retry without re-verifying first.      ║
 // ║    [26 Jun 2026] 4415001 "Prompt has contribution" on DM broadcastText —    ║
-// ║      error fires even from the warmed IgApiClient (after news.inbox warm-   ║
-// ║      up). This is an account-level Instagram restriction (not a warm-up     ║
-// ║      failure). Both IgApiClient path AND _mobileDmPost fallback return it.  ║
-// ║      Fix: error code 4415001 is now treated as "blocked" (same as           ║
-// ║      feedback_required) — stops infinite retries. Account may need manual   ║
-// ║      Instagram app interaction to clear the restriction.                    ║
+// ║      Root cause: news.inbox() warm-up fails at NETWORK level (status 0 —   ║
+// ║      proxy drops the connection). Code was catching the error as "non-      ║
+// ║      fatal" and caching the broken warm-up state anyway, so broadcastText   ║
+// ║      fired on an un-warmed client and got 4415001 from Instagram.           ║
+// ║      Fix 1: if news.inbox() fails with status 0, try currentUser() as a    ║
+// ║      fallback warm-up. If BOTH fail at network level, return null and do    ║
+// ║      NOT cache — next sendDM retries the full warm-up sequence.             ║
+// ║      Fix 2: 4415001 now invalidates _warmedIgClientCache and returns false  ║
+// ║      (retryable) so the engine retries with a fresh warm-up next session.  ║
 // ║                                                                              ║
 // ║  METHOD NAMING — which cookies each helper uses:                             ║
 // ║    mobileSessionGet / mobileSessionPost  → mobileCookieJar (igApiCookies)  ║
@@ -1715,10 +1718,45 @@ export class InstagramWebClient {
     console.log(`[webClient] _buildWarmedIgClient: Phase 1 — cookies loaded (userId=${ownUserId || "unknown"})`);
 
     // ── Phase 2: Authenticated warm-up ───────────────────────────────────────
+    // news.inbox() tells Instagram "this device is active" and lifts the 4415001
+    // gate on broadcastText.  If it fails at the NETWORK level (status 0 — proxy
+    // drop, connection reset) we try ig.account.currentUser() as a lighter
+    // fallback.  If an Instagram-level error is returned (4xx body) we still
+    // treat the warm-up as succeeded — we're connected, inbox just errored.
+    // Only when BOTH calls fail at the network level do we return null (broken
+    // proxy) so the warm-up is NOT cached and the next sendDM attempt retries it.
+    let warmupOk = false;
     try {
       await this.timed("NotificationsBadge", async () => { await ig.news.inbox(); return true; }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
-    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: news/inbox (non-fatal): ${e?.message}`); }
+      warmupOk = true;
+    } catch (e: any) {
+      // status 0 = network-level failure (proxy down / connection reset).
+      // Any non-zero status means Instagram responded — warm-up is good enough.
+      const isNetworkErr = !e?.response || ((e?.response?.statusCode ?? 0) === 0);
+      if (isNetworkErr) {
+        console.warn(`[webClient] _buildWarmedIgClient: news/inbox network-error (status 0) — trying currentUser() fallback: ${e?.message}`);
+        try {
+          await ig.account.currentUser();
+          console.log("[webClient] _buildWarmedIgClient: Phase 2 — fallback currentUser() OK");
+          warmupOk = true;
+        } catch (e2: any) {
+          console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback also failed: ${e2?.message}`);
+        }
+      } else {
+        // Instagram returned an error body (4xx) — we're connected, treat as warm.
+        console.warn(`[webClient] _buildWarmedIgClient: news/inbox Instagram-level error (non-fatal, treating as warm): ${e?.message}`);
+        warmupOk = true;
+      }
+    }
+
+    if (!warmupOk) {
+      // Both warm-up attempts failed at the network level (proxy issue).
+      // Do NOT cache a broken state — next sendDM call will retry the full warm-up.
+      console.warn(`[webClient:${this.profileId}] _buildWarmedIgClient: warm-up failed (network) — NOT caching, returning null`);
+      return null;
+    }
+
     // qe/sync (FetchConfig) is intentionally NOT called here.
     // FetchConfig belongs exclusively to the verify bootstrap (Phase 2b in
     // verifyInstagramCredentials). Calling it again inside _buildWarmedIgClient
@@ -3033,13 +3071,14 @@ export class InstagramWebClient {
       if (body) console.warn(`[webClient] sendDM ${userId}: raw body —`, JSON.stringify(body)?.slice(0, 600));
       if (/feedback_required|ActionBlocked/i.test(msg)) return "blocked";
       if (/login_required|Not authorized/i.test(msg))   return "session_expired";
-      // 4415001 "Prompt has contribution" — account-level Instagram restriction.
-      // Fires even from a fully warmed IgApiClient; the warm-up sequence cannot
-      // lift it. Treat as blocked to stop infinite retries (see debugging log above).
+      // 4415001 "Prompt has contribution" — fires when the news.inbox() warm-up
+      // did not complete (network/proxy error during warm-up).  Invalidate the
+      // warm-up cache so the next sendDM attempt re-runs the full warm-up sequence.
       const bodyCode = (body as any)?.content?.error_code ?? (body as any)?.error_code;
       if (bodyCode === 4415001) {
-        console.warn(`[webClient] sendDM ${userId}: 4415001 Prompt has contribution (account-level restriction) — treating as blocked`);
-        return "blocked";
+        console.warn(`[webClient] sendDM ${userId}: 4415001 Prompt has contribution — warm-up may have failed; invalidating cache so next attempt retries warm-up`);
+        this._warmedIgClientCache = null;
+        return false;
       }
       return false;
     }
@@ -3100,11 +3139,13 @@ export class InstagramWebClient {
 
       const errorCode = j?.content?.error_code ?? j?.error_code;
       console.warn(`[webClient] sendDM ${userId}: failed — error_code=${errorCode} status=${j?.status} message=${j?.message}`);
-      // 4415001 "Prompt has contribution" — account-level restriction, same as
-      // feedback_required. Stop retrying; the user needs to open Instagram manually.
+      // 4415001 "Prompt has contribution" — fires when the IgApiClient warm-up
+      // did not complete (proxy/network error on news.inbox()).  Invalidate the
+      // warm-up cache so the next session retries the full warm-up before DMing.
       if (errorCode === 4415001) {
-        console.warn(`[webClient] sendDM ${userId}: 4415001 Prompt has contribution — treating as blocked (see debugging log at top of file)`);
-        return "blocked";
+        console.warn(`[webClient] sendDM ${userId}: 4415001 on mobileDmPost — invalidating warm-up cache for retry next session`);
+        this._warmedIgClientCache = null;
+        return false;
       }
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
