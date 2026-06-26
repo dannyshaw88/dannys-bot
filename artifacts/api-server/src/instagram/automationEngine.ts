@@ -2071,8 +2071,9 @@ class AutomationEngine {
     const hikerEnabled = globalSettings.hikerApiEnabled === "true";
     const hikerToken   = globalSettings.hikerApiToken ?? "";
     const hikerClient: HikerApiClient | null = (hikerEnabled && hikerToken) ? new HikerApiClient(hikerToken) : null;
-    const useHikerDmByUsername   = !!(hikerClient && globalSettings.hikerDmByUsername !== "false");
-    const useHikerDmGetFollowers = !!(hikerClient && globalSettings.hikerDmGetFollowers !== "false");
+    const useHikerDmByUsername       = !!(hikerClient && globalSettings.hikerDmByUsername !== "false");
+    const useHikerDmGetFollowers     = !!(hikerClient && globalSettings.hikerDmGetFollowers !== "false");
+    const useHikerHumanSessionFeed   = !!(hikerClient && globalSettings.hikerHumanSessionFeed !== "false");
 
     const logHikerDM = (op: string, message: string, durationMs: number) => {
       storage.createInstagramApiCall({
@@ -2495,8 +2496,10 @@ class AutomationEngine {
                     const profileScrollCount = randInt(expProfileScrollMin, expProfileScrollMax);
                     let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
                     try {
-                      profilePosts = await client.viewUserFeed(item.userId, profileScrollCount);
-                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile (from explore)`);
+                      profilePosts = useHikerHumanSessionFeed
+                        ? await hikerClient!.getUserFeedByUserId(item.userId, profileScrollCount)
+                        : await client.viewUserFeed(item.userId, profileScrollCount);
+                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile (from explore)${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
                       this.logAction(profile.id, tool.id, "view_profile_feed", item.username, "", "profile", "ok", `Scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
                     } catch (e: any) {
                       if (await checkSessionErr(e, "explore_profile_feed")) return;
@@ -2651,8 +2654,10 @@ class AutomationEngine {
                     );
                     let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
                     try {
-                      profilePosts = await client.viewUserFeed(item.userId, profileFeedCount);
-                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
+                      profilePosts = useHikerHumanSessionFeed
+                        ? await hikerClient!.getUserFeedByUserId(item.userId, profileFeedCount)
+                        : await client.viewUserFeed(item.userId, profileFeedCount);
+                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
                       this.logAction(profile.id, tool.id, "view_profile_feed", item.username, "", "profile", "ok", `Scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
                     } catch (e: any) {
                       if (await checkSessionErr(e, "view_profile_feed")) return;
@@ -3281,6 +3286,7 @@ class AutomationEngine {
     const useHikerFollowHashtag      = !!(hikerClient && globalSettings.hikerFollowHashtag !== "false");
     const useHikerFollowGetFollowers = !!(hikerClient && globalSettings.hikerFollowGetFollowers !== "false");
     const useHikerFollowByUsername   = !!(hikerClient && globalSettings.hikerFollowByUsername !== "false");
+    const useHikerHumanSessionFeed   = !!(hikerClient && globalSettings.hikerHumanSessionFeed !== "false");
     if (hikerClient) engineLog("INFO", `@${profile.username}: using HikerAPI for scrape calls`);
     else engineLog("WARN", `@${profile.username}: HikerAPI disabled/no token — no scraping fallback, session will abort`);
 
@@ -3537,8 +3543,10 @@ class AutomationEngine {
       const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
       let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
       try {
-        profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
-        engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+        profilePosts = useHikerHumanSessionFeed
+          ? await hikerClient!.getUserFeedByUserId(targetUser.pk, feedCount)
+          : await client.viewUserFeed(targetUser.pk, feedCount);
+        engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
         this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
       } catch { /* non-critical */ }
 

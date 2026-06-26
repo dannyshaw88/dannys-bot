@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.170",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Feature", text: "Settings → Scraping / HikerAPI: new Human Session section with 'Profile Feed Scroll' toggle — when enabled, all profile feed fetches (Visit Author's Profile, Inject Profile Browsing) go through HikerAPI instead of the account's own session." },
+    ],
+  },
+  {
     version: "1.1.169",
     date: "26 Jun 2026",
     items: [

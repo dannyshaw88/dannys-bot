@@ -601,6 +601,32 @@ export function SettingsPage() {
               </div>
             </div>
 
+            {/* HUMAN SESSION */}
+            <div className="border-t border-border/40 pt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Human Session</p>
+              <div className="space-y-3 pl-1">
+                {([
+                  { key: "hikerHumanSessionFeed" as const, label: "Profile Feed Scroll", endpoint: "/v1/user/medias", desc: "Fetches a target's post grid when 'Visit Author's Profile' or 'Inject Profile Browsing' triggers — offloads feed/user/{id}/ from the account." },
+                ] as const).map(({ key, label, endpoint, desc }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{endpoint}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                    <Checkbox
+                      checked={settings?.[key] ?? true}
+                      onCheckedChange={(v) => mutation.mutate({ [key]: !!v })}
+                      disabled={isLoading || mutation.isPending}
+                      className="mt-0.5 shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* OTHER */}
             <div className="border-t border-border/40 pt-5">
               <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Other</p>

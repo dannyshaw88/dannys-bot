@@ -287,4 +287,5 @@ export type GlobalSettings = {
   hikerRepostGetFeed: boolean;
   hikerSyncProfile: boolean;
   hikerGlobalByUsername: boolean;
+  hikerHumanSessionFeed: boolean;
 };

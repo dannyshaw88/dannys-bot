@@ -541,6 +541,36 @@ export class HikerApiClient {
     }
   }
 
+  // Fetches up to `count` posts from a user's feed by their user ID.
+  // Returns the same {mediaId, shortcode, username} shape as viewUserFeed
+  // so the engine can swap between the two without glue code.
+  async getUserFeedByUserId(userId: string, count: number): Promise<Array<{mediaId: string; shortcode: string; username: string}>> {
+    try {
+      const j = await hikerGet(`/v1/user/medias?user_id=${encodeURIComponent(userId)}&amount=${Math.min(Math.max(count, 1), 20)}`, this.token);
+      if (j && !Array.isArray(j) && typeof j.detail === "string") {
+        console.error(`[hikerApi] getUserFeedByUserId ${userId}: HikerAPI error — "${j.detail}"`);
+        return [];
+      }
+      const items: any[] = Array.isArray(j) ? j
+        : Array.isArray(j?.response) ? j.response
+        : Array.isArray(j?.items)    ? j.items
+        : Array.isArray(j?.data)     ? j.data
+        : [];
+      const results: {mediaId: string; shortcode: string; username: string}[] = [];
+      for (const item of items) {
+        const mediaId = String(item.id ?? item.pk ?? "");
+        if (!mediaId) continue;
+        const shortcode = item.code || this.mediaIdToShortcode(mediaId);
+        const username  = String(item.user?.username ?? "");
+        results.push({ mediaId, shortcode, username });
+      }
+      return results;
+    } catch (e: any) {
+      console.error(`[hikerApi] getUserFeedByUserId ${userId} error: ${e?.message}`);
+      return [];
+    }
+  }
+
   async getHashtagUsers(
     hashtag: string,
     max = 50,
