@@ -92,6 +92,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
       contactUsersEnabled: true,
       contactEquinoxUserEnabled: false,
       contactEquinoxMessage: "",
+      contactEquinoxNoRepeat: true,
       contactUsersSendCountMin: 1,
       contactUsersSendCountMax: 5,
       contactUsersDelayBetweenMin: 5,
@@ -309,6 +310,18 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
                 {equinoxPreview}
               </div>
             )}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="contactEquinoxNoRepeat"
+                checked={settings.contactEquinoxNoRepeat ?? true}
+                onChange={(e) => setSettings({ ...settings, contactEquinoxNoRepeat: e.target.checked })}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <label htmlFor="contactEquinoxNoRepeat" className="text-sm text-foreground cursor-pointer select-none">
+                Don't message the same account twice
+              </label>
+            </div>
           </div>
         )}
 

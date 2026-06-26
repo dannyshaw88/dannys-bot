@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.172",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Feature", text: "Contact Tool → Message an Equinox User: new 'Don't message the same account twice' checkbox — when enabled, previously-messaged Equinox accounts (pending and sent) are skipped and a fresh one is picked each session." },
+      { category: "Fix", text: "Verify Credentials: FetchConfig (qe/sync) is no longer called twice when a contact session starts immediately after a verify — the warm-up step now skips it if verify already ran it within the last 2 minutes." },
+    ],
+  },
+  {
     version: "1.1.171",
     date: "26 Jun 2026",
     items: [

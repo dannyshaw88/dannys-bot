@@ -1371,7 +1371,25 @@ class AutomationEngine {
     if (s.contactEquinoxUserEnabled && (s.contactEquinoxMessage ?? "").trim()) {
       try {
         const allProfiles = await storage.getProfiles();
-        const candidates = (allProfiles as any[]).filter(p => p.id !== profile.id);
+        let candidates = (allProfiles as any[]).filter(p => p.id !== profile.id);
+
+        // Build the set of usernames already messaged via the Equinox source.
+        // When contactEquinoxNoRepeat is enabled, this covers both still-pending
+        // messages AND previously-sent messages (all statuses, equinox_user type only).
+        const noRepeat = s.contactEquinoxNoRepeat !== false; // default true
+        if (noRepeat && candidates.length > 0) {
+          const allEquinox = await storage.getContactPendingMessages(profile.id);
+          const alreadyMessaged = new Set(
+            (allEquinox as any[])
+              .filter((m: any) => m.messageType === "equinox_user")
+              .map((m: any) => m.instagramUsername)
+          );
+          candidates = candidates.filter(p => !alreadyMessaged.has(p.username));
+          if (candidates.length === 0) {
+            console.log(`[engine] @${profile.username}: Equinox — all ${allProfiles.length - 1} accounts already messaged (no-repeat enabled), skipping queue`);
+          }
+        }
+
         if (candidates.length > 0) {
           const target = candidates[Math.floor(Math.random() * candidates.length)];
           const targetUsername: string = target.username ?? "";
@@ -1381,21 +1399,25 @@ class AutomationEngine {
           const targetUserId = dsMatch?.[1] ?? "";
           const text = this.applySpintax(s.contactEquinoxMessage.trim());
           if (targetUsername && text) {
-            // Only queue if not already pending for this user
-            const existingPending = await storage.getContactPendingMessages(profile.id, "pending");
-            const alreadyQueued = existingPending.some((m: any) => m.instagramUsername === targetUsername);
-            if (!alreadyQueued) {
-              await storage.createContactPendingMessage({
-                profileId: profile.id,
-                instagramUsername: targetUsername,
-                instagramUserId: targetUserId,
-                messageType: "equinox_user",
-                messageText: text,
-                queuedAt: new Date().toISOString(),
-                status: "pending",
-              });
-              console.log(`[engine] @${profile.username}: queued Equinox DM → @${targetUsername}`);
+            // When no-repeat is off, still avoid double-queueing into pending
+            if (!noRepeat) {
+              const existingPending = await storage.getContactPendingMessages(profile.id, "pending");
+              const alreadyQueued = existingPending.some((m: any) => m.instagramUsername === targetUsername);
+              if (alreadyQueued) {
+                console.log(`[engine] @${profile.username}: Equinox DM to @${targetUsername} already pending — skipping`);
+                return;
+              }
             }
+            await storage.createContactPendingMessage({
+              profileId: profile.id,
+              instagramUsername: targetUsername,
+              instagramUserId: targetUserId,
+              messageType: "equinox_user",
+              messageText: text,
+              queuedAt: new Date().toISOString(),
+              status: "pending",
+            });
+            console.log(`[engine] @${profile.username}: queued Equinox DM → @${targetUsername}`);
           }
         }
       } catch (e: any) {
