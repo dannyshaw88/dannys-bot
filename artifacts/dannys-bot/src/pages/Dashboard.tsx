@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.183",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "View Timeline Feed pagination: removed the hardcoded 0.8–1.5s delay between pages that was added in v1.1.182. Each page call goes through the existing API throttle (controlled by API Controls in Account Settings) — no extra sleep needed." },
+    ],
+  },
+  {
     version: "1.1.182",
     date: "26 Jun 2026",
     items: [

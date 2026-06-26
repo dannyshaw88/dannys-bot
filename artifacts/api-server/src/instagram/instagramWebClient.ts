@@ -2241,8 +2241,7 @@ export class InstagramWebClient {
 
     while (allRawItems.length < count && nextMaxId && page < MAX_PAGES) {
       console.log(`[webClient] viewTimelineFeed: page ${page + 1} — have ${allRawItems.length}/${count} items, cursor=${String(nextMaxId).slice(0, 24)}…`);
-      // Short scroll-paced pause between pages (0.8–1.5 s) to match real app behaviour
-      await new Promise<void>(r => setTimeout(r, 800 + Math.random() * 700));
+      // apiThrottle() inside mobileSessionPost enforces the delay from API Controls — no extra sleep here.
       const pageJ = await this.mobileSessionPost(
         `/api/v1/feed/timeline/`,
         new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString(),
