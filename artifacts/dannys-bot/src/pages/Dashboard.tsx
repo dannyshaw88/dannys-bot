@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.174",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Contact Tool: DMs no longer fail with 'Prompt has contribution' — the DM now uses the already-warmed session (news inbox already fetched) instead of a cold fresh client, matching exactly how Jarvee warms the session before sending." },
+      { category: "Fix", text: "Make-a-Post / Repost: fixed 'upload id is missing' error — a shard-routing cookie (rur) is now seeded with a cheap API call before the image upload begins, so both the upload and the publish step land on the same Instagram backend server every time." },
+    ],
+  },
+  {
     version: "1.1.173",
     date: "26 Jun 2026",
     items: [

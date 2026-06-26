@@ -2973,42 +2973,28 @@ export class InstagramWebClient {
     return null;
   }
 
-  // Send a DM through IgApiClient's native request stack.  This avoids all
-  // the header-assembly issues in our hand-rolled _mobileDmPost by letting the
-  // library (which was built specifically for this) handle device headers,
-  // CSRF, cookie jar management, and HTTPS-proxy routing transparently.
+  // Send a DM through the warmed IgApiClient (Jarvee cold-start sequence).
+  // Using _buildWarmedIgClient() ensures the news.inbox() warm-up has already
+  // run before broadcastText is called — this is what lifts the 4415001
+  // "Prompt has contribution" gate. A cold fresh IgApiClient (no inbox call)
+  // hits 4415001 consistently; the warmed one does not.
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
 
     await this.apiThrottle();
 
-    const ig = newIgClient();
-
-    const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
-    if (this.igDeviceState) {
-      try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
-        ig.state.generateDevice(dmDeviceSeed);
-        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
-        if (saved.uuid)         ig.state.uuid         = saved.uuid;
-        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
-        if (saved.adid)         ig.state.adid         = saved.adid;
-        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-      } catch { ig.state.generateDevice(dmDeviceSeed); }
-    } else {
-      ig.state.generateDevice(dmDeviceSeed);
+    // Reuse the cached warmed client — the warm-up (news.inbox) runs once per
+    // session and the result is cached in _warmedIgClientCache.  Creating a
+    // fresh cold client here (as before) consistently triggered 4415001.
+    const warmed = await this._buildWarmedIgClient();
+    if (!warmed) {
+      console.warn(`[webClient] sendDM ${userId}: _buildWarmedIgClient returned null — falling back to cold client`);
+      return false;
     }
-
-    await this._deserializeIgCookies(ig, this.igApiCookies);
-
-    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
-    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
-    patchIgClientTls(ig, this.proxyUrl);
+    const { ig } = warmed;
 
     try {
-      console.log(`[webClient] sendDM ${userId}: broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
+      console.log(`[webClient] sendDM ${userId}: broadcastText via warmed client (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
       const thread = ig.entity.directThread([userId]);
       const resp = await thread.broadcastText(text) as any;
       const threadId: string = resp?.payload?.thread_id ?? resp?.thread_id ?? "";
@@ -4639,46 +4625,94 @@ export class InstagramWebClient {
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
       console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
-      // Shard-routing strategy (two-layer defence):
-      //  PRIMARY — Shared HttpsProxyAgent: rupload and configure reuse the same
+      // Shard-routing strategy (three-layer defence):
+      //  PRIMARY — rur cookie pre-seed: call a cheap authenticated GET before the
+      //    rupload so Instagram sets the rur cookie in our mobileCookieJar.  Once
+      //    rur is present, both rupload AND configure include it in their Cookie
+      //    header and Instagram's LB routes both to the same backend shard.  This
+      //    is the Jarvee approach and is the most reliable shard-affinity mechanism.
+      //    Without this pre-seed, rur is absent and shard routing depends entirely
+      //    on layer 2 (shared agent), which breaks when a slow upload exhausts the
+      //    proxy TCP tunnel keep-alive.
+      //  SECONDARY — Shared HttpsProxyAgent: rupload and configure reuse the same
       //    proxy tunnel so Instagram's load balancer routes both requests to the
-      //    same backend shard. Without this, the two requests hit different shards
-      //    and configure returns "upload id is missing" even though rupload returned ok.
-      //  SECONDARY — rur cookie: _mobileRupload now ALWAYS overwrites the rur
-      //    entry in mobileCookieJar if the rupload response Set-Cookie contains one
-      //    (fixed the stale-rur bug where we skipped the update if one was already present).
-      // Only create a sharedAgent when a proxy is configured; direct connections
-      // don't need one (and HttpsProxyAgent(undefined) would throw).
-      let sharedAgent: any = undefined;
-      if (this.proxyUrl) {
-        const { HttpsProxyAgent } = await import("https-proxy-agent");
-        sharedAgent = new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 });
-        console.log(`${TAG}   Created shared HttpsProxyAgent for rupload+configure tunnel`);
+      //    same backend shard.  Helps but not sufficient alone when rur is missing
+      //    (Instagram can close the backend connection after a slow upload).
+      //  TERTIARY — rur overwrite: _mobileRupload ALWAYS overwrites the rur entry
+      //    in mobileCookieJar if the rupload response Set-Cookie contains one.
+      if (!this.mobileCookieJar.some(c => c.startsWith("rur="))) {
+        console.log(`${TAG}   rur not in mobileCookieJar — pre-seeding via current_user GET`);
+        try {
+          await this.mobileSessionGet("/api/v1/accounts/current_user/?edit=true");
+          const rurNow = this.mobileCookieJar.some(c => c.startsWith("rur="));
+          console.log(`${TAG}   rur pre-seed complete: rur=${rurNow ? "✓ seeded" : "✗ still missing (session may be cold)"}`);
+        } catch (seedErr: any) {
+          console.warn(`${TAG}   rur pre-seed failed (non-fatal): ${seedErr?.message ?? seedErr}`);
+        }
       } else {
-        console.log(`${TAG}   No proxy — using direct connection for rupload+configure`);
+        console.log(`${TAG}   rur already in mobileCookieJar — skipping pre-seed`);
+      }
+      // ── Attempt helper — one full rupload + configure cycle ─────────────────
+      // Returns the media_id string on success, null on failure.
+      // Each attempt creates its own shared agent so a dead connection from a
+      // previous slow upload never carries over.
+      const runAttempt = async (attemptNum: number): Promise<string | null> => {
+        let attemptAgent: any = undefined;
+        if (this.proxyUrl) {
+          const { HttpsProxyAgent } = await import("https-proxy-agent");
+          attemptAgent = new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 });
+          console.log(`${TAG}   [attempt ${attemptNum}] Created fresh HttpsProxyAgent`);
+        }
+        const uploadId = String(Date.now());
+        console.log(`${TAG}   [attempt ${attemptNum}] Generated uploadId=${uploadId}`);
+        try {
+          const confirmedId = await this._mobileRupload("photo", imageBuffer, uploadId, attemptAgent);
+          if (!confirmedId) {
+            console.error(`${TAG} [attempt ${attemptNum}] ✗ rupload returned null`);
+            return null;
+          }
+          console.log(`${TAG}   [attempt ${attemptNum}] Rupload OK confirmedId=${confirmedId}. Firing configure.`);
+          const mid = await this._configureViaIgClient(confirmedId, caption, false, imageBuffer, attemptAgent);
+          if (mid) {
+            console.log(`${TAG} [attempt ${attemptNum}] ✓ configure OK media_id=${mid}`);
+          } else {
+            console.error(`${TAG} [attempt ${attemptNum}] ✗ configure failed — error="${this._lastConfigureError}"`);
+          }
+          return mid;
+        } finally {
+          (attemptAgent as any)?.destroy?.();
+          console.log(`${TAG}   [attempt ${attemptNum}] Destroyed HttpsProxyAgent`);
+        }
+      };
+
+      // ── Attempt 1 ────────────────────────────────────────────────────────────
+      let mediaId = await runAttempt(1);
+
+      // ── Retry on "upload id is missing" ──────────────────────────────────────
+      // When a slow upload exhausts the proxy TCP keep-alive, Instagram closes
+      // the backend connection and configure lands on a different shard ("upload
+      // id is missing").  By the time we retry, rur is seeded (from the pre-seed
+      // GET above or from the first rupload Set-Cookie), so the retry's rupload
+      // and configure both carry rur and land on the same shard every time.
+      // We intentionally do NOT retry other error types (auth failures, rate
+      // limits, format errors) — only the shard-mismatch class of failure.
+      if (
+        !mediaId &&
+        (this._lastConfigureError?.includes("upload id") ||
+         this._lastConfigureError?.includes("upload_id") ||
+         this._lastConfigureError?.includes("missing"))
+      ) {
+        console.warn(`${TAG} ── PATH B RETRY (shard mismatch detected — rur now seeded) ──`);
+        mediaId = await runAttempt(2);
+        if (mediaId) {
+          console.log(`${TAG} ✓ PATH B succeeded on retry — media_id=${mediaId}`);
+        } else {
+          console.error(`${TAG} ✗ PATH B retry also failed — error="${this._lastConfigureError}"`);
+        }
+      } else if (!mediaId) {
+        console.error(`${TAG} ✗ PATH B configure failed — error="${this._lastConfigureError}"`);
       }
 
-      const uploadId = String(Date.now());
-      console.log(`${TAG}   Generated uploadId=${uploadId}`);
-      let confirmedUploadId: string | null = null;
-      let mediaId: string | null = null;
-      try {
-        confirmedUploadId = await this._mobileRupload("photo", imageBuffer, uploadId, sharedAgent);
-        if (!confirmedUploadId) {
-          console.error(`${TAG} ✗ PATH B rupload returned null — cannot proceed to configure`);
-          return null;
-        }
-        console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure.`);
-        mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
-        if (mediaId) {
-          console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
-        } else {
-          console.error(`${TAG} ✗ PATH B configure failed — error="${this._lastConfigureError}"`);
-        }
-      } finally {
-        (sharedAgent as any).destroy?.();
-        console.log(`${TAG}   Destroyed shared HttpsProxyAgent`);
-      }
       return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`, (result) => result !== null);
   }
