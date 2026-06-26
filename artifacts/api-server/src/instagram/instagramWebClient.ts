@@ -2187,7 +2187,10 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
+  // Paginates using next_max_id so the full count (e.g. 50–100) is reachable —
+  // Instagram returns only ~12–18 posts per call so multiple pages are needed.
   async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, reelWatchCountMin: number = 0, reelWatchCountMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }>; reelWatches?: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> }> {
+    // ── Page 1: cold_start_fetch ─────────────────────────────────────────────
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -2227,11 +2230,35 @@ export class InstagramWebClient {
       }
       return { viewed: 0 };
     }
-    const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
-    console.log(`[webClient] viewTimelineFeed: timeline returned ${rawItems.length} raw items`);
-    if (!rawItems.length) return { viewed: 0 };
 
-    const items = rawItems
+    // ── Pagination loop: keep fetching until we have `count` items ───────────
+    // Instagram returns ~12–18 posts per call. Use next_max_id as the cursor for
+    // subsequent pages (reason=pagination). Cap at 8 pages to avoid runaway loops.
+    let allRawItems: any[] = j?.feed_items ?? j?.items ?? [];
+    let nextMaxId: string | null = j?.next_max_id ?? null;
+    const MAX_PAGES = 8;
+    let page = 1;
+
+    while (allRawItems.length < count && nextMaxId && page < MAX_PAGES) {
+      console.log(`[webClient] viewTimelineFeed: page ${page + 1} — have ${allRawItems.length}/${count} items, cursor=${String(nextMaxId).slice(0, 24)}…`);
+      // Short scroll-paced pause between pages (0.8–1.5 s) to match real app behaviour
+      await new Promise<void>(r => setTimeout(r, 800 + Math.random() * 700));
+      const pageJ = await this.mobileSessionPost(
+        `/api/v1/feed/timeline/`,
+        new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString(),
+      );
+      if (!pageJ) break;
+      const pageItems: any[] = pageJ?.feed_items ?? pageJ?.items ?? [];
+      if (!pageItems.length) break;
+      allRawItems = allRawItems.concat(pageItems);
+      nextMaxId = pageJ?.next_max_id ?? null;
+      page++;
+    }
+
+    console.log(`[webClient] viewTimelineFeed: ${page} page(s) — ${allRawItems.length} raw items total`);
+    if (!allRawItems.length) return { viewed: 0 };
+
+    const items = allRawItems
       .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
       .filter((m: any) => m?.id || m?.pk)
       .slice(0, count);

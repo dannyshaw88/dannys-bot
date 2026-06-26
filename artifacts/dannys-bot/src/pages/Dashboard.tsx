@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.182",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "View Timeline Feed now paginates properly. Instagram returns only ~12–18 posts per API call, so setting 50–100 posts was always stopping at the first page. The tool now fetches additional pages using the next_max_id cursor until the target count is reached (up to 8 pages)." },
+    ],
+  },
+  {
     version: "1.1.181",
     date: "26 Jun 2026",
     items: [
