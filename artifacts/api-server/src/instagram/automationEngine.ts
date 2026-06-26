@@ -27,7 +27,7 @@ import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs, browserSendDM } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
 import * as fsPromises from "node:fs/promises";
@@ -1452,7 +1452,7 @@ class AutomationEngine {
     for (const msg of queue) {
       if (state.stop.stopped) break;
       try {
-        let result = await client.sendDirectMessage(msg.instagramUserId, msg.messageText, msg.instagramUsername);
+        const result = await client.sendDirectMessage(msg.instagramUserId, msg.messageText, msg.instagramUsername);
         if (result === "blocked") {
           // Jarvee ABD dismiss — try before suspending the DM tool
           await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
@@ -1473,24 +1473,7 @@ class AutomationEngine {
           // Do not trigger Stop Tool if Blocked for ABD errors.
           break;
         }
-        // If mobile API DM failed (e.g. 4415001 "Prompt has contribution" blocks the
-        // mobile endpoint), fall back to sending through the live browser session.
-        // browserSendDM() uses page.evaluate + fetch() with the browser's own cookies
-        // on www.instagram.com — this context bypasses the mobile-API 4415001 gate.
-        // Returns null (not an object) if no browser session is open for this profile.
-        if (!result) {
-          console.warn(`[engine] @${profile.username}: mobile API DM to @${msg.instagramUsername} failed — attempting browser-session fallback`);
-          const browserResult = await browserSendDM(profile.id, msg.instagramUserId, msg.messageText).catch(() => null);
-          if (browserResult && browserResult !== "blocked") {
-            console.log(`[engine] @${profile.username}: 📩 contact DM sent via browser fallback to @${msg.instagramUsername}`);
-            result = browserResult;
-          } else if (browserResult === "blocked") {
-            console.warn(`[engine] @${profile.username}: browser DM also blocked for @${msg.instagramUsername}`);
-          } else {
-            console.warn(`[engine] @${profile.username}: browser DM fallback also failed for @${msg.instagramUsername} (no session or error)`);
-          }
-        }
-        if (result && result !== "blocked") {
+        if (result) {
           sent++;
           const sentAt = new Date().toISOString();
           const unsendAt = unsendEnabled
@@ -1499,8 +1482,8 @@ class AutomationEngine {
           await storage.updateContactPendingMessage(msg.id, {
             status: "sent",
             sentAt,
-            dmThreadId: (result as any).threadId || undefined,
-            dmItemId: (result as any).itemId || undefined,
+            dmThreadId: result.threadId || undefined,
+            dmItemId: result.itemId || undefined,
             unsendAt: unsendAt ?? undefined,
           });
           await storage.createContactDmSent({
@@ -1516,8 +1499,10 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
         } else {
-          // All send paths failed — leave as "pending" so it's retried next cycle.
-          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (all paths, will retry)`);
+          // Non-block send failure (session error, network, transient Instagram error)
+          // — leave as "pending" so it's automatically retried on the next send cycle.
+          // Only "blocked" results are permanently failed.
+          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block, will retry)`);
           this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed (will retry)");
           break; // stop this batch but keep message pending
         }
