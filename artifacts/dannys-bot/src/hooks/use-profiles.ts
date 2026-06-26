@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api, buildUrl, type InsertProfile } from "@shared/routes";
 
 export function useProfiles() {
@@ -30,6 +30,10 @@ export function useProfiles() {
       return parsed;
     },
     refetchInterval: 5000,
+    // keepPreviousData: always show the last successful data during background
+    // refetches (e.g. after invalidateQueries following account deletion) so the
+    // UI never flashes a skeleton/loading state that greys out all controls.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -42,6 +46,9 @@ export function useCreatorProfiles() {
       return api.profiles.list.responses[200].parse(await res.json());
     },
     refetchInterval: 5000,
+    // Same keepPreviousData guard — prevent creator-mode list from greying out
+    // the account creation page during post-delete refetches.
+    placeholderData: keepPreviousData,
   });
 }
 

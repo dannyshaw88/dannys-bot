@@ -3966,12 +3966,23 @@ export class InstagramWebClient {
     const entityType = isPhoto ? "image/jpeg" : "video/mp4";
     const ruploadPath = isPhoto ? `/rupload_igphoto/${suffix}` : `/rupload_igvideo/${suffix}`;
     const waterfallHeader = isPhoto ? "X_FB_PHOTO_WATERFALL_ID" : "X_FB_VIDEO_WATERFALL_ID";
+    // ATTEMPT 4 (2026-06-26): Removed image_compression from rupload params.
+    // Reason: when image_compression: {lib_name:"moz"} is present, Instagram's
+    // rupload transcoder attempts to apply MozJPEG decompression to the payload.
+    // If the uploaded JPEG was not produced by MozJPEG (even after re-encoding via
+    // sharp), the transcoder silently stores the upload on a different internal path
+    // and configure cannot locate it → "upload id is missing" (500).
+    // Real Instagram Android clients omit this param when using the standard JPEG
+    // encoder — we mirror that behaviour here.
+    // Log first 4 bytes of the buffer to verify JPEG magic (0xFF 0xD8 0xFF).
+    const magic4 = buffer.slice(0, 4).toString("hex").toUpperCase();
+    console.log(`${TAG}   Buffer first 4 bytes (hex): ${magic4} — JPEG=${magic4.startsWith("FFD8FF") ? "✓" : "✗ NOT JPEG — possible format issue"}`);
     const ruploadParamsObj = {
       retry_context: JSON.stringify({ num_step_auto_retry: 0, num_reupload: 0, num_step_manual_retry: 0 }),
       media_type: isPhoto ? "1" : "2",
       upload_id: uploadId,
       xsharing_user_ids: JSON.stringify([]),
-      ...(isPhoto ? { image_compression: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "80" }) } : {}),
+      // image_compression intentionally omitted — see ATTEMPT 4 note above.
     };
     const ruploadParams = JSON.stringify(ruploadParamsObj);
 
@@ -4389,7 +4400,9 @@ export class InstagramWebClient {
       console.error(`${TAG}     Cause 1: TLS stack mismatch (rupload used Node.js HTTPS, configure used CycleTLS)`);
       console.error(`${TAG}     Cause 2: rur cookie was missing → configure landed on different Instagram shard`);
       console.error(`${TAG}     Cause 3: uploadId expired (configure called too long after rupload)`);
+      console.error(`${TAG}     Cause 4: image_compression rupload header triggered server-side MozJPEG path that stores upload on different internal key`);
       console.error(`${TAG}     rur in mobileCookieJar: ${this.mobileCookieJar.some(c => c.startsWith("rur=")) ? "✓ present" : "✗ MISSING"}`);
+      console.error(`${TAG}     → ATTEMPT 4 fix: image_compression removed from rupload. If still failing, check image magic bytes in rupload log.`);
     } else if (errMsg.includes("not_authorized") || res.status === 403) {
       console.error(`${TAG}   ► DIAGNOSIS: not_authorized. Possible CSRF token mismatch.`);
       console.error(`${TAG}     csrf used: "${csrf.slice(0,12)}…" expected to match csrftoken in cookie jar`);
@@ -4682,9 +4695,16 @@ export class InstagramWebClient {
       //  SECONDARY — rur cookie: _mobileRupload now ALWAYS overwrites the rur
       //    entry in mobileCookieJar if the rupload response Set-Cookie contains one
       //    (fixed the stale-rur bug where we skipped the update if one was already present).
-      const { HttpsProxyAgent } = await import("https-proxy-agent");
-      const sharedAgent = new HttpsProxyAgent(this.proxyUrl!, { keepAlive: true, maxSockets: 1 });
-      console.log(`${TAG}   Created shared HttpsProxyAgent for rupload+configure tunnel`);
+      // Only create a sharedAgent when a proxy is configured; direct connections
+      // don't need one (and HttpsProxyAgent(undefined) would throw).
+      let sharedAgent: any = undefined;
+      if (this.proxyUrl) {
+        const { HttpsProxyAgent } = await import("https-proxy-agent");
+        sharedAgent = new HttpsProxyAgent(this.proxyUrl, { keepAlive: true, maxSockets: 1 });
+        console.log(`${TAG}   Created shared HttpsProxyAgent for rupload+configure tunnel`);
+      } else {
+        console.log(`${TAG}   No proxy — using direct connection for rupload+configure`);
+      }
 
       const uploadId = String(Date.now());
       console.log(`${TAG}   Generated uploadId=${uploadId}`);
@@ -4697,7 +4717,22 @@ export class InstagramWebClient {
           return null;
         }
         console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure immediately.`);
-        mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
+        // ATTEMPT 4: retry configure up to 3 times with a 2 s delay on "upload id
+        // is missing" — Instagram's distributed storage occasionally needs a brief
+        // moment to propagate the upload to the configure shard even when both
+        // requests use the same proxy tunnel and TLS stack.
+        for (let configureAttempt = 1; configureAttempt <= 3; configureAttempt++) {
+          if (configureAttempt > 1) {
+            console.log(`${TAG}   Configure attempt ${configureAttempt}/3 — waiting 2 s for shard propagation…`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+          mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
+          if (mediaId) break;
+          if (this._lastConfigureError && !(this._lastConfigureError.includes("upload id") || this._lastConfigureError.includes("upload_id"))) {
+            console.log(`${TAG}   Configure failed with non-shard error ("${this._lastConfigureError}") — no retry`);
+            break;
+          }
+        }
         if (mediaId) {
           console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
         } else {
