@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Clock, Send, Timer, Shuffle, Undo2, Trash2, RefreshCw, Users, CheckCircle2, Zap,
+  Clock, Send, Timer, Undo2, Trash2, RefreshCw, Users, CheckCircle2, Zap, Shuffle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type ContactPendingMessage } from "@shared/schema";
@@ -78,11 +78,20 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
   const sent = [...(allMessages?.filter(m => m.status !== "pending") ?? [])]
     .sort((a, b) => new Date(b.sentAt ?? b.queuedAt).getTime() - new Date(a.sentAt ?? a.queuedAt).getTime());
 
+  const [equinoxPreview, setEquinoxPreview] = useState("");
+
+  function applySpintax(text: string): string {
+    return text.replace(/\{([^}]+)\}/g, (_, group) => {
+      const parts = group.split("|");
+      return parts[Math.floor(Math.random() * parts.length)];
+    });
+  }
+
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
       contactUsersEnabled: true,
-      contactUsersWaitMin: 30,
-      contactUsersWaitMax: 60,
+      contactEquinoxUserEnabled: false,
+      contactEquinoxMessage: "",
       contactUsersSendCountMin: 1,
       contactUsersSendCountMax: 5,
       contactUsersDelayBetweenMin: 5,
@@ -167,17 +176,6 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
                 </span>
               );
             })()}
-            {settings.contactUsersEnabled && (() => {
-              const avgWait = ((settings.contactUsersWaitMin ?? 30) + (settings.contactUsersWaitMax ?? 60)) / 2;
-              const avgSend = ((settings.contactUsersSendCountMin ?? 1) + (settings.contactUsersSendCountMax ?? 5)) / 2;
-              const perHour = avgWait > 0 ? Math.round((avgSend / avgWait) * 60) : 0;
-              const perDay = perHour * 24;
-              return perHour > 0 ? (
-                <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
-                  {perHour}/hr · {perDay}/day
-                </span>
-              ) : null;
-            })()}
           </div>
         </div>
       </div>
@@ -188,21 +186,8 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
           <h4 className="font-semibold text-sm">Send Settings</h4>
         </div>
 
-        {/* Wait between batches · Messages per batch · Delay between messages — all on one row */}
+        {/* Messages per batch · Delay between messages */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <div className="flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Wait Between Batches (min)</span>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              {numInput("contactUsersWaitMin", 1, 10000)}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              {numInput("contactUsersWaitMax", 1, 10000)}
-            </div>
-          </div>
-          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
           <div className="flex items-center gap-2">
             <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Per Batch</span>
@@ -230,34 +215,100 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
           </div>
         </div>
 
-        {/* Pick random */}
-        {checkRow(
-          "contactUsersPickRandom",
-          "contactUsersPickRandom",
-          "Pick a random message rather than in order",
-          "When enabled, messages are picked randomly from the pending queue instead of FIFO."
-        )}
-
-        {/* Unsend */}
-        {checkRow(
-          "contactUsersUnsendEnabled",
-          "contactUsersUnsendEnabled",
-          "Unsend message after a delay",
-          undefined
-        )}
-
-        {settings.contactUsersUnsendEnabled && (
-          <div className="flex items-center gap-2 flex-wrap pl-6">
-            <Undo2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Unsend After (min)</span>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              {numInput("contactUsersUnsendMin", 1, 10000)}
+        {/* Pick random + Unsend — same row */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="contactUsersPickRandom"
+              checked={!!settings.contactUsersPickRandom}
+              onChange={(e) => setSettings({ ...settings, contactUsersPickRandom: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="contactUsersPickRandom" className="text-sm font-medium cursor-pointer select-none">
+              Pick a random message rather than in order
+            </label>
+          </div>
+          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="contactUsersUnsendEnabled"
+                checked={!!settings.contactUsersUnsendEnabled}
+                onChange={(e) => setSettings({ ...settings, contactUsersUnsendEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="contactUsersUnsendEnabled" className="text-sm font-medium cursor-pointer select-none whitespace-nowrap">
+                Unsend message after a delay
+              </label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              {numInput("contactUsersUnsendMax", 1, 10000)}
+            {settings.contactUsersUnsendEnabled && (
+              <div className="flex items-center gap-2">
+                <Undo2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Unsend After (min)</span>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Min</Label>
+                  {numInput("contactUsersUnsendMin", 1, 10000)}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Max</Label>
+                  {numInput("contactUsersUnsendMax", 1, 10000)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Message an Equinox User */}
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="contactEquinoxUserEnabled"
+            checked={!!settings.contactEquinoxUserEnabled}
+            onChange={(e) => setSettings({ ...settings, contactEquinoxUserEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 mt-0.5 accent-primary cursor-pointer shrink-0"
+          />
+          <div>
+            <label htmlFor="contactEquinoxUserEnabled" className="text-sm font-medium cursor-pointer select-none">
+              Message an Equinox User
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Each session, queue a DM to a randomly picked account from this software's Accounts page.
+            </p>
+          </div>
+        </div>
+
+        {settings.contactEquinoxUserEnabled && (
+          <div className="space-y-2 pl-6">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message</Label>
+              <button
+                onClick={() => setEquinoxPreview(applySpintax(settings.contactEquinoxMessage ?? ""))}
+                className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
+              >
+                <Shuffle className="w-3 h-3" />
+                Preview spin
+              </button>
             </div>
+            <textarea
+              rows={3}
+              className="w-full text-sm border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              placeholder={`{Hi|Hey|Hello} @USERNAME, {check out|have a look at} our latest posts!`}
+              value={settings.contactEquinoxMessage ?? ""}
+              onChange={(e) => {
+                setSettings({ ...settings, contactEquinoxMessage: e.target.value });
+                setEquinoxPreview("");
+              }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Use <code className="bg-muted px-1 rounded">{"{Hi|Hello|Hey}"}</code> syntax to randomly pick one option per send.
+            </p>
+            {equinoxPreview && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800">
+                <span className="font-semibold text-[11px] text-blue-500 uppercase tracking-wider block mb-0.5">Preview</span>
+                {equinoxPreview}
+              </div>
+            )}
           </div>
         )}
 

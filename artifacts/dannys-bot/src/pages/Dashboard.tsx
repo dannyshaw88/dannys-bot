@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.171",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Feature", text: "Contact Tool → Contact Users Sending: new 'Message an Equinox User' option — each session, a DM is automatically queued to a randomly picked account in the software. Includes a full SpinTax message template." },
+      { category: "Improvement", text: "Contact Tool → Contact Users Sending: 'Pick a random message' and 'Unsend message after a delay' are now on the same row with Unsend After (min) inline." },
+      { category: "Improvement", text: "Contact Tool → Contact Users Sending: removed standalone 'Wait Between Batches' setting — timing is controlled by the Human Session's Execute Every interval instead." },
+    ],
+  },
+  {
     version: "1.1.170",
     date: "26 Jun 2026",
     items: [

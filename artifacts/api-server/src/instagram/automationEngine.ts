@@ -1367,6 +1367,42 @@ class AutomationEngine {
       return 0;
     }
 
+    // Equinox User: queue a DM to a randomly picked account from the software each session
+    if (s.contactEquinoxUserEnabled && (s.contactEquinoxMessage ?? "").trim()) {
+      try {
+        const allProfiles = await storage.getProfiles();
+        const candidates = (allProfiles as any[]).filter(p => p.id !== profile.id);
+        if (candidates.length > 0) {
+          const target = candidates[Math.floor(Math.random() * candidates.length)];
+          const targetUsername: string = target.username ?? "";
+          // Extract ds_user_id from igApiCookies: "sessionid=X;csrftoken=Y;ds_user_id=Z;..."
+          const igApiCookies: string = (target as any).igApiCookies ?? "";
+          const dsMatch = igApiCookies.match(/ds_user_id=([^;]+)/);
+          const targetUserId = dsMatch?.[1] ?? "";
+          const text = this.applySpintax(s.contactEquinoxMessage.trim());
+          if (targetUsername && text) {
+            // Only queue if not already pending for this user
+            const existingPending = await storage.getContactPendingMessages(profile.id, "pending");
+            const alreadyQueued = existingPending.some((m: any) => m.instagramUsername === targetUsername);
+            if (!alreadyQueued) {
+              await storage.createContactPendingMessage({
+                profileId: profile.id,
+                instagramUsername: targetUsername,
+                instagramUserId: targetUserId,
+                messageType: "equinox_user",
+                messageText: text,
+                queuedAt: new Date().toISOString(),
+                status: "pending",
+              });
+              console.log(`[engine] @${profile.username}: queued Equinox DM → @${targetUsername}`);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: equinox user queue error: ${e?.message}`);
+      }
+    }
+
     const pending = await storage.getContactPendingMessages(profile.id, "pending");
     if (!pending.length) {
       console.log(`[engine] @${profile.username}: no pending contact messages to send`);
