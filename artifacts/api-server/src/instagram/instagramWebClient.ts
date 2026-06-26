@@ -2980,31 +2980,46 @@ export class InstagramWebClient {
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
 
-    // Use _buildWarmedIgClient() instead of constructing a cold IgApiClient.
-    // _buildWarmedIgClient runs the Jarvee cold-start sequence (news/inbox) which
-    // lifts the 4415001 "Prompt has contribution" gate on broadcastText — a cold
-    // client that skips this warm-up call gets 4415001 on every DM attempt.
-    // The warmed client is cached per-session so this is cheap after the first call.
-    const built = await this._buildWarmedIgClient();
-    if (!built) return false;
-    const { ig } = built;
-
     await this.apiThrottle();
 
-    try {
-      console.log(`[webClient] sendDM ${userId}: via warmed IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
+    const ig = newIgClient();
 
+    const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        ig.state.generateDevice(dmDeviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch { ig.state.generateDevice(dmDeviceSeed); }
+    } else {
+      ig.state.generateDevice(dmDeviceSeed);
+    }
+
+    await this._deserializeIgCookies(ig, this.igApiCookies);
+
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
+
+    try {
+      console.log(`[webClient] sendDM ${userId}: broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
       const thread = ig.entity.directThread([userId]);
       const resp = await thread.broadcastText(text) as any;
       const threadId: string = resp?.payload?.thread_id ?? resp?.thread_id ?? "";
       const itemId: string   = resp?.payload?.item_id  ?? resp?.item_id  ?? "";
-      console.log(`[webClient] sendDM ${userId}: IgApiClient SUCCESS threadId=${threadId} itemId=${itemId}`);
+      console.log(`[webClient] sendDM ${userId}: SUCCESS threadId=${threadId} itemId=${itemId}`);
       return { threadId, itemId };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
       const body = err?.response?.body ?? err?.text ?? err?.response?.text;
-      console.warn(`[webClient] sendDM ${userId}: IgApiClient error —`, msg);
-      if (body) console.warn(`[webClient] sendDM ${userId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 600));
+      console.warn(`[webClient] sendDM ${userId}: error —`, msg);
+      if (body) console.warn(`[webClient] sendDM ${userId}: raw body —`, JSON.stringify(body)?.slice(0, 600));
       if (/feedback_required|ActionBlocked/i.test(msg)) return "blocked";
       if (/login_required|Not authorized/i.test(msg))   return "session_expired";
       return false;
