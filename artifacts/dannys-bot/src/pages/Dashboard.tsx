@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.178",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make-a-Post / Repost: fixed the 'upload id is missing' configure error — the rur shard-routing cookie is now read instantly from the browser cookie file (which always has it) instead of relying on a slow 3-minute API call that often times out without returning one. This means rupload and configure now land on the same Instagram backend server." },
+    ],
+  },
+  {
     version: "1.1.177",
     date: "26 Jun 2026",
     items: [

@@ -4724,7 +4724,31 @@ export class InstagramWebClient {
       //  TERTIARY — rur overwrite: _mobileRupload ALWAYS overwrites the rur entry
       //    in mobileCookieJar if the rupload response Set-Cookie contains one.
       if (!this.mobileCookieJar.some(c => c.startsWith("rur="))) {
-        console.log(`${TAG}   rur not in mobileCookieJar — pre-seeding via current_user GET`);
+        // LAYER 0: Read rur directly from the browser cookie file first — it's always
+        // present there (loaded by loadBrowserCookies into this.cookieJar) but is never
+        // copied into mobileCookieJar.  This is instant and doesn't need a network call.
+        try {
+          const cookieFilePath = process.env.DATABASE_PATH
+            ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data", `cookies-${this.profileId}.json`)
+            : path.join(process.cwd(), "server", "browser-data", `cookies-${this.profileId}.json`);
+          if (this.profileId && fs.existsSync(cookieFilePath)) {
+            const raw = fs.readFileSync(cookieFilePath, "utf8");
+            const puppeteerCookies: Array<{ name: string; value: string; domain?: string }> = JSON.parse(raw);
+            const rurCookie = puppeteerCookies.find(c => c.name === "rur" && (c.domain ?? "").includes("instagram.com"));
+            if (rurCookie) {
+              this.mobileCookieJar = this.mobileCookieJar.filter(c => !c.startsWith("rur="));
+              this.mobileCookieJar.push(`rur=${rurCookie.value}`);
+              console.log(`${TAG}   rur seeded from browser cookie file — ${rurCookie.value.slice(0, 20)}…`);
+            }
+          }
+        } catch (fileErr: any) {
+          console.warn(`${TAG}   rur browser-file read failed (non-fatal): ${fileErr?.message}`);
+        }
+      }
+      if (!this.mobileCookieJar.some(c => c.startsWith("rur="))) {
+        // LAYER 1: If browser file didn't have rur, try a cheap API call to get Instagram
+        // to set it (the Jarvee approach).  Slow on cold proxy but guarantees a fresh value.
+        console.log(`${TAG}   rur not in mobileCookieJar after file read — pre-seeding via current_user GET`);
         try {
           await this.mobileSessionGet("/api/v1/accounts/current_user/?edit=true");
           const rurNow = this.mobileCookieJar.some(c => c.startsWith("rur="));
@@ -4733,7 +4757,7 @@ export class InstagramWebClient {
           console.warn(`${TAG}   rur pre-seed failed (non-fatal): ${seedErr?.message ?? seedErr}`);
         }
       } else {
-        console.log(`${TAG}   rur already in mobileCookieJar — skipping pre-seed`);
+        console.log(`${TAG}   rur already in mobileCookieJar — skipping API pre-seed`);
       }
       // ── Attempt helper — one full rupload + configure cycle ─────────────────
       // Returns the media_id string on success, null on failure.
