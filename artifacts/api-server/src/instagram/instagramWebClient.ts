@@ -384,10 +384,6 @@ export class InstagramWebClient {
   // launcher/sync → tokens/keyed → user.info → qe/sync) on every task cycle.
   private _warmedIgClientCache: { ig: IgApiClient; ownUserId: string } | null = null;
   private _warmedIgClientCookieKey = "";
-  // Set by resetWarmedClient() (called after a full re-verify). _buildWarmedIgClient
-  // skips its own qe/sync (FetchConfig) call for 120 s after a verify — verify already
-  // fires FetchConfig in Phase 2b, so calling it again immediately is redundant.
-  private _verifyRanFetchConfigAt = 0;
 
   // API throttle — enforces the per-profile "x calls every y seconds" limit.
   // Computed as a per-call delay = everySeconds / requestsCount, so all calls
@@ -496,9 +492,6 @@ export class InstagramWebClient {
     }
     this._warmedIgClientCache    = null;
     this._warmedIgClientCookieKey = "";
-    // Mark that verify just ran FetchConfig so _buildWarmedIgClient can skip its
-    // own qe/sync call for the next 120 s (avoids back-to-back double-FetchConfig).
-    this._verifyRanFetchConfigAt = Date.now();
   }
 
   // Returns the saved ig_did from igDeviceState (most authoritative source — written by
@@ -1701,30 +1694,10 @@ export class InstagramWebClient {
       await this.timed("NotificationsBadge", async () => { await ig.news.inbox(); return true; }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: news/inbox (non-fatal): ${e?.message}`); }
-    // Skip FetchConfig if verify just ran it (within the last 120 s) to avoid
-    // back-to-back double qe/sync calls — verify fires it in Phase 2b, and there
-    // is no benefit to repeating it immediately inside the same session.
-    const secsSinceVerify = (Date.now() - this._verifyRanFetchConfigAt) / 1000;
-    if (secsSinceVerify < 120) {
-      console.log(`[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) SKIPPED (verify ran it ${secsSinceVerify.toFixed(0)}s ago)`);
-    } else {
-      try {
-        await this.timed("FetchConfig", async () => {
-          await ig.request.send({
-            url: "/api/v1/qe/sync/",
-            method: "POST",
-            form: ig.request.sign({
-              id: ig.state.uuid,
-              server_config_retrieval: "1",
-              _csrftoken: ig.state.cookieCsrfToken,
-              _uuid: ig.state.uuid,
-            }),
-          });
-          return true;
-        }, "Cold-start warm-up");
-        console.log("[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) OK");
-      } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: qe/sync (non-fatal): ${e?.message}`); }
-    }
+    // qe/sync (FetchConfig) is intentionally NOT called here.
+    // FetchConfig belongs exclusively to the verify bootstrap (Phase 2b in
+    // verifyInstagramCredentials). Calling it again inside _buildWarmedIgClient
+    // would produce a redundant back-to-back double qe/sync — not normal behaviour.
 
     // Store in cache so subsequent calls within the same session skip the bootstrap.
     // Invalidated by setDeviceInfo() when igApiCookies changes (re-verify).
