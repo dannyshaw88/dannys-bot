@@ -4716,23 +4716,8 @@ export class InstagramWebClient {
           console.error(`${TAG} ✗ PATH B rupload returned null — cannot proceed to configure`);
           return null;
         }
-        console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure immediately.`);
-        // ATTEMPT 4: retry configure up to 3 times with a 2 s delay on "upload id
-        // is missing" — Instagram's distributed storage occasionally needs a brief
-        // moment to propagate the upload to the configure shard even when both
-        // requests use the same proxy tunnel and TLS stack.
-        for (let configureAttempt = 1; configureAttempt <= 3; configureAttempt++) {
-          if (configureAttempt > 1) {
-            console.log(`${TAG}   Configure attempt ${configureAttempt}/3 — waiting 2 s for shard propagation…`);
-            await new Promise(r => setTimeout(r, 2000));
-          }
-          mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
-          if (mediaId) break;
-          if (this._lastConfigureError && !(this._lastConfigureError.includes("upload id") || this._lastConfigureError.includes("upload_id"))) {
-            console.log(`${TAG}   Configure failed with non-shard error ("${this._lastConfigureError}") — no retry`);
-            break;
-          }
-        }
+        console.log(`${TAG}   Rupload succeeded — confirmedUploadId=${confirmedUploadId}. Firing configure.`);
+        mediaId = await this._configureViaIgClient(confirmedUploadId, caption, false, imageBuffer, sharedAgent);
         if (mediaId) {
           console.log(`${TAG} ✓ PATH B succeeded — media_id=${mediaId}`);
         } else {
