@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.166",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Profile detail page: tool settings and fields no longer go grey or disappear mid-session when the embedded browser is active or account statuses are updating. The page now keeps showing existing data during background refreshes instead of briefly replacing everything with a loading state." },
+    ],
+  },
+  {
     version: "1.1.165",
     date: "25 Jun 2026",
     items: [

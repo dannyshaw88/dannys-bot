@@ -57,6 +57,8 @@ export function useProfile(id: number) {
       return api.profiles.get.responses[200].parse(await res.json());
     },
     enabled: !!id,
+    staleTime: 10_000,
+    refetchOnWindowFocus: false,
   });
 }
 

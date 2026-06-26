@@ -786,7 +786,7 @@ export function ProfileDetailsPage() {
     }
   };
 
-  if (profileLoading || toolsLoading) {
+  if ((profileLoading && !profile) || (toolsLoading && !tools)) {
     return <AppLayout><div className="p-8 text-muted-foreground">Loading profile...</div></AppLayout>;
   }
 

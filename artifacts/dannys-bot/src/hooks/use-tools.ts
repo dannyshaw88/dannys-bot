@@ -12,6 +12,8 @@ export function useTools(profileId: number) {
       return api.tools.listByProfile.responses[200].parse(await res.json());
     },
     enabled: !!profileId,
+    staleTime: 10_000,
+    refetchOnWindowFocus: false,
   });
 }
 
