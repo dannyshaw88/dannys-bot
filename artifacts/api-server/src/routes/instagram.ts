@@ -480,9 +480,13 @@ export async function registerInstagramRoutes(
       }
       const cm = req.query.creatorMode;
       let filtered: typeof all;
-      if (cm === "1") filtered = all.filter((p: any) => p.creatorMode);
-      else if (cm === "0") filtered = all.filter((p: any) => !p.creatorMode);
-      else filtered = all;
+      // Always exclude isTemplate accounts — they are TrustScore skeleton profiles
+      // managed exclusively via /api/trust-score-templates and must never appear
+      // in the Account Manager or any tool that reads the general profiles list.
+      const nonTemplate = all.filter((p: any) => !p.isTemplate);
+      if (cm === "1") filtered = nonTemplate.filter((p: any) => p.creatorMode);
+      else if (cm === "0") filtered = nonTemplate.filter((p: any) => !p.creatorMode);
+      else filtered = nonTemplate;
       console.log(`[DEBUG profiles/list] after creatorMode(${cm}) filter: ${filtered.length} rows`);
       // Attach live EB fingerprint stats (battery %, connection Mbps) for any
       // profile that currently has an open browser session.  Null when the EB
@@ -5046,6 +5050,24 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
         }
       } catch (e) {
         req.log.warn({ err: e }, "import-eqx: failed to import stats (non-fatal)");
+      }
+
+      // Import API calls log
+      try {
+        if (Array.isArray(payload.apiCalls) && payload.apiCalls.length > 0) {
+          await storage.bulkInsertInstagramApiCalls(payload.apiCalls.map((c: any) => ({
+            profileId: created.id,
+            operationName: c.operationName || "",
+            date: c.date || new Date().toISOString(),
+            message: c.message ?? "",
+            source: c.source ?? "",
+            navChain: c.navChain ?? "",
+            ipAddress: c.ipAddress ?? "",
+            durationMs: c.durationMs ?? 0,
+          })));
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to import api calls log (non-fatal)");
       }
 
       // Import pre-status-change hits

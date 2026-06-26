@@ -276,7 +276,7 @@ class AutomationEngine {
       // independently of this flag, so it still staggers even on a manual toggle.
       const runImmediately = this.initialized;
 
-      const profiles = (await storage.getProfiles()).filter((p: any) => !p.creatorMode);
+      const profiles = (await storage.getProfiles()).filter((p: any) => !p.creatorMode && !p.isTemplate);
 
       // Keep the username cache current so the HTTP logger can resolve IDs → names.
       profileUsernameCache.setMany(profiles);
@@ -1371,7 +1371,7 @@ class AutomationEngine {
     if (s.contactEquinoxUserEnabled && (s.contactEquinoxMessage ?? "").trim()) {
       try {
         const allProfiles = await storage.getProfiles();
-        let candidates = (allProfiles as any[]).filter(p => p.id !== profile.id);
+        let candidates = (allProfiles as any[]).filter(p => p.id !== profile.id && !p.isTemplate);
 
         // Build the set of usernames already messaged via the Equinox source.
         // When contactEquinoxNoRepeat is enabled, this covers both still-pending

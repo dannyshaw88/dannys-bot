@@ -4624,6 +4624,8 @@ export class InstagramWebClient {
       }
 
       // ── Fallback: hand-rolled rupload + configure ──────────────────────────
+      // Clear stale PATH A error so any PATH B failure message reflects only PATH B.
+      this._lastConfigureError = "";
       console.log(`${TAG} ── PATH B: hand-rolled rupload + configure ───────────`);
       // Shard-routing strategy (three-layer defence):
       //  PRIMARY — rur cookie pre-seed: call a cheap authenticated GET before the
@@ -4669,6 +4671,7 @@ export class InstagramWebClient {
           const confirmedId = await this._mobileRupload("photo", imageBuffer, uploadId, attemptAgent);
           if (!confirmedId) {
             console.error(`${TAG} [attempt ${attemptNum}] ✗ rupload returned null`);
+            this._lastConfigureError = "rupload rejected — session expired or auth failure (see rupload log above)";
             return null;
           }
           console.log(`${TAG}   [attempt ${attemptNum}] Rupload OK confirmedId=${confirmedId}. Firing configure.`);

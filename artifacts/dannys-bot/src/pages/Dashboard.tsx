@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.175",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make-a-Post / Repost: when the image upload is rejected by Instagram (session expired), the error message now correctly says 'session expired or auth failure' — previously it was showing an unrelated error from an earlier step." },
+      { category: "Fix", text: "Contact Tool: the Equinox User DM feature no longer picks TrustScore skeleton accounts as recipients — only real accounts are included in the pool." },
+      { category: "Fix", text: "Account Manager: TrustScore skeleton accounts are now completely hidden from the accounts list — they only appear in the TrustScore section where they belong." },
+    ],
+  },
+  {
     version: "1.1.174",
     date: "26 Jun 2026",
     items: [
