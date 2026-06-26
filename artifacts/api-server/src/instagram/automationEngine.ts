@@ -3177,6 +3177,8 @@ class AutomationEngine {
               const uploadErr = client.lastUploadError || "Upload failed";
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}: ${uploadErr}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", uploadErr);
+              // If rupload returned login_required the session is expired — flag it
+              // now so the summary log below can recommend re-verification.
               break;
             }
           }
@@ -3188,10 +3190,18 @@ class AutomationEngine {
               console.warn(`[engine] @${profile.username}: 🔁 repost skipped — feed returned 0 items for @${sourceUsername} (possible API issue)`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `Feed returned no items for @${sourceUsername}`);
             } else if (uploadAttempted > 0) {
-              // We found new posts but the upload itself failed — session/network issue, not exhausted.
-              // Do NOT auto-disable; the next session will retry.
-              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} will retry next session`);
+              // We found new posts but the upload itself failed.
+              if (client.lastUploadLoginRequired) {
+                // Session expired — rupload returned 403 login_required.
+                // Do NOT retry without re-verifying; the session cookie is dead.
+                console.warn(`[engine] @${profile.username}: 🔁 repost skipped — upload rejected (session expired / login_required). Re-verify this account to resume reposting.`);
+                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed: session expired — re-verify account to resume reposting`);
+              } else {
+                // Generic upload failure — session/network issue, not exhausted.
+                // Do NOT auto-disable; the next session will retry.
+                console.warn(`[engine] @${profile.username}: 🔁 repost skipped — ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
+                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} will retry next session`);
+              }
             } else if (s.repostDisableWhenExhausted) {
               // uploadAttempted === 0: every item in the feed was already in our reposted DB — truly exhausted.
               // Disable only the repost sub-feature — never the entire human_sessions tool.

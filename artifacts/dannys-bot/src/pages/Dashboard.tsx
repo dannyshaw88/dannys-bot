@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.176",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Make-a-Post / Repost: when the upload is rejected with 'session expired / login required', the activity log now says 'Re-verify account to resume reposting' instead of the generic 'will retry' — so you know exactly what action to take." },
+      { category: "Fix", text: "Contact Tool / Send-a-Message: DMs that fail with error 4415001 'Prompt has contribution' are now correctly treated as blocked (same as ActionBlocked) — stops the tool from retrying an account-level Instagram restriction indefinitely." },
+      { category: "Improvement", text: "Make-a-Post debugging log added to the code — tracks all known upload failure causes and fixes so future issues are faster to diagnose." },
+    ],
+  },
+  {
     version: "1.1.175",
     date: "26 Jun 2026",
     items: [

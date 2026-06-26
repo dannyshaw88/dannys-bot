@@ -27,6 +27,26 @@
 // ║    • instagram-private-api default v222 → checkpoint_required unsupported   ║
 // ║      (fix: override ig.state.constants.APP_VERSION to MOBILE_VERSION)       ║
 // ║                                                                              ║
+// ║  MAKE-A-POST / REPOST DEBUGGING LOG (add new failures here):                ║
+// ║    [25 Jun 2026] ProcessingFailedError on rupload — raw downloaded buffer   ║
+// ║      passed to rupload without re-encoding. Instagram rejects progressive   ║
+// ║      JPEGs / non-sRGB / corrupt EXIF. Fix: always re-encode via sharp       ║
+// ║      before upload, even when no crop is needed. Do NOT call               ║
+// ║      .toColorspace("srgb") — it embeds an ICC profile that triggers the     ║
+// ║      same error. Use sharp().flatten().jpeg() without toColorspace.         ║
+// ║    [26 Jun 2026] login_required (403) on rupload — both PATH A and PATH B  ║
+// ║      fail. Cause: account igApiCookies/sessionid have expired server-side.  ║
+// ║      Fix: engine now detects this via lastUploadLoginRequired flag and       ║
+// ║      logs a re-verify warning. The account needs re-verification before     ║
+// ║      the next repost attempt. Do NOT retry without re-verifying first.      ║
+// ║    [26 Jun 2026] 4415001 "Prompt has contribution" on DM broadcastText —    ║
+// ║      error fires even from the warmed IgApiClient (after news.inbox warm-   ║
+// ║      up). This is an account-level Instagram restriction (not a warm-up     ║
+// ║      failure). Both IgApiClient path AND _mobileDmPost fallback return it.  ║
+// ║      Fix: error code 4415001 is now treated as "blocked" (same as           ║
+// ║      feedback_required) — stops infinite retries. Account may need manual   ║
+// ║      Instagram app interaction to clear the restriction.                    ║
+// ║                                                                              ║
 // ║  METHOD NAMING — which cookies each helper uses:                             ║
 // ║    mobileSessionGet / mobileSessionPost  → mobileCookieJar (igApiCookies)  ║
 // ║    ebGet / ebPost                        → cookieJar (EB web cookies)       ║
@@ -353,6 +373,11 @@ export class InstagramWebClient {
   // "Upload failed" message.
   private _lastConfigureError = "";
   get lastUploadError(): string { return this._lastConfigureError; }
+  // Set to true when rupload returns login_required (403) — signals the engine
+  // that the account's session has expired and needs re-verification, not just
+  // a generic network retry.
+  private _lastUploadLoginRequired = false;
+  get lastUploadLoginRequired(): boolean { return this._lastUploadLoginRequired; }
   // Set by _mobileLogin when the failure is definitively bad credentials so
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
@@ -3008,6 +3033,14 @@ export class InstagramWebClient {
       if (body) console.warn(`[webClient] sendDM ${userId}: raw body —`, JSON.stringify(body)?.slice(0, 600));
       if (/feedback_required|ActionBlocked/i.test(msg)) return "blocked";
       if (/login_required|Not authorized/i.test(msg))   return "session_expired";
+      // 4415001 "Prompt has contribution" — account-level Instagram restriction.
+      // Fires even from a fully warmed IgApiClient; the warm-up sequence cannot
+      // lift it. Treat as blocked to stop infinite retries (see debugging log above).
+      const bodyCode = (body as any)?.content?.error_code ?? (body as any)?.error_code;
+      if (bodyCode === 4415001) {
+        console.warn(`[webClient] sendDM ${userId}: 4415001 Prompt has contribution (account-level restriction) — treating as blocked`);
+        return "blocked";
+      }
       return false;
     }
   }
@@ -3067,6 +3100,12 @@ export class InstagramWebClient {
 
       const errorCode = j?.content?.error_code ?? j?.error_code;
       console.warn(`[webClient] sendDM ${userId}: failed — error_code=${errorCode} status=${j?.status} message=${j?.message}`);
+      // 4415001 "Prompt has contribution" — account-level restriction, same as
+      // feedback_required. Stop retrying; the user needs to open Instagram manually.
+      if (errorCode === 4415001) {
+        console.warn(`[webClient] sendDM ${userId}: 4415001 Prompt has contribution — treating as blocked (see debugging log at top of file)`);
+        return "blocked";
+      }
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
   }
@@ -4556,6 +4595,7 @@ export class InstagramWebClient {
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
     this._lastConfigureError = "";
+    this._lastUploadLoginRequired = false;
     const TAG = `[UPLOAD:photo @${this.username ?? this.profileId}]`;
     return this.timed("UploadPhoto", async () => {
       console.log(`${TAG} ══════════════════════════════════════════════════════`);
@@ -4672,6 +4712,10 @@ export class InstagramWebClient {
           if (!confirmedId) {
             console.error(`${TAG} [attempt ${attemptNum}] ✗ rupload returned null`);
             this._lastConfigureError = "rupload rejected — session expired or auth failure (see rupload log above)";
+            // Flag session expiry so the engine can handle it correctly instead
+            // of treating it as a generic network failure to retry next session.
+            const isLoginRequired = this._lastConfigureError.includes("session expired");
+            if (isLoginRequired) this._lastUploadLoginRequired = true;
             return null;
           }
           console.log(`${TAG}   [attempt ${attemptNum}] Rupload OK confirmedId=${confirmedId}. Firing configure.`);
