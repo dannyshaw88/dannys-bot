@@ -934,8 +934,8 @@ function EntryCard({ entry, cfg, cross, profileMap, trustMap, reliability }: {
                   ["Min gap", eps.length > 1 ? (m.minInterCallSec < 1 ? `${Math.round(m.minInterCallSec * 1000)}ms` : `${m.minInterCallSec.toFixed(2)}s`) : "—"],
                   ["Max gap", m.maxInterCallSec > 0 ? (m.maxInterCallSec < 60 ? `${m.maxInterCallSec.toFixed(1)}s` : m.maxInterCallSec < 3600 ? `${(m.maxInterCallSec/60).toFixed(1)}m` : `${(m.maxInterCallSec/3600).toFixed(2)}h`) : "—"],
                   ["Timing CoV (σ/μ)", m.timingCoV >= 0 ? `${m.timingCoV.toFixed(4)} [${covLabel}]` : "—"],
-                  ["Shannon entropy", `${m.shannonEntropy.toFixed(4)} bits`],
-                  ["Unique endpoints", `${m.uniqueEndpoints} (${(m.endpointDiversity * 100).toFixed(1)}% diverse)`],
+                  ["Shannon entropy", `${m.shannonEntropy.toFixed(4)} bits (diversity metric)`],
+                  ["Unique endpoints", `${m.uniqueEndpoints} of ${m.totalCalls} calls`],
                   ["Burst windows (≤60s)", `${m.burstCount}`],
                   ["Avg calls before each follow", m.preActionWarmup >= 0 ? `${m.preActionWarmup}` : "—"],
                   ["Action velocity", m.actionVelocityPerHour > 0 ? `${m.actionVelocityPerHour.toFixed(2)}/hr` : "—"],
@@ -1125,7 +1125,7 @@ function PatternIntelligence({ entries, tabKey, cfg, survivingAccounts, trustMap
             <StatRow label="Entropy median" val={cross.entropyMedian.toFixed(4) + " bits"} warn={cross.entropyMedian < 1.5} />
             <StatRow label="Entropy σ"      val={cross.entropyStdDev.toFixed(4)} />
             <StatRow label="Unique ep mean" val={cross.uniqueEpMean.toFixed(1)} />
-            <StatRow label="Diversity ratio" val={(cross.endpointDiversityMean * 100).toFixed(2) + "%"} />
+            <StatRow label="Diversity ratio ⚠" val={(cross.endpointDiversityMean * 100).toFixed(2) + "% (misleading for long sessions)"} />
           </div>
           <div className="p-3 space-y-0.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Session Structure</p>
@@ -1439,6 +1439,20 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
   banEntries: AnalyticsEntry[]; automatedEntries: AnalyticsEntry[];
   captchaEntries: AnalyticsEntry[]; lockedEntries: AnalyticsEntry[];
 }) {
+  const [disproved, setDisproved] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try { setDisproved(JSON.parse(localStorage.getItem(`disproved-theories-${forTab}`) ?? "{}")); }
+    catch { setDisproved({}); }
+  }, [forTab]);
+  function toggleDisprove(id: string) {
+    setDisproved(prev => {
+      const next = { ...prev };
+      if (next[id]) { delete next[id]; }
+      else { next[id] = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
+      try { localStorage.setItem(`disproved-theories-${forTab}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
   const total = primaryEntries.length;
   const primaryMetrics = useMemo(() => primaryEntries.map(e => computeMetrics(filterHiker(parseEps(e.endpointSnapshot)), e.flaggedAt ?? e.bannedAt)), [primaryEntries]);
   const proxyRisks = useMemo(() => buildProxyRiskMap(banEntries, automatedEntries, captchaEntries, lockedEntries), [banEntries, automatedEntries, captchaEntries, lockedEntries]);
@@ -1975,30 +1989,45 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
         </div>
         <div className="divide-y divide-border">
           {[...theories].sort((a, b) => {
+            const aDisp = !!disproved[a.id], bDisp = !!disproved[b.id];
+            if (aDisp && !bDisp) return 1;
+            if (!aDisp && bDisp) return -1;
             if (a.likelihood < 0 && b.likelihood < 0) return 0;
             if (a.likelihood < 0) return 1;
             if (b.likelihood < 0) return -1;
             return b.likelihood - a.likelihood;
-          }).map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => (
-            <div key={id} className="p-4 space-y-2.5">
-              <div className="flex items-start gap-2">
-                <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">{title}</p>
-                  <p className="text-[11px] text-muted-foreground italic">{tagline}</p>
+          }).map(({ id, Icon, title, tagline, likelihood, description, evidence, advice }) => {
+            const isDisproved = !!disproved[id];
+            return (
+              <div key={id} className={`p-4 space-y-2.5 transition-opacity ${isDisproved ? "opacity-50" : ""}`}>
+                <div className="flex items-start gap-2">
+                  <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${isDisproved ? "line-through text-muted-foreground" : ""}`}>{title}</p>
+                    {isDisproved && <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full mt-0.5">Disproved {disproved[id]}</span>}
+                    {!isDisproved && <p className="text-[11px] text-muted-foreground italic">{tagline}</p>}
+                  </div>
+                  <button
+                    onClick={() => toggleDisprove(id)}
+                    className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded border transition-colors ${isDisproved ? "border-muted text-muted-foreground hover:border-foreground hover:text-foreground" : "border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"}`}
+                  >{isDisproved ? "Restore" : "Disprove"}</button>
                 </div>
+                {!isDisproved && (
+                  <>
+                    <LikelihoodBar pct={likelihood} />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
+                    <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
+                      <p className="text-[11px]">{evidence}</p>
+                    </div>
+                    <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
+                      <p className="text-[11px] text-cyan-700 dark:text-cyan-300">{advice}</p>
+                    </div>
+                  </>
+                )}
               </div>
-              <LikelihoodBar pct={likelihood} />
-              <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
-              <div className="bg-muted/30 rounded-md px-3 py-2 space-y-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence from your data</p>
-                <p className="text-[11px]">{evidence}</p>
-              </div>
-              <div className="bg-cyan-50 dark:bg-cyan-900/10 rounded-md px-3 py-2 border border-cyan-200 dark:border-cyan-800">
-                <p className="text-[11px] text-cyan-700 dark:text-cyan-300">{advice}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

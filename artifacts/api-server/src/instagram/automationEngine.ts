@@ -23,7 +23,7 @@
 import { storage } from "../storage";
 import { triggerBanPipeline } from "./banPipeline";
 import { InstagramWebClient } from "./instagramWebClient";
-import { HikerApiClient } from "./hikerApiClient";
+import { HikerApiClient, HikerCacheMissError } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
@@ -1280,18 +1280,26 @@ class AutomationEngine {
     let followers: { pk: string; username: string; fullName: string }[] = [];
     if (useHikerContactGetFollowers && hikerClient) {
       const t1 = Date.now();
-      followers = await hikerClient.getFollowers(ownUserId!, usersToCheck);
-      storage.createInstagramApiCall({
-        profileId: profile.id,
-        username: profile.username,
-        operationName: "getNewFollowersHikerAPI",
-        date: new Date().toISOString(),
-        message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
-        source: "HikerAPI",
-        navChain: "",
-        ipAddress: "",
-        durationMs: Date.now() - t1,
-      }).catch(() => {});
+      try {
+        followers = await hikerClient.getFollowers(ownUserId!, usersToCheck);
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          username: profile.username,
+          operationName: "getNewFollowersHikerAPI",
+          date: new Date().toISOString(),
+          message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
+          source: "HikerAPI",
+          navChain: "",
+          ipAddress: "",
+          durationMs: Date.now() - t1,
+        }).catch(() => {});
+      } catch (err: any) {
+        if (err instanceof HikerCacheMissError) {
+          console.log(`[engine] @${profile.username}: HikerAPI followers cache miss — skipping contact session (${err.message})`);
+          return { fetched: 0, source };
+        }
+        throw err;
+      }
     } else {
       const t2 = Date.now();
       followers = await client.getFollowers(ownUserId!, usersToCheck);
@@ -2165,8 +2173,14 @@ class AutomationEngine {
     if (targetUserId) {
       if (useHikerDmGetFollowers) {
         const t0 = Date.now();
-        candidates = await hikerClient!.getFollowers(targetUserId, processCount * 3);
-        logHikerDM("FollowersScrape", `Scraped followers of @${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+        try {
+          candidates = await hikerClient!.getFollowers(targetUserId, processCount * 3);
+          logHikerDM("FollowersScrape", `Scraped followers of @${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+        } catch (err: any) {
+          if (err instanceof HikerCacheMissError) {
+            console.log(`[engine] @${profile.username}: HikerAPI followers cache miss for DM tool — skipping source @${source.value}`);
+          } else { throw err; }
+        }
       } else {
         candidates = await client.getFollowers(targetUserId, processCount * 3);
       }
@@ -3460,7 +3474,15 @@ class AutomationEngine {
         }
         if (useHikerFollowGetFollowers) {
           const t0 = Date.now();
-          candidates = await hikerClient!.getFollowers(targetPk, Math.max(processCount * 3, 20));
+          let hikerCacheMiss = false;
+          try { candidates = await hikerClient!.getFollowers(targetPk, Math.max(processCount * 3, 20)); }
+          catch (err: any) {
+            if (err instanceof HikerCacheMissError) {
+              console.log(`[engine] @${profile.username}: HikerAPI followers cache miss for follow tool — skipping source @${targetName}`);
+              hikerCacheMiss = true;
+            } else { throw err; }
+          }
+          if (hikerCacheMiss) { return zero; }
           if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
             const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
             const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);

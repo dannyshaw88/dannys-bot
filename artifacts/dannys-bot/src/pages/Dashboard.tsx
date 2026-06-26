@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.180",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "HikerAPI cache miss (Extract Now / DM Tool / Follow Tool): when HikerAPI has no cached data for an account's followers, the tool now skips cleanly with a log message instead of crashing with a 400 error. No account fallback — the session is simply skipped and retried next time." },
+      { category: "Improvement", text: "Ban Analytics — Theories tab: every detection theory now has a Disprove button. Dismissed theories dim, strike through, get a 'Disproved [date]' badge, hide their bar and evidence, and sink to the bottom of the list. A Restore button brings them back. State is saved per error tab and survives restarts." },
+      { category: "Fix", text: "Ban Analytics — endpoint diversity display: the broken 'X% diverse' figure (which collapsed toward 0% for long-running accounts) has been replaced. Unique endpoints now shows 'X of N calls' and Shannon entropy is labelled as the actual diversity metric. The cross-stats Diversity ratio row is marked as misleading for long sessions." },
+    ],
+  },
+  {
     version: "1.1.179",
     date: "26 Jun 2026",
     items: [
