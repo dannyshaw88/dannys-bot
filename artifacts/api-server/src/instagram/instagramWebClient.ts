@@ -3101,11 +3101,15 @@ export class InstagramWebClient {
           return false;
         }
         if (igResult !== false) return igResult;
-        // fall through to _mobileDmPost if IgApiClient itself errors
-        console.warn(`[webClient] sendDM ${userId}: IgApiClient attempt failed, falling back to _mobileDmPost`);
+        // IgApiClient path failed (warm-up failed or broadcast error).
+        // Do NOT fall through to _mobileDmPost — it has no warm-up and will
+        // always get 4415001 for the same reason the IgApiClient path failed.
+        // Return false so the engine retries next session after warm-up.
+        console.warn(`[webClient] sendDM ${userId}: IgApiClient path failed — NOT falling through to _mobileDmPost (warm-up required, will retry next session)`);
+        return false;
       }
 
-      // Fallback: hand-rolled mobile POST (kept for accounts without igApiCookies)
+      // Fallback: hand-rolled mobile POST (only for accounts without igApiCookies)
       const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,

@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.179",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Contact Tool DMs: fixed the actual code bug causing 4415001 — when the warm-up failed, the code was incorrectly falling through to a second DM path (_mobileDmPost) that also has no warm-up, guaranteeing another 4415001. Now it stops immediately and retries next session instead of burning a failed attempt." },
+    ],
+  },
+  {
     version: "1.1.178",
     date: "26 Jun 2026",
     items: [
