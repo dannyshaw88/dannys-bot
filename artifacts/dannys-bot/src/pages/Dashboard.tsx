@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.168",
+    date: "26 Jun 2026",
+    items: [
+      { category: "Fix", text: "Like tool: removed the MediaInfo API call that was fired before every like action. Same unnecessary pre-warm pattern as UserInfo — it's a scraping endpoint and serves no purpose before a like POST." },
+    ],
+  },
+  {
     version: "1.1.167",
     date: "26 Jun 2026",
     items: [

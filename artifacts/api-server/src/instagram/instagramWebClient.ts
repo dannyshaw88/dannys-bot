@@ -1795,15 +1795,6 @@ export class InstagramWebClient {
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     patchIgClientTls(ig, this.proxyUrl);
 
-    // Pre-warm: GET /media/info/ sets a fresh csrftoken cookie before the like POST.
-    // Without this, cookieCsrfToken is "missing" and Instagram rejects the write.
-    try {
-      await this.timed("MediaInfo", async () => { await ig.media.info(mediaId); return true; }, "Like pre-warm");
-      console.log(`[webClient] like ${mediaId}: pre-warm media.info OK — csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
-    } catch (preErr: any) {
-      console.warn(`[webClient] like ${mediaId}: pre-warm media.info failed (${preErr?.message}) — continuing`);
-    }
-
     try {
       console.log(`[webClient] like ${mediaId}: IgApiClient media.like (uuid=${ig.state.uuid.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
       await this.timed("LikePost", async () => {
