@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.186",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Controls throttle: the delay formula was randomising request count and time window independently, which could combine the worst extremes (most requests, shortest window) and produce delays far shorter than your setting. The fix computes the fastest and slowest valid delay from your configured range and picks a random point between them — so the actual delay always stays within the bounds you set." },
+    ],
+  },
+  {
     version: "1.1.185",
     date: "27 Jun 2026",
     items: [

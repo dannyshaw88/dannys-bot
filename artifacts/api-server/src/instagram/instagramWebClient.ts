@@ -463,10 +463,20 @@ export class InstagramWebClient {
   }
 
   private async apiThrottle(): Promise<void> {
-    // Pick random point in the configured rate range each call for natural variance
-    const calls = this.throttleRequestsMin + Math.random() * (this.throttleRequestsMax - this.throttleRequestsMin);
-    const secs  = this.throttleSecondsMin  + Math.random() * (this.throttleSecondsMax  - this.throttleSecondsMin);
-    const delayMs = Math.floor((secs / Math.max(1, calls)) * 1000);
+    // Compute the delay RANGE from the configured rate limits, then pick a random
+    // point inside that range.  Previously the code randomised `calls` and `secs`
+    // independently, which allowed combining calls=MAX with secs=MIN — a delay
+    // shorter than either configured endpoint (e.g. "1–10 req / 60–120 s" could
+    // produce 60/10 = 6 s instead of the expected minimum of 60/1 = 60 s).
+    //
+    // Correct extremes:
+    //   slowest = everySecondsMax / requestsMin  (most seconds for fewest calls)
+    //   fastest = everySecondsMin / requestsMax  (fewest seconds for most calls)
+    // Both are valid configs; we pick a random point between them each call.
+    const slowest = this.throttleSecondsMax  / Math.max(1, this.throttleRequestsMin);
+    const fastest = this.throttleSecondsMin  / Math.max(1, this.throttleRequestsMax);
+    const delaySec = fastest + Math.random() * Math.max(0, slowest - fastest);
+    const delayMs  = Math.floor(delaySec * 1000);
     if (delayMs > 10) {
       await new Promise<void>(r => setTimeout(r, delayMs));
     }
