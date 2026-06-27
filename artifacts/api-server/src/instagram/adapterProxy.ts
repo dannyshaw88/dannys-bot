@@ -16,6 +16,10 @@
 
 import net from "net";
 import os from "os";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 export interface AdapterInfo {
   name: string;
@@ -202,4 +206,37 @@ export async function stopAllAdapterProxies(): Promise<void> {
   for (const id of servers.keys()) {
     await stopAdapterProxy(id);
   }
+}
+
+/**
+ * Disconnect and reconnect a network adapter to force the carrier to assign a
+ * new IP address — the same thing a phone does when you toggle Airplane mode.
+ *
+ * On Windows: uses `netsh interface set interface` to disable the adapter for
+ * 30 seconds then re-enable it. Requires the Electron app to be running with
+ * administrator privileges (which electron-builder's NSIS installer enables).
+ *
+ * The tunnel server does NOT need to restart — it reads getAdapterIp() on
+ * every new connection, so it automatically picks up the new IP after reconnect.
+ *
+ * Non-blocking: fires the async sequence and returns immediately.
+ */
+export function rotateAdapter(adapterName: string, onDone?: (newIp: string | null) => void): void {
+  (async () => {
+    try {
+      console.log(`[adapter] Rotating "${adapterName}" — disabling...`);
+      await execAsync(`netsh interface set interface "${adapterName}" disable`);
+      console.log(`[adapter] "${adapterName}" disabled — waiting 30 s for carrier reassignment...`);
+      await new Promise(r => setTimeout(r, 30_000));
+      await execAsync(`netsh interface set interface "${adapterName}" enable`);
+      // Give the OS a moment to obtain the new DHCP lease
+      await new Promise(r => setTimeout(r, 3_000));
+      const newIp = getAdapterIp(adapterName);
+      console.log(`[adapter] "${adapterName}" re-enabled — new IP: ${newIp ?? "unknown"}`);
+      onDone?.(newIp);
+    } catch (err) {
+      console.warn(`[adapter] Rotation failed for "${adapterName}":`, err);
+      onDone?.(null);
+    }
+  })();
 }

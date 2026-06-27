@@ -69,6 +69,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.201",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy status column now shows latency after pinging a local adapter — previously always showed the IP address even after a ping." },
+      { category: "Improve", text: "Rotate Every column is now visible by default for all proxies — adapter rows show min–max minute inputs, regular proxy rows show a dash." },
+      { category: "Improve", text: "Adapter IP rotation is now fully automatic: the app uses netsh to disable the adapter for 30 seconds then re-enables it, forcing the carrier to assign a new IP." },
+      { category: "Improve", text: "Manual rotate button now actually disconnects and reconnects the adapter instead of just showing a note telling you to unplug it." },
+      { category: "Improve", text: "Ghost Browser: Fingerprint section moved directly under the proxy dropdown in the same card for easier access." },
+    ],
+  },
+  {
     version: "1.1.200",
     date: "27 Jun 2026",
     items: [

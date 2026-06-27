@@ -14,6 +14,7 @@ import {
   scheduleRotation,
   clearRotation,
   stopAllAdapterProxies,
+  rotateAdapter,
 } from "../instagram/adapterProxy";
 import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
@@ -550,13 +551,18 @@ export async function registerInstagramRoutes(
 
       // Schedule rotation if configured
       if (proxy.rotateEveryMin && proxy.rotateEveryMax) {
-        const intervalMs = (proxy.rotateEveryMin + Math.random() * (proxy.rotateEveryMax - proxy.rotateEveryMin)) * 60 * 1000;
-        scheduleRotation(proxyId, adapterName, intervalMs, (id, name) => {
-          console.log(`[adapter] Rotate triggered for proxy ${id} adapter "${name}"`);
-          // Re-schedule with new random interval after rotate
+        const scheduleNext = (id: number, name: string) => {
           const nextMs = (proxy.rotateEveryMin! + Math.random() * (proxy.rotateEveryMax! - proxy.rotateEveryMin!)) * 60 * 1000;
-          scheduleRotation(id, name, nextMs, () => {});
-        });
+          scheduleRotation(id, name, nextMs, (triggeredId, triggeredName) => {
+            console.log(`[adapter] Auto-rotate triggered for proxy ${triggeredId} adapter "${triggeredName}"`);
+            rotateAdapter(triggeredName, newIp => {
+              console.log(`[adapter] Auto-rotate complete for proxy ${triggeredId} — new IP: ${newIp ?? "unknown"}`);
+              // Schedule the next rotation after this one finishes
+              scheduleNext(triggeredId, triggeredName);
+            });
+          });
+        };
+        scheduleNext(proxyId, adapterName);
       }
 
       res.json({ ok: true, port, adapterIp: ip });
@@ -573,7 +579,7 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
-  // Manually trigger an IP rotation (disconnect + reconnect adapter)
+  // Manually trigger an IP rotation (disconnect + reconnect adapter via netsh)
   app.post("/api/proxies/:id/adapter/rotate", async (req, res) => {
     const proxyId = Number(req.params.id);
     const proxy = (await storage.getProxies()).find(p => p.id === proxyId);
@@ -582,9 +588,12 @@ export async function registerInstagramRoutes(
     }
     const adapterName = proxy.adapterName ?? "";
     const ip = getAdapterIp(adapterName);
-    // The tunnel itself does not need restarting — it re-reads the adapter IP
-    // on every new connection. Just report the current IP.
-    res.json({ ok: true, adapterIp: ip ?? null, note: "Unplug and re-plug the dongle to get a new IP. The tunnel will use the new IP automatically." });
+    if (!ip) return res.status(400).json({ error: "Adapter not found or unplugged" });
+    // Kick off the netsh disable/wait/enable cycle in the background — response returns immediately
+    res.json({ ok: true, adapterIp: ip, rotating: true });
+    rotateAdapter(adapterName, newIp => {
+      console.log(`[adapter] Manual rotate complete for proxy ${proxyId} — new IP: ${newIp ?? "unknown"}`);
+    });
   });
 
   // Startup: boot all existing adapter proxies

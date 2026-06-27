@@ -1056,11 +1056,10 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         {/* ── Left: Controls Panel ── */}
         <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
 
-          {/* ── ROW 1: Proxy | Device Identity | Fingerprint ── */}
-          {/* Each column is 247 px — same width as Proxy, reduced 10% from the original 274.7 px (840 px ÷ 3 cols). */}
-          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(3, 247px)" }}>
+          {/* ── ROW 1: Proxy+Fingerprint | Device Identity ── */}
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, 247px)" }}>
 
-            {/* Proxy */}
+            {/* Proxy + Fingerprint */}
             <div className="desktop-card p-2.5 space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
@@ -1079,6 +1078,46 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </div>
                 </div>
               )}
+              {/* Fingerprint — directly below the proxy dropdown */}
+              <div className="border-t border-border pt-1.5 mt-0.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFingerprint(generateGhostFingerprint())}
+                      className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" />
+                      Spin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFingerprintExpanded(v => !v)}
+                      className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-1"
+                    >
+                      {fingerprintExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate" title={fingerprint.webglRenderer}>
+                  GPU: {fingerprint.webglRenderer}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Canvas noise: {fingerprint.canvasNoise} · Font seed: {fingerprint.fontSeed}
+                </p>
+                {fingerprintExpanded && (
+                  <div className="space-y-0.5 text-[10px] text-muted-foreground border-t border-border pt-1.5 mt-1">
+                    <p>Audio noise: {fingerprint.audioNoise}</p>
+                    <p>Speech: {FP_SPEECH_PROFILES[fingerprint.speechProfile]}</p>
+                    <p className="font-mono text-[9px]">Video ID: {fingerprint.mediaVideoId}</p>
+                    <p className="font-mono text-[9px]">Audio ID: {fingerprint.mediaAudioId}</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Device Identity */}
@@ -1090,46 +1129,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
             </div>
 
-            {/* Fingerprint */}
-            <div className="desktop-card p-2.5 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setFingerprint(generateGhostFingerprint())}
-                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <RefreshCw className="w-2.5 h-2.5" />
-                    Spin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFingerprintExpanded(v => !v)}
-                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-1"
-                  >
-                    {fingerprintExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-                  </button>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground truncate" title={fingerprint.webglRenderer}>
-                GPU: {fingerprint.webglRenderer}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Canvas noise: {fingerprint.canvasNoise} · Font seed: {fingerprint.fontSeed}
-              </p>
-              {fingerprintExpanded && (
-                <div className="space-y-0.5 text-[10px] text-muted-foreground border-t border-border pt-1.5 mt-1">
-                  <p>Audio noise: {fingerprint.audioNoise}</p>
-                  <p>Speech: {FP_SPEECH_PROFILES[fingerprint.speechProfile]}</p>
-                  <p className="font-mono text-[9px]">Video ID: {fingerprint.mediaVideoId}</p>
-                  <p className="font-mono text-[9px]">Audio ID: {fingerprint.mediaAudioId}</p>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* ── ROW 1b: Scheduler ── */}

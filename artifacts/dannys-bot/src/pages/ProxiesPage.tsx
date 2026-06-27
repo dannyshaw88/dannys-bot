@@ -33,7 +33,7 @@ type PingResult = { alive: boolean; latencyMs: number; error?: string; adapterIp
 interface AdapterInfo { name: string; ip: string; family: string; internal: boolean; }
 
 type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts" | "acctStatus" | "acctTrustScore" | "rotate";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore", "rotate"];
 const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80, rotate: 130 };
 const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy / Adapter", type: "Type", username: "Username", password: "Password", status: "Proxy Status", accounts: "Accounts", acctStatus: "Status", acctTrustScore: "Trust", rotate: "Rotate Every" };
 const ACTIONS_COL_WIDTH = 100;
@@ -307,7 +307,11 @@ function ProxyRow({
             if (col === "status") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.status }}>
                 {isAdapter ? (
-                  currentAdapterIp ? (
+                  pingResult ? (
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
+                      {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />{pingResult.error ?? "Dead"}</>}
+                    </span>
+                  ) : currentAdapterIp ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-violet-50 text-violet-600 dark:bg-violet-950/40">
                       <Usb className="w-3 h-3" />{currentAdapterIp}
                     </span>
