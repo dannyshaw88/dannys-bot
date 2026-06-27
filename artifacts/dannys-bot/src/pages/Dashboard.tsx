@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.190",
+    date: "27 Jun 2026",
+    items: [
+      { category: "New", text: "Check Stories from Timeline now has a Like % option — set a min/max percentage and the engine will like that portion of the story slides it watched each session." },
+      { category: "New", text: "Check Stories from Timeline now has a Share % option — set a min/max percentage and the engine will share that portion of slides via DM to a random existing conversation, exactly as the in-app share button does." },
+    ],
+  },
+  {
     version: "1.1.189",
     date: "27 Jun 2026",
     items: [

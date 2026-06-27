@@ -2775,7 +2775,9 @@ class AutomationEngine {
         client.setApiCallSource("Human Session Emulation");
         const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
         try {
-          const watched = await client.viewTimelineStories(storyCount);
+          const storyResult = await client.viewTimelineStories(storyCount);
+          const watched = storyResult.count;
+          const storyItems = storyResult.items;
           if (watched === -1) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no igApiCookies session (account not yet verified — run Verify Credentials first)`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no igApiCookies session — run Verify Credentials to establish one");
@@ -2793,6 +2795,58 @@ class AutomationEngine {
             console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
             for (let _i = 0; _i < watched; _i++) await storage.incrementStat(profile.id, "story");
+
+            // ── Story slide likes ─────────────────────────────────────────
+            const storyLikePctMin = Number(s.storyLikePctMin ?? 0);
+            const storyLikePctMax = Number(s.storyLikePctMax ?? 0);
+            if (storyLikePctMax > 0 && storyItems.length > 0) {
+              const pct = randInt(storyLikePctMin, storyLikePctMax);
+              const exactCount = storyItems.length * pct / 100;
+              const likeCount = Math.floor(exactCount) + (Math.random() < (exactCount % 1) ? 1 : 0);
+              if (likeCount > 0) {
+                const shuffled = [...storyItems].sort(() => Math.random() - 0.5);
+                for (const item of shuffled.slice(0, likeCount)) {
+                  try {
+                    const result = await client.likeMedia(item.mediaId);
+                    if (result && result !== "blocked") {
+                      console.log(`[engine] @${profile.username}: ❤️ liked story slide ${item.mediaId}`);
+                      this.logAction(profile.id, tool.id, "like_story_slide", "", item.mediaId, "story", "ok", "Liked story slide");
+                    } else if (result === "blocked") {
+                      console.warn(`[engine] @${profile.username}: ⚠️ story like blocked`);
+                    }
+                  } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: story like error: ${e?.message}`);
+                  }
+                }
+              } else {
+                console.log(`[engine] @${profile.username}: ⏭ story like% rolled 0 (${pct}% of ${storyItems.length} slides)`);
+              }
+            }
+
+            // ── Story slide shares via DM ─────────────────────────────────
+            const storySharePctMin = Number(s.storySharePctMin ?? 0);
+            const storySharePctMax = Number(s.storySharePctMax ?? 0);
+            if (storySharePctMax > 0 && storyItems.length > 0) {
+              const pct = randInt(storySharePctMin, storySharePctMax);
+              const exactCount = storyItems.length * pct / 100;
+              const shareCount = Math.floor(exactCount) + (Math.random() < (exactCount % 1) ? 1 : 0);
+              if (shareCount > 0) {
+                const shuffled = [...storyItems].sort(() => Math.random() - 0.5);
+                for (const item of shuffled.slice(0, shareCount)) {
+                  try {
+                    const ok = await client.shareStoryViaDm(item.mediaId, item.userId);
+                    if (ok) {
+                      console.log(`[engine] @${profile.username}: 📤 shared story slide ${item.mediaId} via DM`);
+                      this.logAction(profile.id, tool.id, "share_story_via_dm", "", item.mediaId, "story", "ok", "Shared story slide via DM");
+                    }
+                  } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: story share error: ${e?.message}`);
+                  }
+                }
+              } else {
+                console.log(`[engine] @${profile.username}: ⏭ story share% rolled 0 (${pct}% of ${storyItems.length} slides)`);
+              }
+            }
           }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_timeline_stories")) return;

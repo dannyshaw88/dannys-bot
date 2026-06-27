@@ -2526,19 +2526,19 @@ export class InstagramWebClient {
   // ── Watch stories from the timeline tray ─────────────────────────────────
   // Fetches the stories tray at the top of the home feed and marks up to
   // `count` story reels as seen, simulating a user swiping through stories.
-  async viewTimelineStories(count: number = 5): Promise<number> {
+  async viewTimelineStories(count: number = 5): Promise<{ count: number; items: { mediaId: string; userId: string }[] }> {
     return this.timed("ViewTimelineStories", async () => {
       // surface=2 is required — without it Instagram returns an empty tray even
       // when followed accounts have active stories (Jarvee always includes this param).
 
       // Check up-front so we can return distinct sentinel values:
-      //   -1 = no mobile session at all (mobileCookieJar has no sessionid)
-      //   -5 = session existed but the mobile API rejected it (HTTP 4xx / expired)
+      //   count: -1 = no mobile session at all (mobileCookieJar has no sessionid)
+      //   count: -5 = session existed but the mobile API rejected it (HTTP 4xx / expired)
       const sessionPresent =
         this.mobileCookieJar.some(c => c.startsWith("sessionid=")) ||
         !!this._deviceAuthorization;
       if (!sessionPresent) {
-        return -1;
+        return { count: -1, items: [] };
       }
 
       const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/?surface=2`);
@@ -2546,19 +2546,20 @@ export class InstagramWebClient {
         // mobileSessionGet returned null — the session was present but Instagram
         // rejected it (HTTP 4xx / expired / checkpoint).  Return -5 so the caller
         // can show a more accurate "session expired" message instead of "no session".
-        return -5;
+        return { count: -5, items: [] };
       }
       const tray: any[] = Array.isArray(j?.tray) ? j.tray : [];
       if (!tray.length) {
         const topKeys = Object.keys(j ?? {}).join(", ") || "(none)";
         const statusField = j?.status ?? "(no status field)";
         console.log(`[webClient] viewTimelineStories: empty tray. status="${statusField}" top-level keys=[${topKeys}]`);
-        return -2;
+        return { count: -2, items: [] };
       }
 
       const toView = tray.slice(0, count);
       const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
       let seenCount = 0;
+      const allItems: { mediaId: string; userId: string }[] = [];
 
       // Instagram's reels_tray does not inline full story items in the modern API —
       // but it does include a media_ids array per entry.  Use that directly so we
@@ -2633,6 +2634,7 @@ export class InstagramWebClient {
         const seenEntries = items.map((item: any) => {
           const mediaId = String(item.id ?? item.pk ?? "");
           const takenAt = item.taken_at ?? Math.floor(Date.now() / 1000);
+          if (mediaId) allItems.push({ mediaId, userId });
           return `${mediaId}_${takenAt}_${takenAt + 2}`;
         });
         seenBody.set(`reels[${userId}]`, seenEntries.join(","));
@@ -2641,12 +2643,13 @@ export class InstagramWebClient {
 
       if (seenCount === 0) {
         console.log(`[webClient] viewTimelineStories: still 0 after reels_media fetch`);
-        return -3;
+        return { count: -3, items: [] };
       }
 
       await this.mobileSessionPost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
-      return seenCount;
-    }, (n) => {
+      return { count: seenCount, items: allItems };
+    }, (r) => {
+      const n = r.count;
       if (n < 0) {
         if (n === -1) return "No mobile session";
         if (n === -2) return "No stories in tray";
@@ -2656,6 +2659,45 @@ export class InstagramWebClient {
       }
       return `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`;
     });
+  }
+
+  // ── Share a story slide to a random DM thread ─────────────────────────────
+  // Fetches the DM inbox, picks one thread at random, and sends the story
+  // as a story_share broadcast — exactly what the share button on a story does.
+  async shareStoryViaDm(mediaId: string, ownerId: string): Promise<boolean> {
+    try {
+      await this.apiThrottle();
+      const j = await this.mobileSessionGet(
+        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=20`
+      );
+      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      if (!threads.length) {
+        console.log(`[webClient] shareStoryViaDm: no DM threads found — skipping share`);
+        return false;
+      }
+      const thread = threads[Math.floor(Math.random() * threads.length)];
+      const threadId: string = thread?.thread_id ?? thread?.id ?? "";
+      if (!threadId) return false;
+
+      const clientCtx = randomUUID();
+      const body = new URLSearchParams({
+        story_media_id: mediaId,
+        reel_id: ownerId,
+        thread_ids: JSON.stringify([threadId]),
+        action: "send_item",
+        client_context: clientCtx,
+        offline_threading_id: clientCtx,
+        is_shh_mode: "0",
+      }).toString();
+
+      const resp = await this._mobileDmPost(`/api/v1/direct_v2/threads/broadcast/story_share/`, body);
+      const ok = resp?.status === "ok";
+      if (!ok) console.log(`[webClient] shareStoryViaDm response:`, JSON.stringify(resp)?.slice(0, 300));
+      return ok;
+    } catch (e: any) {
+      console.warn(`[webClient] shareStoryViaDm error: ${e?.message}`);
+      return false;
+    }
   }
 
   // ── Check direct messages inbox ──────────────────────────────────────────
