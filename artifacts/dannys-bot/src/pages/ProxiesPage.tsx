@@ -36,7 +36,7 @@ type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "account
 const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore", "rotate"];
 const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80, rotate: 130 };
 const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy / Adapter", type: "Type", username: "Username", password: "Password", status: "Proxy Status", accounts: "Accounts", acctStatus: "Status", acctTrustScore: "Trust", rotate: "Rotate Every" };
-const ACTIONS_COL_WIDTH = 100;
+const ACTIONS_COL_WIDTH = 130;
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -195,6 +195,17 @@ function ProxyRow({
     const max = rotateMax === "" ? null : Number(rotateMax);
     updateProxyMutation.mutate({ id: proxy.id, data: { rotateEveryMin: min, rotateEveryMax: max } });
   }, [proxy.id, rotateMin, rotateMax, updateProxyMutation]);
+
+  const [rotating, setRotating] = useState(false);
+  const handleRotateNow = useCallback(async () => {
+    if (rotating) return;
+    setRotating(true);
+    try {
+      await apiRequest("POST", `/api/proxies/${proxy.id}/adapter/rotate`);
+    } catch {}
+    // netsh cycle takes ~33 s; keep spinner running for that duration then reset
+    setTimeout(() => setRotating(false), 35_000);
+  }, [proxy.id, rotating]);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
 
@@ -364,6 +375,11 @@ function ProxyRow({
             <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title={isAdapter ? "Ping via 4G tunnel" : "Ping proxy"}>
               {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
             </Button>
+            {isAdapter && (
+              <Button variant="ghost" size="icon" className={`h-7 w-7 ${rotating ? "text-orange-500" : "text-muted-foreground hover:text-orange-500 hover:bg-orange-500/10"}`} onClick={handleRotateNow} disabled={rotating} title={rotating ? "Rotating — disconnecting adapter for 30 s…" : "Rotate Now — disconnect & reconnect to get a new IP"}>
+                {rotating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+              </Button>
+            )}
             <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
               <Trash className="w-3.5 h-3.5" />
             </Button>
@@ -942,7 +958,7 @@ export function ProxiesPage() {
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center text-center cursor-default whitespace-nowrap ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center justify-center text-center cursor-grab whitespace-nowrap ${dragStyle}`} title="Drag to reorder">
                 {PROXY_COL_LABELS[col]}
               </div>
             );

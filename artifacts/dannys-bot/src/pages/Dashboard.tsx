@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.202",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Improve", text: "Rotate Now button (circular arrow) added to adapter rows — click to immediately disconnect and reconnect the dongle to get a new IP. Spins orange for 35 seconds while the cycle completes." },
+      { category: "Fix", text: "Rotate Every column now visible by default — adapter rows show the min–max minute inputs, other rows show a dash." },
+      { category: "Fix", text: "Non-sortable column headers (Rotate Every, etc.) now show a grab cursor so it's clear they can be dragged to reorder." },
+    ],
+  },
+  {
     version: "1.1.201",
     date: "27 Jun 2026",
     items: [
