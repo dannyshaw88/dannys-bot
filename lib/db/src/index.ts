@@ -17,7 +17,10 @@ sqlite.exec(`
     port INTEGER NOT NULL,
     username TEXT,
     password TEXT,
-    proxy_type TEXT DEFAULT 'http'
+    proxy_type TEXT DEFAULT 'http',
+    adapter_name TEXT,
+    rotate_every_min INTEGER,
+    rotate_every_max INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS profiles (
@@ -281,6 +284,9 @@ const _migrations: string[] = [
   "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'",
   "ALTER TABLE licenses ADD COLUMN expires_at TEXT",
   "ALTER TABLE proxies ADD COLUMN import_linked INTEGER DEFAULT 0",
+  "ALTER TABLE proxies ADD COLUMN adapter_name TEXT",
+  "ALTER TABLE proxies ADD COLUMN rotate_every_min INTEGER",
+  "ALTER TABLE proxies ADD COLUMN rotate_every_max INTEGER",
 ];
 for (const sql of _migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }

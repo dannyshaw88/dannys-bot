@@ -5,6 +5,16 @@ import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import fs from "fs";
 import path from "path";
+import {
+  listAdapters,
+  getAdapterIp,
+  startAdapterProxy,
+  stopAdapterProxy,
+  getAdapterProxyPort,
+  scheduleRotation,
+  clearRotation,
+  stopAllAdapterProxies,
+} from "../instagram/adapterProxy";
 import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
 import { generateEbFingerprint } from "../instagram/browserFingerprint";
@@ -447,6 +457,16 @@ export async function registerInstagramRoutes(
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
 
+    // For adapter proxies, ping = check the adapter is present and has an IP
+    if (proxy.proxyType === "adapter") {
+      const adapterName = proxy.adapterName ?? "";
+      const ip = getAdapterIp(adapterName);
+      if (!ip) return res.json({ alive: false, latencyMs: 0, error: "Adapter not found or unplugged" });
+      const port = getAdapterProxyPort(proxy.id);
+      if (!port) return res.json({ alive: false, latencyMs: 0, error: "Adapter tunnel not started" });
+      return res.json({ alive: true, latencyMs: 0, adapterIp: ip });
+    }
+
     const start = Date.now();
     try {
       // Raw TCP reachability test — definitively confirms whether the proxy
@@ -467,6 +487,85 @@ export async function registerInstagramRoutes(
       res.json({ alive: false, latencyMs: Date.now() - start, error: err.message ?? "unreachable" });
     }
   });
+
+  // ── Adapter proxy routes ─────────────────────────────────────────────────
+
+  // List available network adapters on this machine
+  app.get("/api/adapters", (_req, res) => {
+    res.json(listAdapters());
+  });
+
+  // Start / restart the local tunnel for an adapter proxy
+  app.post("/api/proxies/:id/adapter/start", async (req, res) => {
+    const proxyId = Number(req.params.id);
+    const proxy = (await storage.getProxies()).find(p => p.id === proxyId);
+    if (!proxy || proxy.proxyType !== "adapter") {
+      return res.status(404).json({ error: "Adapter proxy not found" });
+    }
+    const adapterName = proxy.adapterName ?? "";
+    const ip = getAdapterIp(adapterName);
+    if (!ip) return res.status(400).json({ error: `Adapter "${adapterName}" not found or unplugged` });
+
+    try {
+      const port = await startAdapterProxy(proxyId, adapterName);
+      // Persist the tunnel port back into host/port so resolveProxyConfig picks it up
+      await storage.updateProxy(proxyId, { host: "127.0.0.1", port });
+
+      // Schedule rotation if configured
+      if (proxy.rotateEveryMin && proxy.rotateEveryMax) {
+        const intervalMs = (proxy.rotateEveryMin + Math.random() * (proxy.rotateEveryMax - proxy.rotateEveryMin)) * 60 * 1000;
+        scheduleRotation(proxyId, adapterName, intervalMs, (id, name) => {
+          console.log(`[adapter] Rotate triggered for proxy ${id} adapter "${name}"`);
+          // Re-schedule with new random interval after rotate
+          const nextMs = (proxy.rotateEveryMin! + Math.random() * (proxy.rotateEveryMax! - proxy.rotateEveryMin!)) * 60 * 1000;
+          scheduleRotation(id, name, nextMs, () => {});
+        });
+      }
+
+      res.json({ ok: true, port, adapterIp: ip });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to start adapter tunnel" });
+    }
+  });
+
+  // Stop the local tunnel for an adapter proxy
+  app.post("/api/proxies/:id/adapter/stop", async (req, res) => {
+    const proxyId = Number(req.params.id);
+    clearRotation(proxyId);
+    await stopAdapterProxy(proxyId);
+    res.json({ ok: true });
+  });
+
+  // Manually trigger an IP rotation (disconnect + reconnect adapter)
+  app.post("/api/proxies/:id/adapter/rotate", async (req, res) => {
+    const proxyId = Number(req.params.id);
+    const proxy = (await storage.getProxies()).find(p => p.id === proxyId);
+    if (!proxy || proxy.proxyType !== "adapter") {
+      return res.status(404).json({ error: "Adapter proxy not found" });
+    }
+    const adapterName = proxy.adapterName ?? "";
+    const ip = getAdapterIp(adapterName);
+    // The tunnel itself does not need restarting — it re-reads the adapter IP
+    // on every new connection. Just report the current IP.
+    res.json({ ok: true, adapterIp: ip ?? null, note: "Unplug and re-plug the dongle to get a new IP. The tunnel will use the new IP automatically." });
+  });
+
+  // Startup: boot all existing adapter proxies
+  (async () => {
+    try {
+      const allProxies = await storage.getProxies();
+      for (const proxy of allProxies) {
+        if (proxy.proxyType !== "adapter" || !proxy.adapterName) continue;
+        const ip = getAdapterIp(proxy.adapterName);
+        if (!ip) { console.log(`[adapter] Proxy ${proxy.id}: adapter "${proxy.adapterName}" not present — skipping`); continue; }
+        const port = await startAdapterProxy(proxy.id, proxy.adapterName);
+        await storage.updateProxy(proxy.id, { host: "127.0.0.1", port });
+        console.log(`[adapter] Proxy ${proxy.id} "${proxy.adapterName}" → 127.0.0.1:${port}`);
+      }
+    } catch (err) {
+      console.warn("[adapter] Startup boot error:", err);
+    }
+  })();
 
   // Profiles
   app.get(api.profiles.list.path, async (req, res) => {

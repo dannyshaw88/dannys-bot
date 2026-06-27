@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.193",
+    date: "27 Jun 2026",
+    items: [
+      { category: "New", text: "Proxy Manager — Local Adapter proxy type added. Click 'Add Local Adapter', select your 4G dongle from the adapter dropdown, and the app builds an internal proxy tunnel bound to that adapter — no third-party software needed. All other HTTP/SOCKS5 proxies are completely unaffected." },
+      { category: "New", text: "Rotate Every column — adapter proxies show a min/max minute range. The app will trigger an IP rotation on that schedule. Leave blank for no auto-rotate." },
+      { category: "New", text: "Adapter status column shows the current 4G IP address instead of ping latency. Shows 'Unplugged' if the dongle is removed." },
+    ],
+  },
+  {
     version: "1.1.192",
     date: "27 Jun 2026",
     items: [

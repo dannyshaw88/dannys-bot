@@ -12,6 +12,9 @@ export const proxies = sqliteTable("proxies", {
   password: text("password"),
   proxyType: text("proxy_type").default("http"),
   importLinked: integer("import_linked").default(0),
+  adapterName: text("adapter_name"),
+  rotateEveryMin: integer("rotate_every_min"),
+  rotateEveryMax: integer("rotate_every_max"),
 });
 
 export const ACCOUNT_STATUSES = [
@@ -470,7 +473,12 @@ export type LockedAccountAnalytics = typeof lockedAccountsAnalytics.$inferSelect
 
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
-  proxyType: z.enum(["http", "socks5"]).optional().default("http"),
+  host: z.string().default("0.0.0.0"),
+  port: z.number().int().min(0).max(65535).default(0),
+  proxyType: z.enum(["http", "socks5", "adapter"]).optional().default("http"),
+  adapterName: z.string().optional().nullable(),
+  rotateEveryMin: z.number().int().min(1).optional().nullable(),
+  rotateEveryMax: z.number().int().min(1).optional().nullable(),
 });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, status: true }).extend({
   proxyHost: z.string().optional().nullable(),

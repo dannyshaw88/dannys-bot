@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 
 function FilledPersonIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -21,19 +21,22 @@ import {
   Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2,
   Upload, Download, Trash, Search,
   ArrowUp, ArrowDown, ArrowUpDown, Settings2, ChevronDown, ChevronUp, Smartphone,
+  Usb, RotateCcw, Clock, Play, Square,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
-type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
+type PingResult = { alive: boolean; latencyMs: number; error?: string; adapterIp?: string } | null;
 
-type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts" | "acctStatus" | "acctTrustScore";
+interface AdapterInfo { name: string; ip: string; family: string; internal: boolean; }
+
+type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts" | "acctStatus" | "acctTrustScore" | "rotate";
 const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", status: "Proxy Status", accounts: "Accounts", acctStatus: "Status", acctTrustScore: "Trust" };
-const ACTIONS_COL_WIDTH = 76;
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100, acctStatus: 90, acctTrustScore: 80, rotate: 130 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy / Adapter", type: "Type", username: "Username", password: "Password", status: "Proxy Status", accounts: "Accounts", acctStatus: "Status", acctTrustScore: "Trust", rotate: "Rotate Every" };
+const ACTIONS_COL_WIDTH = 100;
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -110,15 +113,18 @@ interface ProxyRowProps {
   colOrder: ProxyCol[];
   colWidths: Record<ProxyCol, number>;
   keepValid: boolean;
+  adapters: AdapterInfo[];
 }
 
 function ProxyRow({
-  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even, colOrder, colWidths, keepValid,
+  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even, colOrder, colWidths, keepValid, adapters,
 }: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const isAdapter = proxy.proxyType === "adapter";
 
   // Show blank when the proxy was just added with the default sentinel values
   const [hostPort, setHostPort] = useState(
@@ -126,14 +132,24 @@ function ProxyRow({
   );
   const [username, setUsername] = useState(proxy.username ?? "");
   const [password, setPassword] = useState(proxy.password ?? "");
-  const [proxyType, setProxyType] = useState<"http" | "socks5">((proxy.proxyType as "http" | "socks5") ?? "http");
+  const [proxyType, setProxyType] = useState<"http" | "socks5" | "adapter">((proxy.proxyType as "http" | "socks5" | "adapter") ?? "http");
+  const [adapterName, setAdapterName] = useState(proxy.adapterName ?? "");
+  const [rotateMin, setRotateMin] = useState(proxy.rotateEveryMin ?? "");
+  const [rotateMax, setRotateMax] = useState(proxy.rotateEveryMax ?? "");
+  const [tunnelRunning, setTunnelRunning] = useState(false);
+  const [tunnelLoading, setTunnelLoading] = useState(false);
 
   useEffect(() => {
-    setHostPort(`${proxy.host}:${proxy.port}`);
+    if (!isAdapter) {
+      setHostPort(`${proxy.host}:${proxy.port}`);
+    }
     setUsername(proxy.username ?? "");
     setPassword(proxy.password ?? "");
-    setProxyType((proxy.proxyType as "http" | "socks5") ?? "http");
-  }, [proxy]);
+    setProxyType((proxy.proxyType as "http" | "socks5" | "adapter") ?? "http");
+    setAdapterName(proxy.adapterName ?? "");
+    setRotateMin(proxy.rotateEveryMin ?? "");
+    setRotateMax(proxy.rotateEveryMax ?? "");
+  }, [proxy, isAdapter]);
 
   const saveField = useCallback((field: "hostPort" | "username" | "password" | "type") => {
     let data: Record<string, string | number | null> = {};
@@ -163,6 +179,43 @@ function ProxyRow({
     }
     updateProxyMutation.mutate({ id: proxy.id, data });
   }, [hostPort, username, password, proxyType, proxy, updateProxyMutation, toast]);
+
+  const saveAdapterName = useCallback((name: string) => {
+    setAdapterName(name);
+    updateProxyMutation.mutate({ id: proxy.id, data: { adapterName: name } });
+  }, [proxy.id, updateProxyMutation]);
+
+  const saveRotate = useCallback(() => {
+    const min = rotateMin === "" ? null : Number(rotateMin);
+    const max = rotateMax === "" ? null : Number(rotateMax);
+    updateProxyMutation.mutate({ id: proxy.id, data: { rotateEveryMin: min, rotateEveryMax: max } });
+  }, [proxy.id, rotateMin, rotateMax, updateProxyMutation]);
+
+  const handleStartTunnel = async () => {
+    setTunnelLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/proxies/${proxy.id}/adapter/start`);
+      const data = await res.json();
+      if (data.ok) {
+        setTunnelRunning(true);
+        toast({ title: `Tunnel started on port ${data.port}`, description: `Adapter IP: ${data.adapterIp}` });
+        queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+      } else {
+        toast({ title: "Failed to start tunnel", description: data.error, variant: "destructive" });
+      }
+    } catch { toast({ title: "Failed to start tunnel", variant: "destructive" }); }
+    finally { setTunnelLoading(false); }
+  };
+
+  const handleStopTunnel = async () => {
+    setTunnelLoading(true);
+    try {
+      await apiRequest("POST", `/api/proxies/${proxy.id}/adapter/stop`);
+      setTunnelRunning(false);
+      toast({ title: "Tunnel stopped" });
+    } catch { toast({ title: "Failed to stop tunnel", variant: "destructive" }); }
+    finally { setTunnelLoading(false); }
+  };
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
 
@@ -196,10 +249,12 @@ function ProxyRow({
 
   const rowBg = even ? "bg-slate-50/60" : "bg-white";
 
+  const currentAdapterIp = adapters.find(a => a.name === adapterName)?.ip;
+
   return (
     <>
       {/* Main proxy row */}
-      <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
+      <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 transition-colors hover:bg-slate-100/60 ${rowBg} ${isAdapter ? "bg-violet-50/40 dark:bg-violet-950/10" : ""}`}>
         <div className="flex items-center gap-2 flex-1">
           {colOrder.map(col => {
             if (col === "acctStatus" || col === "acctTrustScore") return (
@@ -224,47 +279,125 @@ function ProxyRow({
             );
             if (col === "proxy") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.proxy }}>
-                <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
+                {isAdapter ? (
+                  <div className="flex items-center gap-1.5 w-full">
+                    <Usb className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                    <select
+                      value={adapterName}
+                      onChange={e => saveAdapterName(e.target.value)}
+                      className="h-7 flex-1 rounded border border-violet-300 dark:border-violet-700 bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-foreground"
+                    >
+                      <option value="">— select adapter —</option>
+                      {adapters.map(a => (
+                        <option key={a.name} value={a.name}>{a.name} ({a.ip})</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
+                )}
               </div>
             );
             if (col === "type") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.type }}>
                 <select
                   value={proxyType}
-                  onChange={e => { setProxyType(e.target.value as "http" | "socks5"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
-                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  onChange={e => { setProxyType(e.target.value as "http" | "socks5" | "adapter"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
+                  className={`h-7 w-full rounded border border-input bg-background px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/20 ${isAdapter ? "text-violet-600 font-semibold border-violet-300 dark:border-violet-700" : ""}`}
                 >
                   <option value="http">HTTP</option>
                   <option value="socks5">SOCKS5</option>
+                  <option value="adapter">Adapter</option>
                 </select>
               </div>
             );
             if (col === "username") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.username }}>
-                <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-center text-foreground" />
+                {isAdapter ? <span className="text-[11px] text-muted-foreground/40 text-center">—</span> : (
+                  <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full text-center text-foreground" />
+                )}
               </div>
             );
             if (col === "password") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.password }}>
-                <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-center text-foreground" />
+                {isAdapter ? <span className="text-[11px] text-muted-foreground/40 text-center">—</span> : (
+                  <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full text-center text-foreground" />
+                )}
               </div>
             );
             if (col === "status") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.status }}>
-                {pingResult ? (
+                {isAdapter ? (
+                  currentAdapterIp ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-violet-50 text-violet-600 dark:bg-violet-950/40">
+                      <Usb className="w-3 h-3" />{currentAdapterIp}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-500">
+                      <WifiOff className="w-3 h-3" />Unplugged
+                    </span>
+                  )
+                ) : pingResult ? (
                   <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
                     {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />Dead</>}
                   </span>
                 ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
               </div>
             );
+            if (col === "rotate") return (
+              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.rotate }}>
+                {isAdapter ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="min"
+                      value={rotateMin}
+                      onChange={e => setRotateMin(e.target.value === "" ? "" : Number(e.target.value))}
+                      onBlur={saveRotate}
+                      className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="max"
+                      value={rotateMax}
+                      onChange={e => setRotateMax(e.target.value === "" ? "" : Number(e.target.value))}
+                      onBlur={saveRotate}
+                      className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                    />
+                    <span className="text-[10px] text-muted-foreground">m</span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground/40">—</span>
+                )}
+              </div>
+            );
             return null;
           })}
           {/* Actions — inside the centered group so it aligns with the header */}
           <div className="shrink-0 flex items-center justify-center gap-1" style={{ width: ACTIONS_COL_WIDTH }}>
-            <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
-              {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-            </Button>
+            {isAdapter ? (
+              <>
+                <Button
+                  variant="ghost" size="icon"
+                  className={`h-7 w-7 ${tunnelRunning ? "text-red-500 hover:bg-red-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+                  onClick={tunnelRunning ? handleStopTunnel : handleStartTunnel}
+                  disabled={tunnelLoading || !adapterName || !currentAdapterIp}
+                  title={tunnelRunning ? "Stop tunnel" : "Start tunnel"}
+                >
+                  {tunnelLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : tunnelRunning ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-violet-600 hover:bg-violet-50" onClick={() => onPing(proxy.id)} disabled={pinging} title="Check adapter status">
+                  {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Usb className="w-3.5 h-3.5" />}
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
+                {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+              </Button>
+            )}
             <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
               <Trash className="w-3.5 h-3.5" />
             </Button>
@@ -357,6 +490,15 @@ export function ProxiesPage() {
   const createProxyMutation = useCreateProxy();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+  useEffect(() => {
+    apiRequest("GET", "/api/adapters").then(r => r.json()).then(setAdapters).catch(() => {});
+    const interval = setInterval(() => {
+      apiRequest("GET", "/api/adapters").then(r => r.json()).then(setAdapters).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [importing, setImporting] = useState(false);
   const [maxPerProxy, setMaxPerProxy] = useState<number>(() => {
@@ -647,6 +789,12 @@ export function ProxiesPage() {
     });
   };
 
+  const handleAddAdapter = () => {
+    createProxyMutation.mutate({ host: "127.0.0.1", port: 0, username: null, password: null, proxyType: "adapter", adapterName: null }, {
+      onSuccess: () => toast({ title: "Local adapter proxy added — select your dongle adapter from the dropdown" }),
+    });
+  };
+
   const handleSplitEvenly = async () => {
     if (!proxies.length) { toast({ title: "No proxies to assign to", variant: "destructive" }); return; }
     if (!splitCandidates.length) {
@@ -749,6 +897,9 @@ export function ProxiesPage() {
         </div>
         <Button size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 gap-1.5 shrink-0" onClick={handleAddEmpty} disabled={createProxyMutation.isPending}>
           <Plus className="w-4 h-4" /> Add Proxy
+        </Button>
+        <Button size="sm" className="bg-violet-500 hover:bg-violet-600 text-white border-0 gap-1.5 shrink-0" onClick={handleAddAdapter} disabled={createProxyMutation.isPending}>
+          <Usb className="w-4 h-4" /> Add Local Adapter
         </Button>
 
         <Dialog open={isPasteImportOpen} onOpenChange={open => { setIsPasteImportOpen(open); if (!open) setPasteRaw(""); }}>
@@ -906,6 +1057,7 @@ export function ProxiesPage() {
                 colOrder={proxyColOrder}
                 colWidths={proxyColWidths}
                 keepValid={keepValid}
+                adapters={adapters}
               />
             ))
           )}
