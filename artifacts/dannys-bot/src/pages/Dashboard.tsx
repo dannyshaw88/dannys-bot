@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.206",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Local Adapter tunnel now auto-starts when an account needs it — previously a dongle re-plugged after app launch would leave the tunnel port stale and all assigned accounts would show no internet connection." },
+      { category: "Fix", text: "Automation tools using Local Adapter accounts now always read the live tunnel port instead of a potentially stale port from the database." },
+      { category: "Fix", text: "Local Adapter tunnel now forces IPv4 DNS resolution before connecting, avoiding IPv6 address selection and producing clearer error messages when the target hostname fails to resolve." },
+    ],
+  },
+  {
     version: "1.1.205",
     date: "27 Jun 2026",
     items: [

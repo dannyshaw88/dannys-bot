@@ -227,14 +227,39 @@ async function resolveProxyConfig(profile: {
   if (profile.proxyId) {
     const proxies = await storage.getProxies();
     const linked = proxies.find(p => p.id === profile.proxyId);
-    if (linked && linked.host && linked.port) {
-      return {
-        host: linked.host,
-        port: linked.port,
-        type: (linked.proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
-        username: linked.username ?? undefined,
-        password: linked.password ?? undefined,
-      };
+    if (linked) {
+      // Adapter proxies: the DB port is stale after every restart — always use the live
+      // in-process tunnel port.  Auto-start the tunnel if the adapter is plugged in but
+      // the tunnel isn't running yet (e.g. dongle was re-plugged after app start).
+      if (linked.proxyType === "adapter") {
+        const runningPort = getAdapterProxyPort(linked.id);
+        if (runningPort) {
+          return { host: "127.0.0.1", port: runningPort, type: "http" as const };
+        }
+        const adapterName = linked.adapterName ?? "";
+        const ip = getAdapterIp(adapterName);
+        if (ip) {
+          try {
+            const port = await startAdapterProxy(linked.id, adapterName);
+            await storage.updateProxy(linked.id, { host: "127.0.0.1", port });
+            console.log(`[adapter] resolveProxyConfig auto-started tunnel for proxy ${linked.id} "${adapterName}" → 127.0.0.1:${port}`);
+            return { host: "127.0.0.1", port, type: "http" as const };
+          } catch (err) {
+            console.warn(`[adapter] resolveProxyConfig failed to auto-start tunnel for proxy ${linked.id}:`, err);
+          }
+        }
+        console.warn(`[adapter] resolveProxyConfig: adapter "${linked.adapterName}" not plugged in or tunnel failed — returning undefined`);
+        return undefined;
+      }
+      if (linked.host && linked.port) {
+        return {
+          host: linked.host,
+          port: linked.port,
+          type: (linked.proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
+          username: linked.username ?? undefined,
+          password: linked.password ?? undefined,
+        };
+      }
     }
   }
 

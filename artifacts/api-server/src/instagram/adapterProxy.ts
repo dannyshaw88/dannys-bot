@@ -16,8 +16,11 @@
 
 import net from "net";
 import os from "os";
+import dns from "dns";
 import { exec } from "child_process";
 import { promisify } from "util";
+
+const dnsLookup = promisify(dns.lookup);
 
 const execAsync = promisify(exec);
 
@@ -126,22 +129,51 @@ export async function startAdapterProxy(proxyId: number, adapterName: string): P
           return;
         }
 
-        const remote = net.createConnection(
-          { host: targetHost, port: targetPort, localAddress: currentIp },
-          () => {
-            clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-            remote.pipe(clientSocket);
-            clientSocket.pipe(remote);
+        // Resolve the target hostname to an IPv4 address before connecting.
+        // net.createConnection with a hostname triggers dns.lookup() which uses
+        // the OS default resolver — typically routed through the main broadband
+        // interface (lower metric) rather than the 4G dongle.  By resolving
+        // explicitly with family:4 here and then passing the raw IP to
+        // createConnection, we (a) force IPv4, (b) avoid a second silent
+        // dns.lookup() inside Node.js, and (c) get clearer error messages if
+        // DNS itself fails.
+        const resolveAndConnect = async () => {
+          let resolvedHost = targetHost;
+          if (!net.isIP(targetHost)) {
+            try {
+              const { address } = await dnsLookup(targetHost, { family: 4 });
+              resolvedHost = address;
+            } catch (dnsErr: any) {
+              clientSocket.write("HTTP/1.1 502 DNS Resolution Failed\r\n\r\n");
+              clientSocket.destroy();
+              console.warn(`[adapter] DNS lookup failed for "${targetHost}": ${dnsErr?.message ?? dnsErr}`);
+              return;
+            }
           }
-        );
 
-        remote.on("error", () => {
-          clientSocket.write("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+          const remote = net.createConnection(
+            { host: resolvedHost, port: targetPort, localAddress: currentIp },
+            () => {
+              clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+              remote.pipe(clientSocket);
+              clientSocket.pipe(remote);
+            }
+          );
+
+          remote.on("error", (err) => {
+            console.warn(`[adapter] CONNECT to ${resolvedHost}:${targetPort} via ${currentIp} failed: ${(err as any)?.message ?? err}`);
+            clientSocket.write("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+            clientSocket.destroy();
+          });
+          clientSocket.on("error", () => remote.destroy());
+          remote.on("close", () => clientSocket.destroy());
+          clientSocket.on("close", () => remote.destroy());
+        };
+
+        resolveAndConnect().catch(() => {
+          try { clientSocket.write("HTTP/1.1 500 Internal Error\r\n\r\n"); } catch {}
           clientSocket.destroy();
         });
-        clientSocket.on("error", () => remote.destroy());
-        remote.on("close", () => clientSocket.destroy());
-        clientSocket.on("close", () => remote.destroy());
       });
 
       clientSocket.on("error", () => {});

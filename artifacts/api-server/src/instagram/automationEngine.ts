@@ -28,6 +28,7 @@ import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
 import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs } from "./browserSession";
+import { getAdapterProxyPort, getAdapterIp, startAdapterProxy } from "./adapterProxy";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
 import * as fsPromises from "node:fs/promises";
@@ -1678,6 +1679,26 @@ class AutomationEngine {
       const proxies = await storage.getProxies();
       const p = proxies.find(px => px.id === profile.proxyId);
       if (p) {
+        // Adapter proxies: the DB host/port is stale after every restart.
+        // Always use the live in-process tunnel port; auto-start if needed.
+        if (p.proxyType === "adapter") {
+          const runningPort = getAdapterProxyPort(p.id);
+          if (runningPort) return `http://127.0.0.1:${runningPort}`;
+          const adapterName = p.adapterName ?? "";
+          const ip = getAdapterIp(adapterName);
+          if (ip) {
+            try {
+              const port = await startAdapterProxy(p.id, adapterName);
+              await storage.updateProxy(p.id, { host: "127.0.0.1", port });
+              console.log(`[adapter] buildProxyUrl auto-started tunnel for proxy ${p.id} "${adapterName}" → 127.0.0.1:${port}`);
+              return `http://127.0.0.1:${port}`;
+            } catch (err) {
+              console.warn(`[adapter] buildProxyUrl failed to auto-start tunnel for proxy ${p.id}:`, err);
+            }
+          }
+          console.warn(`[adapter] buildProxyUrl: adapter "${p.adapterName}" not plugged in or tunnel failed — returning undefined`);
+          return undefined;
+        }
         const auth = p.username && p.password
           ? `${encodeURIComponent(p.username)}:${encodeURIComponent(p.password)}@`
           : "";
@@ -1697,7 +1718,24 @@ class AutomationEngine {
     if (profile.proxyId) {
       const proxies = await storage.getProxies();
       const p = proxies.find(px => px.id === profile.proxyId);
-      if (p) return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined };
+      if (p) {
+        // Adapter proxies: use the live tunnel port, same as buildProxyUrl.
+        if (p.proxyType === "adapter") {
+          const runningPort = getAdapterProxyPort(p.id);
+          if (runningPort) return { host: "127.0.0.1", port: runningPort };
+          const adapterName = p.adapterName ?? "";
+          const ip = getAdapterIp(adapterName);
+          if (ip) {
+            try {
+              const port = await startAdapterProxy(p.id, adapterName);
+              await storage.updateProxy(p.id, { host: "127.0.0.1", port });
+              return { host: "127.0.0.1", port };
+            } catch {}
+          }
+          return undefined;
+        }
+        return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined };
+      }
     }
     if (profile.proxyHost && profile.proxyPort) {
       return {
