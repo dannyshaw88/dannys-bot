@@ -19,20 +19,43 @@ import os from "os";
 
 export interface AdapterInfo {
   name: string;
+  /** IPv4 address, or empty string if the adapter has no IPv4 address currently assigned. */
   ip: string;
   family: "IPv4";
   internal: boolean;
 }
 
-/** Returns all non-loopback IPv4 interfaces with at least one address. */
+/**
+ * Returns all non-loopback network interfaces.
+ * Adapters without an IPv4 address are included with ip="" so they still
+ * appear in the UI (e.g. a 4G dongle that Windows sees as a wireless adapter
+ * but hasn't been assigned an address yet).
+ */
 export function listAdapters(): AdapterInfo[] {
   const ifaces = os.networkInterfaces();
   const result: AdapterInfo[] = [];
+  const seen = new Set<string>();
+
   for (const [name, addrs] of Object.entries(ifaces ?? {})) {
     if (!addrs) continue;
-    for (const addr of addrs) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        result.push({ name, ip: addr.address, family: "IPv4", internal: false });
+
+    // Skip purely loopback adapters (every address is internal)
+    const nonInternal = addrs.filter(a => !a.internal);
+    if (nonInternal.length === 0) continue;
+
+    // Prefer the IPv4 address if one exists
+    const ipv4 = nonInternal.find(a => a.family === "IPv4");
+
+    if (ipv4) {
+      if (!seen.has(name)) {
+        seen.add(name);
+        result.push({ name, ip: ipv4.address, family: "IPv4", internal: false });
+      }
+    } else {
+      // Adapter exists but has no IPv4 (e.g. IPv6-only, or not yet assigned)
+      if (!seen.has(name)) {
+        seen.add(name);
+        result.push({ name, ip: "", family: "IPv4", internal: false });
       }
     }
   }

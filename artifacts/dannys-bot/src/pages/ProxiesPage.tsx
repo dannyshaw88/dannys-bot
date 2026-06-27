@@ -289,7 +289,7 @@ function ProxyRow({
                     >
                       <option value="">— select adapter —</option>
                       {adapters.map(a => (
-                        <option key={a.name} value={a.name}>{a.name} ({a.ip})</option>
+                        <option key={a.name} value={a.name}>{a.name} {a.ip ? `(${a.ip})` : "(No IP — not connected)"}</option>
                       ))}
                     </select>
                   </div>
