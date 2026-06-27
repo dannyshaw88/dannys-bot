@@ -1565,7 +1565,7 @@ export class InstagramWebClient {
 
     try {
       console.log(`[webClient] follow ${userId}: via IgApiClient friendship.create (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      const result = await this.timed("FollowUser", () => ig.friendship.create(userId) as Promise<any>, "Follow via IgApiClient");
+      const result = await this.timed("FollowUser", () => ig.friendship.create(userId) as Promise<any>, undefined, () => false);
       console.log(`[webClient] follow ${userId}: IgApiClient raw result:`, JSON.stringify(result).slice(0, 300));
 
       if (result?.following || result?.outgoing_request) {
@@ -1875,7 +1875,7 @@ export class InstagramWebClient {
       await this.timed("LikePost", async () => {
         await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
         return true;
-      }, "like-successfull");
+      }, undefined, () => false);
       return { ok: true };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
@@ -2385,7 +2385,7 @@ export class InstagramWebClient {
           }).toString(),
         ).catch(() => {});
         return true;
-      }, "Marked reel as played").catch(() => {});
+      }, undefined, () => false).catch(() => {});
       return true;
     }, "Opened and played reel from feed");
   }
@@ -2943,6 +2943,11 @@ export class InstagramWebClient {
     // No timed() wrapper here — individual likeMedia() calls each produce their
     // own LikeMedia log entry. A LikeTimelinePosts summary on top would cause
     // two entries at the same timestamp and make rate-limit audits confusing.
+    //
+    // No timed() wrapper for the timeline fetch — mobileSessionPost fires
+    // _logTransport directly, producing a "FeedTimeline" API call log entry.
+    // All three calls (FeedTimeline, ViewTimelineFeedSeen, LikeMedia) are real
+    // throttled Instagram endpoints and must all appear in the log.
     const j = await this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
     if (!j) {
       console.warn(`[webClient] likeTimelinePosts: mobileSessionPost returned null — no mobile session`);

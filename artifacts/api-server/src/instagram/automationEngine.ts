@@ -344,15 +344,12 @@ class AutomationEngine {
             if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
           }
 
-          // Contact tool is "effectively enabled" if the top-level flag OR either
-          // sub-feature toggle is on — the sub-toggles live in settings, not t.enabled.
+          // Contact tool: the top-level t.enabled flag is the MASTER SWITCH.
+          // Sub-toggles (contactUsersEnabled, contactNewFollowersEnabled, etc.)
+          // are only relevant when the master switch is ON. A disabled master
+          // switch means the whole tool is off — no sub-feature may override it.
           const contactTool = tools.find(t => t.type === "contact");
-          const cs = contactTool?.settings as any;
-          const contactEffective = contactTool && (
-            contactTool.enabled ||
-            cs?.contactUsersEnabled === true ||
-            cs?.contactNewFollowersEnabled === true
-          );
+          const contactEffective = contactTool?.enabled === true;
           if (contactEffective && profile.accountStatus === "valid") {
             activeContact.add(profile.id);
             if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, profileRunImmediately);
@@ -1110,12 +1107,8 @@ class AutomationEngine {
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const contactTool = tools.find(t => t.type === "contact");
-        const cs2 = contactTool?.settings as any;
-        const stillEnabled = contactTool && (
-          contactTool.enabled ||
-          cs2?.contactUsersEnabled === true ||
-          cs2?.contactNewFollowersEnabled === true
-        );
+        // Master switch: if contactTool.enabled is false the whole tool is off.
+        const stillEnabled = contactTool?.enabled === true;
         if (!stillEnabled || state.stop.stopped) break;
 
         const s = contactTool.settings as any;
@@ -3365,11 +3358,11 @@ class AutomationEngine {
       );
 
       // ── Contact Tool (run as full session within the HS) ──────────────────
+      // Master switch: contactTool.enabled is the sole gate. Sub-toggles
+      // (contactUsersEnabled, contactNewFollowersEnabled, autoReplyEnabled)
+      // only matter when the master is ON — they cannot activate the tool alone.
       const contactTool = hsTools.find(t => t.type === "contact");
-      const contactAnyEnabled = !!(contactTool && (() => {
-        const cs = (contactTool.settings ?? {}) as any;
-        return contactTool.enabled || cs.contactNewFollowersEnabled || cs.autoReplyEnabled || cs.contactUsersEnabled;
-      })());
+      const contactAnyEnabled = contactTool?.enabled === true;
       enqueue("contactTool",
         contactAnyEnabled,
         "contactSkipMin", "contactSkipMax",
@@ -3379,12 +3372,12 @@ class AutomationEngine {
           const execTools = await storage.getToolsByProfile(profile.id);
           const execContactTool = execTools.find(t => t.type === "contact");
           if (!execContactTool) return;
-          const execCS = (execContactTool.settings ?? {}) as any;
-          const execAnyEnabled = execContactTool.enabled || execCS.contactNewFollowersEnabled || execCS.autoReplyEnabled || execCS.contactUsersEnabled;
-          if (!execAnyEnabled) {
+          // Master switch re-check at execution time.
+          if (!execContactTool.enabled) {
             console.log(`[engine] @${profile.username}: HS contact — skipped (disabled at execution time)`);
             return;
           }
+          const execCS = (execContactTool.settings ?? {}) as any;
           try {
             if (execCS.contactNewFollowersEnabled) {
               await this.runContactNewFollowersSession(profile, execContactTool, state);

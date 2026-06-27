@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.194",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Contact tool no longer fires when its master switch is off — sub-toggles could previously bypass the master switch and trigger unintended API calls." },
+      { category: "Fix", text: "API call log now shows one entry per action instead of two. Duplicate confirmation entries (Like Post Successful, Follow via IgApiClient, Marked reel as played) have been removed — only the real throttled Instagram endpoint hit is recorded." },
+    ],
+  },
+  {
     version: "1.1.193",
     date: "27 Jun 2026",
     items: [
