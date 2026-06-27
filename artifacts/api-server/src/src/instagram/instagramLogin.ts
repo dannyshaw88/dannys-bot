@@ -53,9 +53,13 @@ async function loginApiThrottle(
   const reqMax = Math.max(reqMin, apiLimits.requestsMax);
   const secMin = Math.max(0, apiLimits.everySecondsMin / 1000);
   const secMax = Math.max(secMin, apiLimits.everySecondsMax / 1000);
-  const calls   = reqMin  + Math.random() * (reqMax  - reqMin);
-  const secs    = secMin  + Math.random() * (secMax  - secMin);
-  const delayMs = Math.floor((secs / Math.max(1, calls)) * 1000);
+  // Compute valid delay RANGE from configured bounds, then pick a random point.
+  // The OLD code randomised calls and secs independently, which let them combine
+  // at their worst extremes (most calls + shortest window) producing delays shorter
+  // than the configured minimum.
+  const slowestMs = secMax * 1000 / reqMin;
+  const fastestMs = secMin * 1000 / Math.max(1, reqMax);
+  const delayMs   = Math.floor(fastestMs + Math.random() * Math.max(0, slowestMs - fastestMs));
   if (delayMs > 10) {
     await new Promise<void>(r => setTimeout(r, delayMs));
   }

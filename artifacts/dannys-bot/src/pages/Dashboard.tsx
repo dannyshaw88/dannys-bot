@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.188",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Complete throttle audit — three additional bypass paths closed: (1) loginApiThrottle() in Verify Credentials had the same independent-random-extremes bug as v1.1.186; with 1 min / 1 max / 125–250s the verify sequence could still fire faster than 125s between calls. Fixed to use the same range formula as apiThrottle(). (2) browserSendDM() — the browser-session DM path (page.evaluate fetch) was sending directly to Instagram with no throttle at all. (3) uploadPhotoViaFetch() — same: browser-session photo upload bypassed throttle entirely. Both browser-path functions now apply the account's API Controls setting before firing." },
+    ],
+  },
+  {
     version: "1.1.187",
     date: "27 Jun 2026",
     items: [

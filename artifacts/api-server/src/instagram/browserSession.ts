@@ -4667,6 +4667,37 @@ export async function browserCloseTab(profileId: number, index: number) {
   kickFrame(profileId).catch(() => {});
 }
 
+// ── Per-account API throttle for browser-path Instagram calls ────────────────
+// browserSendDM and uploadPhotoViaFetch use page.evaluate + fetch() which runs
+// inside Chrome — completely outside the InstagramWebClient.apiThrottle() path.
+// This helper enforces the same delay before any direct Instagram fetch so
+// browser-path calls obey API Controls exactly like mobile-API calls.
+async function browserApiThrottle(profileId: number): Promise<void> {
+  try {
+    const profile = await storage.getProfile(profileId);
+    const raw = profile?.apiLimits;
+    if (!raw) return;
+    let limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null = null;
+    try { limits = typeof raw === "string" ? JSON.parse(raw) : raw as any; } catch { return; }
+    if (!limits) return;
+    // Values < 1000 are legacy bare-seconds; ≥ 1000 are stored as ms.
+    const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+    const reqMin    = Math.max(1, limits.requestsMin);
+    const reqMax    = Math.max(reqMin, limits.requestsMax);
+    const minMs     = Math.max(0, toMs(limits.everySecondsMin));
+    const maxMs     = Math.max(minMs, toMs(limits.everySecondsMax));
+    // Same fixed formula as InstagramWebClient.apiThrottle() — compute the valid
+    // delay range from configured bounds so extremes can never combine badly.
+    const slowestMs = maxMs / reqMin;
+    const fastestMs = minMs / Math.max(1, reqMax);
+    const delayMs   = Math.floor(fastestMs + Math.random() * Math.max(0, slowestMs - fastestMs));
+    if (delayMs > 10) {
+      log(`[browserApiThrottle] profile ${profileId}: throttling ${delayMs}ms (API Controls: ${reqMin}–${reqMax} req / ${minMs}–${maxMs}ms)`, "browser");
+      await new Promise<void>(r => setTimeout(r, delayMs));
+    }
+  } catch { /* non-fatal — proceed without delay if profile lookup fails */ }
+}
+
 // ── Send a DM through the live browser session ────────────────────────────────
 // Uses page.evaluate + fetch() so all cookies/CSRF are included automatically.
 // This bypasses mobile-API restrictions (4415001) by sending from within the
@@ -4681,6 +4712,10 @@ export async function browserSendDM(
     log(`[browserSendDM] no active session for profile ${profileId}`, "browser");
     return null;
   }
+
+  // Apply per-account API throttle before hitting Instagram — this fetch runs
+  // inside Chrome and bypasses InstagramWebClient.apiThrottle() entirely.
+  await browserApiThrottle(profileId);
 
   try {
     const result = await s.page.evaluate(
@@ -6628,6 +6663,10 @@ export async function uploadPhotoViaFetch(
     log(`uploadPhotoViaFetch [${profileId}]: timeout — no browser session available`);
     return null;
   }
+
+  // Apply per-account API throttle before hitting Instagram — these fetches run
+  // inside Chrome and bypass InstagramWebClient.apiThrottle() entirely.
+  await browserApiThrottle(profileId);
 
   const uploadId = String(Date.now());
   const b64 = imageBuffer.toString("base64");

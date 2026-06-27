@@ -7,6 +7,7 @@ import os from "os";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
+import { storage } from "../../storage";
 
 function log(msg: string, _category?: string) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -904,6 +905,30 @@ export async function browserCloseTab(profileId: number, index: number) {
   kickFrame(profileId).catch(() => {});
 }
 
+// ── Per-account API throttle for browser-path Instagram calls ────────────────
+async function browserApiThrottle(profileId: number): Promise<void> {
+  try {
+    const profile = await storage.getProfile(profileId);
+    const raw = profile?.apiLimits;
+    if (!raw) return;
+    let limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null = null;
+    try { limits = typeof raw === "string" ? JSON.parse(raw) : raw as any; } catch { return; }
+    if (!limits) return;
+    const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+    const reqMin    = Math.max(1, limits.requestsMin);
+    const reqMax    = Math.max(reqMin, limits.requestsMax);
+    const minMs     = Math.max(0, toMs(limits.everySecondsMin));
+    const maxMs     = Math.max(minMs, toMs(limits.everySecondsMax));
+    const slowestMs = maxMs / reqMin;
+    const fastestMs = minMs / Math.max(1, reqMax);
+    const delayMs   = Math.floor(fastestMs + Math.random() * Math.max(0, slowestMs - fastestMs));
+    if (delayMs > 10) {
+      log(`[browserApiThrottle] profile ${profileId}: throttling ${delayMs}ms`);
+      await new Promise<void>(r => setTimeout(r, delayMs));
+    }
+  } catch { /* non-fatal */ }
+}
+
 // ── Send a DM through the live browser session ────────────────────────────────
 // Uses page.evaluate + fetch() so all cookies/CSRF are included automatically.
 // This bypasses mobile-API restrictions (4415001) by sending from within the
@@ -918,6 +943,8 @@ export async function browserSendDM(
     log(`[browserSendDM] no active session for profile ${profileId}`, "browser");
     return null;
   }
+
+  await browserApiThrottle(profileId);
 
   try {
     const result = await s.page.evaluate(
@@ -1843,6 +1870,8 @@ export async function uploadPhotoViaFetch(
     log(`uploadPhotoViaFetch [${profileId}]: timeout — no browser session available`);
     return null;
   }
+
+  await browserApiThrottle(profileId);
 
   const uploadId = String(Date.now());
   const b64 = imageBuffer.toString("base64");
