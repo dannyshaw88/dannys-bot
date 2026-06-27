@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.189",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Total Calls column on the Accounts page no longer counts HikerAPI calls — it now only reflects direct Instagram API calls made by your account, matching the intent of the column." },
+      { category: "Fix", text: "Throttle architecture hardened: all Instagram library (ig.*) automation calls now go through a single factory (_newAutomationIgClient) that hooks the throttle at the transport level. Photo repost/upload was previously bypassing API Controls entirely — now covered. Follow and Like no longer double-throttle." },
+    ],
+  },
+  {
     version: "1.1.188",
     date: "27 Jun 2026",
     items: [

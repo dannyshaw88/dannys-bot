@@ -423,7 +423,12 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select({ profileId: instagramApiCalls.profileId, count: sql<number>`COUNT(*)` })
       .from(instagramApiCalls)
-      .where(eq(instagramApiCalls.isError, false))
+      .where(
+        and(
+          eq(instagramApiCalls.isError, false),
+          ne(instagramApiCalls.source, "HikerAPI"),
+        )
+      )
       .groupBy(instagramApiCalls.profileId);
     const result: Record<number, number> = {};
     for (const row of rows) result[row.profileId] = Number(row.count ?? 0);

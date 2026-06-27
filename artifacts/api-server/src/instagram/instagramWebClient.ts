@@ -482,6 +482,30 @@ export class InstagramWebClient {
     }
   }
 
+  // ── Automation IgApiClient factory ───────────────────────────────────────────
+  // ALL automation code that uses the instagram-private-api library MUST create
+  // its IgApiClient through this factory rather than calling newIgClient() directly.
+  //
+  // The factory hooks apiThrottle() into ig.request.send — the library's single
+  // HTTP dispatch point — so EVERY ig.* call (friendship.create, media.like,
+  // broadcastText, publish.photo, etc.) is rate-limited by API Controls without
+  // any per-feature remembering.  This makes it architecturally impossible for a
+  // new automation feature to bypass the throttle as long as it uses this factory.
+  //
+  // Do NOT use this for non-automation clients (verify, mobile login bootstrap,
+  // TOS consent, ABD dismiss) — those have their own timing logic.
+  private _newAutomationIgClient(): IgApiClient {
+    const ig = newIgClient();
+    const _igReq = ig.request as any;
+    const _origSend = _igReq.send.bind(_igReq);
+    const _throttle = this.apiThrottle.bind(this);
+    _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
+      await _throttle();
+      return _origSend(opts, onlyCheckHttpStatus);
+    };
+    return ig;
+  }
+
   setDeviceInfo(igDeviceState?: string | null, userAgentApi?: string | null, igApiCookies?: string | null) {
     this.igDeviceState = igDeviceState ?? undefined;
     this.userAgentApi  = userAgentApi  ?? undefined;
@@ -1411,6 +1435,7 @@ export class InstagramWebClient {
   // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
   // Used for source-account scraping (repost) so the account is not linked to the lookup.
   private async mobileGetAnonymous(path: string): Promise<any> {
+    await this.apiThrottle();
     const res = await igReq({
       host: "i.instagram.com",
       path,
@@ -1489,12 +1514,9 @@ export class InstagramWebClient {
   private async _followViaIgClient(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
     if (!this.igApiCookies) return { ok: false, status: "follow_blocked", reason: "no igApiCookies — cannot use IgApiClient" };
 
-    // Apply the per-account API throttle before making any Instagram API call.
-    // _followViaIgClient creates its own IgApiClient (no attachRequestLogger),
-    // so apiThrottle() MUST be called here to honour the API Control setting.
-    await this.apiThrottle();
-
-    const ig = newIgClient();
+    // _newAutomationIgClient() hooks apiThrottle() into ig.request.send so every
+    // ig.* call on this client is throttled by API Controls automatically.
+    const ig = this._newAutomationIgClient();
 
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
@@ -1680,17 +1702,9 @@ export class InstagramWebClient {
     }
 
     // ── Device setup ──────────────────────────────────────────────────────────
-    const ig = newIgClient();
-    // Patch ig.request.send so the per-profile rate limit is enforced on every
-    // single API call made through this IgApiClient instance — including the
-    // cold-start warm-up calls, not just the final inbox/DM call.
-    const _igReq = ig.request as any;
-    const _igOriginalSend = _igReq.send.bind(_igReq);
-    const _throttle = this.apiThrottle.bind(this);
-    _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
-      await _throttle();
-      return _igOriginalSend(opts, onlyCheckHttpStatus);
-    };
+    // _newAutomationIgClient() hooks apiThrottle() into ig.request.send so every
+    // ig.* call (warm-up inbox, broadcastText, etc.) is throttled automatically.
+    const ig = this._newAutomationIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -1810,12 +1824,9 @@ export class InstagramWebClient {
   private async _likeViaIgClient(mediaId: string): Promise<{ ok: boolean; reason?: string }> {
     if (!this.igApiCookies) return { ok: false, reason: "no igApiCookies" };
 
-    // Apply the per-account API throttle before making any Instagram API call.
-    // _likeViaIgClient creates its own IgApiClient (no attachRequestLogger),
-    // so apiThrottle() MUST be called here to honour the API Control setting.
-    await this.apiThrottle();
-
-    const ig = newIgClient();
+    // _newAutomationIgClient() hooks apiThrottle() into ig.request.send so every
+    // ig.* call on this client is throttled by API Controls automatically.
+    const ig = this._newAutomationIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -3083,7 +3094,9 @@ export class InstagramWebClient {
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
 
-    await this.apiThrottle();
+    // Throttle is enforced at the transport level via _newAutomationIgClient() inside
+    // _buildWarmedIgClient() — every ig.request.send call (broadcastText, inbox warm-up)
+    // fires apiThrottle() automatically. No manual pre-call needed here.
 
     // Reuse the cached warmed client — the warm-up (news.inbox) runs once per
     // session and the result is cached in _warmedIgClientCache.  Creating a
@@ -4549,7 +4562,9 @@ export class InstagramWebClient {
     console.log(`${TAG} ────────────────────────────────────────────────────────`);
 
     // ── BUILD IgApiClient ────────────────────────────────────────────────────
-    const ig = newIgClient();
+    // _newAutomationIgClient() hooks apiThrottle() into ig.request.send so
+    // ig.publish.photo() is rate-limited by API Controls automatically.
+    const ig = this._newAutomationIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
 
     if (this.igDeviceState) {
