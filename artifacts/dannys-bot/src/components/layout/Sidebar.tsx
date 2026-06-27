@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -90,10 +92,16 @@ export function Sidebar() {
   const [location, setLocation] = useLocation();
   const slot = useSidebarSlot();
   const { pushLocation } = useNavigationHistory();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     pushLocation(location);
   }, [location]);
+
+  // Read the cached proxy list (populated by AdapterRotationWatcher's global poll)
+  // without triggering an extra fetch — just peek at the cache.
+  const proxies = (queryClient.getQueryData<Array<{ proxyType?: string; rotating?: boolean }>>(["/api/proxies"]) ?? []);
+  const anyAdapterRotating = proxies.some(p => p.proxyType === "adapter" && p.rotating);
 
   const BRAND = "#1AD2F2";
   const navItems = [
@@ -124,6 +132,7 @@ export function Sidebar() {
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
+          const showRotating = item.path === "/proxies" && anyAdapterRotating;
 
           return (
             <div key={item.path}>
@@ -136,10 +145,17 @@ export function Sidebar() {
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <Icon
-                  className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
-                  style={isActive ? { color: BRAND } : { color: BRAND }}
-                />
+                <div className="relative">
+                  <Icon
+                    className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
+                    style={isActive ? { color: BRAND } : { color: BRAND }}
+                  />
+                  {showRotating && (
+                    <Loader2
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 animate-spin text-orange-400"
+                    />
+                  )}
+                </div>
                 <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
                   {item.shortLabel}
                 </span>

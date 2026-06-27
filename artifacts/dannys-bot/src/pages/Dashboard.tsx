@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.207",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Pinging a Local Adapter proxy while it is mid-rotation now correctly shows Dead instead of a false Alive result." },
+      { category: "Fix", text: "Navigating away from the Proxy Manager page no longer loses the rotating spinner — state is now server-driven so it survives page changes." },
+      { category: "Improve", text: "The PROXY MANAGER sidebar icon shows a small spinning indicator whenever any adapter is rotating, so you can see it from any page without toast popups." },
+    ],
+  },
+  {
     version: "1.1.206",
     date: "27 Jun 2026",
     items: [

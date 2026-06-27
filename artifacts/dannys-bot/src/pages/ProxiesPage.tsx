@@ -196,15 +196,19 @@ function ProxyRow({
     updateProxyMutation.mutate({ id: proxy.id, data: { rotateEveryMin: min, rotateEveryMax: max } });
   }, [proxy.id, rotateMin, rotateMax, updateProxyMutation]);
 
-  const [rotating, setRotating] = useState(false);
+  // Server-side rotation flag (survives page navigation — polled every 2 s from the proxy list)
+  const serverRotating = (proxy as any).rotating as boolean ?? false;
+  const [localRotating, setLocalRotating] = useState(false);
+  const rotating = serverRotating || localRotating;
+
   const handleRotateNow = useCallback(async () => {
     if (rotating) return;
-    setRotating(true);
+    setLocalRotating(true);
     try {
       await apiRequest("POST", `/api/proxies/${proxy.id}/adapter/rotate`);
     } catch {}
-    // netsh cycle takes ~33 s; keep spinner running for that duration then reset
-    setTimeout(() => setRotating(false), 35_000);
+    // Keep local spinner for 40 s as fallback; server flag drives real state via polling
+    setTimeout(() => setLocalRotating(false), 40_000);
   }, [proxy.id, rotating]);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
@@ -481,6 +485,17 @@ export function ProxiesPage() {
     }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // While any adapter is rotating, refresh the proxy list every 2 s so the spinner
+  // survives page navigation (rotation state is server-side, not React state)
+  const anyRotating = proxies.some(p => (p as any).rotating);
+  useEffect(() => {
+    if (!anyRotating) return;
+    const id = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+    }, 2000);
+    return () => clearInterval(id);
+  }, [anyRotating, queryClient]);
 
   const [importing, setImporting] = useState(false);
   const [maxPerProxy, setMaxPerProxy] = useState<number>(() => {

@@ -88,6 +88,14 @@ interface TunnelServer {
 
 const servers = new Map<number, TunnelServer>();
 
+/** Adapter names currently mid-rotation (netsh disable → wait → enable cycle active). */
+const rotatingAdapters = new Set<string>();
+
+/** Returns true while a netsh disable/enable cycle is running for this adapter name. */
+export function isAdapterRotating(adapterName: string): boolean {
+  return rotatingAdapters.has(adapterName);
+}
+
 /**
  * Start (or restart) a local CONNECT tunnel for the given proxy row.
  * Returns the local port it bound to.
@@ -255,6 +263,7 @@ export async function stopAllAdapterProxies(): Promise<void> {
  */
 export function rotateAdapter(adapterName: string, onDone?: (newIp: string | null) => void): void {
   (async () => {
+    rotatingAdapters.add(adapterName);
     try {
       console.log(`[adapter] Rotating "${adapterName}" — disabling...`);
       await execAsync(`netsh interface set interface "${adapterName}" disable`);
@@ -269,6 +278,8 @@ export function rotateAdapter(adapterName: string, onDone?: (newIp: string | nul
     } catch (err) {
       console.warn(`[adapter] Rotation failed for "${adapterName}":`, err);
       onDone?.(null);
+    } finally {
+      rotatingAdapters.delete(adapterName);
     }
   })();
 }

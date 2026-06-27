@@ -11,6 +11,7 @@ import {
   startAdapterProxy,
   stopAdapterProxy,
   getAdapterProxyPort,
+  isAdapterRotating,
   scheduleRotation,
   clearRotation,
   stopAllAdapterProxies,
@@ -363,6 +364,7 @@ export async function registerInstagramRoutes(
     const enriched = data.map(p => ({
       ...p,
       tunnelPort: getAdapterProxyPort(p.id) ?? null,
+      rotating: p.proxyType === "adapter" && p.adapterName ? isAdapterRotating(p.adapterName) : false,
     }));
     res.json(enriched);
   });
@@ -498,6 +500,10 @@ export async function registerInstagramRoutes(
     // For adapter proxies, ping = measure real round-trip through the tunnel via HTTP CONNECT
     if (proxy.proxyType === "adapter") {
       const adapterName = proxy.adapterName ?? "";
+      // Rotation is in progress — adapter is intentionally offline, report dead immediately
+      if (isAdapterRotating(adapterName)) {
+        return res.json({ alive: false, latencyMs: 0, error: "Rotating — reconnecting dongle…" });
+      }
       const ip = getAdapterIp(adapterName);
       if (!ip) return res.json({ alive: false, latencyMs: 0, error: "Adapter not found or unplugged" });
       const tunnelPort = getAdapterProxyPort(proxy.id);
