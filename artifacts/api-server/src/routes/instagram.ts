@@ -333,7 +333,12 @@ export async function registerInstagramRoutes(
   // Proxies
   app.get(api.proxies.list.path, async (_req, res) => {
     const data = await storage.getProxies();
-    res.json(data);
+    // Attach live tunnel port so the UI can show the correct running state on refresh
+    const enriched = data.map(p => ({
+      ...p,
+      tunnelPort: getAdapterProxyPort(p.id) ?? null,
+    }));
+    res.json(enriched);
   });
 
   app.post(api.proxies.create.path, async (req, res) => {

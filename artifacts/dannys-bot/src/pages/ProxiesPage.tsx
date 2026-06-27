@@ -136,7 +136,7 @@ function ProxyRow({
   const [adapterName, setAdapterName] = useState(proxy.adapterName ?? "");
   const [rotateMin, setRotateMin] = useState(proxy.rotateEveryMin ?? "");
   const [rotateMax, setRotateMax] = useState(proxy.rotateEveryMax ?? "");
-  const [tunnelRunning, setTunnelRunning] = useState(false);
+  const [tunnelRunning, setTunnelRunning] = useState(() => !!(proxy as any).tunnelPort);
   const [tunnelLoading, setTunnelLoading] = useState(false);
 
   useEffect(() => {

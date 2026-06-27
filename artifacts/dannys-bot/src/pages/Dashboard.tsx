@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.198",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Adapter proxy tunnel button now correctly shows as active (red Stop) instead of Play after a page refresh — the app remembers the tunnel is already running." },
+      { category: "Fix", text: "On app startup, adapter proxy tunnels auto-start immediately — you only need to click Start Tunnel once when first setting up a new adapter row." },
+    ],
+  },
+  {
     version: "1.1.197",
     date: "27 Jun 2026",
     items: [
