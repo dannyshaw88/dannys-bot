@@ -1371,60 +1371,33 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           return sc === 403 && (igMsg === "login_required" || errMsg.includes("login_required"));
         };
 
-        // ── Phase 2b + 2c: FetchConfig (qe/sync) + GetBanyan (banyan/banyan) ──
-        // Executed in SHUFFLED order each verify so the call sequence differs
-        // between accounts and sessions — removes the fixed pattern fingerprint.
-        // Each is throttled independently using the account's API Control setting.
-        const phase2bc: Array<() => Promise<VerifyResult | null>> = [
-          // FetchConfig — lightweight config probe, ABD-detectable
-          async () => {
-            await loginApiThrottle(apiLimitsRaw);
-            try {
-              await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
-              console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
-            } catch (e: any) {
-              if (isABDError(e)) {
-                console.error(`[instagramLogin] @${profile.username} — qe/sync: feedback_required (ABD) → automated_behaviour_detected`);
-                return abdResult();
-              }
-              console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
-            }
-            return null;
-          },
-          // GetBanyan — lightweight metadata probe, ABD-detectable
-          async () => {
-            await loginApiThrottle(apiLimitsRaw);
-            try {
-              await ig.request.send({
-                url: "/api/v1/banyan/banyan/",
-                method: "POST",
-                form: ig.request.sign({
-                  _csrftoken: ig.state.cookieCsrfToken,
-                  _uid: userId,
-                  _uuid: ig.state.uuid,
-                  surfaces_to_queries: JSON.stringify([
-                    { surface: "interstitial_link_loading" },
-                    { surface: "interstitial_link_prefetch" },
-                  ]),
-                }),
-              });
-              console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
-            } catch (e: any) {
-              if (isABDError(e)) {
-                console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
-                return abdResult();
-              }
-              console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
-            }
-            return null;
-          },
-        ];
-        // Fisher-Yates shuffle so FetchConfig and Banyan fire in a different order
-        // each session — prevents a fixed 2-call fingerprint after the ABD probe.
-        if (Math.random() < 0.5) [phase2bc[0], phase2bc[1]] = [phase2bc[1], phase2bc[0]];
-        for (const step of phase2bc) {
-          const earlyExit = await step();
-          if (earlyExit) return earlyExit;
+        // ── Phase 2b: GetBanyan (banyan/banyan) ──────────────────────────────
+        // NOTE: FetchConfig (qe/sync) was previously called here as a separate step,
+        // but the ABD probe above (Phase 2a) already sends the identical bare qe/sync
+        // POST — calling it again here was a double qe/sync per verify. Removed.
+        // Only Banyan remains in this phase.
+        await loginApiThrottle(apiLimitsRaw);
+        try {
+          await ig.request.send({
+            url: "/api/v1/banyan/banyan/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig.state.uuid,
+              surfaces_to_queries: JSON.stringify([
+                { surface: "interstitial_link_loading" },
+                { surface: "interstitial_link_prefetch" },
+              ]),
+            }),
+          });
+          console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
+        } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
+          console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${(e as any)?.message}`);
         }
 
         // Tracks how many cold-start calls returned 403 login_required.

@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.185",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify bootstrap: FetchConfig (qe/sync) was being called twice per verify — once as the ABD probe and again as a separate Phase 2b step. The ABD probe is the FetchConfig call; the redundant second call has been removed. Each verify now sends qe/sync exactly once." },
+    ],
+  },
+  {
     version: "1.1.184",
     date: "26 Jun 2026",
     items: [
