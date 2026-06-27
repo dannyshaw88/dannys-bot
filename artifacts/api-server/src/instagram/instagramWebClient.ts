@@ -806,17 +806,11 @@ export class InstagramWebClient {
       "/api/v1/launcher/sync/":                     "Launcher sync",
       "/api/v1/users/self/banner_dismiss/":         "Dismiss banner",
       "/api/v1/direct_v2/threads/":                "DM thread action",
-      "/api/v1/direct_v2/inbox/":                  "Checking DM inbox",
       "/api/v1/tags/":                              "Hashtag sections",
-    };
-    // Some paths produce ugly auto-generated op names (e.g. DirectV2Inbox) — override them here
-    const OP_NAME_OVERRIDE: Record<string, string> = {
-      "/api/v1/direct_v2/inbox/": "GetDirectMessages",
     };
     const basePath = path.split("?")[0];
     const msg = PATH_FRIENDLY[basePath] ?? basePath;
-    const opName = OP_NAME_OVERRIDE[basePath] ?? this._opNameFromPath(path, method);
-    this.logCallFn(opName, durationMs, msg, isError);
+    this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
   }
 
   // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.
@@ -2668,11 +2662,12 @@ export class InstagramWebClient {
   }
 
   // ── Share a story slide to a random DM thread ─────────────────────────────
-  // Fetches the DM inbox, picks one thread at random, and sends the story
-  // as a story_share broadcast — exactly what the share button on a story does.
+  // Fetches the DM inbox to find an existing thread, picks one at random,
+  // and sends the story as a story_share broadcast — exactly what the share
+  // button on a story does.  The inbox fetch here is a prerequisite for
+  // finding a thread ID — it is NOT a "check DMs" action.
   async shareStoryViaDm(mediaId: string, ownerId: string): Promise<boolean> {
-    try {
-      await this.apiThrottle();
+    return this.timed("ShareStoryViaDM", async () => {
       const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=20`
       );
@@ -2700,10 +2695,7 @@ export class InstagramWebClient {
       const ok = resp?.status === "ok";
       if (!ok) console.log(`[webClient] shareStoryViaDm response:`, JSON.stringify(resp)?.slice(0, 300));
       return ok;
-    } catch (e: any) {
-      console.warn(`[webClient] shareStoryViaDm error: ${e?.message}`);
-      return false;
-    }
+    }, (r) => r ? "Shared story via DM" : "Story share skipped (no threads)");
   }
 
   // ── Check direct messages inbox ──────────────────────────────────────────

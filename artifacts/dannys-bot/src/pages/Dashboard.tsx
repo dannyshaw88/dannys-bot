@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.204",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "ShareStoryViaDM now shows as its own labelled action in the activity log — previously it was appearing as DirectV2Inbox because the story-share inbox lookup (finding a thread to send to) was leaking through as a raw transport call." },
+    ],
+  },
+  {
     version: "1.1.203",
     date: "27 Jun 2026",
     items: [
