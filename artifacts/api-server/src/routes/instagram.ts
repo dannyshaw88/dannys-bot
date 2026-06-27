@@ -469,14 +469,36 @@ export async function registerInstagramRoutes(
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
 
-    // For adapter proxies, ping = check the adapter is present and has an IP
+    // For adapter proxies, ping = measure real round-trip through the tunnel via HTTP CONNECT
     if (proxy.proxyType === "adapter") {
       const adapterName = proxy.adapterName ?? "";
       const ip = getAdapterIp(adapterName);
       if (!ip) return res.json({ alive: false, latencyMs: 0, error: "Adapter not found or unplugged" });
-      const port = getAdapterProxyPort(proxy.id);
-      if (!port) return res.json({ alive: false, latencyMs: 0, error: "Adapter tunnel not started" });
-      return res.json({ alive: true, latencyMs: 0, adapterIp: ip });
+      const tunnelPort = getAdapterProxyPort(proxy.id);
+      if (!tunnelPort) return res.json({ alive: false, latencyMs: 0, error: "Tunnel not running — select the adapter to start it" });
+      const start = Date.now();
+      try {
+        const net = await import("net");
+        await new Promise<void>((resolve, reject) => {
+          const sock = (net.default ?? net).createConnection({ host: "127.0.0.1", port: tunnelPort, timeout: 5000 });
+          let buf = "";
+          sock.once("connect", () => {
+            sock.write("CONNECT 1.1.1.1:80 HTTP/1.1\r\nHost: 1.1.1.1:80\r\n\r\n");
+          });
+          sock.on("data", (chunk: Buffer) => {
+            buf += chunk.toString();
+            if (buf.includes("\r\n\r\n")) {
+              sock.destroy();
+              buf.startsWith("HTTP/1.1 200") ? resolve() : reject(new Error("CONNECT refused: " + buf.split("\r\n")[0]));
+            }
+          });
+          sock.once("error", reject);
+          sock.once("timeout", () => { sock.destroy(); reject(new Error("Tunnel timeout")); });
+        });
+        return res.json({ alive: true, latencyMs: Date.now() - start, adapterIp: ip });
+      } catch (err: any) {
+        return res.json({ alive: false, latencyMs: Date.now() - start, error: err.message ?? "Tunnel unreachable" });
+      }
     }
 
     const start = Date.now();

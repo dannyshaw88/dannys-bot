@@ -69,6 +69,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.199",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Improve", text: "Adapter proxy row now has a custom name field — type '4G-UFI-489' (or anything you like) and it saves permanently." },
+      { category: "Improve", text: "Hardware adapter dropdown ('Ethernet 3') is now compact and sits below the custom name label." },
+      { category: "Improve", text: "Picking an adapter from the dropdown now auto-starts the tunnel immediately — no separate button needed." },
+      { category: "Improve", text: "Ping button now measures real round-trip latency through the 4G tunnel (instead of just checking if the adapter is present)." },
+      { category: "Fix", text: "Removed the Stop Tunnel and USB check buttons — the tunnel is automatic and the Ping WiFi button is the only action needed." },
+    ],
+  },
+  {
     version: "1.1.198",
     date: "27 Jun 2026",
     items: [
