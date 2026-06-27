@@ -1344,10 +1344,13 @@ export class InstagramWebClient {
       console.warn(`[webClient] mobileSessionGet ${path}: no igApiCookies session`);
       return null;
     }
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram (fetch_headers / current_user) and would
+    // bypass the per-account rate limit if called first.
+    await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    await this.apiThrottle();
     const _t0 = Date.now();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || "missing";
@@ -3452,13 +3455,16 @@ export class InstagramWebClient {
       console.warn(`[webClient] mobileSessionPost ${path}: no igApiCookies session — cannot proceed (igApiCookies required for write actions)`);
       return null;
     }
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram (fetch_headers / current_user) and would
+    // bypass the per-account rate limit if called first.
     // If this is the first call after a session restore, mobileCsrf will be the
     // "missing" placeholder. Bootstrap a real token by hitting i.instagram.com
     // directly with the mobile session — no EB cookies involved at any point.
+    await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    await this.apiThrottle();
     const _t0 = Date.now();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || this.csrfToken || "missing";
@@ -3914,10 +3920,12 @@ export class InstagramWebClient {
       console.warn(`[webClient] mobilePostMultipart ${path}: no mobile session — run Verify Credentials first`);
       return null;
     }
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram and would bypass the rate limit if called first.
+    await this.apiThrottle();
     if (!this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    await this.apiThrottle();
     const boundary = `----InstaBoundary${Date.now()}`;
     const chunks: Buffer[] = [];
     for (const part of parts) {

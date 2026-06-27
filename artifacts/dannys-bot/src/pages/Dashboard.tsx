@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.187",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Controls throttle: CSRF bootstrap calls (_bootstrapMobileCsrf) were firing before apiThrottle() in mobileSessionGet, mobileSessionPost, and mobilePostMultipart. On the first call after a session restore, this sent 1–2 unthrottled HTTP requests to Instagram before the throttle delay ran, completely bypassing your API Controls setting. apiThrottle() now always fires first — the CSRF bootstrap only runs after the configured delay has elapsed." },
+    ],
+  },
+  {
     version: "1.1.186",
     date: "27 Jun 2026",
     items: [

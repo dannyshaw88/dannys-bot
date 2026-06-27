@@ -907,10 +907,13 @@ export class InstagramWebClient {
       console.warn(`[webClient] mobileSessionGet ${path}: no igApiCookies session`);
       return null;
     }
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram (fetch_headers / current_user) and would
+    // bypass the per-account rate limit if called first.
+    await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    await this.apiThrottle();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || "missing";
     let fullMobileUA: string;
@@ -2603,13 +2606,16 @@ export class InstagramWebClient {
       console.warn(`[webClient] mobileSessionPost ${path}: no igApiCookies session — cannot proceed (igApiCookies required for write actions)`);
       return null;
     }
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram (fetch_headers / current_user) and would
+    // bypass the per-account rate limit if called first.
     // If this is the first call after a session restore, mobileCsrf will be the
     // "missing" placeholder. Bootstrap a real token by hitting i.instagram.com
     // directly with the mobile session — no EB cookies involved at any point.
+    await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    await this.apiThrottle();
     const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || this.csrfToken || "missing";
     // Build full Instagram mobile UA — userAgentApi stores the device string portion only
