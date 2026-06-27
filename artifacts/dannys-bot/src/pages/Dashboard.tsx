@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.192",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Update", text: "Evasion Stats — The Recipe tab renamed to The Rules. Updated with 4 confirmed/tested survival rules: 125s–250s minimum between all API calls, 150–250 min between sessions, instant ban for heavy endpoints or budget overruns, and 400 API calls required before the first follow. Sub-details removed for clarity." },
+    ],
+  },
+  {
     version: "1.1.191",
     date: "27 Jun 2026",
     items: [
