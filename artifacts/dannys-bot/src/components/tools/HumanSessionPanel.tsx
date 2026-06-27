@@ -79,6 +79,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_reel_view",   label: "% of each reel to watch",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
         { key: "vtf_like_delay",  label: "Delay between likes in sec",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
         { key: "vtf_save_media",  label: "Save liked media",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
+        { key: "vtf_share_post",  label: "Share % (chance to share viewed posts to feed)", settingKeys: ["sharePostPercentMin","sharePostPercentMax"] },
         { key: "vtf_click_post",       label: "Click post %",                settingKeys: ["clickPostPercentMin","clickPostPercentMax"] },
         { key: "vtf_view_profile",     label: "Visit profile %",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
         { key: "vtf_profile_feed",     label: "View profile feed % + count", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
@@ -484,6 +485,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       likeTimelinePostsNotUsedMax: 0,
       saveMediaEnabled: false,
       saveMediaPercent: 20,
+      sharePostPercentMin: 0,
+      sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0,
       likeTimelinePostsPercentMax: 0,
       clickPostPercentMin: 0,
@@ -591,6 +594,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       likeTimelinePostsOrderMin: 0, likeTimelinePostsOrderMax: 0,
       likeTimelinePostsNotUsedMin: 0, likeTimelinePostsNotUsedMax: 0,
       saveMediaEnabled: false, saveMediaPercent: 20,
+      sharePostPercentMin: 0, sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
       clickPostPercentMin: 0, clickPostPercentMax: 0,
       viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
@@ -922,6 +926,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     </div>
                     <span className="text-[10px] text-muted-foreground">of liked saved</span>
                   </div>
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("sharePostPercentMin", "sharePostPercentMax")}
+                  <Repeat2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Share%</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to share viewed posts to feed</span>
                 </div>
               </div>
               {/* ROW 3: Click on Post% */}

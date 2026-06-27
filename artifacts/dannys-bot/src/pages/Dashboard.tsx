@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.191",
+    date: "27 Jun 2026",
+    items: [
+      { category: "New", text: "View Timeline Feed now has a Share % option — set a min/max percentage chance and the engine will click the two-arrow share button on that portion of posts scrolled during each session, sharing them to your followers in the feed." },
+      { category: "Audit", text: "Full audit of Human Session tool confirmed: every action (notifications, own profile, timeline feed, stories, DMs, likes, saves, shares) goes through the Instagram mobile API only. Zero embedded browser calls." },
+    ],
+  },
+  {
     version: "1.1.190",
     date: "27 Jun 2026",
     items: [

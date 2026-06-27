@@ -2668,6 +2668,30 @@ class AutomationEngine {
           } // end likeCount > 0
         }
 
+        // ── Share a % of viewed feed posts to the user's feed ────────────────
+        // Simulates pressing the two-arrow share/repost button on posts while
+        // scrolling the timeline — shares them to followers in the home feed.
+        const sharePctMin = Number(s.sharePostPercentMin ?? 0);
+        const sharePctMax = Number(s.sharePostPercentMax ?? 0);
+        if (sharePctMax > 0 && vtfResult?.items && vtfResult.items.length > 0) {
+          for (const item of vtfResult.items) {
+            if (!item.mediaId) continue;
+            const shareRoll = Math.random() * 100;
+            const shareThreshold = randInt(sharePctMin, sharePctMax);
+            if (shareRoll >= shareThreshold) continue;
+            try {
+              const shared = await client.sharePostToFeed(item.mediaId);
+              if (shared) {
+                console.log(`[engine] @${profile.username}: 🔁 shared post ${item.shortcode} by @${item.username} to feed`);
+                this.logAction(profile.id, tool.id, "share_post", item.username, item.shortcode, "post", "ok", "Shared timeline post to feed");
+              }
+            } catch (se: any) {
+              if (await checkSessionErr(se, "share_post")) return;
+              console.warn(`[engine] @${profile.username}: share post error: ${se?.message}`);
+            }
+          }
+        }
+
         // ── Click on a % of viewed feed posts ────────────────────────────────
         // Simulates a user tapping into a post they noticed while scrolling.
         // Each clicked post can then cascade into: visit profile → scroll their

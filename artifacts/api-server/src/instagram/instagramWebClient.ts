@@ -2915,6 +2915,14 @@ export class InstagramWebClient {
     }, `Save media ${mediaId}`);
   }
 
+  async sharePostToFeed(mediaId: string): Promise<boolean> {
+    return this.timed("SharePostToFeed", async () => {
+      const body = new URLSearchParams({ media_id: mediaId }).toString();
+      const j = await this.mobileSessionPost(`/api/v1/media/${mediaId}/re_share_to_feed/`, body);
+      return j?.status === "ok";
+    }, `Share post to feed ${mediaId}`);
+  }
+
   async postComment(mediaId: string, text: string): Promise<boolean> {
     return this.timed("PostComment", async () => {
       const body = new URLSearchParams({ comment_text: text }).toString();
