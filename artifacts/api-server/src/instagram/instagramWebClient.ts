@@ -2255,41 +2255,12 @@ export class InstagramWebClient {
       return { viewed: 0 };
     }
 
-    // ── Pagination loop: keep fetching until we have `count` items ───────────
-    // Instagram returns ~12–18 posts per call. Use next_max_id as the cursor for
-    // subsequent pages (reason=pagination). Cap at 8 pages to avoid runaway loops.
-    let allRawItems: any[] = j?.feed_items ?? j?.items ?? [];
-    let nextMaxId: string | null = j?.next_max_id ?? null;
-    const MAX_PAGES = 8;
-    let page = 1;
-
-    while (allRawItems.length < count && nextMaxId && page < MAX_PAGES) {
-      console.log(`[webClient] viewTimelineFeed: page ${page + 1} — have ${allRawItems.length}/${count} items, cursor=${String(nextMaxId).slice(0, 24)}…`);
-      // apiThrottle() inside mobileSessionPost enforces the delay from API Controls — no extra sleep here.
-      const pageJ = await this.mobileSessionPost(
-        `/api/v1/feed/timeline/`,
-        new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString(),
-      );
-      if (!pageJ) break;
-      const pageItems: any[] = pageJ?.feed_items ?? pageJ?.items ?? [];
-      if (!pageItems.length) break;
-      allRawItems = allRawItems.concat(pageItems);
-      nextMaxId = pageJ?.next_max_id ?? null;
-      page++;
-    }
-
-    console.log(`[webClient] viewTimelineFeed: ${page} page(s) — ${allRawItems.length} raw items total`);
-    if (!allRawItems.length) return { viewed: 0 };
-
-    const items = allRawItems
-      .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
-      .filter((m: any) => m?.id || m?.pk)
-      .slice(0, count);
-
-    let viewed = 0;
-    const viewedItems: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> = [];
-    const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
-
+    // ── Per-page processing ───────────────────────────────────────────────────
+    // Real Instagram marks posts as seen immediately as the user scrolls through
+    // each page — BEFORE requesting the next page.  Fetching the next page is
+    // triggered by the seen POST from the current page items.  We replicate this
+    // interleaved pattern: fetch → mark seen → fetch → mark seen → …
+    //
     // How many reels to actually click and fire ClipsViewed for this operation.
     const safeMin = Math.min(reelWatchCountMin, reelWatchCountMax);
     const safeMax = Math.max(reelWatchCountMin, reelWatchCountMax);
@@ -2297,65 +2268,104 @@ export class InstagramWebClient {
       ? Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin
       : 0;
     let reelWatchedSoFar = 0;
+    let viewed = 0;
+    const viewedItems: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }> = [];
+    const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
+    const allClipImpressions: Array<{ clip_id: string; view_state: string }> = [];
 
-    // Build seen entries and reel impressions without any API calls in the loop.
-    const seenEntries: string[] = [];
-    const clipImpressions: Array<{ clip_id: string; view_state: string }> = [];
+    // Marks one page's worth of posts as seen (batches of 4, matching real app behaviour)
+    // and accumulates viewedItems / reelWatches.  Returns number of items consumed.
+    const processAndMarkPage = async (rawPage: any[]): Promise<number> => {
+      const remaining = count - viewed;
+      const pageMedia = rawPage
+        .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+        .filter((m: any) => m?.id || m?.pk)
+        .slice(0, remaining);
 
-    for (const media of items) {
-      const mediaId = String(media?.id ?? media?.pk ?? "");
-      if (!mediaId) continue;
-      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-      const isReel = media?.media_type === 2 || media?.product_type === "clips";
-      let watchDuration = 3;
-      let watchPct = 0;
-      if (isReel && reelWatchPercentMax > 0) {
-        const reelDuration = Number(media.video_duration ?? 30);
-        const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
-        watchPct = Math.round(pct);
-        watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
-      }
-      seenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
-      viewed++;
+      if (!pageMedia.length) return 0;
 
-      if (isReel && reelWatchPercentMax > 0 && reelWatchedSoFar < reelWatchLimit) {
+      const seenEntries: string[] = [];
+      for (const media of pageMedia) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+        const isReel = media?.media_type === 2 || media?.product_type === "clips";
+        let watchDuration = 3;
+        let watchPct = 0;
+        if (isReel && reelWatchPercentMax > 0) {
+          const reelDuration = Number(media.video_duration ?? 30);
+          const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+          watchPct = Math.round(pct);
+          watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+        }
+        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
+        viewed++;
+
+        if (isReel && reelWatchPercentMax > 0 && reelWatchedSoFar < reelWatchLimit) {
+          const username = String(media?.user?.username ?? "");
+          allClipImpressions.push({ clip_id: mediaId, view_state: "initial_impression" });
+          reelWatchedSoFar++;
+          reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
+        }
+        const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
         const username = String(media?.user?.username ?? "");
-        clipImpressions.push({ clip_id: mediaId, view_state: "initial_impression" });
-        reelWatchedSoFar++;
-        reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
+        if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
       }
 
-      const userId   = String(media?.user?.pk ?? media?.user_id ?? "");
-      const username = String(media?.user?.username ?? "");
-      if (userId) viewedItems.push({ mediaId, userId, username, shortcode: this.mediaIdToShortcode(mediaId), isReel });
+      // Instagram's real mobile app sends at most 4 posts per media/seen/ call.
+      // Fire the seen POST for this page's items immediately (before next page fetch).
+      for (let i = 0; i < seenEntries.length; i += 4) {
+        const batch = seenEntries.slice(i, i + 4);
+        await this.timed("ViewTimelineFeedSeen", async () => {
+          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: batch.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString());
+          return batch.length;
+        }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+      }
+
+      return pageMedia.length;
+    };
+
+    // Process page 1 (already fetched above)
+    const page1Raw: any[] = j?.feed_items ?? j?.items ?? [];
+    console.log(`[webClient] viewTimelineFeed: page 1 — ${page1Raw.length} raw items`);
+    if (!page1Raw.length) return { viewed: 0 };
+    await processAndMarkPage(page1Raw);
+
+    // Paginate: fetch next pages only after marking current page seen
+    let nextMaxId: string | null = j?.next_max_id ?? null;
+    const MAX_PAGES = 8;
+    let page = 1;
+    while (viewed < count && nextMaxId && page < MAX_PAGES) {
+      console.log(`[webClient] viewTimelineFeed: page ${page + 1} — have ${viewed}/${count} seen, cursor=${String(nextMaxId).slice(0, 24)}…`);
+      const pageJ = await this.mobileSessionPost(
+        `/api/v1/feed/timeline/`,
+        new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString(),
+      );
+      if (!pageJ) break;
+      const pageRaw: any[] = pageJ?.feed_items ?? pageJ?.items ?? [];
+      if (!pageRaw.length) break;
+      await processAndMarkPage(pageRaw);
+      nextMaxId = pageJ?.next_max_id ?? null;
+      page++;
     }
 
-    // Instagram's real mobile app sends at most 4 posts per media/seen/ call.
-    // Chunk seenEntries into batches of 4 and fire one ViewTimelineFeedSeen
-    // timed call per batch so the log matches what a real session produces.
-    for (let i = 0; i < seenEntries.length; i += 4) {
-      const batch = seenEntries.slice(i, i + 4);
-      await this.timed("ViewTimelineFeedSeen", async () => {
-        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: batch.join(","),
-          live_vods_skipped: "",
-          nuxes_skipped: "",
-        }).toString());
-        return batch.length;
-      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
-    }
+    console.log(`[webClient] viewTimelineFeed: ${page} page(s) — ${viewed} posts seen`);
 
-    // 1 clips_viewed call for all watched reels — 1 throttle total instead of N.
-    if (clipImpressions.length) {
+    // ClipsViewed is a bulk impression signal — one call for all watched reels is fine.
+    if (allClipImpressions.length) {
       await this.timed("ClipsViewed", async () => {
         await this.mobileSessionPost(
           `/api/v1/clips/clips_viewed/`,
           new URLSearchParams({
-            clips_viewed_impressions: JSON.stringify(clipImpressions),
+            clips_viewed_impressions: JSON.stringify(allClipImpressions),
             is_clips_creation_page: "false",
           }).toString(),
         ).catch(() => {});
-        return clipImpressions.length;
+        return allClipImpressions.length;
       }, (n) => `Watched ${n} reel${n === 1 ? "" : "s"}`).catch(() => {});
     }
 

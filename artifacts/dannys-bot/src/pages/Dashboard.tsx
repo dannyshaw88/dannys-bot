@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.205",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Improve", text: "Timeline feed now marks posts as seen page-by-page as it scrolls, matching real Instagram behaviour — previously it loaded all pages first and sent all seen marks in a batch at the end." },
+    ],
+  },
+  {
     version: "1.1.204",
     date: "27 Jun 2026",
     items: [
