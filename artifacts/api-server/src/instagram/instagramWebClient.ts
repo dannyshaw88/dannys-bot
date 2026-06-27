@@ -806,11 +806,17 @@ export class InstagramWebClient {
       "/api/v1/launcher/sync/":                     "Launcher sync",
       "/api/v1/users/self/banner_dismiss/":         "Dismiss banner",
       "/api/v1/direct_v2/threads/":                "DM thread action",
+      "/api/v1/direct_v2/inbox/":                  "Checking DM inbox",
       "/api/v1/tags/":                              "Hashtag sections",
+    };
+    // Some paths produce ugly auto-generated op names (e.g. DirectV2Inbox) — override them here
+    const OP_NAME_OVERRIDE: Record<string, string> = {
+      "/api/v1/direct_v2/inbox/": "GetDirectMessages",
     };
     const basePath = path.split("?")[0];
     const msg = PATH_FRIENDLY[basePath] ?? basePath;
-    this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
+    const opName = OP_NAME_OVERRIDE[basePath] ?? this._opNameFromPath(path, method);
+    this.logCallFn(opName, durationMs, msg, isError);
   }
 
   // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.
@@ -1872,10 +1878,10 @@ export class InstagramWebClient {
 
     try {
       console.log(`[webClient] like ${mediaId}: IgApiClient media.like (uuid=${ig.state.uuid.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      await this.timed("LikePost", async () => {
-        await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
-        return true;
-      }, undefined, () => false);
+      // No timed("LikePost") wrapper here — _inTimedCall is already true from the outer
+      // timed("LikeMedia"), so the transport hook is suppressed. Using timed() here would
+      // log the raw IgApiClient HTTP error string on failure, which is noisy and confusing.
+      await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
       return { ok: true };
     } catch (err: any) {
       const msg: string = err?.message ?? String(err);
@@ -1885,7 +1891,7 @@ export class InstagramWebClient {
       if (/checkpoint_required/i.test(msg)) return { ok: false, reason: "checkpoint_required" };
       if (/feedback_required|ActionBlocked/i.test(msg)) return { ok: false, reason: "blocked" };
       if (/login_required|Not authorized|401/i.test(msg)) return { ok: false, reason: "session expired" };
-      return { ok: false, reason: msg || "IgApiClient like failed" };
+      return { ok: false, reason: "like failed" };
     }
   }
 
@@ -1979,7 +1985,7 @@ export class InstagramWebClient {
       }
       const shortcode = this.mediaIdToShortcode(mediaId);
       return `https://www.instagram.com/p/${shortcode}/`;
-    }, "Liked media successfully");
+    }, (r) => typeof r === "string" && r.startsWith("http") ? "Like successful" : r === "blocked" ? "Like blocked by Instagram" : "Like failed");
   }
 
   // ── Get a user's recent feed media IDs ────────────────────────────────────

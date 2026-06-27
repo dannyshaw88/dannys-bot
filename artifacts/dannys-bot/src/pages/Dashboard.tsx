@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.203",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Like results now show 'Like successful', 'Like failed', or 'Like blocked by Instagram' — the raw HTTP error string no longer appears in the activity log." },
+      { category: "Fix", text: "DirectV2Inbox is now correctly labelled as GetDirectMessages in the activity log — it was an auto-generated name for the same inbox endpoint." },
+    ],
+  },
+  {
     version: "1.1.202",
     date: "27 Jun 2026",
     items: [
