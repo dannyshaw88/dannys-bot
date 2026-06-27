@@ -7,7 +7,7 @@ import {
   Ghost, ShieldCheck, Globe, Cpu,
   Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus,
   ClipboardPaste, Copy, RefreshCw, UserPlus, Key,
-  CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare, Link,
+  CheckCircle2, Mail, Lock, Server, Calendar, MessageSquare, Link, Usb,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -158,6 +158,8 @@ export interface SavedProxy {
   username?: string | null;
   password?: string | null;
   proxyType?: string | null;
+  adapterName?: string | null;
+  tunnelPort?: number | null;
 }
 
 type ProxySelection =
@@ -198,7 +200,9 @@ function ProxySelect({
   };
 
   const label = value.kind === "saved" && selectedProxy
-    ? selectedProxy.name ?? `${selectedProxy.host}:${selectedProxy.port}`
+    ? selectedProxy.proxyType === "adapter"
+      ? selectedProxy.adapterName || selectedProxy.name || "4G Adapter"
+      : selectedProxy.name ?? `${selectedProxy.host}:${selectedProxy.port}`
     : value.kind === "manual"
     ? "Custom proxy"
     : null;
@@ -232,17 +236,25 @@ function ProxySelect({
           {proxies.length === 0 && (
             <p className="px-3 py-1.5 text-xs text-muted-foreground text-center">No proxies saved in Proxy Manager.</p>
           )}
-          {proxies.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => pick({ kind: "saved", id: p.id })}
-              className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent ${value.kind === "saved" && value.id === p.id ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
-            >
-              <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="truncate text-left">{p.name ? p.name : `${p.host}:${p.port}`}</span>
-            </button>
-          ))}
+          {proxies.map(p => {
+            const isAdap = p.proxyType === "adapter";
+            const adapLabel = isAdap
+              ? (p.adapterName || "4G Adapter") + (p.tunnelPort ? ` — 127.0.0.1:${p.tunnelPort}` : " (tunnel off)")
+              : (p.name ? p.name : `${p.host}:${p.port}`);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => pick({ kind: "saved", id: p.id })}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent ${value.kind === "saved" && value.id === p.id ? "text-primary font-medium bg-accent/40" : "text-foreground"}`}
+              >
+                {isAdap
+                  ? <Usb className="w-3 h-3 text-violet-400 shrink-0" />
+                  : <Globe className="w-3 h-3 text-muted-foreground shrink-0" />}
+                <span className="truncate text-left">{adapLabel}</span>
+              </button>
+            );
+          })}
           <div className="border-t border-border mt-1 pt-1">
             <button
               type="button"
@@ -694,7 +706,14 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
       const p = proxies.find(x => x.id === proxySelection.id);
-      if (p) return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined, proxyType: p.proxyType ?? "http" };
+      if (p) {
+        // Adapter proxies tunnel through localhost — use the live tunnel port
+        if (p.proxyType === "adapter") {
+          if (p.tunnelPort) return { host: "127.0.0.1", port: p.tunnelPort, proxyType: "http" as const };
+          return undefined; // tunnel not started yet
+        }
+        return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined, proxyType: p.proxyType ?? "http" };
+      }
     }
     if (proxySelection.kind === "manual") {
       const host = manualHost.trim();

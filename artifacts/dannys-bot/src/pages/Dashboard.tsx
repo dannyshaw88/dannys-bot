@@ -69,6 +69,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.200",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Adapter proxy row: reverted custom name field — the Windows adapter name (e.g. 'Ethernet 3') now shows directly in the dropdown as before." },
+      { category: "Improve", text: "Ghost Browser proxy dropdown: adapter proxies now appear in the list with a USB icon and show their Windows adapter name (e.g. 'Ethernet 3') and tunnel address." },
+      { category: "Improve", text: "Ghost Browser: selecting an adapter proxy correctly routes the browser through the 4G tunnel (127.0.0.1:port) instead of the placeholder 0.0.0.0:8080 address." },
+    ],
+  },
+  {
     version: "1.1.199",
     date: "27 Jun 2026",
     items: [

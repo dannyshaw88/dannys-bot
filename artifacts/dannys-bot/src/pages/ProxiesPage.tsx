@@ -134,7 +134,6 @@ function ProxyRow({
   const [password, setPassword] = useState(proxy.password ?? "");
   const [proxyType, setProxyType] = useState<"http" | "socks5" | "adapter">((proxy.proxyType as "http" | "socks5" | "adapter") ?? "http");
   const [adapterName, setAdapterName] = useState(proxy.adapterName ?? "");
-  const [customName, setCustomName] = useState((proxy as any).name ?? "");
   const [rotateMin, setRotateMin] = useState(proxy.rotateEveryMin ?? "");
   const [rotateMax, setRotateMax] = useState(proxy.rotateEveryMax ?? "");
 
@@ -190,10 +189,6 @@ function ProxyRow({
       },
     });
   }, [proxy.id, updateProxyMutation]);
-
-  const saveCustomName = useCallback(() => {
-    updateProxyMutation.mutate({ id: proxy.id, data: { name: customName || adapterName } });
-  }, [proxy.id, customName, adapterName, updateProxyMutation]);
 
   const saveRotate = useCallback(() => {
     const min = rotateMin === "" ? null : Number(rotateMin);
@@ -264,29 +259,18 @@ function ProxyRow({
             if (col === "proxy") return (
               <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.proxy }}>
                 {isAdapter ? (
-                  <div className="flex flex-col gap-0.5 w-full">
-                    <input
-                      type="text"
-                      value={customName}
-                      onChange={e => setCustomName(e.target.value)}
-                      onBlur={saveCustomName}
-                      onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                      className="h-6 w-full text-xs font-semibold bg-transparent border-0 border-b border-transparent hover:border-violet-300 focus:border-violet-500 focus:outline-none text-foreground px-0 placeholder:text-muted-foreground/40"
-                      placeholder="Name this adapter…"
-                    />
-                    <div className="flex items-center gap-1">
-                      <Usb className="w-3 h-3 text-violet-400 shrink-0" />
-                      <select
-                        value={adapterName}
-                        onChange={e => saveAdapterName(e.target.value)}
-                        className="flex-1 text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-violet-600 truncate"
-                      >
-                        <option value="">— select adapter —</option>
-                        {adapters.map(a => (
-                          <option key={a.name} value={a.name}>{a.name} {a.ip ? `(${a.ip})` : "(No IP)"}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex items-center gap-1.5 w-full">
+                    <Usb className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                    <select
+                      value={adapterName}
+                      onChange={e => saveAdapterName(e.target.value)}
+                      className="h-7 flex-1 rounded border border-violet-300 dark:border-violet-700 bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-foreground"
+                    >
+                      <option value="">— select adapter —</option>
+                      {adapters.map(a => (
+                        <option key={a.name} value={a.name}>{a.name} {a.ip ? `(${a.ip})` : "(No IP — not connected)"}</option>
+                      ))}
+                    </select>
                   </div>
                 ) : (
                   <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full text-center text-foreground" placeholder="host:port" />
