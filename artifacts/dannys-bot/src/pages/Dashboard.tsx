@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.196",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Debug", text: "App now logs all detected network adapters to the console when the Proxy Manager adapter list is opened — helps diagnose why a dongle or wireless adapter may not appear in the dropdown." },
+    ],
+  },
+  {
     version: "1.1.195",
     date: "27 Jun 2026",
     items: [

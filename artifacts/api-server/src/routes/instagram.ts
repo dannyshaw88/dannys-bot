@@ -492,7 +492,10 @@ export async function registerInstagramRoutes(
 
   // List available network adapters on this machine
   app.get("/api/adapters", (_req, res) => {
-    res.json(listAdapters());
+    const adapters = listAdapters();
+    console.log("[adapters] Raw os.networkInterfaces():", JSON.stringify(require("os").networkInterfaces(), null, 2));
+    console.log("[adapters] Returning", adapters.length, "adapter(s):", adapters.map(a => `${a.name}=${a.ip || "no-ip"}`).join(", "));
+    res.json(adapters);
   });
 
   // Start / restart the local tunnel for an adapter proxy
