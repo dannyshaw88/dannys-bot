@@ -356,6 +356,13 @@ export async function registerInstagramRoutes(
     const id = Number(req.params.id);
     try {
       const input = api.proxies.update.input.parse(req.body);
+      // insertProxySchema has proxyType.default("http") — Zod injects that default
+      // even on a PATCH when the field is absent from the body, silently overwriting
+      // the stored value. Strip any field that was not explicitly supplied by the caller.
+      const bodyKeys = new Set(Object.keys(req.body));
+      for (const key of Object.keys(input) as (keyof typeof input)[]) {
+        if (!bodyKeys.has(key)) delete input[key];
+      }
       if (input.host || input.port) {
         input.name = `${input.host ?? ""}:${input.port ?? ""}`;
       }

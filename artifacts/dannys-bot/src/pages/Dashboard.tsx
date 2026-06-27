@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.197",
+    date: "27 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager — selecting an adapter from the dropdown no longer resets the row type back to HTTP. Saving any single field on an adapter proxy now correctly leaves all other fields (type, adapter name, rotate schedule) untouched." },
+    ],
+  },
+  {
     version: "1.1.196",
     date: "27 Jun 2026",
     items: [
