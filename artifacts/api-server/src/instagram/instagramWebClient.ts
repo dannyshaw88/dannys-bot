@@ -4021,6 +4021,9 @@ export class InstagramWebClient {
       return null;
     }
 
+    // apiThrottle MUST come before _bootstrapMobileCsrf — the bootstrap makes
+    // real HTTP requests to Instagram and would bypass the rate limit if called first.
+    await this.apiThrottle();
     if (!this.mobileCsrf) {
       console.log(`${TAG} mobileCsrf missing — calling _bootstrapMobileCsrf()`);
       await this._bootstrapMobileCsrf();
@@ -4086,8 +4089,6 @@ export class InstagramWebClient {
     console.log(`${TAG}   X-Instagram-Rupload-Params: ${ruploadParams}`);
     console.log(`${TAG}   Authorization: ${authorization ? authorization.slice(0,20)+"…" : "NONE"}`);
     console.log(`${TAG}   Cookie count: ${this.mobileCookieJar.length} proxy=${proxyHost}`);
-
-    await this.apiThrottle();
 
     let json: any;
     let ruploadCookies: string[] = [];
