@@ -69,6 +69,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.208",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call log now shows the full time each call took — including the throttle wait — so you can confirm your API Controls settings are being respected. Previously it only showed the raw server response time, making it look like calls were firing far faster than configured." },
+    ],
+  },
+  {
     version: "1.1.207",
     date: "27 Jun 2026",
     items: [
