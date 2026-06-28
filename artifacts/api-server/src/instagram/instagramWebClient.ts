@@ -511,7 +511,35 @@ export class InstagramWebClient {
       const igMethod: string = (typeof opts === "object" && opts?.method) ? String(opts.method) : "POST";
       try {
         const result = await _origSend(opts, onlyCheckHttpStatus);
-        _logT(igPath, igMethod, Date.now() - t0, false);
+        // Derive a human-readable success message from the parsed response when possible.
+        let successMsg: string | undefined;
+        if (igPath.includes("/direct_v2/inbox")) {
+          const threads: any[] = result?.inbox?.threads ?? result?.threads ?? [];
+          successMsg = `Inbox overview: ${threads.length} thread${threads.length !== 1 ? "s" : ""}`;
+        } else if (igPath.includes("/news/inbox")) {
+          const count: number = result?.counts?.relationships ?? result?.new_stories?.length ?? 0;
+          successMsg = count > 0 ? `${count} new activit${count !== 1 ? "ies" : "y"}` : "Activity checked";
+        } else if (igPath.includes("/feed/reels_tray")) {
+          const n: number = (result?.tray ?? []).length;
+          successMsg = `${n} stor${n === 1 ? "y" : "ies"} in tray`;
+        } else if (igPath.includes("/discover/topical_explore")) {
+          successMsg = "Explore feed loaded";
+        } else if (igPath.includes("/feed/timeline")) {
+          const n: number = (result?.feed_items ?? result?.items ?? []).length;
+          successMsg = n > 0 ? `${n} post${n !== 1 ? "s" : ""} in timeline` : "Loading timeline feed";
+        } else if (igPath.includes("/friendships/create")) {
+          const status = result?.friendship_status?.following ? "following" : "requested";
+          successMsg = `Follow ${status}`;
+        } else if (igPath.includes("/friendships/destroy")) {
+          successMsg = "Unfollowed";
+        } else if (igPath.includes("/like") && igPath.includes("/media")) {
+          successMsg = "Liked post";
+        } else if (igPath.includes("/unlike") && igPath.includes("/media")) {
+          successMsg = "Unliked post";
+        } else if (igPath.includes("/comment") && igPath.includes("/media")) {
+          successMsg = "Comment posted";
+        }
+        _logT(igPath, igMethod, Date.now() - t0, false, successMsg);
         return result;
       } catch (err) {
         _logT(igPath, igMethod, Date.now() - t0, true);
@@ -795,24 +823,70 @@ export class InstagramWebClient {
     return pascal || base;
   }
 
-  private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
+  // Single source of truth for all API call log messages.
+  // Accepts an optional override `msg` — pass it when the caller has parsed
+  // the response and can produce a richer message (e.g. "12 stories in tray").
+  // When `msg` is omitted, the path is matched against MSG to produce a
+  // human-readable description for both success and error cases.
+  private _logTransport(path: string, method: string, durationMs: number, isError: boolean, msg?: string): void {
     if (!this.logCallFn) return;
-    const PATH_FRIENDLY: Record<string, string> = {
-      "/api/v1/feed/timeline/":                    "Loading timeline feed",
-      "/api/v1/media/seen/":                        "Marking media as seen",
-      "/api/v1/friendships/create/":               "Follow user",
-      "/api/v1/friendships/destroy/":              "Unfollow user",
-      "/api/v1/clips/user/":                        "Fetching clips",
-      "/api/v1/accounts/account_security_info/":   "Fetching account security info",
-      "/api/v1/challenge/":                         "Challenge response",
-      "/api/v1/qe/sync/":                           "Config sync",
-      "/api/v1/launcher/sync/":                     "Launcher sync",
-      "/api/v1/users/self/banner_dismiss/":         "Dismiss banner",
-      "/api/v1/direct_v2/threads/":                "DM thread action",
-      "/api/v1/tags/":                              "Hashtag sections",
-    };
-    const basePath = path.split("?")[0];
-    const msg = PATH_FRIENDLY[basePath] ?? basePath;
+
+    if (!msg) {
+      // Strip query string then trailing slashes.
+      const base = path.split("?")[0].replace(/\/+$/, "");
+      // Normalise: replace long numeric segments (IDs) with * for matching.
+      const norm = base.replace(/\/\d{5,}/g, "/*");
+
+      // Each entry is [successMsg, errorMsg].
+      const MSG: Record<string, [string, string]> = {
+        "/api/v1/feed/timeline":                    ["Loading timeline feed",           "Timeline load failed"],
+        "/api/v1/feed/reels_tray":                  ["Stories tray loaded",             "Stories tray failed"],
+        "/api/v1/feed/user/*":                      ["User feed loaded",                "User feed failed"],
+        "/api/v1/feed/tag/*":                       ["Hashtag feed loaded",             "Hashtag feed failed"],
+        "/api/v1/discover/topical_explore":         ["Explore feed loaded",             "Explore feed failed"],
+        "/api/v1/discover/ayml":                    ["Suggestions loaded",              "Suggestions failed"],
+        "/api/v1/media/seen":                       ["Marking media as seen",           "Mark seen failed"],
+        "/api/v1/media/*/like":                     ["Liked post",                      "Like failed"],
+        "/api/v1/media/*/unlike":                   ["Unliked post",                    "Unlike failed"],
+        "/api/v1/media/*/comment":                  ["Comment posted",                  "Comment failed"],
+        "/api/v1/friendships/create":               ["Follow sent",                     "Follow failed"],
+        "/api/v1/friendships/create/*":             ["Follow sent",                     "Follow failed"],
+        "/api/v1/friendships/destroy":              ["Unfollowed",                      "Unfollow failed"],
+        "/api/v1/friendships/destroy/*":            ["Unfollowed",                      "Unfollow failed"],
+        "/api/v1/friendships/show":                 ["Friendship status checked",       "Friendship check failed"],
+        "/api/v1/web/friendships/*/follow":         ["Follow sent",                     "Follow failed"],
+        "/api/v1/web/friendships/*/unfollow":       ["Unfollowed",                      "Unfollow failed"],
+        "/api/v1/direct_v2/inbox":                  ["DM inbox loaded",                 "DM inbox failed"],
+        "/api/v1/direct_v2/threads/*/items":        ["DM sent",                         "DM send failed"],
+        "/api/v1/direct_v2/threads":                ["DM thread action",                "DM thread failed"],
+        "/api/v1/news/inbox":                       ["Activity checked",                "Activity check failed"],
+        "/api/v1/users/*/info":                     ["Profile loaded",                  "Profile load failed"],
+        "/api/v1/accounts/account_security_info":   ["Account security info fetched",   "Security info failed"],
+        "/api/v1/accounts/current_user":            ["Session verified",                "Session verify failed"],
+        "/api/v1/accounts/login":                   ["Login attempt",                   "Login failed"],
+        "/api/v1/challenge":                        ["Challenge response",              "Challenge failed"],
+        "/api/v1/qe/sync":                          ["Config sync",                     "Config sync failed"],
+        "/api/v1/launcher/sync":                    ["Launcher sync",                   "Launcher sync failed"],
+        "/api/v1/si/fetch_headers":                 ["Mobile CSRF bootstrap",           "CSRF bootstrap failed"],
+        "/api/v1/users/self/banner_dismiss":        ["Dismiss banner",                  "Banner dismiss failed"],
+        "/api/v1/clips/user":                       ["Clips loaded",                    "Clips load failed"],
+        "/api/v1/tags":                             ["Hashtag feed loaded",             "Hashtag feed failed"],
+      };
+
+      // 1. Exact match on base path (no trailing slash).
+      let entry = MSG[base] ?? MSG[norm];
+      // 2. Prefix scan — handles sub-paths not in the table (e.g. /api/v1/challenge/verify/).
+      if (!entry) {
+        for (const [k, v] of Object.entries(MSG)) {
+          if (!k.includes("*") && (base.startsWith(k) || norm.startsWith(k))) { entry = v; break; }
+        }
+      }
+
+      msg = entry
+        ? entry[isError ? 1 : 0]
+        : (isError ? "Request failed" : base);
+    }
+
     this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
   }
 
@@ -1364,7 +1438,7 @@ export class InstagramWebClient {
     try { return (JSON.parse(this.igDeviceState) as any).authorization ?? undefined; } catch { return undefined; }
   }
 
-  private async mobileSessionGet(path: string): Promise<any> {
+  private async mobileSessionGet(path: string, msgFn?: (json: any) => string): Promise<any> {
     const authorization = this._deviceAuthorization;
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
@@ -1431,7 +1505,7 @@ export class InstagramWebClient {
       throw new Error(errMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
-    this._logTransport(path, "GET", Date.now() - _t0, false);
+    this._logTransport(path, "GET", Date.now() - _t0, false, msgFn?.(res.json));
     return res.json;
   }
 
@@ -2548,7 +2622,10 @@ export class InstagramWebClient {
         return { count: -1, items: [] };
       }
 
-      const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/?surface=2`);
+      const j = await this.mobileSessionGet(
+        `/api/v1/feed/reels_tray/?surface=2`,
+        (json) => { const n = Array.isArray(json?.tray) ? json.tray.length : 0; return `${n} stor${n === 1 ? "y" : "ies"} in tray`; }
+      );
       if (j === null) {
         // mobileSessionGet returned null — the session was present but Instagram
         // rejected it (HTTP 4xx / expired / checkpoint).  Return -5 so the caller
@@ -5145,7 +5222,13 @@ export class InstagramWebClient {
       const items: Array<{ mediaId: string; shortcode: string; username: string; userId: string }> = [];
       try {
         // Primary endpoint: topical explore (Search & Explore tab)
-        const j = await this.mobileSessionGet(`/api/v1/discover/topical_explore/?is_prefetch=false&omit_cover_media=false&use_sectional_payload=true&timezone_offset=0&session_id=${Date.now()}&include_fixed_destinations=false`);
+        const j = await this.mobileSessionGet(
+          `/api/v1/discover/topical_explore/?is_prefetch=false&omit_cover_media=false&use_sectional_payload=true&timezone_offset=0&session_id=${Date.now()}&include_fixed_destinations=false`,
+          (json) => {
+            const n = (json?.sectional_items ?? json?.items ?? []).reduce((acc: number, s: any) => acc + (s?.layout_content?.medias ?? s?.layout_content?.fill_items ?? []).length, 0);
+            return `Explore feed loaded${n > 0 ? ` (${n} posts)` : ""}`;
+          }
+        );
         const sections: any[] = j?.sectional_items ?? j?.items ?? [];
         for (const section of sections) {
           const medias: any[] = section?.layout_content?.medias ?? section?.layout_content?.fill_items ?? [];
