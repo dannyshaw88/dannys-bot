@@ -3655,9 +3655,14 @@ class AutomationEngine {
     const injectProfileBrowsingWatchStoriesPctMax = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMax ?? 0);
     const injectProfileBrowsingViewHighlightsPctMin = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMin ?? 0);
     const injectProfileBrowsingViewHighlightsPctMax = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMax ?? 0);
-    const injectProfileBrowsingCommentPctMin      = Math.max(0, s.injectProfileBrowsingCommentPctMin ?? 0);
-    const injectProfileBrowsingCommentPctMax      = Math.max(0, s.injectProfileBrowsingCommentPctMax ?? 0);
-    const injectProfileBrowsingCommentText        = (s.injectProfileBrowsingCommentText as string | undefined) ?? "";
+    const injectProfileBrowsingCommentEnabled        = !!(s.injectProfileBrowsingCommentEnabled);
+    const injectProfileBrowsingCommentPctMin         = Math.max(0, s.injectProfileBrowsingCommentPctMin ?? 0);
+    const injectProfileBrowsingCommentPctMax         = Math.max(0, s.injectProfileBrowsingCommentPctMax ?? 0);
+    const injectProfileBrowsingCommentText           = (s.injectProfileBrowsingCommentText as string | undefined) ?? "";
+    const injectProfileBrowsingViewReelsPctMin       = Math.max(0, s.injectProfileBrowsingViewReelsPctMin ?? 0);
+    const injectProfileBrowsingViewReelsPctMax       = Math.max(0, s.injectProfileBrowsingViewReelsPctMax ?? 0);
+    const injectProfileBrowsingShareToDmPctMin       = Math.max(0, s.injectProfileBrowsingShareToDmPctMin ?? 0);
+    const injectProfileBrowsingShareToDmPctMax       = Math.max(0, s.injectProfileBrowsingShareToDmPctMax ?? 0);
 
     // Helper: pick `n` random indices from [lo, hi] without repeats (partial Fisher-Yates).
     // Returns a Set — elements are `followed` counter values at which the injection fires.
@@ -3836,8 +3841,22 @@ class AutomationEngine {
         }
       }
 
-      // Comment on a post (spintax supported)
-      if (injectProfileBrowsingCommentPctMax > 0 && profilePosts.length > 0 && injectProfileBrowsingCommentText.trim()) {
+      // View reels tab
+      if (injectProfileBrowsingViewReelsPctMax > 0) {
+        const reelsPct = randInt(injectProfileBrowsingViewReelsPctMin, injectProfileBrowsingViewReelsPctMax);
+        if (Math.random() * 100 < reelsPct) {
+          try {
+            const ok = await client.viewReels(targetUser.pk, targetUser.username);
+            if (ok) {
+              engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
+              this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
+            }
+          } catch { /* non-critical */ }
+        }
+      }
+
+      // Comment on a post (spintax supported, requires checkbox enabled)
+      if (injectProfileBrowsingCommentEnabled && injectProfileBrowsingCommentPctMax > 0 && profilePosts.length > 0 && injectProfileBrowsingCommentText.trim()) {
         const commentPct = randInt(injectProfileBrowsingCommentPctMin, injectProfileBrowsingCommentPctMax);
         if (Math.random() * 100 < commentPct) {
           const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
@@ -3852,6 +3871,18 @@ class AutomationEngine {
               }
             } catch { /* non-critical */ }
           }
+        }
+      }
+
+      // Share to DM — opens the DM picker (getDirectMessages simulates tapping the share button)
+      if (injectProfileBrowsingShareToDmPctMax > 0) {
+        const sharePct = randInt(injectProfileBrowsingShareToDmPctMin, injectProfileBrowsingShareToDmPctMax);
+        if (Math.random() * 100 < sharePct) {
+          try {
+            await client.getDirectMessages(3);
+            engineLog("INFO", `@${profile.username}: [${label}] opened DM share picker for @${targetUser.username}`);
+            this.logAction(profile.id, tool.id, "share_to_dm", targetUser.username, "", "dm", "ok", `Opened DM share picker from profile browse`);
+          } catch { /* non-critical */ }
         }
       }
     };

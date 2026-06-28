@@ -71,13 +71,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.1.220",
+    version: "1.1.221",
     date: "28 Jun 2026",
     items: [
-      { category: "UI", text: "Inject Browsing: settings now open in a centred dialog (click Open) instead of a hover popup — no more accidental dismissals." },
-      { category: "Feature", text: "Inject Browsing: every sub-setting (Feed Posts, Like %, Save Media %, Watch Stories %, View Highlights %, Comment %, Abandon Follow) now has its own Order % min/max field so each action fires in a different randomised order each session." },
-      { category: "UI", text: "Inject Search and Inject Browsing % input fields are slightly wider for easier clicking." },
-      { category: "Copy Settings", text: "All Inject Browsing per-sub-setting Order % fields are included when copying injection settings to other profiles." },
+      { category: "UI", text: "Inject Browsing dialog: Value % and Order % column headers now align exactly with their input field columns." },
+      { category: "UI", text: "Inject Browsing dialog: Abandon Follow row is now properly aligned with all other rows." },
+      { category: "UI", text: "Inject Browsing dialog: trailing % symbols removed from each value row — % now appears only in the column header." },
+      { category: "Feature", text: "Inject Browsing: added View Reels % — browsing a profile's Reels tab is now a configurable action with its own Order %." },
+      { category: "Feature", text: "Inject Browsing: added Share to DM % — simulates tapping the share button and opening the DM picker, with its own Order %." },
+      { category: "UI", text: "Inject Browsing: Comment % now has an enable/disable checkbox. When ticked, a plain text field appears to enter spintax comment templates." },
     ],
   },
   {
