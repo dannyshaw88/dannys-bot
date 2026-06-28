@@ -76,9 +76,10 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
-    version: "1.1.209",
+    version: "1.1.210",
     date: "28 Jun 2026",
     items: [
+      { category: "Fix", text: "Fixed 2 unthrottled Instagram API calls firing at the start of every single tool run. The CSRF token was being erased on every tool execution (because session setup runs before every tool), which forced a 2-call bootstrap sequence before every action. That bootstrap had no throttle delay, so those 2 calls always appeared in the log at 0ms apart and were not respecting your API Controls. Now the CSRF token is kept in memory between runs — bootstrap only fires once per session, not before every tool." },
       { category: "Fix", text: "Removed fake entries from the API call log. ViewFeedPost and VisitUserProfile made no HTTP call to Instagram but were still being logged as if they did — removed. ViewFeedReel was logging twice (once as ViewFeedReel, once as ClipsViewed) for the same single HTTP call — now logs once as ClipsViewed only." },
     ],
   },

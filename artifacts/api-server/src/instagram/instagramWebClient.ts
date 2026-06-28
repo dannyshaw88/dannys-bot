@@ -597,11 +597,13 @@ export class InstagramWebClient {
       cookies.push(`mid=${this._mobileMid}`);
     }
     // igApiCookies never contains a csrftoken (Jarvee doesn't store it).
-    // Seed with "missing" as a placeholder; _bootstrapMobileCsrf() will replace
-    // it with a real token on the first mobileSessionPost call by doing a GET
-    // to i.instagram.com using only the mobileCookieJar — no EB dependency.
+    // If the client already has a real bootstrapped token in memory, preserve it —
+    // setDeviceInfo is called on every tool run, so without this check the token
+    // gets reset to "missing" every run, which forces _bootstrapMobileCsrf() to
+    // fire 2 unthrottled HTTP calls before every single tool execution.
     if (!cookies.some(c => c.startsWith("csrftoken="))) {
-      cookies.push("csrftoken=missing");
+      const preserved = this.mobileCsrf && this.mobileCsrf !== "missing" ? this.mobileCsrf : null;
+      cookies.push(preserved ? `csrftoken=${preserved}` : "csrftoken=missing");
     }
 
     this.mobileCookieJar = cookies;
