@@ -7,6 +7,7 @@ export interface UaEntry { api: string; embedded: string; }
 interface Props {
   value: string;
   onSelect: (ua: UaEntry) => void;
+  fullWidth?: boolean;
 }
 
 function parseParts(api: string) {
@@ -20,7 +21,7 @@ function parseParts(api: string) {
   };
 }
 
-export function UaPickerDropdown({ value, onSelect }: Props) {
+export function UaPickerDropdown({ value, onSelect, fullWidth }: Props) {
   const [open, setOpen] = useState(false);
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -76,15 +77,15 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
   const isKnown = !!value && userAgents.some(ua => ua.api === value);
   const currentLabel = value || "Pick a device…";
 
-  const btnWidth = `${Math.max(18, currentLabel.length + 6)}ch`;
+  const btnWidth = fullWidth ? undefined : `${Math.max(18, currentLabel.length + 6)}ch`;
 
   return (
-    <div ref={containerRef} className="relative inline-block">
+    <div ref={containerRef} className={fullWidth ? "relative block w-full" : "relative inline-block"}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        style={{ width: btnWidth }}
-        className="flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        style={btnWidth ? { width: btnWidth } : undefined}
+        className={`flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring${fullWidth ? " w-full" : ""}`}
       >
         <span className="flex items-center gap-2 min-w-0 overflow-hidden">
           <Smartphone className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />

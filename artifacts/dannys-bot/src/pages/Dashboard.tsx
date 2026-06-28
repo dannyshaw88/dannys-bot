@@ -71,6 +71,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.218",
+    date: "28 Jun 2026",
+    items: [
+      { category: "UI", text: "Ghost Browser signup tab: Fingerprint is now its own card on the same row as Proxy and Device Identity." },
+      { category: "UI", text: "Ghost Browser: removed the inner scroll bar from the signup panel — the page now scrolls naturally." },
+      { category: "UI", text: "Ghost Browser: Device Identity dropdown now matches the full width of the Proxy dropdown." },
+      { category: "UI", text: "Ghost Browser: scheduler min/max input fields are slightly narrower." },
+      { category: "UI", text: "Ghost Browser: Username, Password, DOB, Bio, and all email/IMAP fields are more compact." },
+      { category: "UI", text: "Ghost Browser: action buttons reduced in width and Nuke Environment moved before Add to Equinox." },
+    ],
+  },
+  {
+    version: "1.1.217",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls: ViewTimelineFeedSeen rows no longer appear as 'ERROR: Marked X posts as seen' in the CSV. Instagram's seen endpoint sometimes returns a non-200 response but the session stays valid — this is now treated as non-fatal so the rows are stored correctly." },
+    ],
+  },
+  {
     version: "1.1.216",
     date: "28 Jun 2026",
     items: [

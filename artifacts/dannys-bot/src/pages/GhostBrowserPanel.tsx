@@ -349,14 +349,14 @@ function XYField({
           value={min}
           onChange={e => onMin(e.target.value.replace(/\D/g, "").slice(0, 3))}
           placeholder="Min"
-          className="h-7 text-xs w-16 text-center font-mono"
+          className="h-7 text-xs w-14 text-center font-mono"
         />
         <span className="text-muted-foreground text-xs">–</span>
         <Input
           value={max}
           onChange={e => onMax(e.target.value.replace(/\D/g, "").slice(0, 3))}
           placeholder="Max"
-          className="h-7 text-xs w-16 text-center font-mono"
+          className="h-7 text-xs w-14 text-center font-mono"
         />
       </div>
     </div>
@@ -1061,14 +1061,14 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         <StatusChip state={browserState} />
       </div>
 
-      {/* Body: single scrollable panel */}
-      <div className="flex flex-col gap-2 overflow-y-auto pr-1" style={{ height: "calc(100vh - 196px)" }}>
+      {/* Body: single panel */}
+      <div className="flex flex-col gap-2">
 
-          {/* ── ROW 1: Proxy+Fingerprint | Device Identity ── */}
-          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, 247px)" }}>
+          {/* ── ROW 1: Proxy | Device Identity | Fingerprint ── */}
+          <div className="flex gap-2 flex-wrap">
 
-            {/* Proxy + Fingerprint */}
-            <div className="desktop-card p-2.5 space-y-1.5">
+            {/* Proxy */}
+            <div className="desktop-card p-2.5 space-y-1.5" style={{ width: 247 }}>
               <div className="flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Proxy</p>
@@ -1086,55 +1086,56 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </div>
                 </div>
               )}
-              {/* Fingerprint — directly below the proxy dropdown */}
-              <div className="border-t border-border pt-1.5 mt-0.5 space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setFingerprint(generateGhostFingerprint())}
-                      className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <RefreshCw className="w-2.5 h-2.5" />
-                      Spin
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFingerprintExpanded(v => !v)}
-                      className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-1"
-                    >
-                      {fingerprintExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted-foreground truncate" title={fingerprint.webglRenderer}>
-                  GPU: {fingerprint.webglRenderer}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Canvas noise: {fingerprint.canvasNoise} · Font seed: {fingerprint.fontSeed}
-                </p>
-                {fingerprintExpanded && (
-                  <div className="space-y-0.5 text-[10px] text-muted-foreground border-t border-border pt-1.5 mt-1">
-                    <p>Audio noise: {fingerprint.audioNoise}</p>
-                    <p>Speech: {FP_SPEECH_PROFILES[fingerprint.speechProfile]}</p>
-                    <p className="font-mono text-[9px]">Video ID: {fingerprint.mediaVideoId}</p>
-                    <p className="font-mono text-[9px]">Audio ID: {fingerprint.mediaAudioId}</p>
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Device Identity */}
-            <div className="desktop-card p-2.5 space-y-1.5">
+            <div className="desktop-card p-2.5 space-y-1.5" style={{ width: 247 }}>
               <div className="flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
-              <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} />
+              <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} fullWidth />
+            </div>
+
+            {/* Fingerprint */}
+            <div className="desktop-card p-2.5 space-y-1 flex-1 min-w-[180px]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFingerprint(generateGhostFingerprint())}
+                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Spin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFingerprintExpanded(v => !v)}
+                    className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-1"
+                  >
+                    {fingerprintExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground truncate" title={fingerprint.webglRenderer}>
+                GPU: {fingerprint.webglRenderer}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Canvas noise: {fingerprint.canvasNoise} · Font seed: {fingerprint.fontSeed}
+              </p>
+              {fingerprintExpanded && (
+                <div className="space-y-0.5 text-[10px] text-muted-foreground border-t border-border pt-1.5 mt-1">
+                  <p>Audio noise: {fingerprint.audioNoise}</p>
+                  <p>Speech: {FP_SPEECH_PROFILES[fingerprint.speechProfile]}</p>
+                  <p className="font-mono text-[9px]">Video ID: {fingerprint.mediaVideoId}</p>
+                  <p className="font-mono text-[9px]">Audio ID: {fingerprint.mediaAudioId}</p>
+                </div>
+              )}
             </div>
 
           </div>
@@ -1216,8 +1217,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   <Input
                     value={usernameSpin}
                     onChange={e => setUsernameSpin(e.target.value)}
-                    placeholder="{john|jane}.{smith}{1|23}"
-                    className="h-7 text-xs font-mono placeholder:font-sans flex-1 min-w-0"
+                    placeholder="{john|jane}.{smith}"
+                    className="h-7 text-xs font-mono placeholder:font-sans w-24"
                     spellCheck={false}
                     autoComplete="off"
                   />
@@ -1235,7 +1236,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   </button>
                 </div>
                 <div className="flex gap-1">
-                  <Input value={password} onChange={e => setPassword(e.target.value)} className="h-7 text-xs font-mono flex-1 min-w-0" spellCheck={false} autoComplete="off" />
+                  <Input value={password} onChange={e => setPassword(e.target.value)} className="h-7 text-xs font-mono w-24" spellCheck={false} autoComplete="off" />
                   <FieldActions value={password} isOpen={isOpen} onType={() => typeIntoField(password)} />
                 </div>
               </div>
@@ -1252,14 +1253,14 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                     Spin
                   </button>
                 </div>
-                <Input value={dob} onChange={e => setDob(e.target.value)} placeholder="DD/MM/YYYY" className="h-7 text-xs font-mono placeholder:font-sans" spellCheck={false} autoComplete="off" />
+                <Input value={dob} onChange={e => setDob(e.target.value)} placeholder="DD/MM/YYYY" className="h-7 text-xs font-mono placeholder:font-sans w-28" spellCheck={false} autoComplete="off" />
               </div>
 
               {/* Bio Spin */}
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Bio Spin</p>
                 <div className="flex gap-1">
-                  <Input value={bioSpin} onChange={e => setBioSpin(e.target.value)} placeholder="{Photographer|Artist} 📸" className="h-7 text-xs font-mono placeholder:font-sans flex-1 min-w-0" spellCheck={false} autoComplete="off" />
+                  <Input value={bioSpin} onChange={e => setBioSpin(e.target.value)} placeholder="{Photographer|Artist}" className="h-7 text-xs font-mono placeholder:font-sans w-24" spellCheck={false} autoComplete="off" />
                   <FieldActions value={bioSpin ? resolveSpintax(bioSpin) : ""} isOpen={isOpen} onType={() => typeIntoField(bioSpin ? resolveSpintax(bioSpin) : "")} />
                 </div>
               </div>
@@ -1276,7 +1277,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Email Address</p>
                 <div className="flex gap-1">
-                  <Input value={emailAddr} onChange={e => setEmailAddr(e.target.value)} placeholder="user@example.com" className="h-7 text-xs flex-1 min-w-0" type="email" autoComplete="off" />
+                  <Input value={emailAddr} onChange={e => setEmailAddr(e.target.value)} placeholder="user@example.com" className="h-7 text-xs w-28" type="email" autoComplete="off" />
                   <FieldActions value={emailAddr} isOpen={isOpen} onType={() => typeIntoField(emailAddr)} />
                 </div>
               </div>
@@ -1285,19 +1286,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   <Lock className="w-2.5 h-2.5 text-muted-foreground" />
                   <p className="text-[10px] text-muted-foreground font-medium">Email Password</p>
                 </div>
-                <Input value={emailPass} onChange={e => setEmailPass(e.target.value)} placeholder="Email account password" className="h-7 text-xs font-mono placeholder:font-sans" type="password" autoComplete="off" />
+                <Input value={emailPass} onChange={e => setEmailPass(e.target.value)} placeholder="Email password" className="h-7 text-xs font-mono placeholder:font-sans w-24" type="password" autoComplete="off" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
                   <Server className="w-2.5 h-2.5 text-muted-foreground" />
                   <p className="text-[10px] text-muted-foreground font-medium">IMAP Host</p>
                 </div>
-                <Input value={imapHost} onChange={e => setImapHost(e.target.value)} placeholder="imap.gmail.com" className="h-7 text-xs flex-1" spellCheck={false} autoComplete="off" />
+                <Input value={imapHost} onChange={e => setImapHost(e.target.value)} placeholder="imap.gmail.com" className="h-7 text-xs w-28" spellCheck={false} autoComplete="off" />
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground font-medium">Port</p>
                 <div className="flex gap-1">
-                  <Input value={imapPort} onChange={e => setImapPort(e.target.value)} placeholder="993" className="h-7 text-xs flex-1" autoComplete="off" />
+                  <Input value={imapPort} onChange={e => setImapPort(e.target.value)} placeholder="993" className="h-7 text-xs w-14" autoComplete="off" />
                   <button
                     type="button"
                     onClick={() => setImapSecure(s => !s)}
@@ -1356,7 +1357,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             <div className="flex gap-2 justify-start">
               <Button
                 className={cn(
-                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[170px]",
                   signupRunning
                     ? "bg-red-500 hover:bg-red-600 text-white border-0"
                     : browserState === "opening"
@@ -1375,8 +1376,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
               <Button
                 variant="outline"
+                className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400 w-[170px]"
+                onClick={handleFresh}
+                disabled={browserState === "opening" || browserState === "resetting"}
+              >
+                {browserState === "resetting"
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
+                  : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
+              </Button>
+
+              <Button
+                variant="outline"
                 className={cn(
-                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[200px]",
+                  "gap-2 text-xs font-semibold tracking-wide uppercase w-[170px]",
                   addedToEquinox
                     ? "border-green-400 text-green-700 bg-green-50 hover:bg-green-50"
                     : "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
@@ -1389,17 +1401,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                   : addedToEquinox
                   ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Equinox!</>
                   : <><UserPlus className="w-3.5 h-3.5" />Add to Equinox</>}
-              </Button>
-
-              <Button
-                variant="outline"
-                className="gap-2 text-xs font-semibold tracking-wide uppercase border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400 w-[200px]"
-                onClick={handleFresh}
-                disabled={browserState === "opening" || browserState === "resetting"}
-              >
-                {browserState === "resetting"
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
-                  : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
               </Button>
             </div>
           </div>
