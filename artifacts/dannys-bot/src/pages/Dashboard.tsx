@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.216",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: when you click 'Add to Equinox', it now sends the exact username that was used during the actual signup — not a freshly re-rolled random version of the spintax template. Previously every click re-resolved the template, often producing a different username than the one Instagram registered." },
+      { category: "Fix", text: "Ghost Browser: the account name in Account Manager now defaults to the username — previously it was blank when added via 'Add to Equinox'." },
+      { category: "Fix", text: "Ghost Browser: session cookies captured at signup are now properly written to the account's browser profile on 'Add to Equinox'. When you open the embedded browser for that account from Account Manager, it will already be logged in." },
+      { category: "Fix", text: "Ghost Browser: the right-hand 'Browser not started' placeholder panel has been removed. The tool now fills the full screen width as a single panel." },
+    ],
+  },
+  {
     version: "1.1.215",
     date: "28 Jun 2026",
     items: [

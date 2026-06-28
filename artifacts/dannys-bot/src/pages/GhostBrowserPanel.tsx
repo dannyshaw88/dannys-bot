@@ -527,8 +527,12 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const imapAutoPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Add to Equinox
-  const [addedToEquinox, setAddedToEquinox]   = useState(false);
-  const [addingToEquinox, setAddingToEquinox] = useState(false);
+  const [addedToEquinox, setAddedToEquinox]     = useState(false);
+  const [addingToEquinox, setAddingToEquinox]   = useState(false);
+  // The username actually submitted to Instagram during the last Create Account run.
+  // Stored so "Add to Equinox" sends the same username instead of re-resolving the
+  // spintax template (which would produce a different random value each render).
+  const [resolvedSignupUsername, setResolvedSignupUsername] = useState("");
 
   // Code-wait countdown
   const [codeWaitSecs, setCodeWaitSecs] = useState(0);
@@ -786,6 +790,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     setSignupStatus("");
     setSignupRunning(false);
     setSignupLog([]);
+    setResolvedSignupUsername("");
     userScrolledUpRef.current = false;
     setBrowserState("closed");
   };
@@ -861,6 +866,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // Create Account — visits websites first, then runs signup
   const handleCreateAccount = async () => {
     const uname = (generatedUsername || usernameSpin).trim();
+    // Save for "Add to Equinox" so it sends the exact same username we submitted,
+    // not a freshly-re-resolved spintax value.
+    setResolvedSignupUsername(uname);
     if (!uname || !password.trim() || !emailAddr.trim() || !dob.trim()) {
       setSignupStatus("⚠ Fill in username, password, email, and DOB before creating an account.");
       return;
@@ -976,7 +984,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
   // Add to Equinox — sends all session data (cookies, proxy, UA, DOB, fingerprint)
   const handleAddToEquinox = async () => {
-    const uname = (generatedUsername || usernameSpin).trim();
+    // Prefer the username that was actually submitted to Instagram during signup.
+    // Fall back to fresh spintax resolution only if no signup has run yet.
+    const uname = (resolvedSignupUsername || generatedUsername || usernameSpin).trim();
     if (!uname || !password.trim()) return;
     setAddingToEquinox(true);
     try {
@@ -1007,6 +1017,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         credentials: "include",
         body: JSON.stringify({
           username:                 uname,
+          name:                     uname,
           password:                 password.trim(),
           email:                    emailAddr.trim() || undefined,
           // Correct field names that match the DB schema
@@ -1050,11 +1061,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         <StatusChip state={browserState} />
       </div>
 
-      {/* Body: settings left, placeholder box right */}
-      <div className="flex gap-3" style={{ height: "calc(100vh - 196px)" }}>
-
-        {/* ── Left: Controls Panel ── */}
-        <div className="w-[840px] shrink-0 flex flex-col gap-2 overflow-y-auto pr-1">
+      {/* Body: single scrollable panel */}
+      <div className="flex flex-col gap-2 overflow-y-auto pr-1" style={{ height: "calc(100vh - 196px)" }}>
 
           {/* ── ROW 1: Proxy+Fingerprint | Device Identity ── */}
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, 247px)" }}>
@@ -1486,27 +1494,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           );
           })()}
-
-        </div>
-
-        {/* ── Right: Placeholder box ── */}
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center bg-muted/10 rounded-lg border border-border overflow-hidden">
-          <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
-            <div className="w-20 h-20 rounded-3xl bg-muted/60 flex items-center justify-center">
-              <Ghost className="w-10 h-10 text-muted-foreground/50" />
-            </div>
-            <div className="space-y-1.5 max-w-xs">
-              <p className="text-base font-semibold text-foreground">
-                {isOpen ? "Browser running" : "Browser not started"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {isOpen
-                  ? `Browser window is open${activeProxyLabel ? ` · ${activeProxyLabel}` : ""}.`
-                  : "Fill in your account details, then click Create Account to launch the browser."}
-              </p>
-            </div>
-          </div>
-        </div>
 
       </div>
     </>

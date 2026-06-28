@@ -775,7 +775,17 @@ export async function registerInstagramRoutes(
         const pad = (n: number) => String(n).padStart(2, "0");
         const stamp = `Re-added: ${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
         const updatedNotes = existing.notes ? `${existing.notes}\n${stamp}` : stamp;
-        const updated = await storage.updateProfile(existing.id, { notes: updatedNotes });
+        // When re-adding from Ghost Browser, also carry over the fresh password and
+        // session cookies so the EB opens already logged in.
+        const reAddUpdate: Record<string, unknown> = { notes: updatedNotes };
+        if (input.password) reAddUpdate.password = input.password;
+        if (input.name)     reAddUpdate.name     = input.name;
+        if (input.igApiCookies && typeof input.igApiCookies === "string" && input.igApiCookies.includes("sessionid=")) {
+          reAddUpdate.igApiCookies = input.igApiCookies;
+        }
+        const updated = await storage.updateProfile(existing.id, reAddUpdate as any);
+        // Seed browser cookie file so EB opens logged in
+        if (reAddUpdate.igApiCookies) seedBrowserCookieFile(existing.id, reAddUpdate.igApiCookies as string);
         return res.status(200).json(updated);
       }
 
