@@ -499,9 +499,24 @@ export class InstagramWebClient {
     const _igReq = ig.request as any;
     const _origSend = _igReq.send.bind(_igReq);
     const _throttle = this.apiThrottle.bind(this);
+    const _logT = this._logTransport.bind(this);
     _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
       await _throttle();
-      return _origSend(opts, onlyCheckHttpStatus);
+      const t0 = Date.now();
+      // Extract the URL path from IgApiClient's options object.
+      // The library passes a got-compatible options object with a `url` string.
+      const rawUrl: string = typeof opts === "string" ? opts : (opts?.url ?? opts?.uri ?? "");
+      let igPath = rawUrl;
+      try { igPath = rawUrl.startsWith("http") ? new URL(rawUrl).pathname : rawUrl.split("?")[0]; } catch { /* keep as-is */ }
+      const igMethod: string = (typeof opts === "object" && opts?.method) ? String(opts.method) : "POST";
+      try {
+        const result = await _origSend(opts, onlyCheckHttpStatus);
+        _logT(igPath, igMethod, Date.now() - t0, false);
+        return result;
+      } catch (err) {
+        _logT(igPath, igMethod, Date.now() - t0, true);
+        throw err;
+      }
     };
     return ig;
   }
@@ -757,33 +772,19 @@ export class InstagramWebClient {
     }
   }
 
-  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string), shouldLog?: (result: T) => boolean): Promise<T> {
-    const t0 = Date.now();
-    const prevInTimed = this._inTimedCall;
+  // timed() is a pure execution wrapper — it no longer logs to api_calls.
+  // All HTTP call logging happens exclusively at the transport layer:
+  //   • mobileSessionGet / mobileSessionPost / webGet / webPost / ebGet → _logTransport()
+  //   • IgApiClient (ig.*) → hooked in _newAutomationIgClient() → _logTransport()
+  //   • direct igReq() calls → caller is responsible for calling _logTransport()
+  // This guarantees exactly 1 log row per real HTTP request with no duplicates.
+  private async timed<T>(opName: string, fn: () => Promise<T>, _message?: string | ((result: T) => string), _shouldLog?: (result: T) => boolean): Promise<T> {
     this._inTimedCall = true;
-    let result!: T;
-    let didThrow = false;
-    let thrownErr: unknown;
     try {
-      result = await fn();
-    } catch (err) {
-      didThrow = true;
-      thrownErr = err;
+      return await fn();
     } finally {
-      this._inTimedCall = prevInTimed;
+      this._inTimedCall = false;
     }
-    const ms = Date.now() - t0;
-    if (didThrow) {
-      // Log the call even on failure so it appears in the API call log, then re-throw.
-      const errText = thrownErr instanceof Error ? thrownErr.message : String(thrownErr ?? "");
-      this.logCallFn?.(opName, ms, errText || undefined, true);
-      throw thrownErr;
-    }
-    if (!shouldLog || shouldLog(result)) {
-      const msg = typeof message === "function" ? message(result) : message;
-      this.logCallFn?.(opName, ms, msg);
-    }
-    return result;
   }
 
   private _opNameFromPath(path: string, _method: string): string {
@@ -795,7 +796,7 @@ export class InstagramWebClient {
   }
 
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean): void {
-    if (this._inTimedCall || !this.logCallFn) return;
+    if (!this.logCallFn) return;
     const PATH_FRIENDLY: Record<string, string> = {
       "/api/v1/feed/timeline/":                    "Loading timeline feed",
       "/api/v1/media/seen/":                        "Marking media as seen",
@@ -3423,25 +3424,33 @@ export class InstagramWebClient {
       const midCookie   = this.mobileCookieJar.find(c => c.startsWith("mid="))
         ?? `mid=${Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
       const anonJar = [igDidCookie, midCookie];
-      const res = await this.timed("FetchHeaders", () => igReq({
-        host: "i.instagram.com",
-        path: `/api/v1/si/fetch_headers/?challenge_type=signup&guid=${guid}`,
-        method: "GET",
-        headers: {
-          Host: "i.instagram.com",
-          "User-Agent": fullMobileUA,
-          Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "X-IG-App-ID": MOBILE_APP_ID,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI",
-          "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-          "X-IG-Bandwidth-TotalBytes-B": "0",
-          "X-IG-Bandwidth-TotalTime-MS": "0",
-        },
-        cookieJar: anonJar,
-        proxyUrl: this.proxyUrl,
-      }), "CSRF bootstrap");
+      const _fh_t0 = Date.now();
+      let res!: any;
+      try {
+        res = await igReq({
+          host: "i.instagram.com",
+          path: `/api/v1/si/fetch_headers/?challenge_type=signup&guid=${guid}`,
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": fullMobileUA,
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": MOBILE_APP_ID,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI",
+            "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+            "X-IG-Bandwidth-TotalBytes-B": "0",
+            "X-IG-Bandwidth-TotalTime-MS": "0",
+          },
+          cookieJar: anonJar,
+          proxyUrl: this.proxyUrl,
+        });
+        this._logTransport(`/api/v1/si/fetch_headers/`, "GET", Date.now() - _fh_t0, res.status >= 400);
+      } catch (e) {
+        this._logTransport(`/api/v1/si/fetch_headers/`, "GET", Date.now() - _fh_t0, true);
+        throw e;
+      }
       // Merge response cookies (csrftoken, mid updates, etc.) back into the FULL
       // mobileCookieJar — this preserves the sessionid while adding the new token.
       if (res.cookies.length) {
@@ -3466,25 +3475,33 @@ export class InstagramWebClient {
     // ── Strategy 2: current_user ──────────────────────────────────────────────
     // Authenticated endpoint — sometimes echoes csrftoken when session is fresh.
     try {
-      const res = await this.timed("GetCurrentUser", () => igReq({
-        host: "i.instagram.com",
-        path: "/api/v1/accounts/current_user/?edit=true",
-        method: "GET",
-        headers: {
-          Host: "i.instagram.com",
-          "User-Agent": fullMobileUA,
-          Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "X-IG-App-ID": MOBILE_APP_ID,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI",
-          "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-          "X-IG-Bandwidth-TotalBytes-B": "0",
-          "X-IG-Bandwidth-TotalTime-MS": "0",
-        },
-        cookieJar: this.mobileCookieJar,
-        proxyUrl: this.proxyUrl,
-      }), "CSRF bootstrap fallback");
+      const _cu_t0 = Date.now();
+      let res!: any;
+      try {
+        res = await igReq({
+          host: "i.instagram.com",
+          path: "/api/v1/accounts/current_user/?edit=true",
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": fullMobileUA,
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": MOBILE_APP_ID,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI",
+            "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+            "X-IG-Bandwidth-TotalBytes-B": "0",
+            "X-IG-Bandwidth-TotalTime-MS": "0",
+          },
+          cookieJar: this.mobileCookieJar,
+          proxyUrl: this.proxyUrl,
+        });
+        this._logTransport(`/api/v1/accounts/current_user/`, "GET", Date.now() - _cu_t0, res.status >= 400);
+      } catch (e) {
+        this._logTransport(`/api/v1/accounts/current_user/`, "GET", Date.now() - _cu_t0, true);
+        throw e;
+      }
       if (res.cookies.length) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       }
@@ -4029,7 +4046,15 @@ export class InstagramWebClient {
     };
 
     console.log(`[webClient] mobilePostMultipart ${path} bodySize=${body.length}B csrf=${csrf.slice(0,8)}... sessionid=${this.mobileCookieJar.find(c => c.startsWith("sessionid=")) ? "present" : "MISSING"}`);
-    const { json } = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl);
+    const _mp_t0 = Date.now();
+    let json: any;
+    try {
+      ({ json } = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl));
+      this._logTransport(path, "POST", Date.now() - _mp_t0, !json);
+    } catch (e) {
+      this._logTransport(path, "POST", Date.now() - _mp_t0, true);
+      throw e;
+    }
     if (!json) {
       console.warn(`[webClient] mobilePostMultipart ${path} returned null — upload may have failed (no JSON in response)`);
     } else {

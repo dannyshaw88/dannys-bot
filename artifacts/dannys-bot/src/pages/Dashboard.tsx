@@ -69,6 +69,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.211",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow tool now correctly stops the session when Instagram returns a 404 on a follow request — this is Instagram's way of signalling a hard follow block, and is now treated the same as the standard block response." },
+      { category: "Fix", text: "API call log export now records every real HTTP call sent to Instagram as exactly one row. Previously some calls (follows, likes, DMs via the API library) were missing from the export, and others appeared twice. Every call is now captured once at the network layer with no duplicates and no fake entries." },
+    ],
+  },
+  {
     version: "1.1.208",
     date: "28 Jun 2026",
     items: [

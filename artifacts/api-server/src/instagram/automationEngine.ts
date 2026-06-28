@@ -4019,8 +4019,9 @@ class AutomationEngine {
           hitHardLimit = true; break;
         }
 
-        // Explicit Instagram account-level block (feedback_required / "Please wait" / "something went wrong")
-        const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
+        // Explicit Instagram account-level block (feedback_required / "Please wait" / "something went wrong" / 404 on friendship.create)
+        // 404 on /friendships/create/ means Instagram has blocked the follow action for this account — treat it as a hard block.
+        const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong") || reason.includes("friendship.create");
         if (isLegitBlock) {
           const isFeedbackRequired = reason.includes("feedback_required");
           // Jarvee "Auto Verify Automatic Behaviour Detected": if the block is a soft
@@ -4229,7 +4230,8 @@ class AutomationEngine {
               state.client = null; hitHardLimit = true; break;
             }
             const isRescrapeABD = reason.includes("feedback_required");
-            if (reason.includes("Please wait") || isRescrapeABD || reason.includes("something went wrong")) {
+            // 404 on /friendships/create/ is a hard follow block — treat same as "Please wait" / action blocked.
+            if (reason.includes("Please wait") || isRescrapeABD || reason.includes("something went wrong") || reason.includes("friendship.create")) {
               // Jarvee ABD dismiss — try to acknowledge soft "Automated Behavior" warnings
               if (isRescrapeABD && state.client) {
                 await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
