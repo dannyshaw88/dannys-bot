@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.219",
+    date: "28 Jun 2026",
+    items: [
+      { category: "UI", text: "Inject Browsing: settings now open in a centred dialog (click Open) instead of a hover popup — no more accidental dismissals." },
+      { category: "Feature", text: "Inject Browsing: added Order % min/max field inside the dialog so injection order is randomised each session instead of always being the same." },
+      { category: "UI", text: "Inject Search and Inject Browsing % input fields are slightly wider for easier clicking." },
+      { category: "Copy Settings", text: "Inject Browsing Order % is now included when copying injection settings to other profiles." },
+    ],
+  },
+  {
     version: "1.1.218",
     date: "28 Jun 2026",
     items: [
