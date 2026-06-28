@@ -120,7 +120,7 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, humanSession: 68, aliveFor: 80, followers: 72, following: 72, sync: 88, lastApiCall: 100, totalCalls: 84, actions: 176, battery: 90, connection: 80, abd: 56, verifyhealth: 68, ip: 128 };
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 230, status: 110, trustscore: 138, active: 64, humanSession: 78, aliveFor: 92, followers: 83, following: 83, sync: 101, lastApiCall: 115, totalCalls: 97, actions: 202, battery: 104, connection: 92, abd: 64, verifyhealth: 78, ip: 147 };
 const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, humanSession: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
 const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "humanSession", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
@@ -1720,9 +1720,14 @@ export function ProfilesPage() {
                   <div key={groupKey}>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 min-w-0 text-left">
-                          <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground italic" : "text-foreground"}`}>{displayName}</span>
+                        {/* Chevron — the ONLY clickable element for expand/collapse */}
+                        <button onClick={() => toggleGroupCollapse(groupKey)} className="shrink-0 flex items-center justify-center">
+                          {isCollapsed
+                            ? <ChevronRight className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />
+                            : <ChevronDown className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />}
                         </button>
+                        {/* Group name — not clickable */}
+                        <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground italic" : "text-foreground"}`}>{displayName}</span>
                         {groupKey !== "__ungrouped__" && (
                           <div className="relative group/icon shrink-0">
                             <button
@@ -1742,12 +1747,7 @@ export function ProfilesPage() {
                             )}
                           </div>
                         )}
-                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
-                          {isCollapsed
-                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                        </button>
+                        <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                       </div>
                       <button
                         onClick={() => {

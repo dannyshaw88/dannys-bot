@@ -71,6 +71,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.222",
+    date: "28 Jun 2026",
+    items: [
+      { category: "UI", text: "Account Manager: all columns are ~15% wider by default for easier reading." },
+      { category: "UI", text: "Account Settings: Notes field in the top-right is 10% wider." },
+      { category: "UI", text: "Account Settings tab bar: BROWSER now appears before DASH." },
+      { category: "UI", text: "Account Manager groups: chevron moved to the start of the row, bold black, and is the only clickable part for expand/collapse — clicking the group name no longer collapses it." },
+      { category: "UI", text: "Statistics page groups: same chevron treatment — bold black, larger, only the chevron collapses the group." },
+    ],
+  },
+  {
     version: "1.1.221",
     date: "28 Jun 2026",
     items: [

@@ -981,6 +981,13 @@ export function ProfileDetailsPage() {
               ))}
               {/* Action buttons — inline after HUMAN SESSION TOOL */}
               <div className="flex items-center border-l border-border/50">
+                <button
+                  onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                >
+                  <Monitor className="w-3.5 h-3.5 shrink-0" />
+                  BROWSER
+                </button>
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
@@ -989,13 +996,6 @@ export function ProfileDetailsPage() {
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
                   DASH
                 </Link>
-                <button
-                  onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
-                >
-                  <Monitor className="w-3.5 h-3.5 shrink-0" />
-                  BROWSER
-                </button>
                 <Link
                   href={`/stats?profileId=${profileId}&tab=metrics`}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold text-[#1D4ED8] border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
@@ -2024,7 +2024,7 @@ export function ProfileDetailsPage() {
           </div>{/* end flex-1 left column */}
 
           {/* ── Notes — far right, aligned from Group row ── */}
-          <div className="w-[390px] shrink-0">
+          <div className="w-[429px] shrink-0">
             <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
               <FileText className="w-3.5 h-3.5" /> Notes
             </Label>

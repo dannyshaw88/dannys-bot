@@ -887,18 +887,20 @@ export function StatsPage() {
                             <tr className="bg-background border-b border-border sticky top-0 z-10">
                               <td colSpan={colCount} className="px-3 py-1.5 select-none">
                                 <div className="flex items-center gap-1.5">
+                                  {/* Chevron — the ONLY clickable element for expand/collapse */}
                                   <button
                                     onClick={() => toggleGroupCollapse(groupKey)}
-                                    className="flex items-center gap-2 min-w-0 text-left"
+                                    className="shrink-0 flex items-center justify-center"
                                   >
                                     {isCollapsed
-                                      ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                      : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                      ? <ChevronRight className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />
+                                      : <ChevronDown className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />
                                     }
-                                    <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>
-                                      {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
-                                    </span>
                                   </button>
+                                  {/* Group name — not clickable */}
+                                  <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>
+                                    {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
+                                  </span>
                                   {groupKey !== "__ungrouped__" && (
                                     <div className="relative group/icon shrink-0">
                                       <button
