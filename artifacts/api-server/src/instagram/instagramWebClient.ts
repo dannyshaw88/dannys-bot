@@ -818,9 +818,12 @@ export class InstagramWebClient {
   private _opNameFromPath(path: string, _method: string): string {
     const base = path.split("?")[0].replace(/\/+$/, "");
     const stripped = base.replace(/^\/api\/v\d+\//, "");
-    const parts = stripped.split("/").filter(p => p && !/^\d+$/.test(p));
-    const pascal = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())).join("");
-    return pascal || base;
+    // Filter out pure-numeric IDs AND Instagram-style compound IDs like {mediaId}_{postId}
+    const parts = stripped.split("/").filter(p => p && !/^\d+$/.test(p) && !/^\d[\d_]{4,}$/.test(p));
+    const pascal = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase()));
+    // Deduplicate: if part[i] is a prefix of part[i+1], drop it (e.g. "Clips"+"ClipsViewed" → "ClipsViewed")
+    const deduped = pascal.filter((p, i) => i === pascal.length - 1 || !pascal[i + 1].startsWith(p));
+    return deduped.join("") || base;
   }
 
   // Single source of truth for all API call log messages.
@@ -834,8 +837,9 @@ export class InstagramWebClient {
     if (!msg) {
       // Strip query string then trailing slashes.
       const base = path.split("?")[0].replace(/\/+$/, "");
-      // Normalise: replace long numeric segments (IDs) with * for matching.
-      const norm = base.replace(/\/\d{5,}/g, "/*");
+      // Normalise: replace numeric IDs (including Instagram compound IDs like
+      // {mediaId}_{postId}, e.g. 3926681724376877436_25025320) with * for matching.
+      const norm = base.replace(/\/\d+(?:_\d+)*/g, "/*");
 
       // Each entry is [successMsg, errorMsg].
       const MSG: Record<string, [string, string]> = {
@@ -870,6 +874,7 @@ export class InstagramWebClient {
         "/api/v1/si/fetch_headers":                 ["Mobile CSRF bootstrap",           "CSRF bootstrap failed"],
         "/api/v1/users/self/banner_dismiss":        ["Dismiss banner",                  "Banner dismiss failed"],
         "/api/v1/clips/user":                       ["Clips loaded",                    "Clips load failed"],
+        "/api/v1/clips/clips_viewed":               ["Reel impressions sent",           "Reel impressions failed"],
         "/api/v1/tags":                             ["Hashtag feed loaded",             "Hashtag feed failed"],
       };
 
@@ -2290,7 +2295,7 @@ export class InstagramWebClient {
   // simulating a user scrolling through their Instagram home feed.
   // Paginates using next_max_id so the full count (e.g. 50–100) is reachable —
   // Instagram returns only ~12–18 posts per call so multiple pages are needed.
-  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, reelWatchCountMin: number = 0, reelWatchCountMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }>; reelWatches?: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, reelWatchCountMin: number = 0, reelWatchCountMax: number = 0, _consentRetry = false, onPageEvent?: (type: "feed_load" | "feed_seen", count: number) => void): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string; isReel: boolean }>; reelWatches?: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> }> {
     // ── Page 1: cold_start_fetch ─────────────────────────────────────────────
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
@@ -2326,7 +2331,7 @@ export class InstagramWebClient {
         const accepted = await this._tryAcceptConsent();
         if (accepted) {
           console.log(`[webClient] viewTimelineFeed: retrying after consent acceptance`);
-          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, reelWatchCountMin, reelWatchCountMax, true);
+          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, reelWatchCountMin, reelWatchCountMax, true, onPageEvent);
         }
       }
       return { viewed: 0 };
@@ -2401,6 +2406,7 @@ export class InstagramWebClient {
           }).toString());
           return batch.length;
         }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+        onPageEvent?.("feed_seen", batch.length);
       }
 
       return pageMedia.length;
@@ -2410,6 +2416,7 @@ export class InstagramWebClient {
     const page1Raw: any[] = j?.feed_items ?? j?.items ?? [];
     console.log(`[webClient] viewTimelineFeed: page 1 — ${page1Raw.length} raw items`);
     if (!page1Raw.length) return { viewed: 0 };
+    onPageEvent?.("feed_load", page1Raw.length);
     await processAndMarkPage(page1Raw);
 
     // Paginate: fetch next pages only after marking current page seen
@@ -2425,6 +2432,7 @@ export class InstagramWebClient {
       if (!pageJ) break;
       const pageRaw: any[] = pageJ?.feed_items ?? pageJ?.items ?? [];
       if (!pageRaw.length) break;
+      onPageEvent?.("feed_load", pageRaw.length);
       await processAndMarkPage(pageRaw);
       nextMaxId = pageJ?.next_max_id ?? null;
       page++;
@@ -2432,19 +2440,9 @@ export class InstagramWebClient {
 
     console.log(`[webClient] viewTimelineFeed: ${page} page(s) — ${viewed} posts seen`);
 
-    // ClipsViewed is a bulk impression signal — one call for all watched reels is fine.
-    if (allClipImpressions.length) {
-      await this.timed("ClipsViewed", async () => {
-        await this.mobileSessionPost(
-          `/api/v1/clips/clips_viewed/`,
-          new URLSearchParams({
-            clips_viewed_impressions: JSON.stringify(allClipImpressions),
-            is_clips_creation_page: "false",
-          }).toString(),
-        ).catch(() => {});
-        return allClipImpressions.length;
-      }, (n) => `Watched ${n} reel${n === 1 ? "" : "s"}`).catch(() => {});
-    }
+    // Note: /api/v1/clips/clips_viewed/ returns 404 HTML — dead endpoint.
+    // The media/seen calls in processAndMarkPage already mark each reel as seen.
+    // No additional impression signal needed.
 
     return { viewed, items: viewedItems, reelWatches };
   }
@@ -2457,19 +2455,9 @@ export class InstagramWebClient {
   }
 
   // ── Open and play a reel from the feed (simulates tapping + watching) ────
-  // Fires one HTTP call (clips_viewed), logged as a single "ClipsViewed" entry.
-  // No outer timed() wrapper — one HTTP call = one log entry.
-  async viewFeedReel(mediaId: string): Promise<boolean> {
-    await this.timed("ClipsViewed", async () => {
-      await this.mobileSessionPost(
-        `/api/v1/clips/clips_viewed/`,
-        new URLSearchParams({
-          clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
-          is_clips_creation_page: "false",
-        }).toString(),
-      ).catch(() => {});
-      return true;
-    }, "Viewed reel from feed", () => false).catch(() => {});
+  // /api/v1/clips/clips_viewed/ returns 404 HTML — dead endpoint.
+  // The media/seen call fired during processAndMarkPage already covers the reel view signal.
+  async viewFeedReel(_mediaId: string): Promise<boolean> {
     return true;
   }
 
@@ -3681,16 +3669,22 @@ export class InstagramWebClient {
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
       // Always log non-200 responses; log body snippet for debugging
-    if (res.status !== 200 || !res.json) {
+    if (res.status >= 400) {
       console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
-      // If Instagram explicitly rejected the request (4xx/5xx or non-JSON response
-      // despite a 200), the session cookies are expired or invalid. Mark the session
-      // as needing refresh so the next isMobileLoggedIn() call returns false and the
-      // engine surfaces a clear "re-run Verify Credentials" message instead of the
-      // cryptic "POST returned null despite session check passing".
-      if ((res.status >= 400 || !res.json) && !this._abdDismissInProgress) {
+      // Only mark the session as invalid for genuine auth failures — a 401, or a 4xx
+      // response whose body says login_required / logged_out / checkpoint_required.
+      // 5xx responses are server-side errors (Instagram returned "Oops, an error occurred."
+      // on /api/v1/media/seen/ while the feed timeline was working fine — the session was
+      // perfectly valid). Poisoning mobileSessionReady on a 500 breaks all subsequent calls.
+      const bodyMsg: string = (res.json as any)?.message ?? res.rawBody.slice(0, 200);
+      const isAuthError = res.status === 401 || /login_required|logged_out|checkpoint_required|not authorized/i.test(bodyMsg);
+      if (isAuthError && !this._abdDismissInProgress) {
         this.mobileSessionReady = false;
       }
+    } else if (!res.json) {
+      // 200 with empty/non-JSON body — normal for seen/viewed endpoints. Log at debug
+      // level only; do NOT mark the session as invalid.
+      console.log(`[webClient] mobileSessionPost ${path} status=200 (empty body — OK)`);
     } else {
       const feedLen = res.json?.feed_items?.length ?? res.json?.items?.length ?? null;
       if (feedLen !== null) {
@@ -3702,7 +3696,7 @@ export class InstagramWebClient {
     if (res.json?.message === "feedback_required" && !this._abdDismissInProgress) {
       this._lastFeedbackResponse = res.json;
     }
-    this._logTransport(path, "POST", Date.now() - _t0, res.status >= 400 || !res.json);
+    this._logTransport(path, "POST", Date.now() - _t0, res.status >= 400);
     return res.json;
   }
 

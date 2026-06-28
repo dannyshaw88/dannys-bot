@@ -44,6 +44,8 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   account_imported:        { label: "EQX Import",      cls: "text-blue-700",      icon: "↓" },
   account_exported:        { label: "EQX Export",      cls: "text-cyan-700",      icon: "↑" },
   view_timeline_feed:      { label: "Timeline Feed",   cls: "text-teal-700",      icon: "≡" },
+  feed_timeline_load:      { label: "Feed Load",       cls: "text-teal-700",      icon: "≡" },
+  feed_timeline_seen:      { label: "Feed Seen",       cls: "text-teal-600",      icon: "✓" },
   like_timeline_post:      { label: "Timeline Like",   cls: "text-rose-600",      icon: "♥" },
   check_timeline_reels:    { label: "Watch Reels",     cls: "text-orange-700",    icon: "▶" },
   check_timeline_stories:  { label: "Watch Stories",   cls: "text-amber-700",     icon: "◎" },
@@ -68,6 +70,23 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.1.214",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call log no longer shows 'Media{mediaId}Like' as the operation name for likes — it now correctly shows 'LikeMedia'. Instagram reel/post IDs like '3926681724376877436_25025320' contain an underscore which was bypassing the ID-stripping logic. Fixed." },
+      { category: "Fix", text: "Removed the dead /clips/clips_viewed/ endpoint call. Instagram's server returns a 404 HTML page for this endpoint — it no longer exists. It was generating a 'ClipsClipsViewed ERROR: Request failed' log entry every session. The media/seen call already covers the reel view signal so nothing is lost." },
+      { category: "Fix", text: "API call operation names are now cleaner. 'ClipsClipsViewed' (redundant 'Clips' prefix) is gone. Any operation name where the first segment is a prefix of the second is now automatically collapsed." },
+    ],
+  },
+  {
+    version: "1.1.213",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "Mark feed as seen no longer shows ERROR in the API call log. Instagram's seen endpoint returns an empty response on success — the software was incorrectly treating an empty body as a failure and marking the session as needing re-verification. Fixed: only real 4xx/5xx responses are treated as errors now." },
+      { category: "Improve", text: "Dashboard activity log now shows each feed page load and each mark-seen batch as individual entries instead of one bundled 'Viewed X posts' line. If the tool loads 4 pages and marks 50 posts as seen, you see 4 Feed Load entries and 13 Feed Seen entries, so you can see exactly what the software is doing in real time." },
+    ],
+  },
   {
     version: "1.1.212",
     date: "28 Jun 2026",
