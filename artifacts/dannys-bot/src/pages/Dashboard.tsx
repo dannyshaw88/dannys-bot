@@ -76,6 +76,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.1.209",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "Removed fake entries from the API call log. ViewFeedPost and VisitUserProfile made no HTTP call to Instagram but were still being logged as if they did — removed. ViewFeedReel was logging twice (once as ViewFeedReel, once as ClipsViewed) for the same single HTTP call — now logs once as ClipsViewed only." },
+    ],
+  },
+  {
     version: "1.1.207",
     date: "27 Jun 2026",
     items: [

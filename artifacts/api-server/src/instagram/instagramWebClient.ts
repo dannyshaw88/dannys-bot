@@ -2373,39 +2373,33 @@ export class InstagramWebClient {
   }
 
   // ── Open / view a single feed post (simulates tapping into it) ───────────
-  // Previously called media/{id}/info/ — that endpoint is identical to what
-  // scrapers use and adds no value for emulation. The media/seen POST
-  // (fired in bulk by the caller) is sufficient to register the view.
-  async viewFeedPost(mediaId: string): Promise<boolean> {
-    return this.timed("ViewFeedPost", async () => true, "Viewed feed post");
+  // No HTTP call is made — the media/seen POST (fired in bulk by the caller)
+  // is sufficient to register the view. Nothing to log here.
+  async viewFeedPost(_mediaId: string): Promise<boolean> {
+    return true;
   }
 
   // ── Open and play a reel from the feed (simulates tapping + watching) ────
-  // Previously called media/{id}/info/ before clips_viewed — removed because
-  // media.info is a scraping endpoint. clips_viewed is the meaningful signal.
+  // Fires one HTTP call (clips_viewed), logged as a single "ClipsViewed" entry.
+  // No outer timed() wrapper — one HTTP call = one log entry.
   async viewFeedReel(mediaId: string): Promise<boolean> {
-    return this.timed("ViewFeedReel", async () => {
-      // Fire clips_viewed — a failure here should not fail the whole action
-      await this.timed("ClipsViewed", async () => {
-        await this.mobileSessionPost(
-          `/api/v1/clips/clips_viewed/`,
-          new URLSearchParams({
-            clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
-            is_clips_creation_page: "false",
-          }).toString(),
-        ).catch(() => {});
-        return true;
-      }, undefined, () => false).catch(() => {});
+    await this.timed("ClipsViewed", async () => {
+      await this.mobileSessionPost(
+        `/api/v1/clips/clips_viewed/`,
+        new URLSearchParams({
+          clips_viewed_impressions: JSON.stringify([{ clip_id: mediaId, view_state: "initial_impression" }]),
+          is_clips_creation_page: "false",
+        }).toString(),
+      ).catch(() => {});
       return true;
-    }, "Opened and played reel from feed");
+    }, "Viewed reel from feed", () => false).catch(() => {});
+    return true;
   }
 
   // ── Visit a user's profile page ──────────────────────────────────────────
-  // Previously called users/{id}/info/ — removed because that endpoint is
-  // identical to what scrapers use. The logged action is still recorded.
-  // Callers that follow this with viewUserFeed still generate the feed fetch.
+  // No HTTP call — scraped users/{id}/info/ was removed. Nothing to log here.
   async visitUserProfile(_userId: string, _fromModule: string = "profile"): Promise<boolean> {
-    return this.timed("VisitUserProfile", async () => true, "Visited user profile");
+    return true;
   }
 
   // ── Scroll through a user's post feed (profile grid) ────────────────────
