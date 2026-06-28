@@ -2509,7 +2509,17 @@ class AutomationEngine {
         let viewed = 0;
         let vtfResult: Awaited<ReturnType<typeof client.viewTimelineFeed>> | null = null;
         try {
-          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, effectiveReelPctMax, reelWatchCountMin, reelWatchCountMax);
+          vtfResult = await client.viewTimelineFeed(
+            feedCount, reelWatchPctMin, effectiveReelPctMax, reelWatchCountMin, reelWatchCountMax,
+            false,
+            (type, count) => {
+              if (type === "feed_load") {
+                this.logAction(profile.id, tool.id, "feed_timeline_load", "", "", "", "ok", `Loading ${count} post${count === 1 ? "" : "s"} from timeline`);
+              } else if (type === "feed_seen") {
+                this.logAction(profile.id, tool.id, "feed_timeline_seen", "", "", "", "ok", `Marked ${count} post${count === 1 ? "" : "s"} as seen`);
+              }
+            },
+          );
           if (vtfResult.sessionExpired) {
             const expReason = vtfResult.reason ?? "session expired (login_required) — viewTimelineFeed";
             console.warn(`[engine] @${profile.username}: viewTimelineFeed — session expired, marking logged_out`);

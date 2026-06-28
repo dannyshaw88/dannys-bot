@@ -353,6 +353,7 @@ export class InstagramWebClient {
   private profileId?: number;
   private _apiCallSource = "Account";
   private _inTimedCall = false;
+  private _lastTimedCallIsError = false;
   // User-agent to use for web (www.instagram.com) POST requests.
   // Should match the EB browser's UA so that cookies and UA are consistent.
   private webUserAgent = WEB_UA;
@@ -806,12 +807,31 @@ export class InstagramWebClient {
   //   • IgApiClient (ig.*) → hooked in _newAutomationIgClient() → _logTransport()
   //   • direct igReq() calls → caller is responsible for calling _logTransport()
   // This guarantees exactly 1 log row per real HTTP request with no duplicates.
-  private async timed<T>(opName: string, fn: () => Promise<T>, _message?: string | ((result: T) => string), _shouldLog?: (result: T) => boolean): Promise<T> {
+  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string), shouldLog?: (result: T) => boolean): Promise<T> {
+    const _t0 = Date.now();
     this._inTimedCall = true;
+    this._lastTimedCallIsError = false;
+    let _result!: T;
+    let _threw = false;
     try {
-      return await fn();
+      _result = await fn();
+      return _result;
+    } catch (e) {
+      _threw = true;
+      throw e;
     } finally {
       this._inTimedCall = false;
+      const durationMs = Date.now() - _t0;
+      if (this.logCallFn) {
+        const isError = _threw || this._lastTimedCallIsError;
+        const doLog = (isError) ? true : (!shouldLog || shouldLog(_result));
+        if (doLog) {
+          const msg = typeof message === "function"
+            ? (_threw ? opName : message(_result))
+            : (message ?? opName);
+          this.logCallFn(opName, durationMs, msg, isError);
+        }
+      }
     }
   }
 
@@ -833,6 +853,13 @@ export class InstagramWebClient {
   // human-readable description for both success and error cases.
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean, msg?: string): void {
     if (!this.logCallFn) return;
+    // When inside a timed() wrapper, suppress the inner per-request log entry —
+    // the outer timed() will produce a single named entry (e.g. ViewTimelineFeedSeen)
+    // instead of the raw URL-derived name (e.g. MediaSeen).
+    if (this._inTimedCall) {
+      if (isError) this._lastTimedCallIsError = true;
+      return;
+    }
 
     if (!msg) {
       // Strip query string then trailing slashes.

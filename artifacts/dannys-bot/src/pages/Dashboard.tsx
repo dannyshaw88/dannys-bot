@@ -71,6 +71,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.215",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call log now correctly shows 'ViewTimelineFeedSeen' (with a success or error result) instead of 'MediaSeen ERROR' when the software marks timeline posts as seen. The previous build stripped the named-wrapper logging so the raw URL-derived name leaked through. Fixed." },
+      { category: "Fix", text: "When loading timeline posts, MediaSeen errors no longer appear. The outer operation name (ViewTimelineFeedSeen) is now the single entry — it shows ERROR if Instagram rejects the call, and shows success with the count if it works." },
+      { category: "Fix", text: "Dashboard now shows live entries during timeline feed loading — a Feed Load entry fires per page fetched and a Feed Seen entry fires per batch marked seen, so you can watch the tool working in real time instead of seeing nothing until it finishes." },
+    ],
+  },
+  {
     version: "1.1.214",
     date: "28 Jun 2026",
     items: [
