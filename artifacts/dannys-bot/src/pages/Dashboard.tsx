@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.247",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Inject Browsing settings now copy correctly to other profiles — the new Amount (min–max count) and Chance % fields added in the last version were missing from the copy list and were silently skipped." },
+      { category: "Improvement", text: "Inject Browsing dialog: middle column header renamed from 'Scroll' to 'Amount' to make clear it sets how many posts/items (e.g. 1–10) the action should iterate through." },
+    ],
+  },
+  {
     version: "1.1.246",
     date: "29 Jun 2026",
     items: [
