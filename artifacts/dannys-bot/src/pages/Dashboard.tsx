@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.239",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify sequence no longer double-throttles — each API call was waiting twice the configured delay (once explicitly, once via the request logger hook). Gaps are now the correct 1× configured range." },
+      { category: "Improvement", text: "API Controls checkboxes (Variation %, Momentum, Attention Drift, Fatigue) now show a tooltip on hover explaining what each setting does and an example of it in action." },
+    ],
+  },
+  {
     version: "1.1.238",
     date: "29 Jun 2026",
     items: [

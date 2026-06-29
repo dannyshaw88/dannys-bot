@@ -1164,7 +1164,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // Hard cap at 20 s: this is a large config download that can take 90+ seconds
         // on high-latency proxies, starving the session probe (users/{id}/info) of time.
         // It is non-fatal so we race it against a timeout and move on either way.
-        await loginApiThrottle(apiLimitsRaw);
         await Promise.race([
           ig.launcher.preLoginSync()
             .then(() => console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`))
@@ -1177,7 +1176,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────
         // Jarvee calls GetTokenResult a second time right after launcher/sync.
-        await loginApiThrottle(apiLimitsRaw);
         try {
           await ig.request.send({
             url: "/api/v1/zr/token/result/",
@@ -1283,7 +1281,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // endpoint doesn't apply for this account type.  This distinction matters
         // for ABD detection below: if the session was only inconclusive-confirmed
         // and cold-start endpoints return 403, that is session expiry, not ABD.
-        await loginApiThrottle(apiLimitsRaw);
         let sessionConfirmed = false;
         let sessionPositivelyConfirmed = false;
         try {
@@ -1336,7 +1333,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // This mirrors what probeAndDismissABD() uses in InstagramWebClient.
         // Check both the return body (200 with feedback_required) and thrown error
         // body (400 with feedback_required).
-        await loginApiThrottle(apiLimitsRaw);
         try {
           const abdProbeBody: any = await ig.request.send({
             url:    "/api/v1/qe/sync/",
@@ -1384,7 +1380,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // but the ABD probe above (Phase 2a) already sends the identical bare qe/sync
         // POST — calling it again here was a double qe/sync per verify. Removed.
         // Only Banyan remains in this phase.
-        await loginApiThrottle(apiLimitsRaw);
         try {
           await ig.request.send({
             url: "/api/v1/banyan/banyan/",
@@ -1430,7 +1425,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           const selected = pool.slice(0, Math.min(epCount, pool.length));
           console.error(`[instagramLogin] @${profile.username} — firing ${selected.length} random post-login endpoint(s): ${selected.map(e => e.name).join(", ")}`);
           for (const ep of selected) {
-            await loginApiThrottle(apiLimitsRaw);
             try {
               await ep.fn(ig);
               console.error(`[instagramLogin] @${profile.username} — random:${ep.name} OK`);

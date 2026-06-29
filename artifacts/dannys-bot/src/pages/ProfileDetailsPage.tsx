@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { NumField } from "@/components/ui/num-field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
 import {
@@ -1510,10 +1511,21 @@ export function ProfileDetailsPage() {
                             </div>
                             {/* Variation % — checkbox on same row; expanded fields wrap below if needed */}
                             <div className="flex items-center ml-1">
-                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                                <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                                Variation %
-                              </label>
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
+                                      <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                      Variation %
+                                    </label>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                                    <p className="font-semibold mb-1">Variation %</p>
+                                    <p>Occasionally spikes calls above or below your normal delay range to break up rhythm.</p>
+                                    <p className="mt-1.5 opacity-80 italic">e.g. 10% chance, +30–60 s above max — roughly 1 in 10 calls adds an extra 30–60 second pause on top of the normal window.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                             {!!(formData.apiLimits as any).variationEnabled && (
                               <div className="flex items-end gap-1 flex-wrap">
@@ -1566,10 +1578,21 @@ export function ProfileDetailsPage() {
                           <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-end">
                             {/* Momentum */}
                             <div className="flex flex-col items-start space-y-0.5">
-                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
-                                <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                                Momentum
-                              </label>
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                      <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                      Momentum
+                                    </label>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                                    <p className="font-semibold mb-1">Momentum</p>
+                                    <p>Pulls each call's delay toward the previous one — creating natural bursts of fast calls and slow-down plateaus, like a human who gets into a rhythm.</p>
+                                    <p className="mt-1.5 opacity-80 italic">e.g. 70% Chance, 20% Spread — 70% of the time the next delay stays within ±20% of the last one instead of picking a fresh random value.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
                             </div>
                             {!!(formData.apiLimits as any).momentumEnabled && (
@@ -1588,10 +1611,21 @@ export function ProfileDetailsPage() {
                             <span className="text-muted-foreground/30 text-xs select-none pb-[14px]">|</span>
                             {/* Attention Drift */}
                             <div className="flex flex-col items-start space-y-0.5">
-                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
-                                <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                                Attention Drift
-                              </label>
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                      <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                      Attention Drift
+                                    </label>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                                    <p className="font-semibold mb-1">Attention Drift</p>
+                                    <p>Simulates a human stepping away from the keyboard — randomly inserts a multi-minute gap into the call schedule, then resumes normally.</p>
+                                    <p className="mt-1.5 opacity-80 italic">e.g. 5–8% Chance, 5–10 Min — roughly 1 in 15 calls triggers a 5–10 minute pause before the next call fires.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
                             </div>
                             {!!(formData.apiLimits as any).attentionDriftEnabled && (
@@ -1621,10 +1655,21 @@ export function ProfileDetailsPage() {
                             <span className="text-muted-foreground/30 text-xs select-none pb-[14px]">|</span>
                             {/* Fatigue */}
                             <div className="flex flex-col items-start space-y-0.5">
-                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
-                                <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                                Fatigue
-                              </label>
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                      <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                      Fatigue
+                                    </label>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                                    <p className="font-semibold mb-1">Fatigue</p>
+                                    <p>Gradually slows calls over a ramp period then speeds back up — mimics a human tiring and recovering in waves.</p>
+                                    <p className="mt-1.5 opacity-80 italic">e.g. 50% Strength, 30 Ramp Calls — over the first 30 calls the delay rises up to 50% toward the max, then falls back to normal over the next 30, repeating continuously.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
                             </div>
                             {!!(formData.apiLimits as any).fatigueEnabled && (
