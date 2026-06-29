@@ -2351,10 +2351,11 @@ export async function registerInstagramRoutes(
       await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
     } finally {
       verifyInFlight.delete(profileId);
-      // Release the proxy slot without cooldown — verify is a one-shot manual
-      // action; the slot should open up immediately for automation afterwards.
+      // Release the proxy slot and start the cooldown timer — verify/EB activity
+      // counts as IP usage, so the slot must cool down before another account
+      // can use this proxy slot.
       if (effectiveProfile.proxyId) {
-        proxySlotManager.forceRelease(effectiveProfile.proxyId, profileId);
+        proxySlotManager.release(effectiveProfile.proxyId, profileId);
       }
     }
     }); // end setImmediate

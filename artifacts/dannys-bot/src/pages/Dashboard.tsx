@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.237",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy slots now correctly track activity time. Slots are only held during an active session and release (starting the cooldown timer) as soon as the session goes silent — dormant accounts sleeping between sessions no longer occupy a slot." },
+      { category: "Fix", text: "Verify and EB activity now start the cooldown timer after the bootstrap sequence completes, as intended." },
+      { category: "Fix", text: "IP/Slots column now shows the true used count (active + cooling) so the number matches what the slot enforcement engine actually uses." },
+      { category: "Improvement", text: "IP/Slots column now has a SLOTS header and is draggable like every other column." },
+    ],
+  },
+  {
     version: "1.1.236",
     date: "29 Jun 2026",
     items: [

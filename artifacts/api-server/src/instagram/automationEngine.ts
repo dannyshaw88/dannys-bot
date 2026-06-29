@@ -336,19 +336,17 @@ class AutomationEngine {
         const hasHumanSessionTool = tools.some(t => t.type === "human_sessions");
 
         // Proxy slot enforcement — only gate NEW runner launches (not ones already in flight).
-        // If this profile already has a running runner it already holds the slot.
+        // HS profiles manage their own per-session slot acquire/release inside launchHumanSession.
+        // Only standalone (non-HS) runners acquire here at launch time.
         const alreadyRunning = currentlyRunning.has(profile.id);
-        if (!alreadyRunning && profile.proxyId && !this.acquiredSlots.has(profile.id) && profile.accountStatus === "valid") {
-          const hasRunnableTools = (
-            (humanSessionTool) ||
-            (!hasHumanSessionTool && (
-              tools.find(t => t.type === "follow" && t.enabled) ||
-              tools.find(t => t.type === "unfollow" && t.enabled) ||
-              tools.find(t => t.type === "dm" && t.enabled) ||
-              (tools.find(t => t.type === "contact")?.enabled === true)
-            ))
+        if (!alreadyRunning && profile.proxyId && !this.acquiredSlots.has(profile.id) && profile.accountStatus === "valid" && !hasHumanSessionTool) {
+          const hasRunnableStandaloneTools = (
+            tools.find(t => t.type === "follow" && t.enabled) ||
+            tools.find(t => t.type === "unfollow" && t.enabled) ||
+            tools.find(t => t.type === "dm" && t.enabled) ||
+            (tools.find(t => t.type === "contact")?.enabled === true)
           );
-          if (hasRunnableTools) {
+          if (hasRunnableStandaloneTools) {
             const slotCheck = proxySlotManager.canAcquire(profile.proxyId, profile.id);
             if (!slotCheck.ok) {
               console.log(`[engine] @${profile.username}: proxy slot unavailable — ${slotCheck.reason}`);
@@ -876,7 +874,21 @@ class AutomationEngine {
         const s = hsTool.settings as any;
 
         if (Date.now() >= state.nextHumanSessionAt) {
+          // Acquire proxy slot immediately before the session starts.
+          // HS manages its own per-session slot lifecycle so the slot is only
+          // held while the account is actually active — not during the long
+          // inter-session sleep (125-250 min, etc.).
+          if (freshProfile.proxyId) {
+            const slotCheck = proxySlotManager.canAcquire(freshProfile.proxyId, freshProfile.id);
+            if (!slotCheck.ok) {
+              console.log(`[engine] @${freshProfile.username}: proxy slot unavailable for HS session — ${slotCheck.reason} — will retry next cycle`);
+              await sleepInterruptible(10_000, state.stop);
+              continue;
+            }
+            proxySlotManager.acquire(freshProfile.proxyId, freshProfile.id);
+          }
           this.logAction(freshProfile.id, hsTool.id, "human_session_start", "", "", "", "ok", "Human Session Emulation started");
+          let acctStatusBroke = false;
           try {
             await this.runHumanSessionTools(freshProfile, hsTool, state);
             await storage.incrementStat(freshProfile.id, "human_session");
@@ -885,8 +897,16 @@ class AutomationEngine {
             const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, hsTool.id);
             this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "error", `Human Session error: ${err?.message ?? "unknown"}`);
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
-            if (acctStatus) break;
+            if (acctStatus) acctStatusBroke = true;
+          } finally {
+            // Release the slot and start the cooldown timer — the account is now
+            // silent. A new session (or another account) can only use this proxy
+            // slot after the cooldown window expires.
+            if (freshProfile.proxyId) {
+              proxySlotManager.release(freshProfile.proxyId, freshProfile.id);
+            }
           }
+          if (acctStatusBroke) break;
           const waitMs = randInt(
             (s.delayMin ?? 30) * 60_000,
             (s.delayMax ?? 60) * 60_000,

@@ -433,7 +433,7 @@ export function ProfilesPage() {
   }, [selectedProfileIds]);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   // ── Proxy slot status — polls /api/proxy-slots/status every 10s ──────────
-  const [slotStatusMap, setSlotStatusMap] = useState<Record<number, { active: number; cooldownUntil: number | null; activeProfileIds: number[] }>>({});
+  const [slotStatusMap, setSlotStatusMap] = useState<Record<number, { active: number; onCooldown: number; cooldownUntil: number | null; activeProfileIds: number[] }>>({});
   const [slotManager, setSlotManager] = useState<{ settings: { maxConcurrent: number; cooldownMinMs: number; cooldownMaxMs: number } }>({ settings: { maxConcurrent: 2, cooldownMinMs: 30 * 60000, cooldownMaxMs: 35 * 60000 } });
   useEffect(() => {
     const fetchSlots = () => {
@@ -1413,6 +1413,7 @@ export function ProfilesPage() {
               );
               if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>ABD</div>;
               if (key === "verifyhealth") return <div key={key} {...dragProps} style={{ width: profColWidths.verifyhealth }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>VERIFY</div>;
+              if (key === "ipslots") return <div key={key} {...dragProps} style={{ width: profColWidths.ipslots }} className={`shrink-0 text-center cursor-default select-none ${dragBorder}`}>SLOTS</div>;
               return null;
             })}
             <div className="flex-1" />
@@ -1688,12 +1689,19 @@ export function ProfilesPage() {
                       const slotInfo = slotStatusMap[profile.proxyId];
                       const settings = slotManager.settings;
                       const active = slotInfo?.active ?? 0;
+                      const onCooldown = slotInfo?.onCooldown ?? 0;
+                      const used = active + onCooldown;
                       const max = settings?.maxConcurrent ?? 2;
                       const isActive = slotInfo?.activeProfileIds?.includes(profile.id);
-                      const color = isActive ? "text-green-600" : active >= max ? "text-red-500" : "text-muted-foreground";
+                      const atCapacity = used >= max;
+                      const color = isActive ? "text-green-600" : atCapacity ? "text-red-500" : "text-muted-foreground";
+                      const tooltipParts = [`${used}/${max} slots used`];
+                      if (active > 0) tooltipParts.push(`${active} running`);
+                      if (onCooldown > 0) tooltipParts.push(`${onCooldown} cooling down`);
+                      if (isActive) tooltipParts.push("this account is active");
                       return (
-                        <div key={key} style={{ width: profColWidths.ipslots }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()} title={`${active}/${max} slots used${isActive ? " — this account is active" : ""}`}>
-                          <span className={`text-[11px] font-bold font-mono ${color}`}>{active}/{max}</span>
+                        <div key={key} style={{ width: profColWidths.ipslots }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()} title={tooltipParts.join(" — ")}>
+                          <span className={`text-[11px] font-bold font-mono ${color}`}>{used}/{max}</span>
                         </div>
                       );
                     }
