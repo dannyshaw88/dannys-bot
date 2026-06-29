@@ -1512,19 +1512,13 @@ export function ProfileDetailsPage() {
                             </div>
                           </div>
                           {/* Variation % */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="variation-enabled"
-                                checked={!!(formData.apiLimits as any).variationEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="variation-enabled" className="text-xs font-bold cursor-pointer select-none">Variation %</label>
-                            </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-2 pt-1.5 border-t border-border/40 items-end">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold self-end mb-[3px] shrink-0">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Variation %
+                            </label>
                             {!!(formData.apiLimits as any).variationEnabled && (
-                              <div className="flex flex-wrap gap-x-3 gap-y-2 pl-5 items-end">
+                              <>
                                 <div className="flex items-center gap-1">
                                   <div className="space-y-0.5">
                                     <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerChanceMin ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMin: Math.min(100, v) } })} />
@@ -1567,23 +1561,17 @@ export function ProfileDetailsPage() {
                                     <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max secs</Label>
                                   </div>
                                 </div>
-                              </div>
+                              </>
                             )}
                           </div>
                           {/* Momentum */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="momentum-enabled"
-                                checked={!!(formData.apiLimits as any).momentumEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="momentum-enabled" className="text-xs font-bold cursor-pointer select-none">Momentum</label>
-                            </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-end">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold self-end mb-[3px] shrink-0">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Momentum
+                            </label>
                             {!!(formData.apiLimits as any).momentumEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                              <>
                                 <div className="space-y-0.5">
                                   <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumChance ?? 70} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumChance: Math.min(100, v) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
@@ -1592,23 +1580,17 @@ export function ProfileDetailsPage() {
                                   <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumSpread ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumSpread: Math.min(100, v) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Spread %</Label>
                                 </div>
-                              </div>
+                              </>
                             )}
                           </div>
                           {/* Attention Drift */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="attention-drift-enabled"
-                                checked={!!(formData.apiLimits as any).attentionDriftEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="attention-drift-enabled" className="text-xs font-bold cursor-pointer select-none">Attention Drift</label>
-                            </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-end">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold self-end mb-[3px] shrink-0">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Attention Drift
+                            </label>
                             {!!(formData.apiLimits as any).attentionDriftEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                              <>
                                 <div className="flex items-center gap-1">
                                   <div className="space-y-0.5">
                                     <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).attentionDriftChanceMin ?? (formData.apiLimits as any).attentionDriftChance ?? 3} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftChanceMin: Math.min(100, v) } })} />
@@ -1628,23 +1610,17 @@ export function ProfileDetailsPage() {
                                   <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMaxMins ?? 15} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMaxMins: Math.max(v, (formData.apiLimits as any).attentionDriftMinMins ?? 5) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Mins</Label>
                                 </div>
-                              </div>
+                              </>
                             )}
                           </div>
                           {/* Fatigue */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="fatigue-enabled"
-                                checked={!!(formData.apiLimits as any).fatigueEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="fatigue-enabled" className="text-xs font-bold cursor-pointer select-none">Fatigue</label>
-                            </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-end">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold self-end mb-[3px] shrink-0">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Fatigue
+                            </label>
                             {!!(formData.apiLimits as any).fatigueEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                              <>
                                 <div className="space-y-0.5">
                                   <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueStrength ?? 50} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueStrength: Math.min(100, v) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Strength %</Label>
@@ -1653,7 +1629,7 @@ export function ProfileDetailsPage() {
                                   <NumField min={1} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueRampCalls ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueRampCalls: Math.max(1, v) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Ramp Calls</Label>
                                 </div>
-                              </div>
+                              </>
                             )}
                           </div>
                         </div>

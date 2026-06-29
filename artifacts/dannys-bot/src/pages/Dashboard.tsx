@@ -480,13 +480,10 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
-    version: "1.1.232",
+    version: "1.1.233",
     date: "29 Jun 2026",
     items: [
-      { category: "UI", text: "Account Settings: Variation % field labels renamed from X/Y to Min/Max with descriptive names (Min %, Max %, Min secs, Max secs)." },
-      { category: "UI", text: "Account Settings: Variation % fields widened by one character." },
-      { category: "UI", text: "Account Settings: Attention Drift chance fields renamed to Min % and Max %." },
-      { category: "UI", text: "Account Settings: Momentum and Fatigue explanation text removed." },
+      { category: "UI", text: "Account Settings: Variation %, Momentum, Attention Drift, and Fatigue controls now appear on the same row as their checkbox titles instead of below them." },
     ],
   },
   {
