@@ -486,11 +486,17 @@ export function ProfileDetailsPage() {
           merged.loginMakePostChanceMax     = srcLimits.loginMakePostChanceMax ?? 10;
         }
         if (expandedKeys.includes("variationSettings")) {
-          merged.variationEnabled      = srcLimits.variationEnabled ?? false;
-          merged.variationLowerChance  = srcLimits.variationLowerChance ?? 10;
-          merged.variationLowerSecs    = srcLimits.variationLowerSecs ?? 30;
-          merged.variationUpperChance  = srcLimits.variationUpperChance ?? 10;
-          merged.variationUpperSecs    = srcLimits.variationUpperSecs ?? 60;
+          merged.variationEnabled         = srcLimits.variationEnabled ?? false;
+          // Use new Min/Max field names; fall back to old single-value names for
+          // accounts that still have the legacy schema in the DB.
+          merged.variationLowerChanceMin  = srcLimits.variationLowerChanceMin  ?? srcLimits.variationLowerChance  ?? 10;
+          merged.variationLowerChanceMax  = srcLimits.variationLowerChanceMax  ?? srcLimits.variationLowerChance  ?? 10;
+          merged.variationLowerSecsMin    = srcLimits.variationLowerSecsMin    ?? srcLimits.variationLowerSecs    ?? 20;
+          merged.variationLowerSecsMax    = srcLimits.variationLowerSecsMax    ?? srcLimits.variationLowerSecs    ?? 30;
+          merged.variationUpperChanceMin  = srcLimits.variationUpperChanceMin  ?? srcLimits.variationUpperChance  ?? 10;
+          merged.variationUpperChanceMax  = srcLimits.variationUpperChanceMax  ?? srcLimits.variationUpperChance  ?? 10;
+          merged.variationUpperSecsMin    = srcLimits.variationUpperSecsMin    ?? srcLimits.variationUpperSecs    ?? 45;
+          merged.variationUpperSecsMax    = srcLimits.variationUpperSecsMax    ?? srcLimits.variationUpperSecs    ?? 60;
         }
         if (expandedKeys.includes("momentumSettings")) {
           merged.momentumEnabled = srcLimits.momentumEnabled ?? false;

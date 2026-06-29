@@ -1007,9 +1007,10 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
     await storage.deleteProfile(profileId);
-    // Clear any proxy slot state for this profile so deleting an account
-    // doesn't keep that proxy slot blocked for the remainder of the cooldown.
-    proxySlotManager.clearProfile(profileId);
+    // NOTE: intentionally do NOT call proxySlotManager.clearProfile() here.
+    // If this account had used a proxy IP it should keep its cooldown slot
+    // occupied so no other account can claim that same IP slot until the
+    // cooldown naturally expires — the IP was used and the software must know that.
     // skipCookieSave: true — the account is gone, no point saving cookies.
     // Also avoids the saveCookies CDP call (can hang 30 s on a challenged page)
     // which was starving the profile-list refetch and causing the UI to freeze.

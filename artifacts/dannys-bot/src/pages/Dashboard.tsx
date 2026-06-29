@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.242",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Deleting an account no longer frees its proxy slot. The IP was used by that account and the cooldown window must run its full course so no other account can claim that same slot too soon." },
+      { category: "Fix", text: "Copy Settings — Variation % sub-option now correctly copies all min/max values to target accounts instead of always sending the built-in defaults." },
+    ],
+  },
+  {
     version: "1.1.241",
     date: "29 Jun 2026",
     items: [
