@@ -1850,6 +1850,37 @@ export async function registerInstagramRoutes(
     });
   });
 
+  // ── Manual EB Slot Acquire / Release ─────────────────────────────────────
+  // Called by Electron main before opening a manual EB window.
+  // Same slot limit as verify and automation.
+  // Force-releases (no cooldown) on window close — manual browsing
+  // should not block automation from starting immediately after.
+
+  app.post("/api/profiles/:id/eb-slot-acquire", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile   = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, reason: "Profile not found" });
+
+    const proxyId = (profile as any).proxyId as number | null | undefined;
+    if (!proxyId) return res.json({ ok: true, proxyId: null });
+
+    const check = proxySlotManager.canAcquire(proxyId, profileId);
+    if (!check.ok) return res.status(429).json({ ok: false, reason: check.reason });
+
+    proxySlotManager.acquire(proxyId, profileId);
+    return res.json({ ok: true, proxyId });
+  });
+
+  app.post("/api/profiles/:id/eb-slot-release", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile   = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false });
+
+    const proxyId = (profile as any).proxyId as number | null | undefined;
+    if (proxyId) proxySlotManager.forceRelease(proxyId, profileId);
+    return res.json({ ok: true });
+  });
+
   // ── Proxy Slot Settings & Status ─────────────────────────────────────────
   app.get("/api/proxy-slots/settings", async (_req, res) => {
     const s = proxySlotManager.getSettings();

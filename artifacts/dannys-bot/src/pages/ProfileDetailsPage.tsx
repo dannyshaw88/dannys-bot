@@ -1490,31 +1490,30 @@ export function ProfileDetailsPage() {
                             </Button>
                             {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap">{timingInfo}</span>}
                           </div>
-                          {/* Row 2: Min / Max / Min (ms) / Max (ms) + Variation % — all on the same row, labels bottom-aligned */}
-                          <div className="flex flex-wrap gap-x-2 gap-y-1 items-end">
+                          {/* Row 2: Min / Max / Min (ms) / Max (ms) + Variation % — all on the same row, center-aligned */}
+                          <div className="flex flex-wrap gap-x-2 gap-y-1 items-center">
                             <div className="flex flex-col items-center space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[34px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[52px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min</Label>
                             </div>
                             <div className="flex flex-col items-center space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[34px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[52px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max</Label>
                             </div>
                             <div className="flex flex-col items-center space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[70px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="flex flex-col items-center space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[70px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
                             {/* Variation % — checkbox on same row; expanded fields wrap below if needed */}
-                            <div className="flex flex-col items-start space-y-0.5 ml-1">
-                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold h-7 shrink-0">
+                            <div className="flex items-center ml-1">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
                                 <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
                                 Variation %
                               </label>
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
                             </div>
                             {!!(formData.apiLimits as any).variationEnabled && (
                               <div className="flex items-end gap-1 flex-wrap">
@@ -1564,12 +1563,15 @@ export function ProfileDetailsPage() {
                             )}
                           </div>
                           {/* Row 3: Momentum + Attention Drift + Fatigue — all on one row */}
-                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-center">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-end">
                             {/* Momentum */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                              <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                              Momentum
-                            </label>
+                            <div className="flex flex-col items-start space-y-0.5">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                Momentum
+                              </label>
+                              <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
+                            </div>
                             {!!(formData.apiLimits as any).momentumEnabled && (
                               <>
                                 <div className="flex flex-col items-center space-y-0.5">
@@ -1583,12 +1585,15 @@ export function ProfileDetailsPage() {
                               </>
                             )}
                             {/* Separator */}
-                            <span className="text-muted-foreground/30 text-xs select-none">|</span>
+                            <span className="text-muted-foreground/30 text-xs select-none pb-[14px]">|</span>
                             {/* Attention Drift */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                              <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                              Attention Drift
-                            </label>
+                            <div className="flex flex-col items-start space-y-0.5">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                Attention Drift
+                              </label>
+                              <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
+                            </div>
                             {!!(formData.apiLimits as any).attentionDriftEnabled && (
                               <>
                                 <div className="flex items-center gap-1">
@@ -1613,12 +1618,15 @@ export function ProfileDetailsPage() {
                               </>
                             )}
                             {/* Separator */}
-                            <span className="text-muted-foreground/30 text-xs select-none">|</span>
+                            <span className="text-muted-foreground/30 text-xs select-none pb-[14px]">|</span>
                             {/* Fatigue */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                              <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                              Fatigue
-                            </label>
+                            <div className="flex flex-col items-start space-y-0.5">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 h-6">
+                                <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                Fatigue
+                              </label>
+                              <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
+                            </div>
                             {!!(formData.apiLimits as any).fatigueEnabled && (
                               <>
                                 <div className="flex flex-col items-center space-y-0.5">

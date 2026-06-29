@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.238",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Opening the browser on the Accounts Manager page is now slot-gated. If the proxy is already at capacity a native dialog explains why and the window will not open." },
+      { category: "Fix", text: "Manually opened browser windows now acquire a proxy slot on open and release it (without starting a cooldown) when the window is closed." },
+      { category: "Improvement", text: "Account Settings API Controls: Min/Max fields are wider (52 px) and Min(ms)/Max(ms) fields are wider (80 px) for easier number entry." },
+      { category: "Improvement", text: "Account Settings: Variation % label now centre-aligns with its input fields. Momentum, Attention Drift, and Fatigue labels now bottom-align cleanly with their sub-labelled input columns." },
+    ],
+  },
+  {
     version: "1.1.237",
     date: "29 Jun 2026",
     items: [

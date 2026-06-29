@@ -803,15 +803,45 @@ function setupBackupHandlers() {
   // open-browser-window: opens a NATIVE Electron BrowserWindow that loads
   // Instagram directly — no Puppeteer, no screencasting, no canvas.
   // This is the Jarvee-style CEF embedded browser approach.
-  ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
-    if (!profileId) return;
-    if (pendingEbOpens.has(profileId)) return; // second click arrived before first window opened
+  ipcMain.handle("open-browser-window", async (_event, { profileId, username }: any) => {
+    if (!profileId) return { blocked: false };
+    if (pendingEbOpens.has(profileId)) return { blocked: false }; // second click arrived before first window opened
     pendingEbOpens.add(profileId);
-    // Fire-and-forget — do NOT await openEbWindow here.  ipcRenderer.invoke
-    // waits for the handle() callback to return before resolving, so awaiting
-    // the entire window setup (proxy fetch + cookie load + Chromium launch)
-    // keeps the UI frozen for up to 10 s before the browser icon reacts.
-    // Returning immediately unblocks the caller; the window appears shortly after.
+
+    // ── Proxy slot check (fast synchronous call — completes in <100 ms) ──────
+    // The handler is async so ipcRenderer.invoke waits for this check before
+    // resolving, but the actual window open is still fire-and-forget below.
+    // This is intentional: the slot gate needs to be synchronous so the renderer
+    // gets an immediate { blocked: true } if the proxy is full, but the 10-second
+    // Chromium launch still happens in the background without freezing the UI.
+    try {
+      const slotRes = await fetch(
+        `http://127.0.0.1:${serverPort}/api/profiles/${profileId}/eb-slot-acquire`,
+        { method: "POST" },
+      );
+      if (slotRes.status === 429) {
+        const data = await slotRes.json().catch(() => ({})) as any;
+        pendingEbOpens.delete(profileId);
+        const reason: string = data.reason ?? "Proxy at capacity — try again later.";
+        console.warn(`[EB] Profile ${profileId}: slot blocked — ${reason}`);
+        dialog.showMessageBox({
+          type: "warning",
+          title: "Proxy Slot Unavailable",
+          message: reason,
+          buttons: ["OK"],
+        });
+        return { blocked: true, reason };
+      }
+    } catch (slotErr: any) {
+      // Slot check failed (API not yet ready?) — proceed anyway so a transient
+      // server hiccup doesn't permanently lock the browser button.
+      console.warn(`[EB] Profile ${profileId}: slot check error (proceeding) — ${slotErr?.message}`);
+    }
+
+    // ── Fire-and-forget window opening ────────────────────────────────────────
+    // Do NOT await openEbWindow here — Chromium launch can take up to 10 s and
+    // would freeze the UI.  The slot has already been acquired above; if
+    // openEbWindow fails we release it in the catch block below.
     void (async () => {
       try {
         let proxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
@@ -858,12 +888,32 @@ function setupBackupHandlers() {
           apiUA,
           ebFingerprint,
         });
+
+        // Hook window close → release slot (force-release, no cooldown).
+        // Manual EB browsing should not block automation from starting
+        // immediately after the window closes.
+        const ebEntry = ebMap.get(profileId);
+        if (ebEntry?.win && !ebEntry.win.isDestroyed()) {
+          ebEntry.win.once("closed", () => {
+            fetch(
+              `http://127.0.0.1:${serverPort}/api/profiles/${profileId}/eb-slot-release`,
+              { method: "POST" },
+            ).catch(err => console.warn(`[EB] Slot release failed for profile ${profileId}: ${err?.message}`));
+          });
+        }
       } catch (err: any) {
+        // openEbWindow failed — release the slot so it doesn't stay permanently occupied.
         console.error(`[EB] open-browser-window error for profile ${profileId}:`, err?.message);
+        fetch(
+          `http://127.0.0.1:${serverPort}/api/profiles/${profileId}/eb-slot-release`,
+          { method: "POST" },
+        ).catch(() => {});
       } finally {
         pendingEbOpens.delete(profileId);
       }
     })();
+
+    return { blocked: false };
   });
 
   // clear-signup-browser-cache: wipe the Electron session + cookie file for the signup EB.
