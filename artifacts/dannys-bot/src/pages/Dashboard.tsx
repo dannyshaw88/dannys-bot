@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.245",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Controls settings now take effect immediately after saving — no restart needed. Changes are applied at the next loop tick so the new call rate kicks in as soon as the current inter-session sleep ends." },
+    ],
+  },
+  {
     version: "1.1.244",
     date: "29 Jun 2026",
     items: [

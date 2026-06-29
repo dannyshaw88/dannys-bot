@@ -659,6 +659,12 @@ class AutomationEngine {
           break;
         }
 
+        // Live API limit sync: apply any changes the user saved while the runner
+        // was sleeping, so new settings take effect at the next loop tick.
+        if (state.client && freshProfile.apiLimits && typeof freshProfile.apiLimits === "object") {
+          state.client.updateApiLimits(freshProfile.apiLimits as any);
+        }
+
         // ── Account status gate ──────────────────────────────────────────────
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") {
           engineLog("WARN", `@${freshProfile.username}: account ${freshProfile.accountStatus} — stopping runner`);
@@ -844,6 +850,9 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
+        if (state.client && freshProfile.apiLimits && typeof freshProfile.apiLimits === "object") {
+          state.client.updateApiLimits(freshProfile.apiLimits as any);
+        }
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") {
           engineLog("WARN", `@${freshProfile.username}: bad_password — cannot authenticate, pausing 10min (update the password to resume)`);
@@ -967,6 +976,9 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
+        if (state.client && freshProfile.apiLimits && typeof freshProfile.apiLimits === "object") {
+          state.client.updateApiLimits(freshProfile.apiLimits as any);
+        }
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
         if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
@@ -1078,6 +1090,9 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
+        if (state.client && freshProfile.apiLimits && typeof freshProfile.apiLimits === "object") {
+          state.client.updateApiLimits(freshProfile.apiLimits as any);
+        }
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
         if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
@@ -1164,6 +1179,9 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
+        if (state.client && freshProfile.apiLimits && typeof freshProfile.apiLimits === "object") {
+          state.client.updateApiLimits(freshProfile.apiLimits as any);
+        }
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
         if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
@@ -1857,14 +1875,16 @@ class AutomationEngine {
       });
     }
 
-    // Always sync apiLimits from the profile (user may have changed them)
+    // Always sync apiLimits from the profile (user may have changed them).
+    // Use updateApiLimits (not setApiLimits) so fatigue/momentum session state is
+    // preserved when limits are refreshed mid-lifecycle on an already-running client.
     const limits = profile.apiLimits as any;
     if (limits && typeof limits === "object") {
       const rMin = Number(limits.requestsMin   ?? 1);
       const rMax = Number(limits.requestsMax   ?? 1);
       const sMin = Number(limits.everySecondsMin ?? 1000);
       const sMax = Number(limits.everySecondsMax ?? 30000);
-      state.client.setApiLimits({ requestsMin: rMin, requestsMax: rMax, everySecondsMin: sMin, everySecondsMax: sMax });
+      state.client.updateApiLimits({ ...limits, requestsMin: rMin, requestsMax: rMax, everySecondsMin: sMin, everySecondsMax: sMax });
       // Log so slow-call issues are immediately diagnosable from the server log
       const toSec = (v: number) => (v < 1000 ? v : Math.round(v / 100) / 10);
       const delayMin = Math.round((toSec(sMin) / Math.max(1, rMax)) * 10) / 10;

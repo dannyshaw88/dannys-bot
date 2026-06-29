@@ -508,6 +508,44 @@ export class InstagramWebClient {
     this._lastDelaySec           = null;
   }
 
+  // Updates throttle parameters without resetting per-session state (_sessionCallCount,
+  // _lastDelaySec). Call this when applying user-changed settings to an already-running
+  // client so fatigue and momentum continuity are preserved.
+  updateApiLimits(limits: {
+    requestsMin: number; requestsMax: number;
+    everySecondsMin: number; everySecondsMax: number;
+    variationEnabled?: boolean;
+    variationLowerChance?: number; variationLowerSecs?: number;
+    variationUpperChance?: number; variationUpperSecs?: number;
+    momentumEnabled?: boolean; momentumChance?: number; momentumSpread?: number;
+    attentionDriftEnabled?: boolean; attentionDriftChance?: number;
+    attentionDriftMinMins?: number; attentionDriftMaxMins?: number;
+    fatigueEnabled?: boolean; fatigueStrength?: number; fatigueRampCalls?: number;
+  }) {
+    this.throttleRequestsMin = Math.max(1, limits.requestsMin);
+    this.throttleRequestsMax = Math.max(1, limits.requestsMax);
+    const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+    this.throttleSecondsMin      = Math.max(0, toMs(limits.everySecondsMin) / 1000);
+    this.throttleSecondsMax      = Math.max(0, toMs(limits.everySecondsMax) / 1000);
+    this.variationEnabled        = !!limits.variationEnabled;
+    this.variationLowerChance    = limits.variationLowerChance    ?? 0;
+    this.variationLowerSecs      = limits.variationLowerSecs      ?? 0;
+    this.variationUpperChance    = limits.variationUpperChance    ?? 0;
+    this.variationUpperSecs      = limits.variationUpperSecs      ?? 0;
+    this.momentumEnabled         = !!limits.momentumEnabled;
+    this.momentumChance          = limits.momentumChance          ?? 70;
+    this.momentumSpread          = limits.momentumSpread          ?? 20;
+    this.attentionDriftEnabled   = !!limits.attentionDriftEnabled;
+    this.attentionDriftChance    = limits.attentionDriftChance    ?? 0;
+    this.attentionDriftMinMins   = limits.attentionDriftMinMins   ?? 5;
+    this.attentionDriftMaxMins   = limits.attentionDriftMaxMins   ?? 15;
+    this.fatigueEnabled          = !!limits.fatigueEnabled;
+    this.fatigueStrength         = limits.fatigueStrength         ?? 50;
+    this.fatigueRampCalls        = Math.max(1, limits.fatigueRampCalls ?? 30);
+    // NOTE: _sessionCallCount and _lastDelaySec are intentionally NOT reset here
+    // so fatigue ramp and momentum continuity are preserved across live limit changes.
+  }
+
   private async apiThrottle(): Promise<void> {
     // Compute the delay RANGE from the configured rate limits, then pick a random
     // point inside that range.  Previously the code randomised `calls` and `secs`
