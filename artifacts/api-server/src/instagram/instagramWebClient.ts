@@ -370,6 +370,10 @@ export class InstagramWebClient {
   // signal that causes Instagram to flag and lock the account.
   private _mobileIgDid: string = "";
   private _mobileMid: string = "";
+  // Cached UTC offset (seconds) for the proxy's exit IP — resolved once on
+  // construction via ip-api.com so X-IG-Timezone-Offset always matches the
+  // connecting IP's region.  Defaults to "0" until the async lookup resolves.
+  private _tzOffset: string = "0";
   // Last configure-step error message, set by _configureViaIgClient when configure
   // returns a non-ok response. Exposed via lastUploadError getter so callers can
   // surface the real Instagram error in the activity log instead of a generic
@@ -451,6 +455,16 @@ export class InstagramWebClient {
     }
     this.proxyUrl = proxyUrl;
     this.profileId = profileId;
+    // Warm the timezone offset for this proxy asynchronously so _buildMobileHeaders
+    // always sends the correct X-IG-Timezone-Offset for the proxy's exit region.
+    // Fire-and-forget — the field stays "0" until the lookup resolves (~1-2s),
+    // which is always before the first automation call (verify runs first).
+    try {
+      const proxyHost = new URL(proxyUrl).hostname;
+      lookupTimezoneOffset(proxyHost).then((offset) => {
+        this._tzOffset = String(offset);
+      }).catch(() => { /* keep default "0" */ });
+    } catch { /* malformed proxyUrl — keep default "0" */ }
   }
 
   // ── Per-account mobile UA resolver ──────────────────────────────────────
@@ -1598,6 +1612,83 @@ export class InstagramWebClient {
     return res.json;
   }
 
+  // Builds the full real-Android Instagram mobile header set for mobileSessionPost
+  // and mobileSessionGet.  This matches the headers sent by the verify flow
+  // (verifyInstagramCredentials baseHeaders) so every automation call looks
+  // identical to a real Android app request — not a stripped-down bot call.
+  //
+  // MISSING FROM OLD CODE (was causing checkpoint_required on follow):
+  //   X-Pigeon-Session-Id, X-Pigeon-Rawclienttime, X-Bloks-Version-Id,
+  //   X-IG-Device-ID, X-IG-Android-ID, X-FB-HTTP-Engine, X-IG-WWW-Claim,
+  //   X-IG-App-Locale, X-IG-Device-Locale, X-IG-Mapped-Locale,
+  //   X-IG-Timezone-Offset, realistic bandwidth values.
+  //
+  // BLOKS_VERSION_ID: confirmed current via instagrapi master (2026-05-24).
+  // Update alongside MOBILE_VERSION when Instagram bumps its minimum version.
+  private _buildMobileHeaders(csrf: string, contentType?: string): Record<string, string> {
+    const MOBILE_APP_ID = "567067343352427";
+    const BLOKS_VERSION_ID = "ce555e5500576acd8e84a66018f54a05720f2dce29f0bb5a1f97f0c10d6fac48";
+
+    // Extract device IDs from stored state — same priority order as verify flow.
+    let igDid  = this._mobileIgDid || "";
+    let androidId = "";
+    let wwwClaim  = "0";
+    if (this.igDeviceState) {
+      try {
+        const s = JSON.parse(this.igDeviceState) as { deviceId?: string; igDid?: string; igWWWClaim?: string };
+        if (!igDid && s.igDid) igDid = s.igDid;
+        if (s.deviceId) androidId = s.deviceId;
+        if (s.igWWWClaim) wwwClaim = s.igWWWClaim;
+      } catch { /* keep defaults */ }
+    }
+
+    // Bandwidth: real Android never sends -1/0 (those are "not measured" placeholders).
+    // Pick a plausible WiFi range (8–40 Mbps) identical to the verify flow.
+    const bwKbps  = 8000 + Math.floor(Math.random() * 32000);
+    const bwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
+    const bwMs    = 300 + Math.floor(Math.random() * 2000);
+
+    const headers: Record<string, string> = {
+      "Host":                         "i.instagram.com",
+      "User-Agent":                   this._fullMobileUA,
+      "Accept":                       "*/*",
+      "Accept-Language":              "en-US,en;q=0.9",
+      "X-IG-App-ID":                  MOBILE_APP_ID,
+      "X-CSRFToken":                  csrf,
+      "X-IG-Capabilities":            "3brTvwE=",
+      "X-IG-Connection-Type":         "WIFI",
+      "X-IG-Connection-Speed":        `${bwKbps}kbps`,
+      "X-IG-Bandwidth-Speed-KBPS":    `${bwKbps}.000`,
+      "X-IG-Bandwidth-TotalBytes-B":  String(bwBytes),
+      "X-IG-Bandwidth-TotalTime-MS":  String(bwMs),
+      "X-Bloks-Version-Id":           BLOKS_VERSION_ID,
+      "X-Bloks-Is-Layout-RTL":        "false",
+      "X-FB-HTTP-Engine":             "Liger",
+      "X-IG-WWW-Claim":               wwwClaim,
+      // Per-session Pigeon headers — generated fresh each call (real app behaviour).
+      "X-Pigeon-Session-Id":          randomUUID(),
+      "X-Pigeon-Rawclienttime":       `${(Date.now() / 1000).toFixed(7)}`,
+      // Locale
+      "X-IG-App-Locale":              "en_US",
+      "X-IG-Device-Locale":           "en_US",
+      "X-IG-Mapped-Locale":           "en_US",
+      // Timezone — resolved from proxy IP at construction time via ip-api.com.
+      "X-IG-Timezone-Offset":         this._tzOffset,
+    };
+
+    if (igDid)    headers["X-IG-Device-ID"]   = igDid;
+    if (androidId) headers["X-IG-Android-ID"] = androidId;
+
+    if (contentType) {
+      headers["Content-Type"] = contentType;
+    }
+
+    const authorization = this._deviceAuthorization;
+    if (authorization) headers["Authorization"] = authorization;
+
+    return headers;
+  }
+
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
@@ -1621,39 +1712,12 @@ export class InstagramWebClient {
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || "missing";
-    let fullMobileUA: string;
-    if (this.userAgentApi && this.userAgentApi.startsWith("Instagram ")) {
-      fullMobileUA = this.userAgentApi;
-    } else {
-      let deviceStr: string | undefined;
-      if (this.igDeviceState) {
-        try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
-      }
-      deviceStr = deviceStr ?? this.userAgentApi;
-      fullMobileUA = deviceStr
-        ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
-        : MOBILE_UA;
-    }
     const res = await igReq({
       host: "i.instagram.com",
       path,
       method: "GET",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": fullMobileUA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "X-IG-App-ID": MOBILE_APP_ID,
-        "X-CSRFToken": csrf,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI",
-        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-        "X-IG-Bandwidth-TotalBytes-B": "0",
-        "X-IG-Bandwidth-TotalTime-MS": "0",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
+      headers: this._buildMobileHeaders(csrf),
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
     });
@@ -3782,44 +3846,13 @@ export class InstagramWebClient {
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
     }
-    const MOBILE_APP_ID = "567067343352427";
     const csrf = this.mobileCsrf || this.csrfToken || "missing";
-    // Build full Instagram mobile UA — userAgentApi stores the device string portion only
-    // (e.g. "34/14; 420dpi; 1220x2712; Xiaomi; ..."). Wrap it if it's not already a full UA.
-    let fullMobileUA: string;
-    if (this.userAgentApi && this.userAgentApi.startsWith("Instagram ")) {
-      fullMobileUA = this.userAgentApi;
-    } else {
-      // Try to get deviceString from parsed ig_device_state first, fall back to userAgentApi
-      let deviceStr: string | undefined;
-      if (this.igDeviceState) {
-        try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
-      }
-      deviceStr = deviceStr ?? this.userAgentApi;
-      fullMobileUA = deviceStr
-        ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
-        : MOBILE_UA;
-    }
-    console.log(`[webClient] mobileSessionPost ${path} using igApiCookies session (csrf=${csrf.slice(0,8) + "..."}, ua=${fullMobileUA.slice(0, 60)})`);
+    console.log(`[webClient] mobileSessionPost ${path} using igApiCookies session (csrf=${csrf.slice(0,8) + "..."})`);
     const res = await igReq({
       host: "i.instagram.com",
       path,
       method: "POST",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": fullMobileUA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-IG-App-ID": MOBILE_APP_ID,
-        "X-CSRFToken": csrf,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI",
-        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-        "X-IG-Bandwidth-TotalBytes-B": "0",
-        "X-IG-Bandwidth-TotalTime-MS": "0",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
+      headers: this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8"),
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,

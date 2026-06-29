@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.248",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Every mobile API call (follow, like, DM, browse) now sends the full set of real Android app headers — Pigeon session ID, Bloks version, device ID, Android ID, realistic bandwidth values, locale, and timezone. These were present during account verify but missing from all automation calls, which was the root cause of the selfie-verification checkpoint on first follow." },
+    ],
+  },
+  {
     version: "1.1.247",
     date: "29 Jun 2026",
     items: [
