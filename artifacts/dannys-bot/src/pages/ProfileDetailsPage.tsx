@@ -1464,168 +1464,171 @@ export function ProfileDetailsPage() {
                           })()}
                         </div>
                         <div className="w-full space-y-3 pt-4 mt-3 border-t border-border">
-                          <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
-                          <div className="flex flex-wrap gap-2 items-start">
+                          {/* Title row + Test Timing inline */}
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs px-2 whitespace-nowrap"
+                                onClick={() => {
+                                  const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
+                                  const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
+                                  const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+                                  const rawMin = Math.max(0, formData.apiLimits.everySecondsMin || 0);
+                                  const rawMax = Math.max(rawMin, formData.apiLimits.everySecondsMax || 0);
+                                  const minMs = toMs(rawMin);
+                                  const maxMs = toMs(rawMax);
+                                  const calls = Math.floor(Math.random() * (maxCalls - minCalls + 1)) + minCalls;
+                                  const windowMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+                                  const delayMs = Math.max(0, Math.floor(windowMs / Math.max(1, calls)));
+                                  const fmt = (v: number) => v >= 60000 ? `${(v / 60000).toFixed(1)}m` : v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}ms`;
+                                  setTimingInfo(`${calls} call${calls !== 1 ? "s" : ""} every ${fmt(delayMs)}`);
+                                }}
+                              >
+                                Test Timing
+                              </Button>
+                              {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap">{timingInfo}</span>}
+                            </div>
+                          </div>
+                          {/* Main controls + feature toggles on same row */}
+                          <div className="flex flex-wrap gap-x-3 gap-y-2 items-center">
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Calls</Label>
+                              <NumField min={0} className="h-7 text-xs w-[34px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Calls</Label>
+                              <NumField min={0} className="h-7 text-xs w-[34px]" value={formData.apiLimits.requestsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(v, formData.apiLimits.requestsMin ?? 0)} })} />
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max</Label>
                             </div>
+                            <span className="text-[10px] text-muted-foreground self-center mb-0.5">calls</span>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
+                              <NumField min={0} className="h-7 text-xs w-[56px]" value={formData.apiLimits.everySecondsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min (ms)</Label>
                             </div>
                             <div className="space-y-1">
-                              <NumField min={0} className="h-7 text-xs w-[80px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
+                              <NumField min={0} className="h-7 text-xs w-[56px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs px-2 whitespace-nowrap"
-                              onClick={() => {
-                                const minCalls = Math.max(1, formData.apiLimits.requestsMin || 1);
-                                const maxCalls = Math.max(minCalls, formData.apiLimits.requestsMax || 1);
-                                // Mirror engine's unit conversion: values <1000 are bare seconds,
-                                // values ≥1000 are already milliseconds (same as setApiLimits toMs).
-                                const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-                                const rawMin = Math.max(0, formData.apiLimits.everySecondsMin || 0);
-                                const rawMax = Math.max(rawMin, formData.apiLimits.everySecondsMax || 0);
-                                const minMs = toMs(rawMin);
-                                const maxMs = toMs(rawMax);
-                                const calls = Math.floor(Math.random() * (maxCalls - minCalls + 1)) + minCalls;
-                                const windowMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-                                // Per-call delay = window ÷ calls (matches engine: delayMs = secs/calls * 1000)
-                                const delayMs = Math.max(0, Math.floor(windowMs / Math.max(1, calls)));
-                                const fmt = (v: number) => v >= 60000 ? `${(v / 60000).toFixed(1)}m` : v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}ms`;
-                                setTimingInfo(`${calls} call${calls !== 1 ? "s" : ""} every ${fmt(delayMs)}`);
-                              }}
-                            >
-                              Test Timing
-                            </Button>
-                            {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap mt-1.5">{timingInfo}</span>}
+                            <div className="w-px h-6 bg-border self-center mx-1" />
+                            <label className="flex items-center gap-1 cursor-pointer select-none text-xs font-bold">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Variation %
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer select-none text-xs font-bold">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).momentumEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Momentum
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer select-none text-xs font-bold">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).attentionDriftEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Attention Drift
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer select-none text-xs font-bold">
+                              <input type="checkbox" checked={!!(formData.apiLimits as any).fatigueEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                              Fatigue
+                            </label>
                           </div>
-                          {/* Variation % */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="variation-enabled"
-                                checked={!!(formData.apiLimits as any).variationEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="variation-enabled" className="text-xs font-bold cursor-pointer select-none">Variation %</label>
-                            </div>
-                            {!!(formData.apiLimits as any).variationEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChance: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Lower %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">→ -</span>
-                                  <div className="space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationLowerSecs ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecs: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Secs</Label>
-                                  </div>
+                          {/* Variation expanded */}
+                          {!!(formData.apiLimits as any).variationEnabled && (
+                            <div className="flex flex-wrap gap-x-3 gap-y-2 items-end pt-1.5 border-t border-border/40">
+                              <div className="flex items-center gap-1">
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationLowerChanceMin ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMin: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">X%</Label>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChance: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Upper %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">→ +</span>
-                                  <div className="space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecs: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Secs</Label>
-                                  </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationLowerChanceMax ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMax: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Y%</Label>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5 mx-0.5">-</span>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationLowerSecsMin ?? (formData.apiLimits as any).variationLowerSecs ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMin: v } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">X secs</Label>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationLowerSecsMax ?? (formData.apiLimits as any).variationLowerSecs ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMax: v } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Y secs</Label>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                          {/* Momentum */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="momentum-enabled"
-                                checked={!!(formData.apiLimits as any).momentumEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="momentum-enabled" className="text-xs font-bold cursor-pointer select-none">Momentum</label>
-                            </div>
-                            {!!(formData.apiLimits as any).momentumEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                              <div className="flex items-center gap-1">
                                 <div className="space-y-0.5">
-                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumChance ?? 70} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumChance: Math.min(100, v) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationUpperChanceMin ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMin: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">X%</Label>
                                 </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
                                 <div className="space-y-0.5">
-                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumSpread ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumSpread: Math.min(100, v) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Spread %</Label>
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationUpperChanceMax ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMax: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Y%</Label>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5 mx-0.5">+</span>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationUpperSecsMin ?? (formData.apiLimits as any).variationUpperSecs ?? 45} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMin: v } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">X secs</Label>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[40px]" value={(formData.apiLimits as any).variationUpperSecsMax ?? (formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMax: v } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Y secs</Label>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                          {/* Attention Drift */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="attention-drift-enabled"
-                                checked={!!(formData.apiLimits as any).attentionDriftEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="attention-drift-enabled" className="text-xs font-bold cursor-pointer select-none">Attention Drift</label>
                             </div>
-                            {!!(formData.apiLimits as any).attentionDriftEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                          )}
+                          {/* Momentum expanded */}
+                          {!!(formData.apiLimits as any).momentumEnabled && (
+                            <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-end pt-1.5 border-t border-border/40">
+                              <div className="space-y-0.5">
+                                <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumChance ?? 70} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumChance: Math.min(100, v) } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
+                              </div>
+                              <div className="space-y-0.5">
+                                <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumSpread ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumSpread: Math.min(100, v) } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Spread %</Label>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground self-end mb-0.5 max-w-[230px]">Spread % — how far each call's timing can deviate within a momentum burst. Higher = more uneven spacing between calls in the run.</p>
+                            </div>
+                          )}
+                          {/* Attention Drift expanded */}
+                          {!!(formData.apiLimits as any).attentionDriftEnabled && (
+                            <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-end pt-1.5 border-t border-border/40">
+                              <div className="flex items-center gap-1">
                                 <div className="space-y-0.5">
-                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftChance ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftChance: Math.min(100, v) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).attentionDriftChanceMin ?? (formData.apiLimits as any).attentionDriftChance ?? 3} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftChanceMin: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">X%</Label>
                                 </div>
+                                <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
                                 <div className="space-y-0.5">
-                                  <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMinMins ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMinMins: v } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Mins</Label>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMaxMins ?? 15} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMaxMins: Math.max(v, (formData.apiLimits as any).attentionDriftMinMins ?? 5) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Mins</Label>
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).attentionDriftChanceMax ?? (formData.apiLimits as any).attentionDriftChance ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftChanceMax: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Y%</Label>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                          {/* Fatigue */}
-                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="fatigue-enabled"
-                                checked={!!(formData.apiLimits as any).fatigueEnabled}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })}
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                              />
-                              <label htmlFor="fatigue-enabled" className="text-xs font-bold cursor-pointer select-none">Fatigue</label>
-                            </div>
-                            {!!(formData.apiLimits as any).fatigueEnabled && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
-                                <div className="space-y-0.5">
-                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueStrength ?? 50} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueStrength: Math.min(100, v) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Strength %</Label>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <NumField min={1} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueRampCalls ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueRampCalls: Math.max(1, v) } })} />
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Ramp Calls</Label>
-                                </div>
+                              <span className="text-[10px] text-muted-foreground self-end mb-0.5">chance</span>
+                              <div className="space-y-0.5">
+                                <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMinMins ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMinMins: v } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Mins</Label>
                               </div>
-                            )}
-                          </div>
+                              <div className="space-y-0.5">
+                                <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMaxMins ?? 15} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMaxMins: Math.max(v, (formData.apiLimits as any).attentionDriftMinMins ?? 5) } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Mins</Label>
+                              </div>
+                            </div>
+                          )}
+                          {/* Fatigue expanded */}
+                          {!!(formData.apiLimits as any).fatigueEnabled && (
+                            <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-end pt-1.5 border-t border-border/40">
+                              <div className="space-y-0.5">
+                                <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueStrength ?? 50} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueStrength: Math.min(100, v) } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Strength %</Label>
+                              </div>
+                              <div className="space-y-0.5">
+                                <NumField min={1} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueRampCalls ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueRampCalls: Math.max(1, v) } })} />
+                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Ramp Calls</Label>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground self-end mb-0.5 max-w-[240px]">Strength % — how much the delay grows at peak fatigue (100% = double delay). Ramp Calls — how many consecutive calls it takes to build to full strength.</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
