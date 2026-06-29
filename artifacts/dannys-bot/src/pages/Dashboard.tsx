@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.234",
+    date: "29 Jun 2026",
+    items: [
+      { category: "New", text: "Proxy Slot Control: limit how many accounts can work on the same proxy at once. Set a max concurrent count and a cooldown gap (in minutes) before a freed slot can be reused. Enforced across automation, verify, and browser sessions." },
+      { category: "New", text: "IP/Slots column added to Account Manager showing each account's current slot usage on its proxy (e.g. 1/2)." },
+      { category: "New", text: "Proxy Slots settings button added next to Ping All in Proxy Manager." },
+      { category: "Improvement", text: "API Controls layout: Test Timing button now sits right next to the section title. Variation % moved inline on the same row. Attention Drift and Fatigue merged onto the Momentum row. Field labels now vertically centered." },
+    ],
+  },
+  {
     version: "1.1.229",
     date: "29 Jun 2026",
     items: [

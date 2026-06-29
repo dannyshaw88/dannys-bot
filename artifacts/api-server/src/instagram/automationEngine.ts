@@ -31,6 +31,7 @@ import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpoch
 import { getAdapterProxyPort, getAdapterIp, startAdapterProxy } from "./adapterProxy";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
+import { proxySlotManager } from "./proxySlotManager";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 
@@ -241,6 +242,9 @@ class AutomationEngine {
   // On reconcile, these profiles get a fresh X-Y random delay before re-launch
   // (same as cold startup) rather than firing immediately.
   private runnerCrashedIds     = new Set<number>();
+  // Tracks which profiles have acquired a proxy slot so we can release them
+  // when the runner finishes.  Maps profileId → proxyId.
+  private acquiredSlots        = new Map<number, number>();
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -288,6 +292,21 @@ class AutomationEngine {
       const activeContact       = new Set<number>();
       const activeHumanSession  = new Set<number>();
 
+      // Release proxy slots for profiles whose runners have all finished
+      const currentlyRunning = new Set<number>([
+        ...this.states.keys(),
+        ...this.unfollowStates.keys(),
+        ...this.dmStates.keys(),
+        ...this.contactStates.keys(),
+        ...this.humanSessionStates.keys(),
+      ]);
+      for (const [profileId, proxyId] of this.acquiredSlots) {
+        if (!currentlyRunning.has(profileId)) {
+          proxySlotManager.release(proxyId, profileId);
+          this.acquiredSlots.delete(profileId);
+        }
+      }
+
       for (const profile of profiles) {
         const tools = await storage.getToolsByProfile(profile.id);
 
@@ -315,6 +334,31 @@ class AutomationEngine {
         // not the enabled flag, so turning HS OFF doesn't accidentally re-activate them.
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
         const hasHumanSessionTool = tools.some(t => t.type === "human_sessions");
+
+        // Proxy slot enforcement — only gate NEW runner launches (not ones already in flight).
+        // If this profile already has a running runner it already holds the slot.
+        const alreadyRunning = currentlyRunning.has(profile.id);
+        if (!alreadyRunning && profile.proxyId && !this.acquiredSlots.has(profile.id) && profile.accountStatus === "valid") {
+          const hasRunnableTools = (
+            (humanSessionTool) ||
+            (!hasHumanSessionTool && (
+              tools.find(t => t.type === "follow" && t.enabled) ||
+              tools.find(t => t.type === "unfollow" && t.enabled) ||
+              tools.find(t => t.type === "dm" && t.enabled) ||
+              (tools.find(t => t.type === "contact")?.enabled === true)
+            ))
+          );
+          if (hasRunnableTools) {
+            const slotCheck = proxySlotManager.canAcquire(profile.proxyId, profile.id);
+            if (!slotCheck.ok) {
+              console.log(`[engine] @${profile.username}: proxy slot unavailable — ${slotCheck.reason}`);
+              continue;
+            }
+            proxySlotManager.acquire(profile.proxyId, profile.id);
+            this.acquiredSlots.set(profile.id, profile.proxyId);
+          }
+        }
+
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) {

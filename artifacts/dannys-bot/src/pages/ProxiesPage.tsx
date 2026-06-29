@@ -486,6 +486,41 @@ export function ProxiesPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Proxy Slot Settings ───────────────────────────────────────────────────
+  const [slotSettingsOpen, setSlotSettingsOpen] = useState(false);
+  const [slotMax, setSlotMax] = useState(2);
+  const [slotCooldownMin, setSlotCooldownMin] = useState(30);
+  const [slotCooldownMax, setSlotCooldownMax] = useState(35);
+  const [slotSaving, setSlotSaving] = useState(false);
+
+  useEffect(() => {
+    apiRequest("GET", "/api/proxy-slots/settings")
+      .then(r => r.json())
+      .then((d: any) => {
+        setSlotMax(d.maxConcurrent ?? 2);
+        setSlotCooldownMin(d.cooldownMinMins ?? 30);
+        setSlotCooldownMax(d.cooldownMaxMins ?? 35);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveSlotSettings = async () => {
+    setSlotSaving(true);
+    try {
+      await apiRequest("PUT", "/api/proxy-slots/settings", {
+        maxConcurrent: slotMax,
+        cooldownMinMins: slotCooldownMin,
+        cooldownMaxMins: slotCooldownMax,
+      });
+      toast({ title: "Proxy slot settings saved" });
+      setSlotSettingsOpen(false);
+    } catch {
+      toast({ title: "Failed to save slot settings", variant: "destructive" });
+    } finally {
+      setSlotSaving(false);
+    }
+  };
+
   // While any adapter is rotating, refresh the proxy list every 2 s so the spinner
   // survives page navigation (rotation state is server-side, not React state)
   const anyRotating = proxies.some(p => (p as any).rotating);
@@ -934,6 +969,69 @@ export function ProxiesPage() {
           {pingingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
           {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
         </Button>
+
+        {/* Proxy Slots settings */}
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 shrink-0"
+          onClick={() => setSlotSettingsOpen(true)}
+        >
+          <Clock className="w-4 h-4" /> Proxy Slots
+        </Button>
+
+        {/* Proxy Slots dialog */}
+        {slotSettingsOpen && (
+          <>
+            <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setSlotSettingsOpen(false)} />
+            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[380px]">
+              <div className="px-5 pt-4 pb-3 border-b border-border flex items-center justify-between">
+                <p className="text-sm font-semibold">Proxy Slot Control</p>
+                <button onClick={() => setSlotSettingsOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4 text-sm">
+                <p className="text-xs text-muted-foreground">Limits how many accounts can work on the same proxy at once, and enforces a cooldown gap before a freed slot can be reused.</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Max accounts per proxy at the same time</Label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={slotMax}
+                    onChange={e => setSlotMax(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full h-8 border border-border rounded px-2.5 text-xs bg-background"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Cooldown min (minutes)</Label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={slotCooldownMin}
+                      onChange={e => setSlotCooldownMin(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full h-8 border border-border rounded px-2.5 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Cooldown max (minutes)</Label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={slotCooldownMax}
+                      onChange={e => setSlotCooldownMax(Math.max(slotCooldownMin, parseFloat(e.target.value) || 0))}
+                      className="w-full h-8 border border-border rounded px-2.5 text-xs bg-background"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">After a slot is freed, it enters cooldown for {slotCooldownMin}–{slotCooldownMax} min before a new account can use it.</p>
+                <Button className="w-full" onClick={handleSaveSlotSettings} disabled={slotSaving}>
+                  {slotSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Main card ──────────────────────────────────────────────────────── */}

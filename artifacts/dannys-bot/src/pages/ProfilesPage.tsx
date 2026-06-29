@@ -120,11 +120,11 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 230, status: 110, trustscore: 138, active: 64, humanSession: 78, aliveFor: 92, followers: 83, following: 83, sync: 101, lastApiCall: 115, totalCalls: 97, actions: 202, battery: 104, connection: 92, abd: 64, verifyhealth: 78, ip: 147 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, humanSession: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "humanSession", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 230, status: 110, trustscore: 138, active: 64, humanSession: 78, aliveFor: 92, followers: 83, following: 83, sync: 101, lastApiCall: 115, totalCalls: 97, actions: 202, battery: 104, connection: 92, abd: 64, verifyhealth: 78, ip: 147, ipslots: 80 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, humanSession: true, aliveFor: true, followers: true, following: true, sync: true, lastApiCall: true, totalCalls: true, actions: true, battery: false, connection: false, abd: true, verifyhealth: false, ip: true, ipslots: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "humanSession", "aliveFor", "followers", "following", "sync", "lastApiCall", "totalCalls", "actions", "battery", "connection", "abd", "verifyhealth", "ip", "ipslots"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", humanSession: "Human Session", aliveFor: "Alive For", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", humanSession: "Human Session", aliveFor: "Alive For", followers: "Followers", following: "Following", sync: "Sync", lastApiCall: "Last API Call", totalCalls: "Total Calls", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", verifyhealth: "Verify Health", ip: "IP:Port", ipslots: "IP/Slots",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -432,6 +432,21 @@ export function ProfilesPage() {
     setActionsOpen(false);
   }, [selectedProfileIds]);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
+  // ── Proxy slot status — polls /api/proxy-slots/status every 10s ──────────
+  const [slotStatusMap, setSlotStatusMap] = useState<Record<number, { active: number; cooldownUntil: number | null; activeProfileIds: number[] }>>({});
+  const [slotManager, setSlotManager] = useState<{ settings: { maxConcurrent: number; cooldownMinMs: number; cooldownMaxMs: number } }>({ settings: { maxConcurrent: 2, cooldownMinMs: 30 * 60000, cooldownMaxMs: 35 * 60000 } });
+  useEffect(() => {
+    const fetchSlots = () => {
+      fetch("/api/proxy-slots/status").then(r => r.json()).then((d: any) => {
+        setSlotStatusMap(d.slots ?? {});
+        if (d.settings) setSlotManager({ settings: d.settings });
+      }).catch(() => {});
+    };
+    fetchSlots();
+    const id = setInterval(fetchSlots, 10000);
+    return () => clearInterval(id);
+  }, []);
+
   const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | "totalCalls" | "aliveFor" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
     return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall" || v === "totalCalls" || v === "aliveFor") ? v as any : "account";
@@ -1665,6 +1680,20 @@ export function ProfilesPage() {
                               {isFixing ? "…" : "Fix"}
                             </button>
                           )}
+                        </div>
+                      );
+                    }
+                    if (key === "ipslots") {
+                      if (!profile.proxyId) return <div key={key} style={{ width: profColWidths.ipslots }} className="shrink-0" />;
+                      const slotInfo = slotStatusMap[profile.proxyId];
+                      const settings = slotManager.settings;
+                      const active = slotInfo?.active ?? 0;
+                      const max = settings?.maxConcurrent ?? 2;
+                      const isActive = slotInfo?.activeProfileIds?.includes(profile.id);
+                      const color = isActive ? "text-green-600" : active >= max ? "text-red-500" : "text-muted-foreground";
+                      return (
+                        <div key={key} style={{ width: profColWidths.ipslots }} className="shrink-0 flex items-center justify-center" onMouseDown={e => e.stopPropagation()} title={`${active}/${max} slots used${isActive ? " — this account is active" : ""}`}>
+                          <span className={`text-[11px] font-bold font-mono ${color}`}>{active}/{max}</span>
                         </div>
                       );
                     }

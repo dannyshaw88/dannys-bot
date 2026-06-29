@@ -87,6 +87,7 @@ import {
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
+import { proxySlotManager } from "../instagram/proxySlotManager";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -345,6 +346,20 @@ export async function registerInstagramRoutes(
   void resumeStuckVerifyingAccounts();
 
   automationEngine.start();
+
+  // On startup, load proxy slot settings from globalSettings DB so the manager
+  // uses the user's saved configuration rather than hardcoded defaults.
+  try {
+    const gs = await storage.getGlobalSettings();
+    const maxConcurrent   = parseInt(gs["proxySlotMaxConcurrent"]   ?? "2",  10) || 2;
+    const cooldownMinMins = parseFloat(gs["proxySlotCooldownMinMins"] ?? "30") || 30;
+    const cooldownMaxMins = parseFloat(gs["proxySlotCooldownMaxMins"] ?? "35") || 35;
+    proxySlotManager.updateSettings({
+      maxConcurrent,
+      cooldownMinMs: Math.round(cooldownMinMins * 60 * 1000),
+      cooldownMaxMs: Math.round(cooldownMaxMins * 60 * 1000),
+    });
+  } catch { /* non-fatal — defaults remain */ }
 
   // ── IPC diagnostic log endpoint ───────────────────────────────────────────
   // The Electron main process and the renderer both POST here so their log
@@ -1835,6 +1850,42 @@ export async function registerInstagramRoutes(
     });
   });
 
+  // ── Proxy Slot Settings & Status ─────────────────────────────────────────
+  app.get("/api/proxy-slots/settings", async (_req, res) => {
+    const s = proxySlotManager.getSettings();
+    res.json({
+      maxConcurrent:     s.maxConcurrent,
+      cooldownMinMins:   s.cooldownMinMs  / 60000,
+      cooldownMaxMins:   s.cooldownMaxMs  / 60000,
+    });
+  });
+
+  app.put("/api/proxy-slots/settings", async (req, res) => {
+    const { maxConcurrent, cooldownMinMins, cooldownMaxMins } = req.body as any;
+    const mc  = Math.max(1, parseInt(maxConcurrent  ?? "2",  10) || 2);
+    const min = Math.max(0, parseFloat(cooldownMinMins ?? "30") || 30);
+    const max = Math.max(min, parseFloat(cooldownMaxMins ?? "35") || 35);
+    proxySlotManager.updateSettings({
+      maxConcurrent: mc,
+      cooldownMinMs: Math.round(min * 60000),
+      cooldownMaxMs: Math.round(max * 60000),
+    });
+    await storage.setGlobalSetting("proxySlotMaxConcurrent",   String(mc));
+    await storage.setGlobalSetting("proxySlotCooldownMinMins", String(min));
+    await storage.setGlobalSetting("proxySlotCooldownMaxMins", String(max));
+    res.json({ ok: true, maxConcurrent: mc, cooldownMinMins: min, cooldownMaxMins: max });
+  });
+
+  app.get("/api/proxy-slots/status", (_req, res) => {
+    const statuses  = proxySlotManager.getStatus();
+    const settings  = proxySlotManager.getSettings();
+    const slots: Record<number, { active: number; onCooldown: number; max: number; available: number; activeProfileIds: number[] }> = {};
+    for (const s of statuses) {
+      slots[s.proxyId] = { active: s.active, onCooldown: s.onCooldown, max: s.max, available: s.available, activeProfileIds: s.activeProfileIds };
+    }
+    res.json({ slots, settings });
+  });
+
   // ── EB State (Electron native window mode) ────────────────────────────────
   // Returns whether the native BrowserWindow is currently open and its URL.
   // Used by BrowserPanel to poll for address bar updates.
@@ -1981,6 +2032,17 @@ export async function registerInstagramRoutes(
     let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
     let loginResult: { ok: boolean; message: string };
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
+
+    // Proxy slot enforcement — check before opening EB / running mobile API.
+    // If the proxy is at capacity or in cooldown, reject the verify request.
+    if (effectiveProfile.proxyId) {
+      const slotCheck = proxySlotManager.canAcquire(effectiveProfile.proxyId, profileId);
+      if (!slotCheck.ok) {
+        verifyInFlight.delete(profileId);
+        return res.status(429).json({ ok: false, message: `Proxy slot unavailable: ${slotCheck.reason}` });
+      }
+      proxySlotManager.acquire(effectiveProfile.proxyId, profileId);
+    }
 
     if (process.env.EB_IPC_PORT) {
       // Electron mode — auto-open the visible EB, run login, harvest cookies, auto-close.
@@ -2301,6 +2363,11 @@ export async function registerInstagramRoutes(
       await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
     } finally {
       verifyInFlight.delete(profileId);
+      // Release the proxy slot without cooldown — verify sessions should not
+      // block subsequent automation runs on the same proxy.
+      if (effectiveProfile.proxyId) {
+        proxySlotManager.forceRelease(effectiveProfile.proxyId, profileId);
+      }
     }
     }); // end setImmediate
   }); // end app.post
