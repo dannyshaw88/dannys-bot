@@ -71,6 +71,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.227",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Feature", text: "API Control moved to its own row below Proxy Settings so all timing options are visible together without crowding." },
+      { category: "Feature", text: "Momentum: tick to enable. Set a Chance % that each API call follows the previous call's timing (inertia), and a Spread % for how much it can deviate. Keeps gaps consistent like a real human in a rhythm." },
+      { category: "Feature", text: "Attention Drift: tick to enable. Set a Chance % per call and Min/Max minutes. When it fires the account goes completely silent for a random number of minutes then continues where it left off." },
+      { category: "Feature", text: "Momentum and Attention Drift are both available in Copy Settings under API & Performance." },
+    ],
+  },
+  {
     version: "1.1.226",
     date: "29 Jun 2026",
     items: [

@@ -391,6 +391,8 @@ export function ProfileDetailsPage() {
         { key: "loginRandomEndpoints", label: "Fire Random Endpoints at Login", description: "Fire random endpoints to each login sequence — enabled state and min/max endpoint count merged into each target's existing API limits without overwriting their rate settings" },
         { key: "loginMakePostChance", label: "Chance of Making a Post", description: "Enabled state, min/max % chance — merged into each target's existing API limits without overwriting their rate settings" },
         { key: "variationSettings", label: "Variation %", description: "Enabled state, lower/upper chance % and seconds — merged into each target's existing API limits without overwriting their rate settings" },
+        { key: "momentumSettings", label: "Momentum", description: "Enabled state, chance % and spread % — merged into each target's existing API limits without overwriting their rate settings" },
+        { key: "attentionDrift", label: "Attention Drift", description: "Enabled state, chance % and min/max minutes — merged into each target's existing API limits without overwriting their rate settings" },
       ],
     },
     {
@@ -462,7 +464,7 @@ export function ProfileDetailsPage() {
     // Copy only the three loginRandom* fields, merging into each target's existing
     // apiLimits so their rate limit settings are never overwritten.
     const needsLimitsMerge =
-      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings"))
+      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift"))
       && !expandedKeys.includes("apiLimits");
 
     if (needsLimitsMerge) {
@@ -487,6 +489,17 @@ export function ProfileDetailsPage() {
           merged.variationLowerSecs    = srcLimits.variationLowerSecs ?? 30;
           merged.variationUpperChance  = srcLimits.variationUpperChance ?? 10;
           merged.variationUpperSecs    = srcLimits.variationUpperSecs ?? 60;
+        }
+        if (expandedKeys.includes("momentumSettings")) {
+          merged.momentumEnabled = srcLimits.momentumEnabled ?? false;
+          merged.momentumChance  = srcLimits.momentumChance ?? 70;
+          merged.momentumSpread  = srcLimits.momentumSpread ?? 20;
+        }
+        if (expandedKeys.includes("attentionDrift")) {
+          merged.attentionDriftEnabled  = srcLimits.attentionDriftEnabled ?? false;
+          merged.attentionDriftChance   = srcLimits.attentionDriftChance ?? 5;
+          merged.attentionDriftMinMins  = srcLimits.attentionDriftMinMins ?? 5;
+          merged.attentionDriftMaxMins  = srcLimits.attentionDriftMaxMins ?? 15;
         }
         const r = await fetch(`/api/profiles/${id}`, {
           method: "PATCH",
@@ -1330,10 +1343,10 @@ export function ProfileDetailsPage() {
                       </div>
                     )}
 
-                    {/* Proxy Settings + API Controls — same row */}
+                    {/* Proxy Settings */}
                     <div className="pt-3 border-t border-border mt-3">
-                      <div className="flex gap-4 items-start">
-                        <div className="flex-1 min-w-0 space-y-3">
+                      <div className="flex flex-col gap-0">
+                        <div className="w-full space-y-3">
                           <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
                           {(() => {
                             const linked = proxies?.find(p => p.id === profile.proxyId);
@@ -1444,8 +1457,7 @@ export function ProfileDetailsPage() {
                             );
                           })()}
                         </div>
-                        <div className="w-px bg-border self-stretch shrink-0" />
-                        <div className="flex-1 min-w-0 space-y-3">
+                        <div className="w-full space-y-3 pt-4 mt-3 border-t border-border">
                           <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                           <div className="flex flex-wrap gap-2 items-start">
                             <div className="space-y-1">
@@ -1525,6 +1537,60 @@ export function ProfileDetailsPage() {
                                     <NumField min={0} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecs: v } })} />
                                     <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Secs</Label>
                                   </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Momentum */}
+                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="momentum-enabled"
+                                checked={!!(formData.apiLimits as any).momentumEnabled}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, momentumEnabled: e.target.checked } })}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                              />
+                              <label htmlFor="momentum-enabled" className="text-xs font-bold cursor-pointer select-none">Momentum</label>
+                            </div>
+                            {!!(formData.apiLimits as any).momentumEnabled && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumChance ?? 70} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumChance: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).momentumSpread ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, momentumSpread: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Spread %</Label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Attention Drift */}
+                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="attention-drift-enabled"
+                                checked={!!(formData.apiLimits as any).attentionDriftEnabled}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftEnabled: e.target.checked } })}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                              />
+                              <label htmlFor="attention-drift-enabled" className="text-xs font-bold cursor-pointer select-none">Attention Drift</label>
+                            </div>
+                            {!!(formData.apiLimits as any).attentionDriftEnabled && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftChance ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftChance: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Chance %</Label>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMinMins ?? 5} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMinMins: v } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min Mins</Label>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMaxMins ?? 15} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMaxMins: Math.max(v, (formData.apiLimits as any).attentionDriftMinMins ?? 5) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Mins</Label>
                                 </div>
                               </div>
                             )}

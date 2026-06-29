@@ -426,6 +426,14 @@ export class InstagramWebClient {
   private variationLowerSecs    = 0;
   private variationUpperChance  = 0;
   private variationUpperSecs    = 0;
+  private momentumEnabled       = false;
+  private momentumChance        = 0;
+  private momentumSpread        = 20;
+  private attentionDriftEnabled = false;
+  private attentionDriftChance  = 0;
+  private attentionDriftMinMins = 5;
+  private attentionDriftMaxMins = 15;
+  private _lastDelaySec: number | null = null;
 
   constructor(proxyUrl?: string, profileId?: number) {
     // ── IP-LEAK PREVENTION ──────────────────────────────────────────────────
@@ -464,19 +472,29 @@ export class InstagramWebClient {
     variationEnabled?: boolean;
     variationLowerChance?: number; variationLowerSecs?: number;
     variationUpperChance?: number; variationUpperSecs?: number;
+    momentumEnabled?: boolean; momentumChance?: number; momentumSpread?: number;
+    attentionDriftEnabled?: boolean; attentionDriftChance?: number;
+    attentionDriftMinMins?: number; attentionDriftMaxMins?: number;
   }) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
     // Unit-aware conversion: values <1000 are legacy bare-seconds (schema default was 30/60);
     // values ≥1000 are milliseconds (current UI format).  Convert all to seconds for throttle logic.
     const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-    this.throttleSecondsMin     = Math.max(0, toMs(limits.everySecondsMin) / 1000);
-    this.throttleSecondsMax     = Math.max(0, toMs(limits.everySecondsMax) / 1000);
-    this.variationEnabled       = !!limits.variationEnabled;
-    this.variationLowerChance   = limits.variationLowerChance ?? 0;
-    this.variationLowerSecs     = limits.variationLowerSecs   ?? 0;
-    this.variationUpperChance   = limits.variationUpperChance ?? 0;
-    this.variationUpperSecs     = limits.variationUpperSecs   ?? 0;
+    this.throttleSecondsMin      = Math.max(0, toMs(limits.everySecondsMin) / 1000);
+    this.throttleSecondsMax      = Math.max(0, toMs(limits.everySecondsMax) / 1000);
+    this.variationEnabled        = !!limits.variationEnabled;
+    this.variationLowerChance    = limits.variationLowerChance    ?? 0;
+    this.variationLowerSecs      = limits.variationLowerSecs      ?? 0;
+    this.variationUpperChance    = limits.variationUpperChance    ?? 0;
+    this.variationUpperSecs      = limits.variationUpperSecs      ?? 0;
+    this.momentumEnabled         = !!limits.momentumEnabled;
+    this.momentumChance          = limits.momentumChance          ?? 70;
+    this.momentumSpread          = limits.momentumSpread          ?? 20;
+    this.attentionDriftEnabled   = !!limits.attentionDriftEnabled;
+    this.attentionDriftChance    = limits.attentionDriftChance    ?? 0;
+    this.attentionDriftMinMins   = limits.attentionDriftMinMins   ?? 5;
+    this.attentionDriftMaxMins   = limits.attentionDriftMaxMins   ?? 15;
   }
 
   private async apiThrottle(): Promise<void> {
@@ -493,7 +511,16 @@ export class InstagramWebClient {
     const slowest = this.throttleSecondsMax / Math.max(1, this.throttleRequestsMin);
     const fastest = this.throttleSecondsMin / Math.max(1, this.throttleRequestsMax);
     let delaySec: number;
-    if (this.variationEnabled) {
+    const lastDelay = this._lastDelaySec;
+
+    if (this.momentumEnabled && lastDelay !== null && Math.random() * 100 < this.momentumChance) {
+      // Momentum: bias toward the previous call's delay (inertia).
+      // Clamp within [fastest, slowest] so momentum never escapes the safe range.
+      const spread = this.momentumSpread / 100;
+      const lo = Math.max(fastest, lastDelay * (1 - spread));
+      const hi = Math.min(slowest, lastDelay * (1 + spread));
+      delaySec = lo + Math.random() * Math.max(0, hi - lo);
+    } else if (this.variationEnabled) {
       const roll = Math.random() * 100;
       if (roll < this.variationLowerChance) {
         // Variation — go below normal range (faster than usual)
@@ -508,9 +535,21 @@ export class InstagramWebClient {
     } else {
       delaySec = fastest + Math.random() * Math.max(0, slowest - fastest);
     }
+
+    this._lastDelaySec = delaySec;
     const delayMs = Math.floor(delaySec * 1000);
     if (delayMs > 10) {
       await new Promise<void>(r => setTimeout(r, delayMs));
+    }
+
+    // Attention Drift: random multi-minute pause that fires AFTER the normal throttle.
+    // Resets momentum so the next call picks fresh rather than following a stale delay.
+    if (this.attentionDriftEnabled && Math.random() * 100 < this.attentionDriftChance) {
+      const driftMins = this.attentionDriftMinMins + Math.random() * Math.max(0, this.attentionDriftMaxMins - this.attentionDriftMinMins);
+      const driftMs = Math.floor(driftMins * 60 * 1000);
+      console.log(`[throttle] Attention drift — pausing ${driftMins.toFixed(1)} min`);
+      this._lastDelaySec = null;
+      await new Promise<void>(r => setTimeout(r, driftMs));
     }
   }
 
