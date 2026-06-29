@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.244",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Feature", text: "Inject Browsing Settings: all action rows now have three columns — Chance %, Scroll (min–max count), and Order %. Feed Posts has its own Chance % to optionally skip scrolling; Like and Save Media use their Scroll count to cap how many posts are iterated; Watch Stories, View Highlights, and View Reels each have a Scroll field for future use." },
+      { category: "Fix", text: "Browse Before Follow label in the Inject Browsing dialog is now two points smaller so it fits cleanly without wrapping." },
+    ],
+  },
+  {
     version: "1.1.243",
     date: "29 Jun 2026",
     items: [

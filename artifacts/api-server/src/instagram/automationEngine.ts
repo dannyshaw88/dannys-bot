@@ -3702,6 +3702,8 @@ class AutomationEngine {
     const injectProfileBrowsingEnabled            = !!(s.injectProfileBrowsingEnabled);
     const injectProfileBrowsingMin                = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 1));
     const injectProfileBrowsingMax                = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 1));
+    const injectProfileBrowsingFeedChanceMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingFeedChanceMin ?? 100));
+    const injectProfileBrowsingFeedChanceMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingFeedChanceMax ?? 100));
     const injectProfileBrowsingFeedMin            = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
     const injectProfileBrowsingFeedMax            = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
     const injectProfileBrowsingPostPctMin         = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
@@ -3717,18 +3719,28 @@ class AutomationEngine {
     // New inject browsing action settings
     const injectProfileBrowsingLikePctMin         = Math.max(0, s.injectProfileBrowsingLikePctMin ?? 0);
     const injectProfileBrowsingLikePctMax         = Math.max(0, s.injectProfileBrowsingLikePctMax ?? 0);
+    const injectProfileBrowsingLikeScrollMin      = Math.max(0, s.injectProfileBrowsingLikeScrollMin ?? 0);
+    const injectProfileBrowsingLikeScrollMax      = Math.max(0, s.injectProfileBrowsingLikeScrollMax ?? 0);
     const injectProfileBrowsingSaveMediaPctMin    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMin ?? 0);
     const injectProfileBrowsingSaveMediaPctMax    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMax ?? 0);
+    const injectProfileBrowsingSaveMediaScrollMin = Math.max(0, s.injectProfileBrowsingSaveMediaScrollMin ?? 0);
+    const injectProfileBrowsingSaveMediaScrollMax = Math.max(0, s.injectProfileBrowsingSaveMediaScrollMax ?? 0);
     const injectProfileBrowsingWatchStoriesPctMin = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMin ?? 0);
     const injectProfileBrowsingWatchStoriesPctMax = Math.max(0, s.injectProfileBrowsingWatchStoriesPctMax ?? 0);
+    const injectProfileBrowsingWatchStoriesScrollMin = Math.max(0, s.injectProfileBrowsingWatchStoriesScrollMin ?? 0);
+    const injectProfileBrowsingWatchStoriesScrollMax = Math.max(0, s.injectProfileBrowsingWatchStoriesScrollMax ?? 0);
     const injectProfileBrowsingViewHighlightsPctMin = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMin ?? 0);
     const injectProfileBrowsingViewHighlightsPctMax = Math.max(0, s.injectProfileBrowsingViewHighlightsPctMax ?? 0);
+    const injectProfileBrowsingViewHighlightsScrollMin = Math.max(0, s.injectProfileBrowsingViewHighlightsScrollMin ?? 0);
+    const injectProfileBrowsingViewHighlightsScrollMax = Math.max(0, s.injectProfileBrowsingViewHighlightsScrollMax ?? 0);
     const injectProfileBrowsingCommentEnabled        = !!(s.injectProfileBrowsingCommentEnabled);
     const injectProfileBrowsingCommentPctMin         = Math.max(0, s.injectProfileBrowsingCommentPctMin ?? 0);
     const injectProfileBrowsingCommentPctMax         = Math.max(0, s.injectProfileBrowsingCommentPctMax ?? 0);
     const injectProfileBrowsingCommentText           = (s.injectProfileBrowsingCommentText as string | undefined) ?? "";
     const injectProfileBrowsingViewReelsPctMin       = Math.max(0, s.injectProfileBrowsingViewReelsPctMin ?? 0);
     const injectProfileBrowsingViewReelsPctMax       = Math.max(0, s.injectProfileBrowsingViewReelsPctMax ?? 0);
+    const injectProfileBrowsingViewReelsScrollMin    = Math.max(0, s.injectProfileBrowsingViewReelsScrollMin ?? 0);
+    const injectProfileBrowsingViewReelsScrollMax    = Math.max(0, s.injectProfileBrowsingViewReelsScrollMax ?? 0);
     const injectProfileBrowsingShareToDmPctMin       = Math.max(0, s.injectProfileBrowsingShareToDmPctMin ?? 0);
     const injectProfileBrowsingShareToDmPctMax       = Math.max(0, s.injectProfileBrowsingShareToDmPctMax ?? 0);
 
@@ -3807,16 +3819,19 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `Visited profile`);
       } catch { /* non-critical */ }
 
-      // 2. Scroll feed — always before engagement actions (like/save/comment depend on profilePosts)
+      // 2. Scroll feed — gated by chance %; feeds profilePosts for engagement actions
+      const feedChance = randInt(injectProfileBrowsingFeedChanceMin, injectProfileBrowsingFeedChanceMax);
       const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
       let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
-      try {
-        profilePosts = useHikerHumanSessionFeed
-          ? await hikerClient!.getUserFeedByUserId(targetUser.pk, feedCount)
-          : await client.viewUserFeed(targetUser.pk, feedCount);
-        engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
-        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
-      } catch { /* non-critical */ }
+      if (Math.random() * 100 < feedChance) {
+        try {
+          profilePosts = useHikerHumanSessionFeed
+            ? await hikerClient!.getUserFeedByUserId(targetUser.pk, feedCount)
+            : await client.viewUserFeed(targetUser.pk, feedCount);
+          engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
+          this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
+        } catch { /* non-critical */ }
+      }
 
       // 3. Build ordered engagement queue — each action draws a random order value from
       //    its OrderMin/OrderMax range. Higher order = runs first (same convention as Human Session tool).
@@ -3856,7 +3871,9 @@ class AutomationEngine {
           Number(s.injectProfileBrowsingLikePctOrderMin ?? 0), Number(s.injectProfileBrowsingLikePctOrderMax ?? 0),
           async () => {
             const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
-            for (const post of profilePosts) {
+            const likeScrollCap = injectProfileBrowsingLikeScrollMax > 0 ? randInt(injectProfileBrowsingLikeScrollMin, injectProfileBrowsingLikeScrollMax) : profilePosts.length;
+            const likePosts = profilePosts.slice(0, likeScrollCap);
+            for (const post of likePosts) {
               if (Math.random() * 100 < likePct) {
                 try {
                   const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
@@ -3878,7 +3895,9 @@ class AutomationEngine {
           Number(s.injectProfileBrowsingSaveMediaPctOrderMin ?? 0), Number(s.injectProfileBrowsingSaveMediaPctOrderMax ?? 0),
           async () => {
             const savePct = randInt(injectProfileBrowsingSaveMediaPctMin, injectProfileBrowsingSaveMediaPctMax);
-            for (const post of profilePosts) {
+            const saveScrollCap = injectProfileBrowsingSaveMediaScrollMax > 0 ? randInt(injectProfileBrowsingSaveMediaScrollMin, injectProfileBrowsingSaveMediaScrollMax) : profilePosts.length;
+            const savePosts = profilePosts.slice(0, saveScrollCap);
+            for (const post of savePosts) {
               if (Math.random() * 100 < savePct) {
                 try {
                   const saved = await client.saveMedia(post.mediaId);
