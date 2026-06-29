@@ -71,6 +71,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.224",
+    date: "29 Jun 2026",
+    items: [
+      { category: "UI", text: "Inject Browsing dialog: title is now centred, column header renamed to Chance Called, and % symbols removed from all action row labels." },
+      { category: "UI", text: "Inject Browsing dialog: Browse Before Follow row added at the top — set the chance % that a profile is browsed before following. No order % (not applicable)." },
+      { category: "UI", text: "Inject Browsing dialog: Visit Profile (100–100, First) and Scroll Feed (100–100, Second) shown as hardcoded read-only rows so you can see exactly what always runs first." },
+      { category: "UI", text: "Inject Browsing dialog: Abandon Follow no longer shows Order % fields (not applicable)." },
+      { category: "Engine", text: "Removed the unconditional GetSuggestedUsers call before the first follow — it now only fires when the Inject GetSuggestedUsers setting is enabled, like any other injection." },
+    ],
+  },
+  {
     version: "1.1.223",
     date: "28 Jun 2026",
     items: [

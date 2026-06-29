@@ -1058,21 +1058,53 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                       <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={() => setShowBrowsingDialog(false)}>
                         <div className="absolute inset-0 bg-black/50" />
                         <div className="relative bg-background border border-border rounded-xl shadow-2xl p-5 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-between mb-3">
+                          {/* Centred title */}
+                          <div className="relative flex items-center justify-center mb-3">
                             <span className="text-xs font-bold text-foreground uppercase tracking-wider">Inject Browsing Settings</span>
-                            <button type="button" onClick={() => setShowBrowsingDialog(false)} className="text-muted-foreground hover:text-foreground transition-colors ml-4"><X className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => setShowBrowsingDialog(false)} className="absolute right-0 text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            {/* Column headers — aligned with their respective min-field columns */}
+                            {/* Column headers */}
                             <div className="flex items-center gap-2 shrink-0 pb-0.5">
                               <span className="shrink-0 w-[140px]" />
-                              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 whitespace-nowrap">Value %</span>
+                              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 whitespace-nowrap">Chance Called</span>
                               <span className="invisible text-[10px] shrink-0">–</span>
                               <span className="invisible w-[43px] shrink-0" />
                               <div className="w-px h-3 bg-border/50 shrink-0" />
                               <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 whitespace-nowrap">Order %</span>
                             </div>
                             <div className="w-full h-px bg-border/40" />
+                            {/* Browse Before Follow — no Order % */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-1.5 w-[140px] shrink-0">
+                                <input type="checkbox" id="injectProfileBrowsingBeforeFollow" checked={!!(settings as any).injectProfileBrowsingBeforeFollow} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollow: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
+                                <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Browse Before Follow</label>
+                              </div>
+                              <div className={`flex items-center gap-2 shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}>
+                                <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: v, injectProfileBrowsingBeforeFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 0) } as any)} />
+                                <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                                <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: v, injectProfileBrowsingBeforeFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0) } as any)} />
+                              </div>
+                            </div>
+                            <div className="w-full h-px bg-border/40" />
+                            {/* Visit Profile — hardcoded, not editable */}
+                            <div className="flex items-center gap-2 shrink-0 opacity-50 select-none">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Visit Profile</span>
+                              <span className="text-[10px] text-muted-foreground w-[43px] text-center shrink-0">100</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                              <span className="text-[10px] text-muted-foreground w-[43px] text-center shrink-0">100</span>
+                              <div className="w-px h-5 bg-border/50 shrink-0" />
+                              <span className="text-[10px] text-muted-foreground italic shrink-0">First</span>
+                            </div>
+                            {/* Scroll Feed — hardcoded, not editable */}
+                            <div className="flex items-center gap-2 shrink-0 opacity-50 select-none">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Scroll Feed</span>
+                              <span className="text-[10px] text-muted-foreground w-[43px] text-center shrink-0">100</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                              <span className="text-[10px] text-muted-foreground w-[43px] text-center shrink-0">100</span>
+                              <div className="w-px h-5 bg-border/50 shrink-0" />
+                              <span className="text-[10px] text-muted-foreground italic shrink-0">Second</span>
+                            </div>
                             {/* Feed Posts */}
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Feed Posts</span>
@@ -1084,9 +1116,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingFeedOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingFeedOrderMax: v, injectProfileBrowsingFeedOrderMin: Math.min(v, (settings as any).injectProfileBrowsingFeedOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* Like % */}
+                            {/* Like */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Like %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Like</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingLikePctMin: v, injectProfileBrowsingLikePctMax: Math.max(v, (settings as any).injectProfileBrowsingLikePctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingLikePctMax: v, injectProfileBrowsingLikePctMin: Math.min(v, (settings as any).injectProfileBrowsingLikePctMin ?? 0) } as any)} />
@@ -1095,9 +1127,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingLikePctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingLikePctOrderMax: v, injectProfileBrowsingLikePctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingLikePctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* Save Media % */}
+                            {/* Save Media */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Save Media %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Save Media</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMin: v, injectProfileBrowsingSaveMediaPctMax: Math.max(v, (settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingSaveMediaPctMax: v, injectProfileBrowsingSaveMediaPctMin: Math.min(v, (settings as any).injectProfileBrowsingSaveMediaPctMin ?? 0) } as any)} />
@@ -1106,9 +1138,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingSaveMediaPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingSaveMediaPctOrderMax: v, injectProfileBrowsingSaveMediaPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingSaveMediaPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* Watch Stories % */}
+                            {/* Watch Stories */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Watch Stories %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Watch Stories</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMin: v, injectProfileBrowsingWatchStoriesPctMax: Math.max(v, (settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctMax: v, injectProfileBrowsingWatchStoriesPctMin: Math.min(v, (settings as any).injectProfileBrowsingWatchStoriesPctMin ?? 0) } as any)} />
@@ -1117,9 +1149,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingWatchStoriesPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingWatchStoriesPctOrderMax: v, injectProfileBrowsingWatchStoriesPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingWatchStoriesPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* View Highlights % */}
+                            {/* View Highlights */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">View Highlights %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">View Highlights</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMin: v, injectProfileBrowsingViewHighlightsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctMax: v, injectProfileBrowsingViewHighlightsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewHighlightsPctMin ?? 0) } as any)} />
@@ -1128,9 +1160,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctOrderMax: v, injectProfileBrowsingViewHighlightsPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingViewHighlightsPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* View Reels % */}
+                            {/* View Reels */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">View Reels %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">View Reels</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMin: v, injectProfileBrowsingViewReelsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMax: v, injectProfileBrowsingViewReelsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctMin ?? 0) } as any)} />
@@ -1139,12 +1171,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctOrderMax: v, injectProfileBrowsingViewReelsPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* Comment % — checkbox enables the row + reveals text input */}
+                            {/* Comment — checkbox enables the row + reveals text input */}
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="flex items-center gap-1.5 w-[140px] shrink-0">
                                   <input type="checkbox" id="injectProfileBrowsingCommentEnabled" checked={!!(settings as any).injectProfileBrowsingCommentEnabled} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingCommentEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                                  <label htmlFor="injectProfileBrowsingCommentEnabled" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Comment %</label>
+                                  <label htmlFor="injectProfileBrowsingCommentEnabled" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Comment</label>
                                 </div>
                                 <div className={`flex items-center gap-2 shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingCommentEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingCommentPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingCommentPctMin: v, injectProfileBrowsingCommentPctMax: Math.max(v, (settings as any).injectProfileBrowsingCommentPctMax ?? 0) } as any)} />
@@ -1165,9 +1197,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                                 />
                               )}
                             </div>
-                            {/* Share to DM % */}
+                            {/* Share to DM */}
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Share to DM %</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">Share to DM</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingShareToDmPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingShareToDmPctMin: v, injectProfileBrowsingShareToDmPctMax: Math.max(v, (settings as any).injectProfileBrowsingShareToDmPctMax ?? 0) } as any)} />
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingShareToDmPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingShareToDmPctMax: v, injectProfileBrowsingShareToDmPctMin: Math.min(v, (settings as any).injectProfileBrowsingShareToDmPctMin ?? 0) } as any)} />
@@ -1176,7 +1208,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingShareToDmPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingShareToDmPctOrderMax: v, injectProfileBrowsingShareToDmPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingShareToDmPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* Abandon Follow — separator + checkbox row aligned with others */}
+                            {/* Abandon Follow — separator + checkbox, NO Order % */}
                             <div className="w-full h-px bg-border/40 mt-0.5" />
                             <div className="flex items-center gap-2 shrink-0">
                               <div className="flex items-center gap-1.5 w-[140px] shrink-0">
@@ -1187,10 +1219,6 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                                 <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 10} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMin: v, injectProfileBrowsingAbandonFollowPctMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 100) } as any)} />
                                 <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                                 <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowPctMax ?? 20} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowPctMax: v, injectProfileBrowsingAbandonFollowPctMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowPctMin ?? 0) } as any)} />
-                                <div className="w-px h-5 bg-border/50 shrink-0" />
-                                <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowOrderMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowOrderMin: v, injectProfileBrowsingAbandonFollowOrderMax: Math.max(v, (settings as any).injectProfileBrowsingAbandonFollowOrderMax ?? 0) } as any)} />
-                                <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                                <NumField min={0} max={100} className="w-[43px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingAbandonFollowOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingAbandonFollowOrderMax: v, injectProfileBrowsingAbandonFollowOrderMin: Math.min(v, (settings as any).injectProfileBrowsingAbandonFollowOrderMin ?? 0) } as any)} />
                               </div>
                             </div>
                           </div>

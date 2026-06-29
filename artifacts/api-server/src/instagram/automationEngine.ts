@@ -3646,6 +3646,10 @@ class AutomationEngine {
     const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
     const injectProfileBrowsingAbandonPctMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMax ?? 20));
+    // Browse-before-follow settings (pre-follow browse, controlled by user)
+    const injectProfileBrowsingBeforeFollow       = !!(s.injectProfileBrowsingBeforeFollow);
+    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? 0));
+    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? 0));
     // New inject browsing action settings
     const injectProfileBrowsingLikePctMin         = Math.max(0, s.injectProfileBrowsingLikePctMin ?? 0);
     const injectProfileBrowsingLikePctMax         = Math.max(0, s.injectProfileBrowsingLikePctMax ?? 0);
@@ -3688,43 +3692,27 @@ class AutomationEngine {
     // enabled. Math.round alone produces 0 when processCount is small (2–3 follows) and
     // the percentage is low (10–25%) — e.g. Math.round(2 * 17 / 100) = Math.round(0.34) = 0.
     const injectSuggestedSlots = injectSuggestedEnabled
-      ? sampleSlots(Math.max(1, Math.round(processCount * suggestedPct / 100)), 1, Math.max(1, processCount - 1))
+      ? sampleSlots(Math.max(1, Math.round(processCount * suggestedPct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
 
     const searchMidPct      = randInt(injectSearchMin, injectSearchMax);
     const injectSearchMidSlots = injectSearchEnabled
-      ? sampleSlots(Math.max(1, Math.round(processCount * searchMidPct / 100)), 1, Math.max(1, processCount - 1))
+      ? sampleSlots(Math.max(1, Math.round(processCount * searchMidPct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
 
-    const browsePct         = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
-    const injectBrowseSlots = injectProfileBrowsingEnabled
-      ? sampleSlots(Math.max(1, Math.round(processCount * browsePct / 100)), 0, Math.max(0, processCount - 1))
+    // Pre-follow browse: uses the Browse Before Follow % setting from the dialog.
+    // Post-follow browse (injectProfileBrowsingMin/Max) handled separately per-follow below.
+    const beforeFollowBrowsePct = randInt(injectProfileBrowsingBeforeFollowPctMin, injectProfileBrowsingBeforeFollowPctMax);
+    const injectBrowseSlots = (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+      ? sampleSlots(Math.max(1, Math.round(processCount * beforeFollowBrowsePct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
 
     if (injectSuggestedEnabled)
       engineLog("INFO", `@${profile.username}: getSuggestedUsers scheduled for ${injectSuggestedSlots.size}/${processCount} follow slots (${suggestedPct}%)`);
     if (injectSearchEnabled)
       engineLog("INFO", `@${profile.username}: searchByUsername mid-session scheduled for ${injectSearchMidSlots.size}/${processCount} follow slots (${searchMidPct}%)`);
-    if (injectProfileBrowsingEnabled)
-      engineLog("INFO", `@${profile.username}: inject profile browsing scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${browsePct}%)`);
-
-    // GetSuggestedUsers always fires before the very first follow of every session.
-    // This is unconditional — the real app always loads the suggested-users panel
-    // when the user opens the Follow tab.  The checkbox + % control mid-session
-    // re-injection (follows 2+), not this initial call.
-    // NOTE: do NOT gate this on candidates.length > 0. If the initial scrape returned
-    // all-deduped candidates (empty array) the rescrape loop below will still find users
-    // to follow — but GetSuggestedUsers would have been skipped. Fire it unconditionally
-    // so it always precedes the first follow regardless of how candidates were obtained.
-    console.log(`[getSuggestedUsers:pre] @${profile.username} — calling getSuggestedUsers before first follow (logCallFn set=${!!(client as any).logCallFn})`);
-    try {
-      await client.getSuggestedUsers();
-      console.log(`[getSuggestedUsers:pre] @${profile.username} — OK`);
-      engineLog("INFO", `@${profile.username}: GetSuggestedUsers fired before first follow (always-on)`);
-    } catch (e: any) {
-      console.log(`[getSuggestedUsers:pre] @${profile.username} — FAILED: ${e?.message ?? e}`);
-      engineLog("WARN", `@${profile.username}: GetSuggestedUsers (pre-first-follow) failed (non-critical): ${e?.name ?? "Error"}: ${e?.message ?? e}`);
-    }
+    if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
+      engineLog("INFO", `@${profile.username}: inject profile browsing (pre-follow) scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${beforeFollowBrowsePct}%)`);
 
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
@@ -4014,24 +4002,24 @@ class AutomationEngine {
         hitHardLimit = true; break;
       }
 
-      // Inject GetSuggestedUsers and/or searchUserByUsername before some follows (follows 2+).
+      // Inject GetSuggestedUsers and/or searchUserByUsername before some follows.
       // RULE: searchUserByUsername must NEVER fire immediately before getSuggestedUsers —
       // that is not a real app flow (you cannot reach suggested users from the search bar).
       // So we roll for getSuggestedUsers first; if it fires we skip the search injection for
       // this follow slot entirely.
-      if (followed > 0) {
+      {
         let suggestedFired = false;
 
         if (injectSuggestedEnabled && injectSuggestedSlots.has(followed)) {
-          console.log(`[getSuggestedUsers:mid] @${profile.username} — injecting at follow #${followed + 1}`);
+          console.log(`[getSuggestedUsers] @${profile.username} — injecting at follow #${followed + 1}`);
           try {
             await client.getSuggestedUsers();
-            console.log(`[getSuggestedUsers:mid] @${profile.username} — OK`);
+            console.log(`[getSuggestedUsers] @${profile.username} — OK`);
             engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
             suggestedFired = true;
           } catch (e: any) {
-            console.log(`[getSuggestedUsers:mid] @${profile.username} — FAILED: ${e?.message ?? e}`);
-            engineLog("WARN", `@${profile.username}: getSuggestedUsers (mid-session) failed (non-critical): ${e?.name ?? "Error"}: ${e?.message ?? e}`);
+            console.log(`[getSuggestedUsers] @${profile.username} — FAILED: ${e?.message ?? e}`);
+            engineLog("WARN", `@${profile.username}: getSuggestedUsers failed (non-critical): ${e?.name ?? "Error"}: ${e?.message ?? e}`);
           }
         }
 
