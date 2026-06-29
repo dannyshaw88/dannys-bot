@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.243",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "API call log no longer shows two Follow entries for a single follow action. The inner FollowUser sub-step was logging separately on errors, creating a duplicate alongside the real FollowedUser entry." },
+    ],
+  },
+  {
     version: "1.1.242",
     date: "29 Jun 2026",
     items: [

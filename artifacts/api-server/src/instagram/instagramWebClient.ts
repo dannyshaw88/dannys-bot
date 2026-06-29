@@ -1773,7 +1773,7 @@ export class InstagramWebClient {
 
     try {
       console.log(`[webClient] follow ${userId}: via IgApiClient friendship.create (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
-      const result = await this.timed("FollowUser", () => ig.friendship.create(userId) as Promise<any>, undefined, () => false);
+      const result = await (ig.friendship.create(userId) as Promise<any>);
       console.log(`[webClient] follow ${userId}: IgApiClient raw result:`, JSON.stringify(result).slice(0, 300));
 
       if (result?.following || result?.outgoing_request) {
