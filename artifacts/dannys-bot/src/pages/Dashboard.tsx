@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.236",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "\"Initiating a verification via API\" entry removed — it no longer appears in the API calls log or export." },
+      { category: "Fix", text: "HikerAPI profile sync no longer counts as \"last alive\" in the Last API Call column. System-generated bookkeeping entries are also excluded." },
+    ],
+  },
+  {
     version: "1.1.235",
     date: "29 Jun 2026",
     items: [

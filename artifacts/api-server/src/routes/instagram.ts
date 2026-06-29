@@ -1976,19 +1976,6 @@ export async function registerInstagramRoutes(
     await storage.updateProfile(profile.id, { accountStatus: "verifying" });
 
 
-    // Log "Initiating" BEFORE the verify call so it gets a genuinely earlier
-    // timestamp/ID than the result entry — dashboard is newest-first so
-    // "Initiating" (older) must have a lower ID than "Verified" (newer).
-    await storage.createInstagramApiCall({
-      profileId: profile.id,
-      username: profile.username,
-      operationName: "VerifyAccount",
-      date: new Date().toISOString(),
-      message: `Initiating a verification via API`,
-      source: "System",
-      durationMs: 0,
-    }).catch(() => {});
-
     // ── Jarvee-style EB-first verify ──────────────────────────────────────────
     // Step 1: Launch the embedded browser (headless) for this profile.
     // Step 2: Auto-login via Instagram web (handles 2FA, challenges, etc.)
@@ -2034,7 +2021,8 @@ export async function registerInstagramRoutes(
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
 
     // Proxy slot enforcement — check before opening EB / running mobile API.
-    // If the proxy is at capacity or in cooldown, reject the verify request.
+    // Verify opens a Chromium window and makes mobile API calls, so it counts
+    // as a full slot occupant. If the proxy is at capacity, block the request.
     if (effectiveProfile.proxyId) {
       const slotCheck = proxySlotManager.canAcquire(effectiveProfile.proxyId, profileId);
       if (!slotCheck.ok) {
@@ -2363,8 +2351,8 @@ export async function registerInstagramRoutes(
       await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
     } finally {
       verifyInFlight.delete(profileId);
-      // Release the proxy slot without cooldown — verify sessions should not
-      // block subsequent automation runs on the same proxy.
+      // Release the proxy slot without cooldown — verify is a one-shot manual
+      // action; the slot should open up immediately for automation afterwards.
       if (effectiveProfile.proxyId) {
         proxySlotManager.forceRelease(effectiveProfile.proxyId, profileId);
       }

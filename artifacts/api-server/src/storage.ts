@@ -444,7 +444,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLastValidApiCallByProfile(): Promise<Record<number, string>> {
-    // Valid = not HikerAPI, not a failed/error call, not a pre-action log.
+    // Valid = not HikerAPI, not a System-bookkeeping entry, not a failed/error call.
+    // HikerAPI syncs are done by the service (not the account) so they don't count as "last alive".
+    // System-source entries are internal bookkeeping (verify initiation, etc.) — not account activity.
     // Returns the most recent date ISO string per profile.
     const rows = await db
       .select({
@@ -455,6 +457,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           ne(instagramApiCalls.source, "HikerAPI"),
+          ne(instagramApiCalls.source, "System"),
           or(
             isNull(instagramApiCalls.message),
             not(like(instagramApiCalls.message, "error:%"))
