@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.241",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Deleting an account now immediately frees its proxy slot. Previously the cooldown window would continue blocking that proxy slot even after the account was removed." },
+    ],
+  },
+  {
     version: "1.1.240",
     date: "29 Jun 2026",
     items: [

@@ -203,6 +203,19 @@ class ProxySlotManager {
   }
 
   /**
+   * Remove all slot state for a specific profile across every proxy.
+   * Call this when an account is deleted so its cooldown no longer blocks
+   * that proxy slot for other accounts.
+   */
+  clearProfile(profileId: number) {
+    for (const entry of this.slots.values()) {
+      entry.active.delete(profileId);
+      entry.cooldowns.delete(profileId);
+    }
+    this.notifyChange();
+  }
+
+  /**
    * Serialize all non-expired cooldown state to a JSON string for DB persistence.
    * Active slots are NOT persisted — if the server restarts, running sessions
    * are gone and we only need to preserve the cooldown windows.

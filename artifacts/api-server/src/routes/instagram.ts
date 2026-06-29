@@ -1007,6 +1007,9 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
     await storage.deleteProfile(profileId);
+    // Clear any proxy slot state for this profile so deleting an account
+    // doesn't keep that proxy slot blocked for the remainder of the cooldown.
+    proxySlotManager.clearProfile(profileId);
     // skipCookieSave: true — the account is gone, no point saving cookies.
     // Also avoids the saveCookies CDP call (can hang 30 s on a challenged page)
     // which was starving the profile-list refetch and causing the UI to freeze.
