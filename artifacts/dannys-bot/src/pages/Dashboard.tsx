@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.223",
+    date: "28 Jun 2026",
+    items: [
+      { category: "Engine", text: "Inject Browsing: the Order % settings now actually control the sequence of engagement actions inside each profile browse — higher order fires first, randomised per session." },
+      { category: "Engine", text: "Inject Browsing: the activity log now shows the exact engagement order chosen for each browse (e.g. 'watch stories → like posts → view reels → comment')." },
+    ],
+  },
+  {
     version: "1.1.222",
     date: "28 Jun 2026",
     items: [

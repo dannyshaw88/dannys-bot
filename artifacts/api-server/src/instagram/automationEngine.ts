@@ -3748,13 +3748,14 @@ class AutomationEngine {
     // optionally watch stories and highlights, and optionally post a comment.
     // Used for both the between-follows injection and the before-follow browse.
     const browseTargetProfile = async (label: string, targetUser: { pk: string; username: string }) => {
+      // 1. Visit profile — always first, not in queue
       try {
-        // "profile" from_module — navigating to a user's profile from the followers list
         await client.visitUserProfile(targetUser.pk, "profile");
         engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
         this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `Visited profile`);
       } catch { /* non-critical */ }
 
+      // 2. Scroll feed — always before engagement actions (like/save/comment depend on profilePosts)
       const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
       let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
       try {
@@ -3765,125 +3766,187 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
       } catch { /* non-critical */ }
 
-      // Open posts (view individual post detail)
+      // 3. Build ordered engagement queue — each action draws a random order value from
+      //    its OrderMin/OrderMax range. Higher order = runs first (same convention as Human Session tool).
+      type BrowseQueueEntry = { order: number; actionLabel: string; run: () => Promise<void> };
+      const queue: BrowseQueueEntry[] = [];
+
+      const enqueue = (
+        actionLabel: string,
+        orderMin: number, orderMax: number,
+        fn: () => Promise<void>,
+      ) => {
+        queue.push({ order: randInt(orderMin, orderMax), actionLabel, run: fn });
+      };
+
+      // Open individual posts
       if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
-        const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
-        for (const post of profilePosts) {
-          if (Math.random() * 100 < postPct) {
-            try {
-              await client.viewFeedPost(post.mediaId);
-              engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
-              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
-            } catch { /* non-critical */ }
-          }
-        }
+        enqueue("open posts",
+          Number(s.injectProfileBrowsingFeedOrderMin ?? 0), Number(s.injectProfileBrowsingFeedOrderMax ?? 0),
+          async () => {
+            const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
+            for (const post of profilePosts) {
+              if (Math.random() * 100 < postPct) {
+                try {
+                  await client.viewFeedPost(post.mediaId);
+                  engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
+                  this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
+                } catch { /* non-critical */ }
+              }
+            }
+          },
+        );
       }
 
       // Like posts
       if (injectProfileBrowsingLikePctMax > 0 && profilePosts.length > 0) {
-        const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
-        for (const post of profilePosts) {
-          if (Math.random() * 100 < likePct) {
-            try {
-              const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
-              if (likeResult && likeResult !== "blocked") {
-                engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
-                this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
-                await storage.incrementStat(profile.id, "like");
+        enqueue("like posts",
+          Number(s.injectProfileBrowsingLikePctOrderMin ?? 0), Number(s.injectProfileBrowsingLikePctOrderMax ?? 0),
+          async () => {
+            const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
+            for (const post of profilePosts) {
+              if (Math.random() * 100 < likePct) {
+                try {
+                  const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
+                  if (likeResult && likeResult !== "blocked") {
+                    engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
+                    this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
+                    await storage.incrementStat(profile.id, "like");
+                  }
+                } catch { /* non-critical */ }
               }
-            } catch { /* non-critical */ }
-          }
-        }
+            }
+          },
+        );
       }
 
       // Save media
       if (injectProfileBrowsingSaveMediaPctMax > 0 && profilePosts.length > 0) {
-        const savePct = randInt(injectProfileBrowsingSaveMediaPctMin, injectProfileBrowsingSaveMediaPctMax);
-        for (const post of profilePosts) {
-          if (Math.random() * 100 < savePct) {
-            try {
-              const saved = await client.saveMedia(post.mediaId);
-              if (saved) {
-                engineLog("INFO", `@${profile.username}: [${label}] saved post ${post.shortcode} from @${targetUser.username}`);
-                this.logAction(profile.id, tool.id, "save_media", targetUser.username, post.shortcode, "post", "ok", `Saved post from profile browse`);
+        enqueue("save media",
+          Number(s.injectProfileBrowsingSaveMediaPctOrderMin ?? 0), Number(s.injectProfileBrowsingSaveMediaPctOrderMax ?? 0),
+          async () => {
+            const savePct = randInt(injectProfileBrowsingSaveMediaPctMin, injectProfileBrowsingSaveMediaPctMax);
+            for (const post of profilePosts) {
+              if (Math.random() * 100 < savePct) {
+                try {
+                  const saved = await client.saveMedia(post.mediaId);
+                  if (saved) {
+                    engineLog("INFO", `@${profile.username}: [${label}] saved post ${post.shortcode} from @${targetUser.username}`);
+                    this.logAction(profile.id, tool.id, "save_media", targetUser.username, post.shortcode, "post", "ok", `Saved post from profile browse`);
+                  }
+                } catch { /* non-critical */ }
               }
-            } catch { /* non-critical */ }
-          }
-        }
+            }
+          },
+        );
       }
 
       // Watch stories
       if (injectProfileBrowsingWatchStoriesPctMax > 0) {
-        const storiesPct = randInt(injectProfileBrowsingWatchStoriesPctMin, injectProfileBrowsingWatchStoriesPctMax);
-        if (Math.random() * 100 < storiesPct) {
-          try {
-            const storiesUrl = await client.viewStories(targetUser.pk, targetUser.username);
-            if (storiesUrl) {
-              engineLog("INFO", `@${profile.username}: [${label}] watched stories of @${targetUser.username}`);
-              this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
-              await storage.incrementStat(profile.id, "story");
+        enqueue("watch stories",
+          Number(s.injectProfileBrowsingWatchStoriesPctOrderMin ?? 0), Number(s.injectProfileBrowsingWatchStoriesPctOrderMax ?? 0),
+          async () => {
+            const storiesPct = randInt(injectProfileBrowsingWatchStoriesPctMin, injectProfileBrowsingWatchStoriesPctMax);
+            if (Math.random() * 100 < storiesPct) {
+              try {
+                const storiesUrl = await client.viewStories(targetUser.pk, targetUser.username);
+                if (storiesUrl) {
+                  engineLog("INFO", `@${profile.username}: [${label}] watched stories of @${targetUser.username}`);
+                  this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
+                  await storage.incrementStat(profile.id, "story");
+                }
+              } catch { /* non-critical */ }
             }
-          } catch { /* non-critical */ }
-        }
+          },
+        );
       }
 
       // View highlights
       if (injectProfileBrowsingViewHighlightsPctMax > 0) {
-        const highlightsPct = randInt(injectProfileBrowsingViewHighlightsPctMin, injectProfileBrowsingViewHighlightsPctMax);
-        if (Math.random() * 100 < highlightsPct) {
-          try {
-            const hlUrl = await client.viewHighlights(targetUser.pk, targetUser.username);
-            if (hlUrl) {
-              engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
-              this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
+        enqueue("view highlights",
+          Number(s.injectProfileBrowsingViewHighlightsPctOrderMin ?? 0), Number(s.injectProfileBrowsingViewHighlightsPctOrderMax ?? 0),
+          async () => {
+            const highlightsPct = randInt(injectProfileBrowsingViewHighlightsPctMin, injectProfileBrowsingViewHighlightsPctMax);
+            if (Math.random() * 100 < highlightsPct) {
+              try {
+                const hlUrl = await client.viewHighlights(targetUser.pk, targetUser.username);
+                if (hlUrl) {
+                  engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
+                  this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
+                }
+              } catch { /* non-critical */ }
             }
-          } catch { /* non-critical */ }
-        }
+          },
+        );
       }
 
-      // View reels tab
+      // View reels
       if (injectProfileBrowsingViewReelsPctMax > 0) {
-        const reelsPct = randInt(injectProfileBrowsingViewReelsPctMin, injectProfileBrowsingViewReelsPctMax);
-        if (Math.random() * 100 < reelsPct) {
-          try {
-            const ok = await client.viewReels(targetUser.pk, targetUser.username);
-            if (ok) {
-              engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
-              this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
+        enqueue("view reels",
+          Number(s.injectProfileBrowsingViewReelsPctOrderMin ?? 0), Number(s.injectProfileBrowsingViewReelsPctOrderMax ?? 0),
+          async () => {
+            const reelsPct = randInt(injectProfileBrowsingViewReelsPctMin, injectProfileBrowsingViewReelsPctMax);
+            if (Math.random() * 100 < reelsPct) {
+              try {
+                const ok = await client.viewReels(targetUser.pk, targetUser.username);
+                if (ok) {
+                  engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
+                  this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
+                }
+              } catch { /* non-critical */ }
             }
-          } catch { /* non-critical */ }
-        }
+          },
+        );
       }
 
       // Comment on a post (spintax supported, requires checkbox enabled)
       if (injectProfileBrowsingCommentEnabled && injectProfileBrowsingCommentPctMax > 0 && profilePosts.length > 0 && injectProfileBrowsingCommentText.trim()) {
-        const commentPct = randInt(injectProfileBrowsingCommentPctMin, injectProfileBrowsingCommentPctMax);
-        if (Math.random() * 100 < commentPct) {
-          const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
-          const commentText = this.spin(injectProfileBrowsingCommentText).trim();
-          if (commentText) {
-            try {
-              const commented = await client.postComment(post.mediaId, commentText);
-              if (commented) {
-                engineLog("INFO", `@${profile.username}: [${label}] commented on post ${post.shortcode} of @${targetUser.username}: "${commentText}"`);
-                this.logAction(profile.id, tool.id, "comment", targetUser.username, post.shortcode, "post", "ok", `Commented: ${commentText}`);
-                await storage.incrementStat(profile.id, "comment");
+        enqueue("comment",
+          Number(s.injectProfileBrowsingCommentPctOrderMin ?? 0), Number(s.injectProfileBrowsingCommentPctOrderMax ?? 0),
+          async () => {
+            const commentPct = randInt(injectProfileBrowsingCommentPctMin, injectProfileBrowsingCommentPctMax);
+            if (Math.random() * 100 < commentPct) {
+              const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
+              const commentText = this.spin(injectProfileBrowsingCommentText).trim();
+              if (commentText) {
+                try {
+                  const commented = await client.postComment(post.mediaId, commentText);
+                  if (commented) {
+                    engineLog("INFO", `@${profile.username}: [${label}] commented on post ${post.shortcode} of @${targetUser.username}: "${commentText}"`);
+                    this.logAction(profile.id, tool.id, "comment", targetUser.username, post.shortcode, "post", "ok", `Commented: ${commentText}`);
+                    await storage.incrementStat(profile.id, "comment");
+                  }
+                } catch { /* non-critical */ }
               }
-            } catch { /* non-critical */ }
-          }
-        }
+            }
+          },
+        );
       }
 
-      // Share to DM — opens the DM picker (getDirectMessages simulates tapping the share button)
+      // Share to DM — opens the DM picker
       if (injectProfileBrowsingShareToDmPctMax > 0) {
-        const sharePct = randInt(injectProfileBrowsingShareToDmPctMin, injectProfileBrowsingShareToDmPctMax);
-        if (Math.random() * 100 < sharePct) {
-          try {
-            await client.getDirectMessages(3);
-            engineLog("INFO", `@${profile.username}: [${label}] opened DM share picker for @${targetUser.username}`);
-            this.logAction(profile.id, tool.id, "share_to_dm", targetUser.username, "", "dm", "ok", `Opened DM share picker from profile browse`);
-          } catch { /* non-critical */ }
-        }
+        enqueue("share to DM",
+          Number(s.injectProfileBrowsingShareToDmPctOrderMin ?? 0), Number(s.injectProfileBrowsingShareToDmPctOrderMax ?? 0),
+          async () => {
+            const sharePct = randInt(injectProfileBrowsingShareToDmPctMin, injectProfileBrowsingShareToDmPctMax);
+            if (Math.random() * 100 < sharePct) {
+              try {
+                await client.getDirectMessages(3);
+                engineLog("INFO", `@${profile.username}: [${label}] opened DM share picker for @${targetUser.username}`);
+                this.logAction(profile.id, tool.id, "share_to_dm", targetUser.username, "", "dm", "ok", `Opened DM share picker from profile browse`);
+              } catch { /* non-critical */ }
+            }
+          },
+        );
+      }
+
+      // Sort descending by order (higher = runs first), then execute sequentially
+      queue.sort((a, b) => b.order - a.order);
+      if (queue.length > 0) {
+        engineLog("INFO", `@${profile.username}: [${label}] engagement order for @${targetUser.username}: ${queue.map(e => e.actionLabel).join(" → ")}`);
+      }
+      for (const entry of queue) {
+        await entry.run();
       }
     };
 
