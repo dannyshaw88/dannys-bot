@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.229",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fatigue now oscillates as a wave instead of ramping up and staying there. Timing rises toward the slow end over Ramp Calls, then recovers back to normal, then rises again — repeating throughout the session so no long stretch of calls is ever stuck at the same speed." },
+    ],
+  },
+  {
     version: "1.1.228",
     date: "29 Jun 2026",
     items: [

@@ -523,14 +523,21 @@ export class InstagramWebClient {
     const slowest = this.throttleSecondsMax / Math.max(1, this.throttleRequestsMin);
     const fastest = this.throttleSecondsMin / Math.max(1, this.throttleRequestsMax);
 
-    // Fatigue: as call count grows, the effective lower bound drifts toward slowest.
-    // fatigueFactor goes 0→1 over fatigueRampCalls calls; clamped at 1 thereafter.
+    // Fatigue: the effective lower bound oscillates as a triangle wave over the session.
+    // It rises from fastest→(fastest+drift) over fatigueRampCalls calls, then falls back,
+    // then rises again — repeating throughout the session so no stretch of calls is ever
+    // stuck at a fixed timing.
+    // fatigueFactor: 0→1 over rampCalls, 1→0 over the next rampCalls, then repeats.
     // effectiveFastest = fastest + fatigueFactor * (strength/100) * (slowest - fastest)
-    // At strength=50%, call 0: picks from full [fastest, slowest].
-    //                 call N: picks from [midpoint, slowest].
-    const effectiveFastest = this.fatigueEnabled
-      ? fastest + Math.min(1, this._sessionCallCount / this.fatigueRampCalls) * (this.fatigueStrength / 100) * Math.max(0, slowest - fastest)
-      : fastest;
+    const effectiveFastest = (() => {
+      if (!this.fatigueEnabled) return fastest;
+      const cycleLen = 2 * this.fatigueRampCalls;
+      const pos = this._sessionCallCount % cycleLen;
+      const fatigueFactor = pos < this.fatigueRampCalls
+        ? pos / this.fatigueRampCalls           // rising  0→1
+        : (cycleLen - pos) / this.fatigueRampCalls; // falling 1→0
+      return fastest + fatigueFactor * (this.fatigueStrength / 100) * Math.max(0, slowest - fastest);
+    })();
 
     let delaySec: number;
     const lastDelay = this._lastDelaySec;
