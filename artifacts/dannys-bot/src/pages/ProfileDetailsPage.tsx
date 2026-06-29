@@ -390,6 +390,7 @@ export function ProfileDetailsPage() {
         { key: "apiLimits", label: "API Limits & Control", description: "Min/max calls and interval settings" },
         { key: "loginRandomEndpoints", label: "Fire Random Endpoints at Login", description: "Fire random endpoints to each login sequence — enabled state and min/max endpoint count merged into each target's existing API limits without overwriting their rate settings" },
         { key: "loginMakePostChance", label: "Chance of Making a Post", description: "Enabled state, min/max % chance — merged into each target's existing API limits without overwriting their rate settings" },
+        { key: "variationSettings", label: "Variation %", description: "Enabled state, lower/upper chance % and seconds — merged into each target's existing API limits without overwriting their rate settings" },
       ],
     },
     {
@@ -461,7 +462,7 @@ export function ProfileDetailsPage() {
     // Copy only the three loginRandom* fields, merging into each target's existing
     // apiLimits so their rate limit settings are never overwritten.
     const needsLimitsMerge =
-      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance"))
+      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings"))
       && !expandedKeys.includes("apiLimits");
 
     if (needsLimitsMerge) {
@@ -479,6 +480,13 @@ export function ProfileDetailsPage() {
           merged.loginMakePostChanceEnabled = srcLimits.loginMakePostChanceEnabled ?? false;
           merged.loginMakePostChanceMin     = srcLimits.loginMakePostChanceMin ?? 5;
           merged.loginMakePostChanceMax     = srcLimits.loginMakePostChanceMax ?? 10;
+        }
+        if (expandedKeys.includes("variationSettings")) {
+          merged.variationEnabled      = srcLimits.variationEnabled ?? false;
+          merged.variationLowerChance  = srcLimits.variationLowerChance ?? 10;
+          merged.variationLowerSecs    = srcLimits.variationLowerSecs ?? 30;
+          merged.variationUpperChance  = srcLimits.variationUpperChance ?? 10;
+          merged.variationUpperSecs    = srcLimits.variationUpperSecs ?? 60;
         }
         const r = await fetch(`/api/profiles/${id}`, {
           method: "PATCH",

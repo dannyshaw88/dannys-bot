@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.226",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Feature", text: "API Control: Variation % is now available in Copy Settings under API & Performance — tick it to copy your enabled state, lower/upper chance % and seconds to other accounts without touching their rate limits." },
+    ],
+  },
+  {
     version: "1.1.225",
     date: "29 Jun 2026",
     items: [
