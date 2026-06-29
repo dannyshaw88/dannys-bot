@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.246",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "VerifyAccount entries no longer appear in the API calls log or export — verify failures are surfaced only via the account status, not as extra log rows." },
+      { category: "Fix", text: "AnalyticsLog removed from the session warm-up sequence — Instagram's analytics endpoint now returns 404 and was causing noise in every verify run." },
+    ],
+  },
+  {
     version: "1.1.245",
     date: "29 Jun 2026",
     items: [

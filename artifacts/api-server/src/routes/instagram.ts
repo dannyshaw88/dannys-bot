@@ -2375,19 +2375,6 @@ export async function registerInstagramRoutes(
       timestamp: new Date().toISOString(),
     });
 
-    // Log failure in API call log too (success already surfaced via session action above)
-    if (!result.ok) {
-      storage.createInstagramApiCall({
-        profileId: profile.id,
-        username: profile.username,
-        operationName: "VerifyAccount",
-        date: new Date().toISOString(),
-        message: `✗ Failed, ${(result.message ?? "").replace(/^@\S+\s*[—–-]+\s*(Login failed\s*[—–-]+\s*)?/i, "")}`,
-        source: "System",
-        durationMs: 0,
-      }).catch(() => {});
-    }
-
     // If Instagram returned a checkpoint URL, cache it so the EB navigates there directly
     // on next open (bypassing the 429 rate-limit on the home page)
     if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {

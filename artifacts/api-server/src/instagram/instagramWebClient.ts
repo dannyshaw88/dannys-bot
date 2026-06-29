@@ -339,7 +339,6 @@ const FORCE_EMU_FRIENDLY: Record<string, string> = {
   GetCurrentUser:     "Fetched own account info",
   ViewTimelineFeed:   "Loaded timeline feed",
   LauncherSync:       "Synced mobile config",
-  AnalyticsLog:       "Sent analytics log",
   BatchFetchWeb:      "Batch fetched web queries",
   AttributionLaunch:  "Sent attribution launch",
 };
@@ -2414,7 +2413,6 @@ export class InstagramWebClient {
       { method: "POST", path: "/api/v1/feed/timeline/",   body: "reason=cold_start_fetch&is_pull_to_refresh=0",                        opName: "ViewTimelineFeed"   },
       // server_config_retrieval=1 is the minimum body the real app sends on launcher/sync
       { method: "POST", path: "/api/v1/launcher/sync/",   body: "server_config_retrieval=1",                                          opName: "LauncherSync"       },
-      { method: "POST", path: "/api/v1/analytics/log/",                                                                                opName: "AnalyticsLog"       },
       // Batch query-parameter prefetch — fires unconditionally on every real app open
       // Minimal surface set (5717 = home feed, 5718 = stories) matches the startup call pattern
       { method: "POST", path: "/api/v1/qp/batch_fetch_web/",  body: `surfaces_to_queries=${encodeURIComponent(JSON.stringify({ "5717": {}, "5718": {} }))}`, opName: "BatchFetchWeb" },
