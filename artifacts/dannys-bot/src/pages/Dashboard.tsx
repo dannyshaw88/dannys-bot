@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.225",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Feature", text: "API Control: new Variation % option with a tick to enable. Set a Lower % chance to occasionally fire a call faster than your min, and an Upper % chance to go slower than your max — keeping calls in a safe range with occasional natural outliers." },
+      { category: "Engine", text: "Accounts with unique user agents are now enforced server-side on creation so no two accounts share the same device string." },
+    ],
+  },
+  {
     version: "1.1.224",
     date: "29 Jun 2026",
     items: [

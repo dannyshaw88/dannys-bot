@@ -196,7 +196,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    // Pick the least-used UA from the pool — unique first, then least-used.
+    const existingUAs: string[] = (await db.select({ ua: profiles.userAgentApi }).from(profiles))
+      .map(r => r.ua).filter(Boolean) as string[];
+    const uaUsedCount = new Map<string, number>();
+    for (const ua of existingUAs) uaUsedCount.set(ua, (uaUsedCount.get(ua) ?? 0) + 1);
+    const unused = userAgents.filter(u => !uaUsedCount.has(u.api));
+    const pool = unused.length > 0 ? unused : userAgents;
+    const randomUA = pool[Math.floor(Math.random() * pool.length)];
+
     // Auto-stamp the Notes field with the date/time the account was first added to
     // Equinox. Only written when notes is blank — never overwrites an existing value
     // (e.g. a note that came from an EQX re-import already carries the original stamp).
@@ -205,9 +213,9 @@ export class DatabaseStorage implements IStorage {
     const firstAddedStamp = `Added: ${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
     const [created] = await db.insert(profiles).values({
       ...profile,
-      // Only fall back to random UA if the caller did not supply one
-      userAgentApi: profile.userAgentApi || randomUA.api,
-      userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
+      // Always use the server-selected unique UA — overrides any client-side random pick.
+      userAgentApi: randomUA.api,
+      userAgentEmbedded: randomUA.embedded,
       tags: profile.tags || "No Group Assigned",
       // Preserve any existing notes (EQX import carries the original stamp); only
       // set the auto-stamp when notes is genuinely absent.

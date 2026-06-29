@@ -21,7 +21,7 @@ import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
 import { generateEbFingerprint } from "../instagram/browserFingerprint";
 import { db } from "@workspace/db";
-import { proxies, tools } from "@workspace/db";
+import { proxies, tools, profiles } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -733,6 +733,18 @@ export async function registerInstagramRoutes(
       result[row.profileId] = s.humanSessionEnabled !== false;
     }
     res.json(result);
+  });
+
+  // Returns the least-used UA from the pool — unused first, then least-used.
+  // Must be before /:id routes so Express doesn't treat "suggest-ua" as a profile ID.
+  app.get("/api/profiles/suggest-ua", async (_req, res) => {
+    const existing = await db.select({ ua: profiles.userAgentApi }).from(profiles);
+    const usedSet = new Set(existing.map(r => r.ua).filter(Boolean));
+    const { userAgents } = await import("../shared/userAgents");
+    const unused = userAgents.filter(u => !usedSet.has(u.api));
+    const pool = unused.length > 0 ? unused : userAgents;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    res.json({ api: pick.api, embedded: pick.embedded });
   });
 
   app.patch("/api/profiles/:id/human-session-enabled", async (req, res) => {

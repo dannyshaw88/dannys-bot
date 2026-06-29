@@ -714,7 +714,8 @@ export function ProfileDetailsPage() {
   };
 
   const handleResetDeviceIds = async () => {
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    const uaRes = await fetch("/api/profiles/suggest-ua", { credentials: "include" });
+    const randomUA = uaRes.ok ? await uaRes.json() : { api: "", embedded: "" };
     try {
       await fetch(`/api/profiles/${profileId}/reset-device-ids`, {
         method: "POST",
@@ -1480,6 +1481,45 @@ export function ProfileDetailsPage() {
                               Test Timing
                             </Button>
                             {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap mt-1.5">{timingInfo}</span>}
+                          </div>
+                          {/* Variation % */}
+                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="variation-enabled"
+                                checked={!!(formData.apiLimits as any).variationEnabled}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                              />
+                              <label htmlFor="variation-enabled" className="text-xs font-bold cursor-pointer select-none">Variation %</label>
+                            </div>
+                            {!!(formData.apiLimits as any).variationEnabled && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChance: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Lower %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground mb-3.5">→ -</span>
+                                  <div className="space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationLowerSecs ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecs: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Secs</Label>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChance: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Upper %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground mb-3.5">→ +</span>
+                                  <div className="space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[52px]" value={(formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecs: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Secs</Label>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

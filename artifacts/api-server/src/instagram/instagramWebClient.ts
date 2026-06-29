@@ -421,6 +421,11 @@ export class InstagramWebClient {
   private throttleRequestsMax = 10;
   private throttleSecondsMin  = 3;
   private throttleSecondsMax  = 8;
+  private variationEnabled      = false;
+  private variationLowerChance  = 0;
+  private variationLowerSecs    = 0;
+  private variationUpperChance  = 0;
+  private variationUpperSecs    = 0;
 
   constructor(proxyUrl?: string, profileId?: number) {
     // ── IP-LEAK PREVENTION ──────────────────────────────────────────────────
@@ -453,14 +458,25 @@ export class InstagramWebClient {
       : MOBILE_UA;
   }
 
-  setApiLimits(limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number }) {
+  setApiLimits(limits: {
+    requestsMin: number; requestsMax: number;
+    everySecondsMin: number; everySecondsMax: number;
+    variationEnabled?: boolean;
+    variationLowerChance?: number; variationLowerSecs?: number;
+    variationUpperChance?: number; variationUpperSecs?: number;
+  }) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
     // Unit-aware conversion: values <1000 are legacy bare-seconds (schema default was 30/60);
     // values ≥1000 are milliseconds (current UI format).  Convert all to seconds for throttle logic.
     const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
-    this.throttleSecondsMin  = Math.max(0, toMs(limits.everySecondsMin) / 1000);
-    this.throttleSecondsMax  = Math.max(0, toMs(limits.everySecondsMax) / 1000);
+    this.throttleSecondsMin     = Math.max(0, toMs(limits.everySecondsMin) / 1000);
+    this.throttleSecondsMax     = Math.max(0, toMs(limits.everySecondsMax) / 1000);
+    this.variationEnabled       = !!limits.variationEnabled;
+    this.variationLowerChance   = limits.variationLowerChance ?? 0;
+    this.variationLowerSecs     = limits.variationLowerSecs   ?? 0;
+    this.variationUpperChance   = limits.variationUpperChance ?? 0;
+    this.variationUpperSecs     = limits.variationUpperSecs   ?? 0;
   }
 
   private async apiThrottle(): Promise<void> {
@@ -474,10 +490,25 @@ export class InstagramWebClient {
     //   slowest = everySecondsMax / requestsMin  (most seconds for fewest calls)
     //   fastest = everySecondsMin / requestsMax  (fewest seconds for most calls)
     // Both are valid configs; we pick a random point between them each call.
-    const slowest = this.throttleSecondsMax  / Math.max(1, this.throttleRequestsMin);
-    const fastest = this.throttleSecondsMin  / Math.max(1, this.throttleRequestsMax);
-    const delaySec = fastest + Math.random() * Math.max(0, slowest - fastest);
-    const delayMs  = Math.floor(delaySec * 1000);
+    const slowest = this.throttleSecondsMax / Math.max(1, this.throttleRequestsMin);
+    const fastest = this.throttleSecondsMin / Math.max(1, this.throttleRequestsMax);
+    let delaySec: number;
+    if (this.variationEnabled) {
+      const roll = Math.random() * 100;
+      if (roll < this.variationLowerChance) {
+        // Variation — go below normal range (faster than usual)
+        const floor = Math.max(0, fastest - this.variationLowerSecs);
+        delaySec = floor + Math.random() * Math.max(0, fastest - floor);
+      } else if (roll < this.variationLowerChance + this.variationUpperChance) {
+        // Variation — go above normal range (slower than usual)
+        delaySec = slowest + Math.random() * this.variationUpperSecs;
+      } else {
+        delaySec = fastest + Math.random() * Math.max(0, slowest - fastest);
+      }
+    } else {
+      delaySec = fastest + Math.random() * Math.max(0, slowest - fastest);
+    }
+    const delayMs = Math.floor(delaySec * 1000);
     if (delayMs > 10) {
       await new Promise<void>(r => setTimeout(r, delayMs));
     }
