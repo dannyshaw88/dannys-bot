@@ -393,6 +393,7 @@ export function ProfileDetailsPage() {
         { key: "variationSettings", label: "Variation %", description: "Enabled state, lower/upper chance % and seconds — merged into each target's existing API limits without overwriting their rate settings" },
         { key: "momentumSettings", label: "Momentum", description: "Enabled state, chance % and spread % — merged into each target's existing API limits without overwriting their rate settings" },
         { key: "attentionDrift", label: "Attention Drift", description: "Enabled state, chance % and min/max minutes — merged into each target's existing API limits without overwriting their rate settings" },
+        { key: "fatigueSettings", label: "Fatigue", description: "Enabled state, strength % and ramp calls — merged into each target's existing API limits without overwriting their rate settings" },
       ],
     },
     {
@@ -464,7 +465,7 @@ export function ProfileDetailsPage() {
     // Copy only the three loginRandom* fields, merging into each target's existing
     // apiLimits so their rate limit settings are never overwritten.
     const needsLimitsMerge =
-      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift"))
+      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift") || expandedKeys.includes("fatigueSettings"))
       && !expandedKeys.includes("apiLimits");
 
     if (needsLimitsMerge) {
@@ -500,6 +501,11 @@ export function ProfileDetailsPage() {
           merged.attentionDriftChance   = srcLimits.attentionDriftChance ?? 5;
           merged.attentionDriftMinMins  = srcLimits.attentionDriftMinMins ?? 5;
           merged.attentionDriftMaxMins  = srcLimits.attentionDriftMaxMins ?? 15;
+        }
+        if (expandedKeys.includes("fatigueSettings")) {
+          merged.fatigueEnabled    = srcLimits.fatigueEnabled ?? false;
+          merged.fatigueStrength   = srcLimits.fatigueStrength ?? 50;
+          merged.fatigueRampCalls  = srcLimits.fatigueRampCalls ?? 30;
         }
         const r = await fetch(`/api/profiles/${id}`, {
           method: "PATCH",
@@ -1591,6 +1597,31 @@ export function ProfileDetailsPage() {
                                 <div className="space-y-0.5">
                                   <NumField min={0} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).attentionDriftMaxMins ?? 15} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, attentionDriftMaxMins: Math.max(v, (formData.apiLimits as any).attentionDriftMinMins ?? 5) } })} />
                                   <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max Mins</Label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Fatigue */}
+                          <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="fatigue-enabled"
+                                checked={!!(formData.apiLimits as any).fatigueEnabled}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, fatigueEnabled: e.target.checked } })}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                              />
+                              <label htmlFor="fatigue-enabled" className="text-xs font-bold cursor-pointer select-none">Fatigue</label>
+                            </div>
+                            {!!(formData.apiLimits as any).fatigueEnabled && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-5 items-end">
+                                <div className="space-y-0.5">
+                                  <NumField min={0} max={100} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueStrength ?? 50} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueStrength: Math.min(100, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Strength %</Label>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <NumField min={1} className="h-6 text-xs w-[60px]" value={(formData.apiLimits as any).fatigueRampCalls ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, fatigueRampCalls: Math.max(1, v) } })} />
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Ramp Calls</Label>
                                 </div>
                               </div>
                             )}

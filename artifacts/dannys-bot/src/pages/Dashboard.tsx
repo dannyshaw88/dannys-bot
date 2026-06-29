@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.228",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Feature", text: "Fatigue: tick to enable. Set Strength % (how far timing drifts toward your max by end of session) and Ramp Calls (how many API calls to reach full fatigue). Resets automatically at the start of each session. Available in Copy Settings." },
+    ],
+  },
+  {
     version: "1.1.227",
     date: "29 Jun 2026",
     items: [
