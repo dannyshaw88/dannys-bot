@@ -480,17 +480,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
-    version: "1.1.231",
+    version: "1.1.232",
     date: "29 Jun 2026",
     items: [
-      { category: "UI", text: "Account Settings: Test Timing button now sits inline on the same row as the API Limits & Control title." },
-      { category: "UI", text: "Account Settings: Min Calls and Max Calls fields narrowed." },
-      { category: "UI", text: "Account Settings: Variation rows now use a plain hyphen separator instead of the arrow symbol." },
-      { category: "UI", text: "Account Settings: Variation Lower and Upper percentage chance fields now each have an X–Y range." },
-      { category: "UI", text: "Account Settings: Variation Lower and Upper seconds fields now each have an X–Y range." },
-      { category: "UI", text: "Account Settings: Attention Drift chance now has an X–Y percentage range." },
-      { category: "UI", text: "Account Settings: Momentum Spread now shows a description of what it controls." },
-      { category: "UI", text: "Account Settings: Fatigue Strength % and Ramp Calls now each show an explanation." },
+      { category: "UI", text: "Account Settings: Variation % field labels renamed from X/Y to Min/Max with descriptive names (Min %, Max %, Min secs, Max secs)." },
+      { category: "UI", text: "Account Settings: Variation % fields widened by one character." },
+      { category: "UI", text: "Account Settings: Attention Drift chance fields renamed to Min % and Max %." },
+      { category: "UI", text: "Account Settings: Momentum and Fatigue explanation text removed." },
     ],
   },
   {
