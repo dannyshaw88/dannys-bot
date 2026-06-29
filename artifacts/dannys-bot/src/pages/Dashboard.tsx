@@ -71,6 +71,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.240",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy slot cooldown windows now survive server restarts. Previously, all slot state was in-memory only and cleared on every restart, making blocked accounts appear available again immediately." },
+      { category: "Fix", text: "Opening and closing the browser for a profile that was on automation cooldown no longer erases that cooldown. The cooldown now resumes correctly after the browser window is closed." },
+      { category: "Fix", text: "IP:Port column width is no longer capped at 600px — it can now be resized up to 2000px." },
+    ],
+  },
+  {
     version: "1.1.239",
     date: "29 Jun 2026",
     items: [

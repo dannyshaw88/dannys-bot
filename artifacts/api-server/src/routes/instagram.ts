@@ -347,8 +347,8 @@ export async function registerInstagramRoutes(
 
   automationEngine.start();
 
-  // On startup, load proxy slot settings from globalSettings DB so the manager
-  // uses the user's saved configuration rather than hardcoded defaults.
+  // On startup, load proxy slot settings AND restore any saved cooldown state
+  // from the DB so cooldown windows survive server restarts.
   try {
     const gs = await storage.getGlobalSettings();
     const maxConcurrent   = parseInt(gs["proxySlotMaxConcurrent"]   ?? "2",  10) || 2;
@@ -359,7 +359,17 @@ export async function registerInstagramRoutes(
       cooldownMinMs: Math.round(cooldownMinMins * 60 * 1000),
       cooldownMaxMs: Math.round(cooldownMaxMins * 60 * 1000),
     });
+    if (gs["proxySlotCooldownState"]) {
+      proxySlotManager.restore(gs["proxySlotCooldownState"]);
+      console.log("[startup] proxy slot cooldown state restored from DB");
+    }
   } catch { /* non-fatal — defaults remain */ }
+
+  // Persist slot state to DB on every change so cooldowns survive restarts.
+  proxySlotManager.setSaveFn(() => {
+    const json = proxySlotManager.serialize();
+    storage.setGlobalSetting("proxySlotCooldownState", json).catch(() => {});
+  });
 
   // ── IPC diagnostic log endpoint ───────────────────────────────────────────
   // The Electron main process and the renderer both POST here so their log
@@ -1867,7 +1877,10 @@ export async function registerInstagramRoutes(
     const check = proxySlotManager.canAcquire(proxyId, profileId);
     if (!check.ok) return res.status(429).json({ ok: false, reason: check.reason });
 
-    proxySlotManager.acquire(proxyId, profileId);
+    // clearCooldown=false: preserve any automation-originated cooldown so that
+    // closing the EB window later (forceRelease) restores the cooldown rather
+    // than silently erasing it.
+    proxySlotManager.acquire(proxyId, profileId, false);
     return res.json({ ok: true, proxyId });
   });
 

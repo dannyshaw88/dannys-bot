@@ -1850,7 +1850,7 @@ export function ProfilesPage() {
                         const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
                         const midIdx = reorderable.indexOf(key as any);
                         const updateCol = (delta: number) => {
-                          const v = Math.max(1, Math.min(600, profColWidths[key] + delta));
+                          const v = Math.max(1, Math.min(2000, profColWidths[key] + delta));
                           const next = { ...profColWidths, [key]: v };
                           setProfColWidths(next);
                           localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
@@ -1875,7 +1875,7 @@ export function ProfilesPage() {
                             />
                             <label className="text-xs w-14 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
                             <button onClick={() => updateCol(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
-                            <input type="number" min={1} max={600} value={profColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(600, Number(e.target.value))); const next = { ...profColWidths, [key]: v }; setProfColWidths(next); localStorage.setItem("profiles_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                            <input type="number" min={1} max={2000} value={profColWidths[key]} onChange={e => { const v = Math.max(1, Math.min(2000, Number(e.target.value))); const next = { ...profColWidths, [key]: v }; setProfColWidths(next); localStorage.setItem("profiles_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
                             <button onClick={() => updateCol(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
                           </div>
                         );
