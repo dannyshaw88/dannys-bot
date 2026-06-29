@@ -1464,7 +1464,7 @@ export function ProfileDetailsPage() {
                           })()}
                         </div>
                         <div className="w-full space-y-3 pt-4 mt-3 border-t border-border">
-                          {/* Row 1: Title + Test Timing + Variation % (all inline) */}
+                          {/* Row 1: Title + Test Timing */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="text-sm font-bold flex items-center gap-2 shrink-0"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                             <Button
@@ -1489,60 +1489,9 @@ export function ProfileDetailsPage() {
                               Test Timing
                             </Button>
                             {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap">{timingInfo}</span>}
-                            {/* Variation % inline on title row */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0 ml-1">
-                              <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
-                              Variation %
-                            </label>
-                            {!!(formData.apiLimits as any).variationEnabled && (
-                              <div className="flex items-center gap-1 flex-wrap">
-                                <div className="flex items-center gap-1">
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerChanceMin ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMin: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerChanceMax ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMax: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5 mx-0.5">-</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerSecsMin ?? (formData.apiLimits as any).variationLowerSecs ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMin: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min secs</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerSecsMax ?? (formData.apiLimits as any).variationLowerSecs ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMax: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max secs</Label>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperChanceMin ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMin: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperChanceMax ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMax: Math.min(100, v) } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max %</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5 mx-0.5">+</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperSecsMin ?? (formData.apiLimits as any).variationUpperSecs ?? 45} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMin: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min secs</Label>
-                                  </div>
-                                  <span className="text-[10px] text-muted-foreground mb-3.5">–</span>
-                                  <div className="flex flex-col items-center space-y-0.5">
-                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperSecsMax ?? (formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMax: v } })} />
-                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max secs</Label>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
                           </div>
-                          {/* Row 2: Main controls — items-center so labels sit centred to their fields */}
-                          <div className="flex flex-wrap gap-2 items-center">
+                          {/* Row 2: Min / Max / Min (ms) / Max (ms) + Variation % — all on the same row, labels bottom-aligned */}
+                          <div className="flex flex-wrap gap-x-2 gap-y-1 items-end">
                             <div className="flex flex-col items-center space-y-1">
                               <NumField min={0} className="h-7 text-xs w-[34px]" value={formData.apiLimits.requestsMin ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, requestsMin: v} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min</Label>
@@ -1559,6 +1508,60 @@ export function ProfileDetailsPage() {
                               <NumField min={0} className="h-7 text-xs w-[70px]" value={formData.apiLimits.everySecondsMax ?? 0} onChange={v => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(v, formData.apiLimits.everySecondsMin ?? 0)} })} />
                               <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max (ms)</Label>
                             </div>
+                            {/* Variation % — checkbox on same row; expanded fields wrap below if needed */}
+                            <div className="flex flex-col items-start space-y-0.5 ml-1">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold h-7 shrink-0">
+                                <input type="checkbox" checked={!!(formData.apiLimits as any).variationEnabled} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, variationEnabled: e.target.checked } })} className="h-3.5 w-3.5 accent-primary cursor-pointer" />
+                                Variation %
+                              </label>
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">&nbsp;</Label>
+                            </div>
+                            {!!(formData.apiLimits as any).variationEnabled && (
+                              <div className="flex items-end gap-1 flex-wrap">
+                                <div className="flex items-end gap-1">
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerChanceMin ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMin: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3">–</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerChanceMax ?? (formData.apiLimits as any).variationLowerChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerChanceMax: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3 mx-0.5">-</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerSecsMin ?? (formData.apiLimits as any).variationLowerSecs ?? 20} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMin: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min secs</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3">–</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationLowerSecsMax ?? (formData.apiLimits as any).variationLowerSecs ?? 30} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationLowerSecsMax: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max secs</Label>
+                                  </div>
+                                </div>
+                                <div className="flex items-end gap-1">
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperChanceMin ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMin: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3">–</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} max={100} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperChanceMax ?? (formData.apiLimits as any).variationUpperChance ?? 10} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperChanceMax: Math.min(100, v) } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max %</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3 mx-0.5">+</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperSecsMin ?? (formData.apiLimits as any).variationUpperSecs ?? 45} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMin: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Min secs</Label>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground pb-3">–</span>
+                                  <div className="flex flex-col items-center space-y-0.5">
+                                    <NumField min={0} className="h-6 text-xs w-[48px]" value={(formData.apiLimits as any).variationUpperSecsMax ?? (formData.apiLimits as any).variationUpperSecs ?? 60} onChange={v => updateField({ apiLimits: { ...formData.apiLimits, variationUpperSecsMax: v } })} />
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block text-center">Max secs</Label>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           {/* Row 3: Momentum + Attention Drift + Fatigue — all on one row */}
                           <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1.5 border-t border-border/40 items-center">
@@ -2179,8 +2182,7 @@ export function ProfileDetailsPage() {
             <textarea
               className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               placeholder="Any notes about this account…"
-              rows={4}
-              style={{ maxHeight: "calc(4 * 1.5rem + 1rem)", overflowY: "auto" }}
+              rows={10}
               value={formData.notes}
               onChange={e => updateField({ notes: e.target.value })}
               data-testid="input-notes"

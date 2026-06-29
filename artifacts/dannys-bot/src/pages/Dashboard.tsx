@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.235",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Improvement", text: "API Controls: Variation % checkbox and its fields moved onto the same row as Min / Max / Min (ms) / Max (ms). All fields on that row now bottom-align so labels sit at a consistent baseline." },
+      { category: "Improvement", text: "Account Settings: Notes field expanded to show 10 rows at all times." },
+    ],
+  },
+  {
     version: "1.1.234",
     date: "29 Jun 2026",
     items: [
