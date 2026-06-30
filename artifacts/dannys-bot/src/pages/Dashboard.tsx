@@ -71,10 +71,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.1.256",
+    version: "1.1.257",
     date: "30 Jun 2026",
     items: [
-      { category: "Fix", text: "Accounts no longer get stuck on 'Logged Out' after the DM inbox check. Instagram was returning a soft UI prompt (error 4415001) that the engine was incorrectly treating as a real logout — the session was always valid, the DM check now skips gracefully instead." },
+      { category: "Fix", text: "Accounts no longer get stuck on 'Logged Out' after the DM inbox check. Instagram's 4415001 prompt gate is now handled correctly: the engine runs the warm-up sequence to lift the gate and retries the inbox — DMs are still read, and the account stays valid." },
     ],
   },
   {

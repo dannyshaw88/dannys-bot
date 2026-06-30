@@ -3216,20 +3216,40 @@ export class InstagramWebClient {
       const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
       const msg  = String(e?.message ?? "");
       console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${msg}`);
-      // 4415001 = "Prompt has contribution" — Instagram soft UI gate, NOT a logout.
-      // Swallow it so the account is not marked logged_out.  The session is valid.
+      // 4415001 = "Prompt has contribution" — Instagram is gating the inbox behind
+      // a soft UI prompt.  The session is valid.  Run the Jarvee warm-up sequence
+      // (_buildWarmedIgClient → news.inbox) which lifts this gate, then retry
+      // the inbox call.  Do NOT mark the account logged_out.
       if (/prompt_required_4415001/i.test(msg)) {
-        console.warn(`[webClient] getDirectMessagesInternal: 4415001 prompt gate — skipping DM check (account is still logged in)`);
+        console.warn(`[webClient] getDirectMessagesInternal: 4415001 prompt gate — running warm-up sequence to lift gate, then retrying inbox`);
+        try {
+          await this._buildWarmedIgClient();
+          // Re-attempt the inbox via mobileSessionGet now that the gate is lifted.
+          const retryResult = await this.timed("GetDirectMessages", async () => {
+            const j = await this.mobileSessionGet(
+              `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
+            );
+            if (!j) throw new Error("DM inbox returned null after warm-up retry (HTTP 4xx)");
+            const items: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+            return { items, ok: true as const };
+          }, (r) => `Inbox overview (retry after 4415001): ${r.items.length} thread${r.items.length === 1 ? "" : "s"}`,
+          (r) => r.ok);
+          inboxThreads = retryResult.items;
+          console.log(`[webClient] getDirectMessagesInternal: inbox OK after warm-up retry — ${inboxThreads.length} thread(s)`);
+        } catch (retryErr: any) {
+          console.warn(`[webClient] getDirectMessagesInternal: inbox retry after 4415001 also failed — ${retryErr?.message}`);
+          return { count: 0, ok: false, threads: [] };
+        }
+      } else {
+        // Re-throw account-level errors (checkpoint, email confirmation, session
+        // expired, etc.) so the engine's checkSessionErr can classify them and
+        // write the correct accountStatus to the DB.  Transient errors (network
+        // timeouts, rate-limits) stay swallowed and just produce ok:false.
+        if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
+          throw e;
+        }
         return { count: 0, ok: false, threads: [] };
       }
-      // Re-throw account-level errors (checkpoint, email confirmation, session
-      // expired, etc.) so the engine's checkSessionErr can classify them and
-      // write the correct accountStatus to the DB.  Transient errors (network
-      // timeouts, rate-limits) stay swallowed and just produce ok:false.
-      if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
-        throw e;
-      }
-      return { count: 0, ok: false, threads: [] };
     }
 
     // Map ALL inbox threads now so auto-reply can scan the full list later
