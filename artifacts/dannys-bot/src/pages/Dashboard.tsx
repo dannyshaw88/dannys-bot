@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.265",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow: pre-follow profile browsing, search and suggested-users injections now still run even while the follow action itself is suspended. A suspended follow no longer silently disables the human-behaviour browsing that should keep happening around it." },
+    ],
+  },
+  {
     version: "1.1.264",
     date: "30 Jun 2026",
     items: [

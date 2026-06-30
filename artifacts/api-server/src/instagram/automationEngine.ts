@@ -4100,15 +4100,6 @@ class AutomationEngine {
         }
       }
 
-      // Check if the follow action itself is currently suspended
-      if (this.isActionSuspended(state, "follow")) {
-        const rem = this.suspensionRemaining(state, "follow");
-        console.log(`[engine] @${profile.username}: follow suspended (${rem} remaining) — skipping session`);
-        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended ${rem} remaining`);
-        blocked++;
-        hitHardLimit = true; break;
-      }
-
       // Inject GetSuggestedUsers and/or searchUserByUsername before some follows.
       // RULE: searchUserByUsername must NEVER fire immediately before getSuggestedUsers —
       // that is not a real app flow (you cannot reach suggested users from the search bar).
@@ -4163,6 +4154,18 @@ class AutomationEngine {
             continue;
           }
         }
+      }
+
+      // Check if the follow action itself is currently suspended.
+      // Moved here (right before followUser) instead of before the browse-injection block above,
+      // so pre-follow browse/search/suggested injections still run even while follow is suspended —
+      // a suspended follow tool should not also silently disable its human-behaviour injections.
+      if (this.isActionSuspended(state, "follow")) {
+        const rem = this.suspensionRemaining(state, "follow");
+        console.log(`[engine] @${profile.username}: follow suspended (${rem} remaining) — skipping session`);
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended ${rem} remaining`);
+        blocked++;
+        hitHardLimit = true; break;
       }
 
       // Follow
