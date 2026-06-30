@@ -19,6 +19,7 @@ type Tab = "api-log" | "whats-new";
 const ERROR_ACTIONS = new Set([
   "verification_failed", "follow_blocked", "unfollow_blocked",
   "dm_blocked", "contact_dm_blocked", "logged_out",
+  "follow_suspension", "like_suspension", "unfollow_suspension", "dm_suspension", "contact_suspension", "action_suspended",
 ]);
 
 const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string | React.ReactNode }> = {
@@ -29,6 +30,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
   follow:                  { label: "Follow",          cls: "text-sky-700",       icon: "+" },
   follow_blocked:          { label: "Blocked",         cls: "text-rose-700",      icon: "⊘" },
+  follow_suspension:       { label: "Follow",          cls: "text-rose-700",      icon: "⊘" },
   follow_abandoned:        { label: "Abandoned",       cls: "text-amber-600",     icon: "↩" },
   follow_skipped:          { label: "Skipped",         cls: "text-orange-700",    icon: "⇥" },
   dedup_skip:              { label: "Skipped",         cls: "text-amber-700",     icon: "⇥" },
@@ -41,6 +43,11 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   abd_dismissed:           { label: "ABD Cleared",     cls: "text-teal-700",      icon: "✓" },
   no_sources:              { label: "No Sources",      cls: "text-slate-600",     icon: "⚠" },
   logged_out:              { label: "Logged Out",      cls: "text-red-700",       icon: "⚠" },
+  action_suspended:        { label: "Suspended",       cls: "text-amber-700",     icon: "⏸" },
+  like_suspension:         { label: "Like",            cls: "text-rose-700",      icon: "⊘" },
+  unfollow_suspension:     { label: "Unfollow",        cls: "text-pink-700",      icon: "⊘" },
+  dm_suspension:           { label: "DM",              cls: "text-fuchsia-700",   icon: "⊘" },
+  contact_suspension:      { label: "Contact",         cls: "text-indigo-700",    icon: "⊘" },
   account_imported:        { label: "EQX Import",      cls: "text-blue-700",      icon: "↓" },
   account_exported:        { label: "EQX Export",      cls: "text-cyan-700",      icon: "↑" },
   view_timeline_feed:      { label: "Timeline Feed",   cls: "text-teal-700",      icon: "≡" },
@@ -70,6 +77,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.1.260",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Activity log: when Instagram blocks a follow and a suspension is applied, only ONE entry now appears — showing the ACTION column as 'Follow ⊘' with the full 'Follow blocked by Instagram — suspension applied. Suspended until [time] UTC' detail. Previously a redundant 'Blocked ⊘' entry also appeared alongside the 'ACTION SUSPENDED' entry." },
+      { category: "Fix", text: "Activity log: the 'Blocked ⊘' entry with 'We're sorry, but something went wrong. Please try again.' is no longer logged for legit Instagram follow blocks — those are now fully covered by the suspension entry." },
+      { category: "Improved", text: "Activity log: suspension entries for follow, like, unfollow, DM, and contact tools now show the actual action name in the ACTION column (e.g. 'Follow ⊘', 'Like ⊘', 'Unfollow ⊘') instead of the generic 'ACTION SUSPENDED' label. 'Suspended ⏸' entries remain for the 'tool is still paused' start-of-session gate messages." },
+    ],
+  },
   {
     version: "1.1.259",
     date: "30 Jun 2026",
