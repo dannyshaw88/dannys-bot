@@ -1605,6 +1605,7 @@ export class InstagramWebClient {
     });
     if (!res.json) console.log(`[webClient] ebGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     this._logTransport(path, "GET", Date.now() - _t0, res.status >= 400);
+    this._absorbResponseHeaders(res.responseHeaders);
     return res.json;
   }
 
@@ -3405,6 +3406,7 @@ export class InstagramWebClient {
           proxyUrl: this.proxyUrl,
         });
         console.log(`[webClient] get_by_participants(${qs.slice(0, 30)}) HTTP ${res.status}:`, res.rawBody.slice(0, 400));
+        this._absorbResponseHeaders(res.responseHeaders);
         const j = res.json;
         const tid = j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
         if (tid) {
@@ -3428,6 +3430,7 @@ export class InstagramWebClient {
         proxyUrl: this.proxyUrl,
       });
       console.log(`[webClient] inbox HTTP ${res.status} raw(500):`, res.rawBody.slice(0, 500));
+      this._absorbResponseHeaders(res.responseHeaders);
       const j = res.json;
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       console.log(`[webClient] inbox: ${threads.length} threads, top-level keys: ${Object.keys(j ?? {}).join(",")}`);
@@ -3600,6 +3603,7 @@ export class InstagramWebClient {
     const newCsrf = extractCsrf(res.cookies);
     if (newCsrf) this.mobileCsrf = newCsrf;
     if (!res.json) console.log(`[webClient] _mobileDmPost ${path} HTTP ${res.status}:`, res.rawBody.slice(0, 300));
+    this._absorbResponseHeaders(res.responseHeaders);
     return res.json;
   }
 
@@ -3656,6 +3660,7 @@ export class InstagramWebClient {
     const safeCookies = res.cookies.filter(c => !c.startsWith("csrftoken="));
     this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
     if (!res.json) console.log(`[webClient] ebPost ${path} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
+    this._absorbResponseHeaders(res.responseHeaders);
     return res.json;
   }
 

@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.252",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Session claim token is now absorbed from every API call type — DMs, inbox lookups, thread lookups, and photo configure calls all update the token, not just follow/browse calls." },
+    ],
+  },
+  {
     version: "1.1.251",
     date: "29 Jun 2026",
     items: [
