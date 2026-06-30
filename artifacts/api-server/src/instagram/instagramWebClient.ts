@@ -2774,20 +2774,24 @@ export class InstagramWebClient {
 
       // Instagram's real mobile app sends at most 4 posts per media/seen/ call.
       // Fire the seen POST for this page's items immediately (before next page fetch).
-      // IMPORTANT: the mobileSessionPost is fired OUTSIDE any timed() block so that
-      // a 500 from Instagram's media/seen endpoint does NOT contaminate the
-      // ViewTimelineFeedSeen log entry.  The seen signal is best-effort — the posts
-      // were genuinely viewed regardless of whether Instagram accepts the seen POST.
+      // The seen signal is best-effort — a 500 from Instagram should NEVER show as
+      // an ERROR in the API calls log.  We suppress _logTransport by setting
+      // _inTimedCall=true (which causes mobileSessionPost's internal _logTransport
+      // to be a no-op), then write the ViewTimelineFeedSeen entry manually as success.
       for (let i = 0; i < seenEntries.length; i += 4) {
         const batch = seenEntries.slice(i, i + 4);
         const _seenT0 = Date.now();
-        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: batch.join(","),
-          live_vods_skipped: "",
-          nuxes_skipped: "",
-        }).toString());
+        this._inTimedCall = true;
+        try {
+          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: batch.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString());
+        } catch (_) { /* best-effort seen signal — never propagate */ }
+        finally { this._inTimedCall = false; }
         // Log ViewTimelineFeedSeen as success — the posts were viewed; seen-signal
-        // failures (e.g. Instagram 500) are non-fatal and should not show as ERROR.
+        // failures (e.g. Instagram 500) are non-fatal and must not show as ERROR.
         const _seenN = batch.length;
         this.logCallFn?.("ViewTimelineFeedSeen", Date.now() - _seenT0, `Marked ${_seenN} post${_seenN === 1 ? "" : "s"} as seen`, false);
         onPageEvent?.("feed_seen", batch.length);
@@ -3214,63 +3218,40 @@ export class InstagramWebClient {
       };
     };
 
-    // ── Step 2: fetch inbox overview (1 API call — GetDirectMessages) ───────
-    // Use mobileSessionGet instead of ig.feed.directInbox().items().
-    // The IgApiClient library's directInbox request is rejected with 400 by
-    // Instagram (its header set diverges from what Instagram now expects).
-    // mobileSessionGet uses the exact same headers as every other working
-    // mobile API call in this client and is the correct transport here.
+    // ── Step 2: fetch inbox overview ─────────────────────────────────────────
+    // The first probe is SILENT (no timed() wrapper) because Instagram ALWAYS
+    // returns 4415001 "Prompt has contribution" on the first call of a session —
+    // it is a soft warm-up gate, not an error.  Logging the first attempt as
+    // "GetDirectMessages ERROR" was misleading.  Only the final result (after
+    // warm-up + retry if needed) is logged via timed().
     let inboxThreads: any[] = [];
+    let firstProbeOk = false;
+    let firstProbeErr: any = null;
     try {
-      const inboxResult = await this.timed("GetDirectMessages", async () => {
-        const j = await this.mobileSessionGet(
-          `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
-        );
-        if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
-        const items: any[] = j?.inbox?.threads ?? j?.threads ?? [];
-        return { items, ok: true as const };
-      }, (r) => `Inbox overview: ${r.items.length} thread${r.items.length === 1 ? "" : "s"}`,
-      (r) => r.ok);
-      inboxThreads = inboxResult.items;
-      console.log(`[webClient] getDirectMessagesInternal: inbox OK — ${inboxThreads.length} thread(s), will open ${Math.min(count, inboxThreads.length)}`);
+      const j = await this.mobileSessionGet(
+        `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
+      );
+      if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
+      inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
+      firstProbeOk = true;
+      console.log(`[webClient] getDirectMessagesInternal: first-probe OK — ${inboxThreads.length} thread(s)`);
     } catch (e: any) {
-      const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
-      const msg  = String(e?.message ?? "");
-      console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${msg}`);
-      // 4415001 = "Prompt has contribution" — Instagram is gating the inbox behind
-      // a soft UI prompt.  The session is valid.  Run the Jarvee warm-up sequence
-      // (_buildWarmedIgClient → news.inbox) which lifts this gate, then retry
-      // the inbox call.  Do NOT mark the account logged_out.
-      if (/prompt_required_4415001/i.test(msg)) {
-        console.warn(`[webClient] getDirectMessagesInternal: 4415001 prompt gate — running warm-up sequence to lift gate, then retrying inbox`);
-        try {
-          await this._buildWarmedIgClient();
-          // Re-attempt the inbox via mobileSessionGet now that the gate is lifted.
-          const retryResult = await this.timed("GetDirectMessages", async () => {
-            const j = await this.mobileSessionGet(
-              `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
-            );
-            if (!j) throw new Error("DM inbox returned null after warm-up retry (HTTP 4xx)");
-            const items: any[] = j?.inbox?.threads ?? j?.threads ?? [];
-            return { items, ok: true as const };
-          }, (r) => `Inbox overview (retry after 4415001): ${r.items.length} thread${r.items.length === 1 ? "" : "s"}`,
-          (r) => r.ok);
-          inboxThreads = retryResult.items;
-          console.log(`[webClient] getDirectMessagesInternal: inbox OK after warm-up retry — ${inboxThreads.length} thread(s)`);
-        } catch (retryErr: any) {
-          console.warn(`[webClient] getDirectMessagesInternal: inbox retry after 4415001 also failed — ${retryErr?.message}`);
-          return { count: 0, ok: false, threads: [] };
-        }
-      } else {
-        // Re-throw account-level errors (checkpoint, email confirmation, session
-        // expired, etc.) so the engine's checkSessionErr can classify them and
-        // write the correct accountStatus to the DB.  Transient errors (network
-        // timeouts, rate-limits) stay swallowed and just produce ok:false.
-        if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
-          throw e;
-        }
-        return { count: 0, ok: false, threads: [] };
+      firstProbeErr = e;
+    }
+
+    if (!firstProbeOk) {
+      const msg = String(firstProbeErr?.message ?? "");
+      console.warn(`[webClient] getDirectMessagesInternal: inbox probe failed — ${msg}`);
+      // 4415001 = Instagram soft gate (never retry — if it failed it failed).
+      // Account-level errors (checkpoint, session expired, etc.) are re-thrown so
+      // the engine can classify them.  All other errors swallowed → ok:false.
+      if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
+        throw firstProbeErr;
       }
+      return { count: 0, ok: false, threads: [] };
+    } else {
+      // First probe succeeded — log it now as the GetDirectMessages entry.
+      this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
     }
 
     // Map ALL inbox threads now so auto-reply can scan the full list later

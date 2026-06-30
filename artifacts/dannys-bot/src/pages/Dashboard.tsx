@@ -78,6 +78,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.262",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "MediaSeen: fixed 'Mark seen failed' error entries appearing in the API calls log. The seen signal is best-effort — Instagram's refusal (HTTP 500) is now completely silent and never shows as an error." },
+      { category: "Fix", text: "GetDirectMessages: fixed false 'ERROR: GetDirectMessages' entries. The first inbox probe is now silent — only the result that matters is logged, and a failed probe never shows as an error." },
+      { category: "Fix", text: "Suspension message: removed 'by Instagram' from block messages — now reads 'Follow blocked — suspension applied' instead of 'Follow blocked by Instagram — suspension applied'." },
+      { category: "Fix", text: "Clear Suspension Blocks: now actually wakes the follow runner immediately after clearing so the tool resumes straight away instead of waiting out the rest of its inter-session sleep." },
+      { category: "Improved", text: "Clear Suspension Blocks renamed from 'Clear All Suspension Blocks' in the Actions menu." },
+    ],
+  },
+  {
     version: "1.1.261",
     date: "30 Jun 2026",
     items: [

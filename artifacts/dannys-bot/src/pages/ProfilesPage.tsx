@@ -2259,7 +2259,7 @@ export function ProfilesPage() {
               </button>
               <button onClick={() => { setActionsOpen(false); handleClearAllSuspensions(); }} disabled={clearingSuspensions} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {clearingSuspensions ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                <span className="flex-1">Clear All Suspension Blocks{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ` (All)`}</span>
+                <span className="flex-1">Clear Suspension Blocks{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ` (All)`}</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-1 text-[7px] text-foreground">Ctrl+P</span>

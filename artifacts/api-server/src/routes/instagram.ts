@@ -1017,27 +1017,33 @@ export async function registerInstagramRoutes(
     let clearedProfiles = 0;
     let clearedTools = 0;
     for (const profileId of ids) {
-      // Clear in-memory action suspensions for every tool type.
+      // 1. Clear in-memory action suspensions for every tool type.
       for (const toolType of TOOL_TYPES) {
         automationEngine.clearSuspensions(profileId, toolType);
       }
-      // Clear the DB-persisted toolBlockedUntil from all tools for this profile.
+      // 2. Clear the DB-persisted toolBlockedUntil from ALL tools for this profile,
+      //    regardless of whether the field is currently set.  This guarantees the
+      //    runner reads a clean tool on its next iteration even if the in-memory
+      //    state was already empty.
       try {
         const profileTools = await storage.getToolsByProfile(profileId);
         for (const tool of profileTools) {
           const s = (tool.settings ?? {}) as Record<string, unknown>;
-          if (s.toolBlockedUntil !== undefined || s.blockCount !== undefined) {
-            const cleared = { ...s };
-            delete cleared.toolBlockedUntil;
-            delete cleared.blockCount;
-            await storage.updateTool(tool.id, { settings: cleared });
-            clearedTools++;
-          }
+          // Always write — even if the keys are absent — so we're certain the DB row
+          // is clean.  Avoids any key-name or type mismatch silently leaving a stale timer.
+          const cleared = { ...s };
+          delete cleared.toolBlockedUntil;
+          delete cleared.blockCount;
+          await storage.updateTool(tool.id, { settings: cleared });
+          clearedTools++;
         }
         clearedProfiles++;
       } catch (err) {
         req.log.error(`[clear-suspensions] profileId=${profileId} threw: ${err}`);
       }
+      // 3. Wake the follow runner from its inter-session sleep so the cleared state
+      //    takes effect immediately instead of waiting for the next scheduled session.
+      automationEngine.forceFollowNow(profileId);
     }
     req.log.info(`[clear-suspensions] cleared suspensions for ${clearedProfiles}/${ids.length} profiles, ${clearedTools} tool(s) updated`);
     res.json({ ok: true, clearedProfiles, clearedTools });

@@ -2045,7 +2045,7 @@ class AutomationEngine {
       console.warn(`[engine] @profile${profileId}: ${msg}`);
       this.logAction(profileId, toolId, suspensionAction, targetUsername, sourceValue, sourceType, "suspended", msg);
     } else {
-      const msg = `${displayName} blocked by Instagram — suspension applied. Suspended until ${untilStr}`;
+      const msg = `${displayName} blocked — suspension applied. Suspended until ${untilStr}`;
       console.warn(`[engine] @profile${profileId}: ${msg}`);
       this.logAction(profileId, toolId, suspensionAction, targetUsername, sourceValue, sourceType, "suspended", msg);
     }
