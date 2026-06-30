@@ -4217,10 +4217,12 @@ class AutomationEngine {
           hitHardLimit = true; break;
         }
 
-        // Explicit Instagram account-level block (feedback_required / "Please wait" / "something went wrong" / 404 on friendship.create)
-        // 404 on /friendships/create/ means Instagram has blocked the follow action for this account — treat it as a hard block.
+        // Explicit Instagram account-level block (feedback_required / "Please wait" / 404 on friendship.create).
+        // "api_error:" prefix = technical/transient rejection (bad signature, server hiccup, etc.) — NOT a real block,
+        // do NOT suspend. Only suspend on confirmed block signals or 404 on friendship.create endpoint.
         // For legit blocks, recordActionBlock logs the suspension entry — we do NOT also log a separate follow_blocked entry.
-        const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong") || reason.includes("friendship.create");
+        const isApiError = reason.startsWith("api_error:");
+        const isLegitBlock = !isApiError && (reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("friendship.create"));
         if (isLegitBlock) {
           const isFeedbackRequired = reason.includes("feedback_required");
           // Jarvee "Auto Verify Automatic Behaviour Detected": if the block is a soft
@@ -4428,9 +4430,10 @@ class AutomationEngine {
               state.client = null; hitHardLimit = true; break;
             }
             const isRescrapeABD = reason.includes("feedback_required");
+            // "api_error:" = technical/transient rejection — NOT a real block, do not suspend.
             // 404 on /friendships/create/ is a hard follow block — treat same as "Please wait" / action blocked.
             // For legit blocks, recordActionBlock logs "follow_suspension" — no separate follow_blocked entry.
-            if (reason.includes("Please wait") || isRescrapeABD || reason.includes("something went wrong") || reason.includes("friendship.create")) {
+            if (!reason.startsWith("api_error:") && (reason.includes("Please wait") || isRescrapeABD || reason.includes("friendship.create"))) {
               // Jarvee ABD dismiss — try to acknowledge soft "Automated Behavior" warnings
               if (isRescrapeABD && state.client) {
                 await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });

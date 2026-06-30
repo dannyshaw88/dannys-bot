@@ -78,6 +78,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.264",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow: fixed false suspension blocks. A generic 'something went wrong' response from Instagram (caused by a technical request issue, not a real action block) was being treated as a 24h action block. It now gets logged as a skipped follow and retried next session instead of locking the account out for 24h." },
+      { category: "Fix", text: "Follow: real action blocks (spam flagged, feedback required, Please wait) are still correctly detected and still apply the 24h suspension — only the false-positive technical rejections are excluded." },
+    ],
+  },
+  {
     version: "1.1.263",
     date: "30 Jun 2026",
     items: [

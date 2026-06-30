@@ -2050,9 +2050,22 @@ export class InstagramWebClient {
       if (/404|Not Found/i.test(msg)) {
         return { ok: false, status: "follow_blocked", reason: `Instagram returned 404 on friendship.create — ${msg}` };
       }
-      if (/spam/i.test(msg))                           return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
-      if (/feedback_required|ActionBlocked/i.test(msg)) return { ok: false, status: "follow_blocked", reason: msg };
+      // Check the actual response body for confirmed real block signals — not just the message string.
+      // spam:true or feedback_required:true in the body = real action block → suspension warranted.
+      // A bare "something went wrong" / "Please wait" without these body fields = technical rejection
+      // (bad signature, rejected API request, transient server error) — NOT a real block.
+      const bodySpam = body?.spam === true || /spam/i.test(msg);
+      const bodyFeedback = body?.feedback_required === true || /feedback_required|ActionBlocked/i.test(msg);
+      const bodyPleaseWait = body?.message && /please wait/i.test(String(body.message));
+      if (bodySpam)        return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
+      if (bodyFeedback)    return { ok: false, status: "follow_blocked", reason: msg };
+      if (bodyPleaseWait)  return { ok: false, status: "follow_blocked", reason: String(body.message) };
       if (/login_required|Not authorized|401/i.test(msg)) return { ok: false, status: "follow_blocked", reason: "session expired — re-verify account" };
+      // "something went wrong" without confirmed block signals = technical/transient rejection.
+      // Tag with api_error: prefix so the engine does NOT apply a 24h suspension.
+      if (/something went wrong|sorry/i.test(msg)) {
+        return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
+      }
       return { ok: false, status: "follow_blocked", reason: msg || "IgApiClient follow failed" };
     }
   }
