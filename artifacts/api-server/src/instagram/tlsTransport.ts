@@ -185,14 +185,24 @@ export async function tlsRequest(opts: {
 
   const client = await getClient();
 
-  // ── CycleTLS path (OkHttp4 JA3) ─────────────────────────────────────────────
-  if (client && !forceNodeTls) {
+  // ── CycleTLS path (OkHttp4 JA3) — REQUIRED for all non-account-creation calls ─
+  // Node.js TLS is only permitted when forceNodeTls=true (account creation, where
+  // no device fingerprint exists yet).  Any other path that reaches Node.js TLS
+  // exposes the OpenSSL JA3 fingerprint to Instagram — which is a clear bot signal.
+  if (!forceNodeTls) {
+    if (!client) {
+      throw new Error(
+        `[TLS-BLOCKED] CycleTLS failed to initialise — refusing to use Node.js TLS (exposes bot fingerprint). ` +
+        `Check that the CycleTLS Go binary is present and restart the server.`,
+      );
+    }
+
     const url = `https://${host}${path}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
     // CycleTLS takes User-Agent as a dedicated field — remove from header map.
     // Also strip Accept-Encoding and force "identity": CycleTLS does NOT
     // auto-decompress gzip responses, so we prevent Instagram from sending
-    // compressed bodies here.  The Node.js fallback path handles gzip itself.
+    // compressed bodies here.
     const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
     headersWithoutUA["Accept-Encoding"] = "identity";
 
@@ -213,9 +223,8 @@ export async function tlsRequest(opts: {
           // tunnel — they present their own cert instead of Instagram's.
           // CycleTLS's Go binary verifies certs strictly by default, so it
           // rejects the proxy cert and returns status=0 with an empty body.
-          // Node.js avoids this via NODE_TLS_REJECT_UNAUTHORIZED=0 in the
-          // fallback path.  Setting insecureSkipVerify here gives the Go
-          // binary the same leniency so it can route through MITM proxies.
+          // Setting insecureSkipVerify gives the Go binary the same leniency
+          // so it can route through MITM proxies.
           insecureSkipVerify: true,
         },
         method.toLowerCase(),
@@ -235,10 +244,6 @@ export async function tlsRequest(opts: {
       );
     }
 
-    // Status 0 = CycleTLS got no HTTP response (proxy blocked the Go subprocess,
-    // CONNECT tunnel rejected, or connection refused).  Fall through to the
-    // Node.js HTTPS fallback so the request still has a chance of succeeding.
-    //
     // NOTE: CycleTLS v2.x stores the response body in `.data`, NOT `.body`.
     // `.data` is an already-parsed JSON object (or a raw string) when the
     // request succeeds, or the Go error message string when status === 0.
@@ -257,33 +262,24 @@ export async function tlsRequest(opts: {
       return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
     }
 
-    // Log the error the Go subprocess returned.  In CycleTLS v2.x the error
-    // message (e.g. "proxyconnect tcp: EOF", "x509: certificate signed by
-    // unknown authority") lives in resp.data (not resp.body which no longer exists).
+    // Status 0 = CycleTLS got no HTTP response (proxy blocked the Go subprocess,
+    // CONNECT tunnel rejected, or connection refused).
+    // Do NOT fall back to Node.js TLS — that would expose the OpenSSL fingerprint.
     const cycleTlsErr = resp.data != null
       ? (typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data))
       : "";
-    console.warn(
-      `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path}` +
-      ` elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)}` +
-      ` err=${cycleTlsErr.slice(0, 300) || "(empty)"}` +
-      ` — retrying via Node.js HTTPS`,
+    throw new Error(
+      `[TLS-BLOCKED] CycleTLS returned status 0 for ${method} ${host}${path}` +
+      ` (proxy blocked Go subprocess — check proxy settings).` +
+      ` err=${cycleTlsErr.slice(0, 200) || "(empty)"}`,
     );
   }
 
-  // ── Node.js TLS fallback ──────────────────────────────────────────────────
-  // Reached when: (a) CycleTLS never initialised, (b) CycleTLS returned
-  // status 0 (proxy blocked the Go subprocess connection), or (c) the caller
-  // passed forceNodeTls=true to bypass CycleTLS entirely (e.g. account creation
-  // where there is no stored device fingerprint and the OkHttp4 JA3 fingerprint
-  // is not required).
-  if (forceNodeTls) {
-    console.log(`[tls:req] forceNodeTls — using Node.js TLS for ${method} ${host}${path}`);
-  } else if (client) {
-    console.warn(`[tls:req] CycleTLS→Node.js fallback for ${method} ${host}${path}`);
-  } else {
-    console.warn(`[tls:req] CycleTLS unavailable — using Node.js TLS for ${method} ${host}${path}`);
-  }
+  // ── Node.js TLS — forceNodeTls=true ONLY (account creation) ─────────────────
+  // This path is intentionally reached only when forceNodeTls=true.  Account
+  // creation has no stored device fingerprint so the OkHttp4 JA3 fingerprint
+  // is not required (and would be inconsistent with the Chrome User-Agent).
+  console.log(`[tls:req] forceNodeTls — using Node.js TLS for ${method} ${host}${path}`);
   const { HttpsProxyAgent } = await import("https-proxy-agent");
   const https = await import("node:https");
   const zlib = await import("node:zlib");
@@ -372,13 +368,14 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
   if (!proxyUrl) return;
 
   const _reqObj = ig.request as any;
-  const _origFTR = _reqObj.faultTolerantRequest.bind(_reqObj);
 
   _reqObj.faultTolerantRequest = async function (options: any) {
     const client = await getClient();
     if (!client) {
-      // CycleTLS unavailable — delegate to original (Node.js TLS) transport
-      return _origFTR(options);
+      throw new IgNetworkError(new Error(
+        "[TLS-BLOCKED] CycleTLS failed to initialise — refusing to use Node.js TLS (exposes bot fingerprint). " +
+        "Check that the CycleTLS Go binary is present and restart the server.",
+      ));
     }
 
     // ── Resolve full URL ──────────────────────────────────────────────────────

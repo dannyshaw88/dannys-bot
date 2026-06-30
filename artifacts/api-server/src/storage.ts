@@ -73,7 +73,7 @@ export interface IStorage {
   getApiEndpointCounts(profileId: number, todayPrefix: string): Promise<{ operationName: string; todayCount: number; totalCount: number }[]>;
   getLastValidApiCallByProfile(): Promise<Record<number, string>>;
   getVerifyOpsByProfile(): Promise<Record<number, string[]>>;
-  createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean }): Promise<any>;
+  createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean; transport?: string }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
 
   // Pre-Status-Change Hit Tracking
@@ -592,7 +592,7 @@ export class DatabaseStorage implements IStorage {
 
   private _apiCallInsertCount = 0;
 
-  async createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean }): Promise<any> {
+  async createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean; transport?: string }): Promise<any> {
     // All callers are fire-and-forget (no await). Any unhandled rejection from this
     // function terminates the Node.js process on v15+. Wrap everything so it never rejects.
     try {
@@ -607,6 +607,7 @@ export class DatabaseStorage implements IStorage {
         ipAddress: call.ipAddress ?? "",
         durationMs: call.durationMs ?? 0,
         isError: call.isError ?? false,
+        transport: call.transport ?? "ja3",
       }).returning();
 
       // Prune to keep the 1,000 most recent rows PER profile — checked every 50 inserts.

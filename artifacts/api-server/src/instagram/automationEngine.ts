@@ -1872,6 +1872,7 @@ class AutomationEngine {
           source: state.client!.apiCallSource,
           durationMs,
           isError: isError ?? false,
+          transport: "ja3",
         }).catch(() => {});
       });
     }

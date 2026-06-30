@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.253",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "All Instagram API calls now use the OkHttp4 JA3 fingerprint (Android TLS) including verify and bootstrap — the Node.js TLS fallback has been removed entirely so the bot signal can never slip through." },
+      { category: "Improvement", text: "Export API Calls CSV now includes a Transport column showing JA3 (OkHttp4) for every call, confirming the fingerprint was active." },
+    ],
+  },
+  {
     version: "1.1.252",
     date: "30 Jun 2026",
     items: [

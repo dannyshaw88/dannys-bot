@@ -2912,7 +2912,7 @@ export async function registerInstagramRoutes(
 
       const headers = [
         "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
-        "Message", "Source", "IpAddress", "Duration(miliseconds)"
+        "Message", "Source", "IpAddress", "Duration(miliseconds)", "Transport"
       ];
 
       // "Operation Name" is the tool that made the call.  "API Call" is the raw endpoint.
@@ -2998,6 +2998,7 @@ export async function registerInstagramRoutes(
           resolveSource(call.source ?? ""),
           ipPort,
           String(call.durationMs ?? ""),
+          (call.transport ?? "ja3") === "ja3" ? "JA3 (OkHttp4)" : "Node.js TLS",
         ].map(esc).join(",");
       });
 

@@ -408,6 +408,9 @@ if (!igApiCallsColNames.has("username")) {
 if (!igApiCallsColNames.has("is_error")) {
   sqlite.exec(`ALTER TABLE instagram_api_calls ADD COLUMN is_error INTEGER DEFAULT 0;`);
 }
+if (!igApiCallsColNames.has("transport")) {
+  sqlite.exec(`ALTER TABLE instagram_api_calls ADD COLUMN transport TEXT DEFAULT 'ja3';`);
+}
 
 // Pre-status-change hit tracker — records the last API endpoint called before each status change.
 // Linked by both profile_id and username so data survives EQX export/import cycles.

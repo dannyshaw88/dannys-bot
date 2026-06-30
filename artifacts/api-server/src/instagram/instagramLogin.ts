@@ -6,6 +6,7 @@ import { instagramApiCalls } from "../shared/schema";
 import type { Profile } from "../shared/schema";
 import { storage } from "../storage";
 import { MOBILE_VERSION, MOBILE_VERSION_CODE } from "./instagramWebClient";
+import { patchIgClientTls } from "./tlsTransport.js";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string; igApiCookies?: string }
@@ -148,6 +149,7 @@ async function logApiCall(
       navChain,
       ipAddress,
       durationMs,
+      transport: "ja3",
     });
   } catch { /* never crash on logging failure */ }
 }
@@ -615,6 +617,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   }
 
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
+  patchIgClientTls(ig, proxyUrl);
 
   // ── ig_did (Instagram Device ID) cookie ──────────────────────────────────
   // The real Instagram app receives ig_did via Set-Cookie from Instagram's

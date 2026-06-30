@@ -180,6 +180,7 @@ export const instagramApiCalls = sqliteTable("instagram_api_calls", {
   ipAddress: text("ip_address").default(""),
   durationMs: integer("duration_ms").default(0),
   isError: integer("is_error", { mode: "boolean" }).default(false),
+  transport: text("transport").default("ja3"),
 });
 
 export const logsRelations = relations(logs, ({ one }) => ({
