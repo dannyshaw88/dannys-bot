@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.250",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "HS column toggle on the account manager page now correctly starts and stops the Human Session runner — it was only toggling a sub-setting but not the engine's master gate, so the switch appeared to move but had no effect." },
+      { category: "Fix", text: "Instagram's session claim token (X-IG-WWW-Claim) is now updated after every API call — Instagram sends a fresh token in each response and the real app echoes it back on the next request as a continuity signal. Sending a stale value was a detectable bot pattern." },
+    ],
+  },
+  {
     version: "1.1.249",
     date: "29 Jun 2026",
     items: [

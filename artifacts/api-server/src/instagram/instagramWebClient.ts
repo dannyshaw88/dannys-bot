@@ -1680,6 +1680,34 @@ export class InstagramWebClient {
     return headers;
   }
 
+  // After each mobileSessionPost/Get, Instagram may send back a fresh
+  // X-IG-WWW-Claim token in the ig-set-www-claim response header and a new
+  // Bearer token in ig-set-authorization.  The real Android app echoes the
+  // latest claim on every subsequent request — sending a stale value is a bot
+  // signal.  This method absorbs both tokens into this.igDeviceState in memory
+  // so the next _buildMobileHeaders() call sends the current values.
+  private _absorbResponseHeaders(responseHeaders: Record<string, string | string[] | undefined>): void {
+    const raw = (key: string): string | undefined => {
+      const v = responseHeaders[key] ?? responseHeaders[key.toLowerCase()];
+      return Array.isArray(v) ? v[0] : v;
+    };
+    const newClaim = raw("ig-set-www-claim");
+    const newAuth  = raw("ig-set-authorization");
+    if (!newClaim && !newAuth) return;
+    // Parse stored device state (or start fresh), merge updated fields, re-serialize.
+    let ds: Record<string, unknown> = {};
+    if (this.igDeviceState) {
+      try { ds = JSON.parse(this.igDeviceState) as Record<string, unknown>; } catch { /* keep empty */ }
+    }
+    if (newClaim && newClaim !== "0") {
+      ds.igWWWClaim = newClaim;
+    }
+    if (newAuth) {
+      ds.authorization = newAuth;
+    }
+    this.igDeviceState = JSON.stringify(ds);
+  }
+
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
@@ -1717,6 +1745,7 @@ export class InstagramWebClient {
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
+    this._absorbResponseHeaders(res.responseHeaders);
     if (res.status >= 400) {
       // Extract the message Instagram sent (may be empty for plain session-expired 400s).
       // Fall back to "login_required" so getAccountLevelStatus() classifies it as
@@ -3801,7 +3830,8 @@ export class InstagramWebClient {
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
-      // Always log non-200 responses; log body snippet for debugging
+    this._absorbResponseHeaders(res.responseHeaders);
+    // Always log non-200 responses; log body snippet for debugging
     if (res.status >= 400) {
       console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
       // Only mark the session as invalid for genuine auth failures — a 401, or a 4xx

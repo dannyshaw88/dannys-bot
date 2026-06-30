@@ -779,7 +779,10 @@ export async function registerInstagramRoutes(
     const tool = rows.find(t => t.type === "human_sessions");
     if (!tool) { res.status(404).json({ error: "human_sessions tool not found" }); return; }
     const newSettings = { ...(tool.settings as Record<string, unknown> ?? {}), humanSessionEnabled: enabled };
-    const updated = await storage.updateTool(tool.id, { settings: newSettings });
+    // Update BOTH tool.enabled (the reconcile gate) and settings.humanSessionEnabled
+    // (the per-action gate inside the HS loop). Without setting tool.enabled the
+    // automation engine's reconcile never starts/stops the runner.
+    const updated = await storage.updateTool(tool.id, { enabled, settings: newSettings });
     if (enabled) automationEngine.triggerHumanSession(profileId);
     res.json({ ok: true, settings: updated.settings });
   });
