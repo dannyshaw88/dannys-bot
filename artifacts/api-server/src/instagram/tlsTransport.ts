@@ -428,12 +428,19 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
     const method = (options.method ?? "GET").toUpperCase();
     let body = "";
     if (method !== "GET" && options.form && typeof options.form === "object") {
-      const params = new URLSearchParams(
-        Object.entries(options.form as Record<string, any>)
-          .filter(([, v]) => v != null)
-          .map(([k, v]) => [k, String(v)]),
-      );
-      body = params.toString();
+      // IMPORTANT: use raw string concatenation — do NOT use URLSearchParams here.
+      // Instagram's mobile API uses signed_body=<hmac>.<raw-JSON> format.  The
+      // server splits on the first '.' to extract the HMAC and the JSON payload,
+      // then re-computes the HMAC over the raw JSON to verify the signature.
+      // URLSearchParams would %-encode the JSON value (e.g. { → %7B), so Instagram
+      // would see URL-encoded garbage instead of JSON, the HMAC comparison would
+      // fail, and Instagram would return HTTP 200 "We're sorry, but something went
+      // wrong. Please try again." — exactly the error we were seeing on every
+      // friendship.create, media.like, and currentUser() call through IgApiClient.
+      body = Object.entries(options.form as Record<string, any>)
+        .filter(([, v]) => v != null)
+        .map(([k, v]) => `${k}=${String(v)}`)
+        .join("&");
       headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8";
       headers["Content-Length"] = String(Buffer.byteLength(body));
     } else if (options.body) {

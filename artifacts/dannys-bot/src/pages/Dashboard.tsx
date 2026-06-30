@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.258",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow, like, and warm-up calls no longer return 'We're sorry, but something went wrong.' The root cause was that signed request bodies were being URL-encoded before sending, which corrupted Instagram's HMAC signature check. All mobile API calls through the automation engine now send the correct unencoded format." },
+    ],
+  },
+  {
     version: "1.1.257",
     date: "30 Jun 2026",
     items: [
