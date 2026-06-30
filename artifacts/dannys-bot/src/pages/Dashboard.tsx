@@ -78,6 +78,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.261",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "DM check: fixed accounts constantly hitting the 4415001 'Prompt has contribution' gate. The warm-up sequence now uses the same reliable transport path as all other session calls, so the gate is lifted correctly and DM inbox reads succeed." },
+      { category: "Fix", text: "ViewTimelineFeedSeen: fixed the entry always showing as ERROR even when posts were genuinely viewed. The 'mark as seen' signal to Instagram is best-effort — a refusal from Instagram's server no longer contaminates the view count log entry." },
+      { category: "Fix", text: "AccountsCurrentUser: removed confusing 'Session verify failed' entries from the API calls log. These were internal CSRF token housekeeping calls that had nothing to do with verifying accounts, and were incorrectly surfaced as user-facing errors." },
+    ],
+  },
+  {
     version: "1.1.260",
     date: "30 Jun 2026",
     items: [

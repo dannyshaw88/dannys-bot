@@ -2198,23 +2198,38 @@ export class InstagramWebClient {
     // treat the warm-up as succeeded — we're connected, inbox just errored.
     // Only when BOTH calls fail at the network level do we return null (broken
     // proxy) so the warm-up is NOT cached and the next sendDM attempt retries it.
+    // ── Phase 2: Authenticated warm-up via mobileSessionGet ─────────────────
+    // Previously this called ig.news.inbox() through patchIgClientTls, but the
+    // CycleTLS Go subprocess returns status 0 (no response) for authenticated
+    // IgApiClient calls through certain proxies — while mobileSessionGet (which
+    // uses igReq → tlsRequest directly) works fine for the same proxy.
+    // Using mobileSessionGet here avoids the CycleTLS/IgApiClient proxy
+    // compatibility gap while still firing the same news/inbox endpoint.
     let warmupOk = false;
     try {
-      await this.timed("NotificationsBadge", async () => { await ig.news.inbox(); return true; }, "Cold-start warm-up");
+      await this.timed("NotificationsBadge", async () => {
+        const j = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
+        // mobileSessionGet returns null only on connection failure (not on 4xx body errors).
+        // Any non-null response means Instagram replied — gate is lifted regardless of body status.
+        if (j === null) throw new Error("news/inbox: connection failed (null response)");
+        return true;
+      }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
       warmupOk = true;
     } catch (e: any) {
-      // status 0 = network-level failure (proxy down / connection reset).
-      // Any non-zero status means Instagram responded — warm-up is good enough.
-      const isNetworkErr = !e?.response || ((e?.response?.statusCode ?? 0) === 0);
+      // mobileSessionGet throws only on network-level failures (no HTTP response).
+      // Instagram-level errors (4xx body) return null from mobileSessionGet, not a throw —
+      // the null check above converts them to a throw with "connection failed" message.
+      const isNetworkErr = e?.message?.includes("connection failed") || !e?.response || ((e?.response?.statusCode ?? 0) === 0);
       if (isNetworkErr) {
-        console.warn(`[webClient] _buildWarmedIgClient: news/inbox network-error (status 0) — trying currentUser() fallback: ${e?.message}`);
-        try {
-          await ig.account.currentUser();
+        console.warn(`[webClient] _buildWarmedIgClient: news/inbox network-error — trying currentUser() fallback`);
+        // Fallback: try current_user via mobileSessionGet (same reliable path)
+        const cuJ = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
+        if (cuJ !== null) {
           console.log("[webClient] _buildWarmedIgClient: Phase 2 — fallback currentUser() OK");
           warmupOk = true;
-        } catch (e2: any) {
-          console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback also failed: ${e2?.message}`);
+        } else {
+          console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback also failed (null response)`);
         }
       } else {
         // Instagram returned an error body (4xx) — we're connected, treat as warm.
@@ -2759,16 +2774,22 @@ export class InstagramWebClient {
 
       // Instagram's real mobile app sends at most 4 posts per media/seen/ call.
       // Fire the seen POST for this page's items immediately (before next page fetch).
+      // IMPORTANT: the mobileSessionPost is fired OUTSIDE any timed() block so that
+      // a 500 from Instagram's media/seen endpoint does NOT contaminate the
+      // ViewTimelineFeedSeen log entry.  The seen signal is best-effort — the posts
+      // were genuinely viewed regardless of whether Instagram accepts the seen POST.
       for (let i = 0; i < seenEntries.length; i += 4) {
         const batch = seenEntries.slice(i, i + 4);
-        await this.timed("ViewTimelineFeedSeen", async () => {
-          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-            reels: batch.join(","),
-            live_vods_skipped: "",
-            nuxes_skipped: "",
-          }).toString());
-          return batch.length;
-        }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
+        const _seenT0 = Date.now();
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: batch.join(","),
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString());
+        // Log ViewTimelineFeedSeen as success — the posts were viewed; seen-signal
+        // failures (e.g. Instagram 500) are non-fatal and should not show as ERROR.
+        const _seenN = batch.length;
+        this.logCallFn?.("ViewTimelineFeedSeen", Date.now() - _seenT0, `Marked ${_seenN} post${_seenN === 1 ? "" : "s"} as seen`, false);
         onPageEvent?.("feed_seen", batch.length);
       }
 
@@ -3890,23 +3911,19 @@ export class InstagramWebClient {
 
     // ── Strategy 2: current_user ──────────────────────────────────────────────
     // Authenticated endpoint — sometimes echoes csrftoken when session is fresh.
+    // NOT logged to the API calls log — this is internal CSRF housekeeping, not
+    // a user-facing account operation.  Logging it as "AccountsCurrentUser ERROR"
+    // was confusing and showed "Session verify failed" for a call the user never
+    // requested and that has nothing to do with session validity.
     try {
-      const _cu_t0 = Date.now();
-      let res!: any;
-      try {
-        res = await igReq({
-          host: "i.instagram.com",
-          path: "/api/v1/accounts/current_user/?edit=true",
-          method: "GET",
-          headers: this._buildMobileHeaders(this.mobileCsrf || "missing"),
-          cookieJar: this.mobileCookieJar,
-          proxyUrl: this.proxyUrl,
-        });
-        this._logTransport(`/api/v1/accounts/current_user/`, "GET", Date.now() - _cu_t0, res.status >= 400);
-      } catch (e) {
-        this._logTransport(`/api/v1/accounts/current_user/`, "GET", Date.now() - _cu_t0, true);
-        throw e;
-      }
+      const res = await igReq({
+        host: "i.instagram.com",
+        path: "/api/v1/accounts/current_user/?edit=true",
+        method: "GET",
+        headers: this._buildMobileHeaders(this.mobileCsrf || "missing"),
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+      });
       if (res.cookies.length) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       }
