@@ -200,11 +200,12 @@ export async function tlsRequest(opts: {
     const url = `https://${host}${path}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
     // CycleTLS takes User-Agent as a dedicated field — remove from header map.
-    // Also strip Accept-Encoding and force "identity": CycleTLS does NOT
-    // auto-decompress gzip responses, so we prevent Instagram from sending
-    // compressed bodies here.
+    // Accept-Encoding is intentionally NOT set here: Go's fhttp transport adds
+    // "Accept-Encoding: gzip" to the wire automatically and transparently
+    // decompresses the response before returning resp.data, so the body is
+    // always clean JSON. Explicitly setting "identity" was a visible bot signal
+    // on every single API call — real OkHttp4 always advertises gzip.
     const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
-    headersWithoutUA["Accept-Encoding"] = "identity";
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };
@@ -439,15 +440,14 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
       body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
     }
 
-    // CycleTLS takes User-Agent as a dedicated field.
-    // Also strip Accept-Encoding and force "identity": CycleTLS does NOT
-    // auto-decompress gzip responses — if Instagram returns a compressed body
-    // the raw gzip bytes land in resp.data and JSON.parse fails with
-    // "200 undefined".  The Node.js fallback path decompresses explicitly
-    // (lines ~292-297), so this override is only needed here.
+    // CycleTLS takes User-Agent as a dedicated field — remove from header map.
+    // Accept-Encoding is intentionally NOT set: Go's fhttp transport adds
+    // "Accept-Encoding: gzip" to the wire automatically and transparently
+    // decompresses the response before returning resp.data, so the body is
+    // always clean JSON. Explicitly setting "identity" was a visible bot signal
+    // on every single API call — real OkHttp4 always advertises gzip.
     const userAgent = headers["User-Agent"] ?? "";
     const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = headers;
-    headersWithoutUA["Accept-Encoding"] = "identity";
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };

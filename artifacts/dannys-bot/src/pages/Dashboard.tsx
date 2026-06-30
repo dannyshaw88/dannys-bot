@@ -71,6 +71,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.254",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Every API call now sends Accept-Encoding: gzip on the wire instead of identity — matching a real Android phone and removing a bot signal that was present on every single request." },
+      { category: "Fix", text: "Pigeon session ID is now stable for the lifetime of an account session instead of generating a new random value on every call — real Instagram apps keep this fixed per app launch." },
+      { category: "Improvement", text: "Locale headers (App, Device, Mapped) now match the proxy's exit country automatically — a German proxy sends de_DE, a French proxy sends fr_FR, and so on, removing the IP/locale mismatch signal." },
+    ],
+  },
+  {
     version: "1.1.253",
     date: "30 Jun 2026",
     items: [

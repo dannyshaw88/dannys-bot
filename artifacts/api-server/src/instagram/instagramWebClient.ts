@@ -89,26 +89,111 @@ import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls } from "./tls
 // doesn't pay the ~300 ms startup cost.
 warmupTls();
 
-// ── Proxy IP timezone lookup ──────────────────────────────────────────────────
-// Queries ip-api.com (free, no key required) for the UTC offset (in seconds)
-// of the proxy's IP so X-IG-Timezone-Offset matches the IP's region.
-// Instagram cross-checks this against the connecting IP — a mismatch (e.g.
-// "UTC+0" header from a US IP) is a bot signal.  Times out in 5 s and falls
-// back to -18000 (UTC-5, US Eastern) on any error so signup is never blocked.
-async function lookupTimezoneOffset(proxyHost: string): Promise<number> {
+// ── Proxy IP geo lookup ───────────────────────────────────────────────────────
+// Queries ip-api.com for the UTC offset AND country code of the proxy's exit
+// IP. Both are needed so X-IG-Timezone-Offset and X-IG-App-Locale match the
+// connecting IP's region. Instagram cross-checks both against the IP — a
+// mismatch (e.g. "UTC+0 / en_US" from a German IP) is a bot signal.
+// Times out in 5 s and falls back to sensible defaults on any error.
+
+// Maps an ISO-3166-1 alpha-2 country code to the Instagram/CLDR locale string
+// that matches the dominant language spoken there.
+function countryToLocale(cc: string): string {
+  const map: Record<string, string> = {
+    // English-speaking
+    US: "en_US", GB: "en_GB", AU: "en_AU", CA: "en_CA", NZ: "en_NZ",
+    IE: "en_IE", ZA: "en_ZA", IN: "en_IN", SG: "en_SG", NG: "en_NG",
+    PH: "en_PH", KE: "en_KE", GH: "en_GH", PK: "en_PK",
+    // German
+    DE: "de_DE", AT: "de_AT", CH: "de_CH",
+    // French
+    FR: "fr_FR", BE: "fr_BE", LU: "fr_LU", SN: "fr_SN", CI: "fr_CI",
+    // Spanish
+    ES: "es_ES", MX: "es_MX", AR: "es_AR", CO: "es_CO", CL: "es_CL",
+    PE: "es_PE", VE: "es_VE", EC: "es_EC", GT: "es_GT", CU: "es_CU",
+    BO: "es_BO", DO: "es_DO", HN: "es_HN", PY: "es_PY", SV: "es_SV",
+    UY: "es_UY", CR: "es_CR", PA: "es_PA", NI: "es_NI",
+    // Portuguese
+    BR: "pt_BR", PT: "pt_PT", AO: "pt_AO", MZ: "pt_MZ",
+    // Italian
+    IT: "it_IT",
+    // Dutch
+    NL: "nl_NL",
+    // Russian
+    RU: "ru_RU", BY: "ru_BY", KZ: "ru_KZ",
+    // Japanese
+    JP: "ja_JP",
+    // Korean
+    KR: "ko_KR",
+    // Chinese
+    CN: "zh_CN", TW: "zh_TW", HK: "zh_HK", MO: "zh_MO",
+    // Arabic
+    SA: "ar_SA", AE: "ar_AE", EG: "ar_EG", IQ: "ar_IQ", JO: "ar_JO",
+    KW: "ar_KW", LB: "ar_LB", LY: "ar_LY", MA: "ar_MA", QA: "ar_QA",
+    TN: "ar_TN", YE: "ar_YE",
+    // Turkish
+    TR: "tr_TR",
+    // Polish
+    PL: "pl_PL",
+    // Swedish
+    SE: "sv_SE",
+    // Norwegian
+    NO: "nb_NO",
+    // Danish
+    DK: "da_DK",
+    // Finnish
+    FI: "fi_FI",
+    // Greek
+    GR: "el_GR",
+    // Romanian
+    RO: "ro_RO",
+    // Hungarian
+    HU: "hu_HU",
+    // Czech
+    CZ: "cs_CZ",
+    // Slovak
+    SK: "sk_SK",
+    // Ukrainian
+    UA: "uk_UA",
+    // Thai
+    TH: "th_TH",
+    // Indonesian
+    ID: "id_ID",
+    // Malay
+    MY: "ms_MY",
+    // Vietnamese
+    VN: "vi_VN",
+    // Hebrew
+    IL: "he_IL",
+    // Hindi
+    // IN already mapped to en_IN above; HI maps to hi_IN
+    // Bengali
+    BD: "bn_BD",
+    // Persian/Farsi
+    IR: "fa_IR",
+    // Swahili
+    TZ: "sw_TZ", UG: "sw_UG",
+  };
+  return map[cc] ?? "en_US";
+}
+
+async function lookupProxyGeoInfo(proxyHost: string): Promise<{ offset: number; locale: string }> {
   return new Promise((resolve) => {
-    const fallback = -18000;
+    const fallback = { offset: -18000, locale: "en_US" };
     const timer = setTimeout(() => resolve(fallback), 5000);
     const req = http.get(
-      `http://ip-api.com/json/${encodeURIComponent(proxyHost)}?fields=offset`,
+      `http://ip-api.com/json/${encodeURIComponent(proxyHost)}?fields=offset,countryCode`,
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c: Buffer) => chunks.push(c));
         res.on("end", () => {
           clearTimeout(timer);
           try {
-            const j = JSON.parse(Buffer.concat(chunks).toString()) as { offset?: number };
-            resolve(typeof j.offset === "number" ? j.offset : fallback);
+            const j = JSON.parse(Buffer.concat(chunks).toString()) as { offset?: number; countryCode?: string };
+            resolve({
+              offset: typeof j.offset === "number" ? j.offset : fallback.offset,
+              locale: j.countryCode ? countryToLocale(j.countryCode) : fallback.locale,
+            });
           } catch {
             resolve(fallback);
           }
@@ -374,6 +459,15 @@ export class InstagramWebClient {
   // construction via ip-api.com so X-IG-Timezone-Offset always matches the
   // connecting IP's region.  Defaults to "0" until the async lookup resolves.
   private _tzOffset: string = "0";
+  // Pigeon session identifier — stable for the lifetime of this client instance.
+  // A real Instagram app generates this once at launch and reuses it on every
+  // request. Regenerating a new UUID per-call was a detectable bot signal.
+  private _pigeonSessionId: string = randomUUID();
+  // Locale derived from the proxy's exit country — resolved in constructor via
+  // ip-api.com. Matching locale to the proxy's country removes the mismatch
+  // between X-IG-App-Locale and the connecting IP's region (bot signal).
+  // Defaults to "en_US" until the async lookup resolves.
+  private _locale: string = "en_US";
   // Called immediately whenever _absorbResponseHeaders() updates igDeviceState
   // (e.g. new ig-set-www-claim or ig-set-authorization from Instagram).
   // Set by the automation engine to persist the fresh state to the DB so it
@@ -460,16 +554,18 @@ export class InstagramWebClient {
     }
     this.proxyUrl = proxyUrl;
     this.profileId = profileId;
-    // Warm the timezone offset for this proxy asynchronously so _buildMobileHeaders
-    // always sends the correct X-IG-Timezone-Offset for the proxy's exit region.
-    // Fire-and-forget — the field stays "0" until the lookup resolves (~1-2s),
-    // which is always before the first automation call (verify runs first).
+    // Resolve timezone offset AND locale for this proxy asynchronously so
+    // _buildMobileHeaders always sends the correct X-IG-Timezone-Offset and
+    // X-IG-App-Locale for the proxy's exit region. Fire-and-forget — fields
+    // stay at defaults until the lookup resolves (~1-2 s), which is always
+    // before the first automation call (verify runs first).
     try {
       const proxyHost = new URL(proxyUrl).hostname;
-      lookupTimezoneOffset(proxyHost).then((offset) => {
+      lookupProxyGeoInfo(proxyHost).then(({ offset, locale }) => {
         this._tzOffset = String(offset);
-      }).catch(() => { /* keep default "0" */ });
-    } catch { /* malformed proxyUrl — keep default "0" */ }
+        this._locale   = locale;
+      }).catch(() => { /* keep defaults */ });
+    } catch { /* malformed proxyUrl — keep defaults */ }
   }
 
   // ── Per-account mobile UA resolver ──────────────────────────────────────
@@ -1662,13 +1758,15 @@ export class InstagramWebClient {
       "X-Bloks-Is-Layout-RTL":        "false",
       "X-FB-HTTP-Engine":             "Liger",
       "X-IG-WWW-Claim":               wwwClaim,
-      // Per-session Pigeon headers — generated fresh each call (real app behaviour).
-      "X-Pigeon-Session-Id":          randomUUID(),
+      // Pigeon session ID — stable for the lifetime of this client instance.
+      // A real app generates this once at launch; refreshing it per-call is a bot signal.
+      "X-Pigeon-Session-Id":          this._pigeonSessionId,
       "X-Pigeon-Rawclienttime":       `${(Date.now() / 1000).toFixed(7)}`,
-      // Locale
-      "X-IG-App-Locale":              "en_US",
-      "X-IG-Device-Locale":           "en_US",
-      "X-IG-Mapped-Locale":           "en_US",
+      // Locale — derived from the proxy's exit country via ip-api.com lookup in constructor.
+      // Mismatching locale and connecting IP region is a detectable bot signal.
+      "X-IG-App-Locale":              this._locale,
+      "X-IG-Device-Locale":           this._locale,
+      "X-IG-Mapped-Locale":           this._locale,
       // Timezone — resolved from proxy IP at construction time via ip-api.com.
       "X-IG-Timezone-Offset":         this._tzOffset,
     };
@@ -5556,14 +5654,17 @@ export async function createInstagramAccountViaApi(params: {
   // We query ip-api.com with the proxy hostname to get the actual UTC offset
   // for that IP's country, falling back to -18000 (UTC-5) on lookup failure.
   let tzOffset = -18000;
+  let signupLocale = "en_US";
   if (proxyUrl) {
     try {
       const proxyHost = new URL(proxyUrl).hostname;
-      tzOffset = await lookupTimezoneOffset(proxyHost);
-      step(`Timezone: ${proxyHost} → offset ${tzOffset >= 0 ? "+" : ""}${tzOffset}s (${tzOffset >= 0 ? "+" : ""}${(tzOffset / 3600).toFixed(1)}h UTC)`);
-    } catch { /* non-fatal — keep default */ }
+      const geoInfo = await lookupProxyGeoInfo(proxyHost);
+      tzOffset      = geoInfo.offset;
+      signupLocale  = geoInfo.locale;
+      step(`Geo: ${proxyHost} → offset ${tzOffset >= 0 ? "+" : ""}${tzOffset}s (${(tzOffset / 3600).toFixed(1)}h UTC), locale=${signupLocale}`);
+    } catch { /* non-fatal — keep defaults */ }
   } else {
-    step("Timezone: no proxy — using default UTC-5 offset");
+    step("Geo: no proxy — using defaults (UTC-5, en_US)");
   }
 
   // Headers restored to match the EXACT state of the one successful HTTP 200
@@ -5605,10 +5706,11 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-WWW-Claim": "0",
     "X-Pigeon-Session-Id": pigeonSessionId,
     "X-Pigeon-Rawclienttime": pigeonRawclienttime(),
-    // Locale headers present on every real Android Instagram request
-    "X-IG-App-Locale": "en_US",
-    "X-IG-Device-Locale": "en_US",
-    "X-IG-Mapped-Locale": "en_US",
+    // Locale matched to the proxy's exit country — resolved above via ip-api.com.
+    // Mismatching locale and IP region is a detectable bot signal.
+    "X-IG-App-Locale": signupLocale,
+    "X-IG-Device-Locale": signupLocale,
+    "X-IG-Mapped-Locale": signupLocale,
     // UTC offset in seconds matching the proxy IP's geographic region.
     // Instagram cross-checks this against the connecting IP — mismatch = bot flag.
     "X-IG-Timezone-Offset": String(tzOffset),
