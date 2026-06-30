@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.249",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Full header audit complete — 6 more call sites (DM send, image post-upload configure, inbox lookup, thread lookup, EB probe calls) were still using stripped headers. All now send the same full Android header set as verify and the follow action." },
+      { category: "Fix", text: "Proxy timezone is now auto-detected from the proxy's IP on startup — every API call sends the correct X-IG-Timezone-Offset matching the proxy's region instead of defaulting to UTC." },
+    ],
+  },
+  {
     version: "1.1.248",
     date: "29 Jun 2026",
     items: [
