@@ -71,6 +71,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.255",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Export API Calls CSV now correctly labels HikerAPI calls as 'HikerAPI' and historical calls (before JA3 was implemented) as '—' instead of wrongly stamping everything as JA3 (OkHttp4)." },
+      { category: "Fix", text: "Clicking Verify on multiple accounts at once no longer opens all Chromium windows simultaneously — accounts now queue and open one at a time, preventing the crash caused by parallel BrowserWindow spawns." },
+    ],
+  },
+  {
     version: "1.1.254",
     date: "30 Jun 2026",
     items: [

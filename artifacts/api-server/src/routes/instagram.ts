@@ -2086,6 +2086,17 @@ export async function registerInstagramRoutes(
     if (process.env.EB_IPC_PORT) {
       // Electron mode — auto-open the visible EB, run login, harvest cookies, auto-close.
       const _verifyIpcPort = Number(process.env.EB_IPC_PORT);
+
+      // Acquire the slot BEFORE opening the EB window.
+      // Previously the slot was acquired after /eb/open, which meant clicking Verify
+      // on 6 accounts simultaneously opened 6 Chromium instances at once — exactly
+      // the crash pattern documented in replit.md (main process killed by parallel
+      // BrowserWindow spawns).  Gating here ensures at most 1 Chromium verify
+      // window is ever open at a time; accounts 2–N queue here and wait.
+      console.log(`[verify:${profileId}] @${profile.username} — waiting for verify slot`);
+      await acquireSilentVerifySlot();
+      console.log(`[verify:${profileId}] @${profile.username} — verify slot acquired`);
+
       // Step 1: open the visible EB browser so the user can watch the login flow.
       try {
         console.log(`[verify:${profileId}] @${profile.username} — opening EB window via /eb/open`);
@@ -2118,8 +2129,6 @@ export async function registerInstagramRoutes(
       } catch (openErr: any) {
         console.warn(`[verify:${profileId}] @${profile.username} — /eb/open failed (non-fatal): ${openErr?.message}`);
       }
-
-      await acquireSilentVerifySlot();
       try {
         console.log(`[verify:${profileId}] @${profile.username} — calling electronSilentVerify`);
         const silentRes = await electronSilentVerify({
@@ -2998,7 +3007,9 @@ export async function registerInstagramRoutes(
           resolveSource(call.source ?? ""),
           ipPort,
           String(call.durationMs ?? ""),
-          (call.transport ?? "ja3") === "ja3" ? "JA3 (OkHttp4)" : "Node.js TLS",
+          call.source === "HikerAPI" ? "HikerAPI" :
+          call.transport === "ja3" ? "JA3 (OkHttp4)" :
+          call.transport ? call.transport : "—",
         ].map(esc).join(",");
       });
 
