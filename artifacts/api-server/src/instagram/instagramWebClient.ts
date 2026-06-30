@@ -1853,6 +1853,17 @@ export class InstagramWebClient {
     }
     this._absorbResponseHeaders(res.responseHeaders);
     if (res.status >= 400) {
+      // 4415001 = "Prompt has contribution" — Instagram is gating the endpoint behind
+      // a soft UI prompt (e.g. a feature intro screen it wants the user to dismiss).
+      // This is NOT a session expiry — the account is logged in and the session is valid.
+      // Throw a specific string so callers can swallow it without marking the account
+      // as logged_out.  Do this BEFORE the generic login_required fallback below.
+      const errorCode: number | undefined = (res.json as any)?.content?.error_code ?? (res.json as any)?.error_code;
+      if (errorCode === 4415001) {
+        console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (prompt_required_4415001 — soft gate, not a logout): ${res.rawBody.slice(0, 200)}`);
+        this._logTransport(path, "GET", Date.now() - _t0, true);
+        throw new Error("prompt_required_4415001");
+      }
       // Extract the message Instagram sent (may be empty for plain session-expired 400s).
       // Fall back to "login_required" so getAccountLevelStatus() classifies it as
       // "logged_out" and applyAccountLevelError() marks the account for re-verification.
@@ -3205,6 +3216,12 @@ export class InstagramWebClient {
       const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
       const msg  = String(e?.message ?? "");
       console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${msg}`);
+      // 4415001 = "Prompt has contribution" — Instagram soft UI gate, NOT a logout.
+      // Swallow it so the account is not marked logged_out.  The session is valid.
+      if (/prompt_required_4415001/i.test(msg)) {
+        console.warn(`[webClient] getDirectMessagesInternal: 4415001 prompt gate — skipping DM check (account is still logged in)`);
+        return { count: 0, ok: false, threads: [] };
+      }
       // Re-throw account-level errors (checkpoint, email confirmation, session
       // expired, etc.) so the engine's checkSessionErr can classify them and
       // write the correct accountStatus to the DB.  Transient errors (network
