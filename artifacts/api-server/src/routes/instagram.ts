@@ -1003,6 +1003,46 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Clear all action-block suspensions for a set of profiles ─────────────
+  // Resets the in-memory actionSuspensions map AND clears toolBlockedUntil
+  // from the DB settings of every tool belonging to the given profiles so the
+  // engine starts following/liking/etc. again immediately.
+  app.post("/api/profiles/clear-suspensions", async (req, res) => {
+    const { profileIds } = req.body ?? {};
+    if (!Array.isArray(profileIds) || profileIds.length === 0) {
+      return res.status(400).json({ message: "profileIds (array) is required" });
+    }
+    const ids = (profileIds as unknown[]).map(Number).filter(n => !Number.isNaN(n));
+    const TOOL_TYPES = ["follow", "unfollow", "dm", "contact", "like"] as const;
+    let clearedProfiles = 0;
+    let clearedTools = 0;
+    for (const profileId of ids) {
+      // Clear in-memory action suspensions for every tool type.
+      for (const toolType of TOOL_TYPES) {
+        automationEngine.clearSuspensions(profileId, toolType);
+      }
+      // Clear the DB-persisted toolBlockedUntil from all tools for this profile.
+      try {
+        const profileTools = await storage.getToolsByProfile(profileId);
+        for (const tool of profileTools) {
+          const s = (tool.settings ?? {}) as Record<string, unknown>;
+          if (s.toolBlockedUntil !== undefined || s.blockCount !== undefined) {
+            const cleared = { ...s };
+            delete cleared.toolBlockedUntil;
+            delete cleared.blockCount;
+            await storage.updateTool(tool.id, { settings: cleared });
+            clearedTools++;
+          }
+        }
+        clearedProfiles++;
+      } catch (err) {
+        req.log.error(`[clear-suspensions] profileId=${profileId} threw: ${err}`);
+      }
+    }
+    req.log.info(`[clear-suspensions] cleared suspensions for ${clearedProfiles}/${ids.length} profiles, ${clearedTools} tool(s) updated`);
+    res.json({ ok: true, clearedProfiles, clearedTools });
+  });
+
   app.patch("/api/profiles/:id", handleProfileUpdate);
   app.put("/api/profiles/:id", handleProfileUpdate);
 

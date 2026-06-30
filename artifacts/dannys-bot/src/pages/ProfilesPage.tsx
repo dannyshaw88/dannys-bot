@@ -412,6 +412,7 @@ export function ProfilesPage() {
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [fixingAbd, setFixingAbd] = useState(false);
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
+  const [clearingSuspensions, setClearingSuspensions] = useState(false);
   const [flaggedIds, setFlaggedIds] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]; } catch { return []; }
   });
@@ -1105,6 +1106,22 @@ export function ProfilesPage() {
   }, [selectedProfileIds, toast]);
 
   // ── Bulk: Remove Proxies → Pending ───────────────────────────────────────
+  const handleClearAllSuspensions = useCallback(async () => {
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
+    if (ids.length === 0) return;
+    setClearingSuspensions(true);
+    try {
+      await fetch("/api/profiles/clear-suspensions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileIds: ids }),
+      });
+      queryClient.invalidateQueries();
+    } finally {
+      setClearingSuspensions(false);
+    }
+  }, [selectedProfileIds, profiles, queryClient]);
+
   const handleBulkRemoveProxies = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
     try {
@@ -2239,6 +2256,10 @@ export function ProfilesPage() {
               <button onClick={() => { setActionsOpen(false); handleBulkFixAbd(); }} disabled={fixingAbd} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingAbd ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ShieldCheck className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1">Fix Auto-Behaviour ({selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length})</span>
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleClearAllSuspensions(); }} disabled={clearingSuspensions} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                {clearingSuspensions ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                <span className="flex-1">Clear All Suspension Blocks{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ` (All)`}</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-1 text-[7px] text-foreground">Ctrl+P</span>

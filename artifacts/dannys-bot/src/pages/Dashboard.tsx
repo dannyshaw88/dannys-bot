@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.259",
+    date: "30 Jun 2026",
+    items: [
+      { category: "New", text: "Actions → Clear All Suspension Blocks: instantly removes all 24h/50h follow, like, unfollow, DM, and contact suspensions so the engine starts working again immediately. If accounts are selected it clears only those; otherwise clears all accounts." },
+    ],
+  },
+  {
     version: "1.1.258",
     date: "30 Jun 2026",
     items: [
