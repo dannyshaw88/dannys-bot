@@ -548,6 +548,7 @@ class AutomationEngine {
       // igApiCookies seed the mobile session (mobileSessionReady=true).
       // Without it mobileSessionGet returns null immediately and sync always fails.
       client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+      client.onDeviceStateUpdate = (state) => { storage.updateProfile(profile.id, { igDeviceState: state }).catch(() => {}); };
       client.loadBrowserCookies();
       try {
         stats = await client.getOwnProfileStats();
@@ -1902,6 +1903,7 @@ class AutomationEngine {
     // _restoreMobileFromApiCookies, so if the account was previously verified
     // isMobileLoggedIn() will return true immediately below — no web login needed.
     state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+    state.client.onDeviceStateUpdate = (s) => { storage.updateProfile(profile.id, { igDeviceState: s }).catch(() => {}); };
 
     const client = state.client;
 
@@ -4726,6 +4728,7 @@ class AutomationEngine {
     if (!proxyUrl) return { ok: false, message: "No proxy assigned — assign a proxy to this account before fixing ABD." };
     const client = new InstagramWebClient(proxyUrl, profileId);
     client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+    client.onDeviceStateUpdate = (s) => { storage.updateProfile(profileId, { igDeviceState: s }).catch(() => {}); };
     client.username = profile.username;
 
     // ── Path A: banner_dismiss with stored session ────────────────────────────

@@ -374,6 +374,11 @@ export class InstagramWebClient {
   // construction via ip-api.com so X-IG-Timezone-Offset always matches the
   // connecting IP's region.  Defaults to "0" until the async lookup resolves.
   private _tzOffset: string = "0";
+  // Called immediately whenever _absorbResponseHeaders() updates igDeviceState
+  // (e.g. new ig-set-www-claim or ig-set-authorization from Instagram).
+  // Set by the automation engine to persist the fresh state to the DB so it
+  // survives process restarts without needing a new verify bootstrap.
+  onDeviceStateUpdate?: (state: string) => void;
   // Last configure-step error message, set by _configureViaIgClient when configure
   // returns a non-ok response. Exposed via lastUploadError getter so callers can
   // surface the real Instagram error in the activity log instead of a generic
@@ -1706,6 +1711,8 @@ export class InstagramWebClient {
       ds.authorization = newAuth;
     }
     this.igDeviceState = JSON.stringify(ds);
+    // Persist immediately so restarts never need to re-derive from verify.
+    this.onDeviceStateUpdate?.(this.igDeviceState);
   }
 
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).

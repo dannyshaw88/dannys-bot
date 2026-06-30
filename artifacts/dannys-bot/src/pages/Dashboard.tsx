@@ -71,6 +71,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.251",
+    date: "29 Jun 2026",
+    items: [
+      { category: "Fix", text: "Session claim token (X-IG-WWW-Claim) is now written to the database immediately after each API call — restarts no longer need a verify re-bootstrap to recover the latest token." },
+    ],
+  },
+  {
     version: "1.1.250",
     date: "29 Jun 2026",
     items: [
