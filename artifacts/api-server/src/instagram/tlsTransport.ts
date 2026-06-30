@@ -515,6 +515,70 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
       try { parsedBody = JSON.parse(parsedBody); } catch {}
     }
 
+    // ── Diagnostic: dump full request/response context on a generic technical
+    // rejection ("something went wrong" with HTTP 200, status:"fail", no spam/
+    // feedback_required field). This is the exact pattern seen on repeated
+    // follow failures — logged here (not just at the call site) because this is
+    // the only place that has the ACTUAL bytes sent on the wire: the Cookie
+    // header built from the tough-cookie jar, and the signed_body sent in the
+    // form. If the csrftoken in the Cookie header differs from the _csrftoken
+    // embedded inside signed_body's JSON, Instagram's CSRF check fails server-
+    // side and returns exactly this generic message — even though the HMAC
+    // signature itself is mathematically valid (it's signed over the JSON
+    // payload, which still contains the stale _csrftoken value).
+    if (
+      resp.status === 200 &&
+      parsedBody && typeof parsedBody === "object" &&
+      parsedBody.status === "fail" &&
+      !("spam" in parsedBody) && !("feedback_required" in parsedBody) &&
+      /something went wrong|sorry/i.test(String(parsedBody.message ?? ""))
+    ) {
+      let signedCsrf: string | undefined;
+      let signedUuid: string | undefined;
+      if (typeof body === "string" && body.includes("signed_body=")) {
+        const m = body.match(/signed_body=([^&]+)/);
+        if (m) {
+          const raw = decodeURIComponent(m[1]);
+          const dotIdx = raw.indexOf(".");
+          const jsonPart = dotIdx !== -1 ? raw.slice(dotIdx + 1) : raw;
+          try {
+            const payload = JSON.parse(jsonPart);
+            signedCsrf = payload._csrftoken;
+            signedUuid = payload._uuid;
+          } catch {
+            // raw concatenation in the body-build step above means signed_body
+            // may not be percent-encoded at all — try the raw (un-decoded) form too.
+            const rawAlt = m[1];
+            const dotIdx2 = rawAlt.indexOf(".");
+            const jsonPart2 = dotIdx2 !== -1 ? rawAlt.slice(dotIdx2 + 1) : rawAlt;
+            try {
+              const payload2 = JSON.parse(jsonPart2);
+              signedCsrf = payload2._csrftoken;
+              signedUuid = payload2._uuid;
+            } catch { /* give up — log raw below */ }
+          }
+        }
+      }
+      const cookieCsrfMatch = cookieStr.match(/csrftoken=([^;]+)/);
+      const cookieCsrf = cookieCsrfMatch?.[1];
+      const csrfMismatch = signedCsrf != null && cookieCsrf != null && signedCsrf !== cookieCsrf;
+      console.warn(
+        `[tls:ig][DIAG] ${method} ${rawUrl} — generic technical rejection (HTTP 200, status:"fail", no block fields). ` +
+        `cookie_csrf=${cookieCsrf ?? "MISSING"} signed_body_csrf=${signedCsrf ?? "n/a"} ` +
+        `csrf_MISMATCH=${csrfMismatch} signed_body_uuid=${signedUuid ?? "n/a"} ` +
+        `content-type_sent=${headersWithoutUA["Content-Type"] ?? "none"} body_len=${body.length} ` +
+        `req_body_preview=${body.slice(0, 300)}`,
+      );
+      if (csrfMismatch) {
+        console.error(
+          `[tls:ig][DIAG] *** CSRF TOKEN MISMATCH CONFIRMED *** — the signed_body was signed with csrftoken=${signedCsrf} ` +
+          `but the Cookie header on this exact request carried csrftoken=${cookieCsrf}. This is almost certainly the ` +
+          `root cause of "something went wrong" — the client.state cached csrftoken used for signing is stale relative ` +
+          `to the tough-cookie jar's current csrftoken (likely rotated by a prior Set-Cookie response).`,
+        );
+      }
+    }
+
     // ── Return synthetic response in the shape instagram-private-api expects ──
     // The library's Request.send() reads:
     //   response.statusCode, response.headers, response.body (parsed JSON),

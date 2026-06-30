@@ -78,6 +78,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.266",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Search: fixed a bug where the same person could get searched twice in a row before being followed. Now each person is only searched once per follow." },
+      { category: "Fix", text: "Follow: added deeper internal diagnostics for the rare 'something went wrong' technical rejection from Instagram, so the real cause can be pinpointed instead of guessed at." },
+    ],
+  },
+  {
     version: "1.1.265",
     date: "30 Jun 2026",
     items: [

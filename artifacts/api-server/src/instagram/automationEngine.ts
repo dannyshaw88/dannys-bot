@@ -3799,6 +3799,15 @@ class AutomationEngine {
     const injectSearchMidSlots = injectSearchEnabled
       ? sampleSlots(Math.max(1, Math.round(processCount * searchMidPct / 100)), 0, Math.max(0, processCount - 1))
       : new Set<number>();
+    // The pre-session search injection below (line ~3820) already searches candidates[0]'s
+    // username before the loop starts — for any source type other than "target_followers".
+    // If slot 0 also lands in injectSearchMidSlots, candidates[0] would get searched AGAIN
+    // seconds later, right before their own follow — a duplicate SearchUser call for the
+    // same username. Strip slot 0 here so the mid-session injection never re-searches the
+    // user the pre-session injection already covered.
+    if (injectSearchEnabled && source.type !== "target_followers" && candidates.length > 0) {
+      injectSearchMidSlots.delete(0);
+    }
 
     // Pre-follow browse: uses the Browse Before Follow % setting from the dialog.
     // Post-follow browse (injectProfileBrowsingMin/Max) handled separately per-follow below.
