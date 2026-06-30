@@ -2017,9 +2017,17 @@ export class InstagramWebClient {
       if (result?.following || result?.outgoing_request) {
         return { ok: true, status: result.following ? "following" : "requested" };
       }
-      // friendship.create returns the friendship_status object directly
+      // friendship.create returns the friendship_status object directly.
+      // If "following" key is present but false AND outgoing_request is also false/absent,
+      // Instagram silently declined the follow (soft block) — do NOT count as success.
       if (result && typeof result === "object" && "following" in result) {
-        return { ok: true, status: result.following ? "following" : "requested" };
+        const isFollowing = !!result.following;
+        const isPending   = !!result.outgoing_request;
+        if (isFollowing || isPending) {
+          return { ok: true, status: isFollowing ? "following" : "requested" };
+        }
+        // following=false, outgoing_request=false — Instagram accepted the request but didn't apply it
+        return { ok: false, status: "follow_blocked", reason: `Instagram silently declined follow (following=false, outgoing_request=false) — soft block or already following` };
       }
       return { ok: false, status: "follow_blocked", reason: "unexpected IgApiClient response: " + JSON.stringify(result).slice(0, 200) };
     } catch (err: any) {

@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.263",
+    date: "30 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow: fixed a silent false-success bug where Instagram accepted a follow request but didn't apply it (returning following=false, outgoing_request=false). These are now correctly logged as blocked instead of being counted as successful follows." },
+    ],
+  },
+  {
     version: "1.1.262",
     date: "30 Jun 2026",
     items: [
