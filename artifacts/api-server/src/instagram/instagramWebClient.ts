@@ -2360,202 +2360,222 @@ export class InstagramWebClient {
   private async _bootstrapWwwClaim(): Promise<void> {
     if (!this.igApiCookies) return;
 
-    // Skip if a real claim is already stored
+    // Read stored claim and auth
     let existingClaim: string | undefined;
     if (this.igDeviceState) {
       try { existingClaim = (JSON.parse(this.igDeviceState) as any).igWWWClaim; } catch {}
     }
-    if (existingClaim && existingClaim !== "0") return;
+    const claimAlreadyPresent = !!(existingClaim && existingClaim !== "0");
 
-    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing — running Jarvee Phase 0→1→2 via IgApiClient`);
+    // Return early ONLY if BOTH claim AND Authorization Bearer token are present.
+    // If the claim is cached but auth is missing, still run Phase 2d — Instagram
+    // app v431+ requires the Authorization header on every write (follow, like,
+    // DM) and returns "something went wrong" without it.  Claim and auth are
+    // independent tokens; either can be absent without the other.
+    if (claimAlreadyPresent && this._deviceAuthorization) return;
 
-    // ── Build IgApiClient (same setup as _buildWarmedIgClient) ──────────────
-    // _newBootstrapIgClient hooks ig.request.send → _absorbIgClientState(ig)
-    // so every response that carries ig-set-www-claim is automatically synced,
-    // WITHOUT the apiThrottle delay (bootstrap calls are internal plumbing,
-    // not user-facing API calls — throttling wastes 9+ minutes per session).
-    const ig = this._newBootstrapIgClient();
-    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
-    if (this.igDeviceState) {
-      try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string };
-        ig.state.generateDevice(deviceSeed);
-        if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
-        if (saved.uuid)          ig.state.uuid          = saved.uuid;
-        if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
-        if (saved.adid)          ig.state.adid          = saved.adid;
-        if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
-        if (saved.authorization) ig.state.authorization = saved.authorization;
-        // intentionally do NOT restore igWWWClaim — that is what we are bootstrapping
-      } catch { ig.state.generateDevice(deviceSeed); }
-    } else {
-      ig.state.generateDevice(deviceSeed);
-    }
-    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
-    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
-    patchIgClientTls(ig, this.proxyUrl);
-
-    // ── Phase 0a: anonymous GetTokenResult ────────────────────────────────────
-    // No cookies loaded yet — matches Jarvee's very first pre-auth device probe.
-    try {
-      await ig.request.send({
-        url: "/api/v1/zr/token/result/",
-        method: "GET",
-        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
-    } catch (e: any) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
-    }
-
-    // ── Phase 0b: anonymous launcher/sync (SendMobileConfig) ─────────────────
-    // Still no sessionid — Instagram sees a clean device probe, not a checkpointed
-    // session.  Hard-capped at 20 s (large config download on high-latency proxies).
-    try {
-      await Promise.race([
-        ig.launcher.preLoginSync()
-          .then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`))
-          .catch((e: any) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
-        new Promise<void>(r => setTimeout(r, 20_000)),
-      ]);
-    } catch {}
-
-    // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────────────
-    // Jarvee calls zr/token/result a second time right after launcher/sync.
-    // Mirrors instagramLogin.ts Phase 0c exactly.
-    try {
-      await ig.request.send({
-        url: "/api/v1/zr/token/result/",
-        method: "GET",
-        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
-    } catch (e: any) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
-    }
-
-    // ── Phase 1: inject sessionid ─────────────────────────────────────────────
-    // Load AFTER the unauthenticated Phase 0 calls — exact Jarvee ordering.
-    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
-    const sessionPair = pairs.find(p => p.toLowerCase().startsWith("sessionid="));
-    let ownUserId = pairs.find(p => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
-    if (!ownUserId && sessionPair) {
-      const rawVal = sessionPair.slice("sessionid=".length);
-      let decoded = rawVal;
-      try { decoded = decodeURIComponent(rawVal); } catch {}
-      ownUserId = decoded.split(":")[0] ?? "";
-    }
-    const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
-    await this._deserializeIgCookies(ig, cwuId);
-    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
-
-    // Helper: check whether a real claim has been absorbed since the last call.
+    // Helper: read current claim from igDeviceState (updated mid-sequence).
     const claimNow = (): string | undefined => {
       if (!this.igDeviceState) return undefined;
       try { return (JSON.parse(this.igDeviceState) as any).igWWWClaim ?? undefined; } catch { return undefined; }
     };
 
-    // ── Phase 2a: accounts/get_account_family/ ────────────────────────────────
-    // First authenticated call in the Jarvee verify sequence.
-    // Returns ig-set-www-claim for multi-account (Meta Family) accounts on success.
-    // For regular personal accounts it returns 404 WITHOUT the header — in that
-    // case we fall through to Phase 2b and 2c (same sequence the verify runner uses).
-    try {
-      await ig.request.send({
-        url: "/api/v1/accounts/get_account_family/",
-        method: "POST",
-        form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken }),
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
-    } catch (e: any) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
-      const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
-      this._absorbResponseHeaders(errHeaders);
-      this._absorbIgClientState(ig);
-    }
+    if (!claimAlreadyPresent) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing — running Jarvee Phase 0→1→2 via IgApiClient`);
 
-    // ── Phase 2b: qe/sync/ bare POST (mirrors verify ABD probe) ──────────────
-    // The verify sequence fires this immediately after get_account_family/.
-    // For regular personal accounts where get_account_family/ returns 404 with no
-    // claim header, qe/sync is the next endpoint that Instagram returns
-    // ig-set-www-claim on. Abort early if claim already obtained.
-    if (!claimNow() || claimNow() === "0") {
+      // ── Build IgApiClient (same setup as _buildWarmedIgClient) ──────────────
+      // _newBootstrapIgClient hooks ig.request.send → _absorbIgClientState(ig)
+      // so every response that carries ig-set-www-claim is automatically synced,
+      // WITHOUT the apiThrottle delay (bootstrap calls are internal plumbing,
+      // not user-facing API calls — throttling wastes 9+ minutes per session).
+      const ig = this._newBootstrapIgClient();
+      const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+      if (this.igDeviceState) {
+        try {
+          const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string };
+          ig.state.generateDevice(deviceSeed);
+          if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
+          if (saved.uuid)          ig.state.uuid          = saved.uuid;
+          if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
+          if (saved.adid)          ig.state.adid          = saved.adid;
+          if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
+          if (saved.authorization) ig.state.authorization = saved.authorization;
+          // intentionally do NOT restore igWWWClaim — that is what we are bootstrapping
+        } catch { ig.state.generateDevice(deviceSeed); }
+      } else {
+        ig.state.generateDevice(deviceSeed);
+      }
+      ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+      ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+      patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+      if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+      patchIgClientTls(ig, this.proxyUrl);
+
+      // ── Phase 0a: anonymous GetTokenResult ──────────────────────────────────
+      // No cookies loaded yet — matches Jarvee's very first pre-auth device probe.
       try {
-        await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+        await ig.request.send({
+          url: "/api/v1/zr/token/result/",
+          method: "GET",
+          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
       } catch (e: any) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
+      }
+
+      // ── Phase 0b: anonymous launcher/sync (SendMobileConfig) ──────────────
+      // Still no sessionid — Instagram sees a clean device probe, not a checkpointed
+      // session.  Hard-capped at 20 s (large config download on high-latency proxies).
+      try {
+        await Promise.race([
+          ig.launcher.preLoginSync()
+            .then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`))
+            .catch((e: any) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
+          new Promise<void>(r => setTimeout(r, 20_000)),
+        ]);
+      } catch {}
+
+      // ── Phase 0c: GetTokenResult #2 ─────────────────────────────────────────
+      // Jarvee calls zr/token/result a second time right after launcher/sync.
+      // Mirrors instagramLogin.ts Phase 0c exactly.
+      try {
+        await ig.request.send({
+          url: "/api/v1/zr/token/result/",
+          method: "GET",
+          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
+      } catch (e: any) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
+      }
+
+      // ── Phase 1: inject sessionid ───────────────────────────────────────────
+      // Load AFTER the unauthenticated Phase 0 calls — exact Jarvee ordering.
+      const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+      const sessionPair = pairs.find(p => p.toLowerCase().startsWith("sessionid="));
+      let ownUserId = pairs.find(p => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+      if (!ownUserId && sessionPair) {
+        const rawVal = sessionPair.slice("sessionid=".length);
+        let decoded = rawVal;
+        try { decoded = decodeURIComponent(rawVal); } catch {}
+        ownUserId = decoded.split(":")[0] ?? "";
+      }
+      const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
+      await this._deserializeIgCookies(ig, cwuId);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+
+      // ── Phase 2a: accounts/get_account_family/ ──────────────────────────────
+      // First authenticated call in the Jarvee verify sequence.
+      // Returns ig-set-www-claim for multi-account (Meta Family) accounts on success.
+      // For regular personal accounts it returns 404 WITHOUT the header — in that
+      // case we fall through to Phase 2b and 2c (same sequence the verify runner uses).
+      try {
+        await ig.request.send({
+          url: "/api/v1/accounts/get_account_family/",
+          method: "POST",
+          form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken }),
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
+      } catch (e: any) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
         const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
         this._absorbResponseHeaders(errHeaders);
         this._absorbIgClientState(ig);
       }
-    }
 
-    // ── Phase 2c: banyan/banyan/ signed POST (mirrors verify Phase 2b) ────────
-    // Third endpoint in the verify cold-start sequence. If qe/sync did not return
-    // the claim, banyan/banyan typically will — it is a signed authenticated POST
-    // that Instagram uses to push interstitial config and reliably carries
-    // ig-set-www-claim in its response.
-    if (!claimNow() || claimNow() === "0") {
-      try {
-        await ig.request.send({
-          url: "/api/v1/banyan/banyan/",
-          method: "POST",
-          form: ig.request.sign({
-            _csrftoken: ig.state.cookieCsrfToken,
-            _uid: ownUserId,
-            _uuid: ig.state.uuid,
-            surfaces_to_queries: JSON.stringify([
-              { surface: "interstitial_link_loading" },
-              { surface: "interstitial_link_prefetch" },
-            ]),
-          }),
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
-      } catch (e: any) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
-        const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
-        this._absorbResponseHeaders(errHeaders);
-        this._absorbIgClientState(ig);
+      // ── Phase 2b: qe/sync/ bare POST (mirrors verify ABD probe) ─────────────
+      // The verify sequence fires this immediately after get_account_family/.
+      // For regular personal accounts where get_account_family/ returns 404 with no
+      // claim header, qe/sync is the next endpoint that Instagram returns
+      // ig-set-www-claim on. Abort early if claim already obtained.
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+        } catch (e: any) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+          const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+
+      // ── Phase 2c: banyan/banyan/ signed POST (mirrors verify Phase 2b) ───────
+      // Third endpoint in the verify cold-start sequence. If qe/sync did not return
+      // the claim, banyan/banyan typically will — it is a signed authenticated POST
+      // that Instagram uses to push interstitial config and reliably carries
+      // ig-set-www-claim in its response.
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({
+            url: "/api/v1/banyan/banyan/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: ownUserId,
+              _uuid: ig.state.uuid,
+              surfaces_to_queries: JSON.stringify([
+                { surface: "interstitial_link_loading" },
+                { surface: "interstitial_link_prefetch" },
+              ]),
+            }),
+          });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
+        } catch (e: any) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
+          const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+
+      // Confirm claim result
+      const resultClaim = claimNow();
+      if (resultClaim && resultClaim !== "0") {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
+      } else {
+        console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c — follow will use claim=0`);
       }
     }
 
     // ── Phase 2d: current_user GET — acquire ig-set-authorization Bearer token ─
-    // For personal accounts, Phase 2a/2b/2c all return 404/400 and Instagram
-    // does NOT include ig-set-authorization in error responses.  Without the
-    // Bearer token, _buildMobileHeaders sends no Authorization header and
-    // friendships/create is rejected with "something went wrong" (confirmed in
-    // WIRE log: no Authorization header present on the follow POST).
+    // Runs regardless of whether claim was already cached (claim and auth are
+    // independent tokens; either can be absent).
     //
-    // A GET to /accounts/current_user/ is a lightweight authenticated call that
-    // real Instagram apps make immediately after loading cookies.  Instagram
-    // reliably returns ig-set-authorization on this endpoint for all account
-    // types.  The patched ig.request.send dispatcher calls _absorbIgClientState
-    // automatically, which captures the token into this.igDeviceState so that
-    // _buildMobileHeaders (→ _deviceAuthorization) includes Authorization on
-    // every subsequent call.
+    // Uses igReq directly with _buildMobileHeaders — SAME transport and headers
+    // as the follow/unfollow requests — instead of ig.account.currentUser()
+    // through IgApiClient.  The IgApiClient path sends fewer Android-specific
+    // headers (no X-Bloks-*, X-Pigeon-*, locale, timezone) and consistently
+    // returns HTTP 200 status:"fail" "something went wrong" for personal accounts.
+    // igReq + _buildMobileHeaders matches what a real Android app sends and
+    // _absorbResponseHeaders captures ig-set-authorization from the response
+    // headers even when the body status is "fail" — the header is present
+    // independently of the body's success/fail field.
     if (!this._deviceAuthorization) {
       try {
-        await ig.account.currentUser();
+        const csrf2d = this.mobileCsrf || this.csrfToken || "missing";
+        const r2d = await igReq({
+          host: "i.instagram.com",
+          path: "/api/v1/accounts/current_user/?edit=true",
+          method: "GET",
+          headers: this._buildMobileHeaders(csrf2d),
+          cookieJar: this.mobileCookieJar,
+          proxyUrl: this.proxyUrl,
+        });
+        this._absorbResponseHeaders(r2d.responseHeaders);
+        if (r2d.cookies.length) {
+          this.mobileCookieJar = mergeCookies(this.mobileCookieJar, r2d.cookies);
+          const newCsrf = extractCsrf(r2d.cookies);
+          if (newCsrf) this.mobileCsrf = newCsrf;
+        }
         const gotAuth = !!this._deviceAuthorization;
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user → authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user (direct igReq) → status=${r2d.status} authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
       } catch (e: any) {
-        // Non-fatal — if current_user itself fails (e.g. session revoked) the
-        // subsequent follow will surface the real error.
         console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user threw (non-fatal): ${e?.message}`);
       }
     } else {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped — authorization already present`);
-    }
-
-    // Confirm result in the log
-    const resultClaim = claimNow();
-    if (resultClaim && resultClaim !== "0") {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
-    } else {
-      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2d — follow will use claim=0`);
     }
   }
 

@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.273",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool: fixed 'Please try again' error by fetching the Authorization Bearer token before each follow using a direct Android-style request — the token is now obtained regardless of whether the www-claim was already cached, and persisted so subsequent follows reuse it without extra calls." },
+    ],
+  },
+  {
     version: "1.1.272",
     date: "1 Jul 2026",
     items: [
