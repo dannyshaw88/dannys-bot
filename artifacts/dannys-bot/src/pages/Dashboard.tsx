@@ -76,12 +76,34 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
   account: "ACCOUNT", open_eb: "OPEN EB", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
 
-const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
+  {
+    version: "1.1.275",
+    date: "1 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow Tool: fixed root cause of 'Please try again' — the Authorization Bearer token was never being captured from Instagram's response, even when Instagram was sending it.",
+        technical: [
+          "Root cause: patchIgClientTls replaces IgApiClient's entire got transport with CycleTLS. got has a built-in response interceptor that reads ig-set-authorization and ig-set-www-claim headers and writes them onto ig.state — CycleTLS bypassed this interceptor entirely, so ig.state.authorization was ALWAYS undefined after every call, including launcher/sync which does return the token.",
+          "Fix: after each CycleTLS response in patchIgClientTls, the raw ig-set-authorization and ig-set-www-claim headers are now read manually and written directly onto ig.state.authorization / ig.state.igWWWClaim. This restores the behaviour that got's interceptor was supposed to provide.",
+          "Effect: _absorbIgClientState() (which persists the token to DB) will now actually have a value to save, and the follow request will carry Authorization: Bearer IGT:2:... on every call.",
+        ],
+      },
+    ],
+  },
   {
     version: "1.1.274",
     date: "1 Jul 2026",
     items: [
-      { category: "Fix", text: "Follow Tool: replaced the Authorization token fetch with a call to users/{id}/info through the full Android API pipeline — this is the same endpoint the verify flow uses, and the only one Instagram reliably returns the Bearer token on. The previous current_user/?edit=true call was not returning the token for personal accounts." },
+      {
+        category: "Fix",
+        text: "Follow Tool: changed the Authorization token fetch in Phase 2d from current_user/?edit=true to users/{id}/info — the same endpoint the verify flow uses.",
+        technical: [
+          "current_user/?edit=true was returning HTTP 200 with status:fail for personal accounts, so no ig-set-authorization was ever returned.",
+          "users/{id}/info returns HTTP 200 with a valid user object — but the token was still not captured (root cause fixed in v1.1.275).",
+        ],
+      },
     ],
   },
   {
@@ -9501,7 +9523,16 @@ export function Dashboard() {
                               {item.category}
                             </span>
                           </span>
-                          <span className="text-foreground leading-relaxed">{item.text}</span>
+                          <span className="flex-1">
+                            <span className="text-foreground leading-relaxed">{item.text}</span>
+                            {item.technical && item.technical.length > 0 && (
+                              <ul className="mt-1.5 space-y-1 pl-3 border-l border-border/50">
+                                {item.technical.map((note, j) => (
+                                  <li key={j} className="text-xs text-muted-foreground leading-relaxed">{note}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </span>
                         </li>
                       ))}
                     </ul>

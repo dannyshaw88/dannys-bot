@@ -601,6 +601,31 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
       } catch {}
     }
 
+    // ── Process ig-set-authorization and ig-set-www-claim response headers ───
+    // IgApiClient's normal transport uses got, which has a response interceptor
+    // that reads these headers and updates ig.state.authorization /
+    // ig.state.igWWWClaim automatically.  patchIgClientTls replaces the entire
+    // got pipeline with CycleTLS, bypassing that interceptor completely — so
+    // ig.state.authorization was ALWAYS staying undefined even when Instagram
+    // returned ig-set-authorization (e.g. on launcher/sync).  We must set both
+    // fields manually from the raw CycleTLS response headers here so that
+    // _absorbIgClientState() (hooked in _newBootstrapIgClient / _newAutomationIgClient)
+    // can persist them to igDeviceState.authorization / igDeviceState.igWWWClaim.
+    const rawIgAuth = resp.headers["ig-set-authorization"];
+    if (rawIgAuth) {
+      const authVal = Array.isArray(rawIgAuth) ? rawIgAuth[0] : rawIgAuth;
+      if (authVal && authVal.startsWith("IGT:")) {
+        (ig.state as any).authorization = authVal;
+      }
+    }
+    const rawIgClaim = resp.headers["ig-set-www-claim"];
+    if (rawIgClaim) {
+      const claimVal = Array.isArray(rawIgClaim) ? rawIgClaim[0] : rawIgClaim;
+      if (claimVal && claimVal !== "0") {
+        (ig.state as any).igWWWClaim = claimVal;
+      }
+    }
+
     // ── Parse response body ───────────────────────────────────────────────────
     // CycleTLS v2.x: body is in .data (already-parsed JSON or raw string).
     // When .data is a Buffer (binary response), convert to UTF-8 string first —
