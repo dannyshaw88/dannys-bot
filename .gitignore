@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# SQLite WAL/SHM files (transient runtime state)
+*.db-shm
+*.db-wal
+
+# Sensitive files that should never be committed
+attached_assets/*.txt
