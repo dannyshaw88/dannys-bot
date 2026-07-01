@@ -2107,6 +2107,115 @@ export class InstagramWebClient {
     }
   }
 
+  // ── Follow via mobileSessionPost with HMAC-signed body ──────────────────
+  // Replaces _followViaIgClient.  Root cause of IgApiClient failures:
+  //   • IgApiClient sends X-IG-Device-ID = uuid  (session UUID — wrong device token)
+  //   • IgApiClient sends X-IG-Bandwidth-Speed-KBPS = -1.000  (bot signal)
+  //   • IgApiClient omits X-CSRFToken
+  // _buildMobileHeaders() sends the correct igDid for X-IG-Device-ID, realistic
+  // WiFi bandwidth values, and X-CSRFToken — identical to how verify/unfollow/DM work.
+  // signBody() adds the HMAC-SHA256 signature that Instagram requires on write calls.
+  private async _followViaMobileSession(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
+    if (!hasMobileSession) {
+      return { ok: false, status: "follow_blocked", reason: "no igApiCookies session — cannot follow" };
+    }
+
+    const _t0 = Date.now();
+    // apiThrottle MUST come before _bootstrapMobileCsrf (bootstrap makes real HTTP requests)
+    await this.apiThrottle();
+    if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
+    }
+    const csrf = this.mobileCsrf || this.csrfToken || "missing";
+
+    // HMAC-signed body — Instagram requires signed_body on friendship/create.
+    // signBody() produces: ig_sig_key_version=4&signed_body=<hmac>.<raw-json>
+    // Do NOT URL-encode the JSON part (Instagram's parser splits on '.' — encoding breaks it).
+    // _uuid, _uid, _csrftoken, device_id are required fields — omitting them causes
+    // Instagram to return "We're sorry, but something went wrong" (status: fail).
+    let _uuid = "";
+    let _deviceId = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState) as { uuid?: string; deviceId?: string };
+        _uuid = ds.uuid ?? "";
+        _deviceId = ds.deviceId ?? "";
+      } catch { /* keep empty */ }
+    }
+    const _uid = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1] ?? "";
+    const body = signBody({
+      user_id: userId,
+      _uuid,
+      _uid,
+      _csrftoken: csrf,
+      device_id: _deviceId,
+      radio_type: "wifi-none",
+      container_module: "profile",
+    });
+
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…)`);
+
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: `/api/v1/friendships/create/${userId}/`,
+      method: "POST",
+      headers: this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8"),
+      body,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl,
+    });
+
+    // Merge cookies/headers back (same as mobileSessionPost)
+    if (res.cookies.length) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) this.mobileCsrf = newCsrf;
+    }
+    this._absorbResponseHeaders(res.responseHeaders);
+    this._logTransport(`/api/v1/friendships/create/${userId}/`, "POST", Date.now() - _t0, res.status >= 400);
+
+    if (res.status >= 400) {
+      console.warn(`[webClient] follow ${userId}: _followViaMobileSession status=${res.status} body:`, res.rawBody.slice(0, 400));
+    }
+
+    const j = res.json as any;
+    if (!j) return { ok: false, status: "follow_blocked", reason: "no response from mobile API" };
+
+    console.log(`[webClient] follow ${userId} (_followViaMobileSession):`, JSON.stringify(j).slice(0, 400));
+
+    if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
+      return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: j?.checkpoint_url ?? "" };
+    }
+    if (j?.spam === true) return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
+    if (j?.feedback_required === true || /feedback_required|ActionBlocked/i.test(j?.message ?? "")) {
+      return { ok: false, status: "follow_blocked", reason: j?.message ?? "feedback_required" };
+    }
+    if (j?.require_login || j?.message === "login_required") {
+      return { ok: false, status: "follow_blocked", reason: "session expired — re-verify account" };
+    }
+    if (j?.message && /please wait/i.test(String(j.message))) {
+      return { ok: false, status: "follow_blocked", reason: j.message };
+    }
+    if (j?.friendship_status) {
+      const fs = j.friendship_status;
+      return { ok: true, status: fs.following ? "following" : "requested" };
+    }
+    if (j?.following !== undefined || j?.outgoing_request !== undefined) {
+      if (j.following || j.outgoing_request) return { ok: true, status: j.following ? "following" : "requested" };
+      return { ok: false, status: "follow_blocked", reason: "Instagram silently declined follow (following=false, outgoing_request=false)" };
+    }
+    if (j?.status === "fail") {
+      const msg: string = j?.message || "Instagram declined (status: fail)";
+      if (/something went wrong|sorry/i.test(msg)) return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
+      return { ok: false, status: "follow_blocked", reason: msg };
+    }
+    if (j?.status === "ok") return { ok: true, status: "following" };
+    console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
+    return { ok: false, status: "follow_blocked", reason: "unexpected response: " + JSON.stringify(j).slice(0, 200) };
+  }
+
   // ── Programmatic consent acceptance ──────────────────────────────────────
   // When Instagram's mobile API returns consent_required, it means the account
   // must accept the updated Terms of Service / Privacy Policy before any API
@@ -2415,12 +2524,12 @@ export class InstagramWebClient {
 
   async followUser(userId: string, username?: string, sourceLabel?: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
     return this.timed("FollowedUser", async () => {
-      // Prefer IgApiClient path (properly signs the request body with HMAC-SHA256).
-      // The hand-rolled mobileSessionPost sends an unsigned body which Instagram
-      // rejects with "We're sorry, but something went wrong" on some users even
-      // when the account can follow just fine via the real app or EB.
+      // Use _followViaMobileSession: correct _buildMobileHeaders (igDid device ID,
+      // realistic bandwidth, X-CSRFToken) + HMAC-signed body via signBody().
+      // IgApiClient was sending wrong X-IG-Device-ID (uuid instead of igDid),
+      // bandwidth=-1.000 (bot signal), and missing X-CSRFToken.
       if (this.igApiCookies) {
-        return this._followViaIgClient(userId);
+        return this._followViaMobileSession(userId);
       }
 
       // Fallback: hand-rolled POST (no igApiCookies available).

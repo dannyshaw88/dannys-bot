@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.268",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow: fixed a bug where the follow request was missing required identity fields, causing Instagram to reject every follow with 'We're sorry, but something went wrong'. The signed request now includes the device UUID, account ID, CSRF token, and device ID as required." },
+    ],
+  },
+  {
     version: "1.1.267",
     date: "1 Jul 2026",
     items: [
