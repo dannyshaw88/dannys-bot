@@ -2433,38 +2433,83 @@ export class InstagramWebClient {
     await this._deserializeIgCookies(ig, cwuId);
     console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
 
-    // ── Phase 2: first authenticated IgApiClient call ────────────────────────
-    // accounts/get_account_family/ is the first authenticated call in the Jarvee
-    // verify sequence.  Instagram returns ig-set-www-claim here — even a 404
-    // (endpoint not applicable for this account type) still carries the header.
-    // The library's handleResponseHeaders() picks it up → ig.state.igWWWClaim set
-    // → _absorbIgClientState (hooked in _newAutomationIgClient) → igDeviceState updated.
+    // Helper: check whether a real claim has been absorbed since the last call.
+    const claimNow = (): string | undefined => {
+      if (!this.igDeviceState) return undefined;
+      try { return (JSON.parse(this.igDeviceState) as any).igWWWClaim ?? undefined; } catch { return undefined; }
+    };
+
+    // ── Phase 2a: accounts/get_account_family/ ────────────────────────────────
+    // First authenticated call in the Jarvee verify sequence.
+    // Returns ig-set-www-claim for multi-account (Meta Family) accounts on success.
+    // For regular personal accounts it returns 404 WITHOUT the header — in that
+    // case we fall through to Phase 2b and 2c (same sequence the verify runner uses).
     try {
       await ig.request.send({
         url: "/api/v1/accounts/get_account_family/",
         method: "POST",
         form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken }),
       });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family OK`);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
     } catch (e: any) {
-      // Non-fatal — the claim header is returned even on 4xx error responses.
-      // On a throw the library skips handleResponseHeaders, so we absorb manually.
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family threw (non-fatal): ${e?.message}`);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
       const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
       this._absorbResponseHeaders(errHeaders);
-      // Also absorb from ig.state in case the library partially processed it
       this._absorbIgClientState(ig);
     }
 
-    // Confirm result in the log
-    let resultClaim: string | undefined;
-    if (this.igDeviceState) {
-      try { resultClaim = (JSON.parse(this.igDeviceState) as any).igWWWClaim; } catch {}
+    // ── Phase 2b: qe/sync/ bare POST (mirrors verify ABD probe) ──────────────
+    // The verify sequence fires this immediately after get_account_family/.
+    // For regular personal accounts where get_account_family/ returns 404 with no
+    // claim header, qe/sync is the next endpoint that Instagram returns
+    // ig-set-www-claim on. Abort early if claim already obtained.
+    if (!claimNow() || claimNow() === "0") {
+      try {
+        await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+      } catch (e: any) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+        const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+        this._absorbResponseHeaders(errHeaders);
+        this._absorbIgClientState(ig);
+      }
     }
+
+    // ── Phase 2c: banyan/banyan/ signed POST (mirrors verify Phase 2b) ────────
+    // Third endpoint in the verify cold-start sequence. If qe/sync did not return
+    // the claim, banyan/banyan typically will — it is a signed authenticated POST
+    // that Instagram uses to push interstitial config and reliably carries
+    // ig-set-www-claim in its response.
+    if (!claimNow() || claimNow() === "0") {
+      try {
+        await ig.request.send({
+          url: "/api/v1/banyan/banyan/",
+          method: "POST",
+          form: ig.request.sign({
+            _csrftoken: ig.state.cookieCsrfToken,
+            _uid: ownUserId,
+            _uuid: ig.state.uuid,
+            surfaces_to_queries: JSON.stringify([
+              { surface: "interstitial_link_loading" },
+              { surface: "interstitial_link_prefetch" },
+            ]),
+          }),
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
+      } catch (e: any) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
+        const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+        this._absorbResponseHeaders(errHeaders);
+        this._absorbIgClientState(ig);
+      }
+    }
+
+    // Confirm result in the log
+    const resultClaim = claimNow();
     if (resultClaim && resultClaim !== "0") {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
     } else {
-      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2 — follow will use claim=0`);
+      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c — follow will use claim=0`);
     }
   }
 

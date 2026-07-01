@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.271",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow: extended the www-claim bootstrap to call qe/sync and banyan/banyan after get_account_family/ — for regular personal accounts, get_account_family/ returns 404 with no claim header, but qe/sync and banyan/banyan do return it, matching the full verify sequence." },
+    ],
+  },
+  {
     version: "1.1.270",
     date: "1 Jul 2026",
     items: [
