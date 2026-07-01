@@ -1764,6 +1764,7 @@ export class InstagramWebClient {
       "X-Bloks-Version-Id":           BLOKS_VERSION_ID,
       "X-Bloks-Is-Layout-RTL":        "false",
       "X-FB-HTTP-Engine":             "Liger",
+      "X-IG-WWW-Claim":               wwwClaim,
       // Pigeon session ID — stable for the lifetime of this client instance.
       // A real app generates this once at launch; refreshing it per-call is a bot signal.
       "X-Pigeon-Session-Id":          this._pigeonSessionId,
@@ -6058,6 +6059,7 @@ export async function createInstagramAccountViaApi(params: {
     "X-Bloks-Version-Id": BLOKS_VERSION_ID,
     "X-Bloks-Is-Layout-RTL": "false",
     "X-FB-HTTP-Engine": "Liger",
+    "X-IG-WWW-Claim": "0",
     "X-Pigeon-Session-Id": pigeonSessionId,
     "X-Pigeon-Rawclienttime": pigeonRawclienttime(),
     // Locale matched to the proxy's exit country — resolved above via ip-api.com.

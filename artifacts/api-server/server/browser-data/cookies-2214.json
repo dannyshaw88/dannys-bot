@@ -1,7 +1,7 @@
 [
   {
     "name": "sessionid",
-    "value": "20064017370%3AAnSDkOB3DyJzgm%3A27%3AAYgQsqkAsSRYBG1zWA5mHHUyKJD2kCqSpuAWKf3mkw",
+    "value": "15934164001%3AzeM3ayjoze0szD%3A27%3AAYjDMUksv9Iz59sGpPzyGYhspLRqNowLDqkq4jEK0Q",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
@@ -12,7 +12,7 @@
   },
   {
     "name": "csrftoken",
-    "value": "U0xw3VMcgPYLa6T6WfwJ4m05RONeKkuz",
+    "value": "j1sg8ZzOqvArPCWyyECqqarMShko8v0g",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
@@ -23,7 +23,7 @@
   },
   {
     "name": "ds_user_id",
-    "value": "20064017370",
+    "value": "15934164001",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
@@ -34,7 +34,7 @@
   },
   {
     "name": "mid",
-    "value": "akTi6wABAAFffOe6MbuLIb7oRCXh",
+    "value": "akOyYQABAAHAbc40Atd1cu4m1Xtl",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
@@ -45,7 +45,7 @@
   },
   {
     "name": "ig_did",
-    "value": "B5F19DA9-30E7-4E47-B94E-C83C0B08BD0B",
+    "value": "BA4CCD4E-9D81-405D-9C3A-40DBD21C708B",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
