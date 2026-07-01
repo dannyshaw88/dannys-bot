@@ -2539,40 +2539,87 @@ export class InstagramWebClient {
       }
     }
 
-    // ── Phase 2d: current_user GET — acquire ig-set-authorization Bearer token ─
+    // ── Phase 2d: users/{id}/info GET — acquire ig-set-authorization Bearer token ─
     // Runs regardless of whether claim was already cached (claim and auth are
     // independent tokens; either can be absent).
     //
-    // Uses igReq directly with _buildMobileHeaders — SAME transport and headers
-    // as the follow/unfollow requests — instead of ig.account.currentUser()
-    // through IgApiClient.  The IgApiClient path sends fewer Android-specific
-    // headers (no X-Bloks-*, X-Pigeon-*, locale, timezone) and consistently
-    // returns HTTP 200 status:"fail" "something went wrong" for personal accounts.
-    // igReq + _buildMobileHeaders matches what a real Android app sends and
-    // _absorbResponseHeaders captures ig-set-authorization from the response
-    // headers even when the body status is "fail" — the header is present
-    // independently of the body's success/fail field.
+    // Uses users/{id}/info/ through IgApiClient (NOT current_user/?edit=true via igReq).
+    //
+    // WHY NOT current_user/?edit=true:
+    //   - Instagram treats ?edit=true as a profile-write attempt on a freshly restored
+    //     session and raises checkpoint_required (instagramLogin.ts line 1043).
+    //   - Even when it returns HTTP 200, the body is status:"fail" for personal accounts
+    //     and Instagram does NOT include ig-set-authorization in those responses.
+    //
+    // WHY users/{id}/info:
+    //   - This is the endpoint the verify flow (mobileBootstrapFromWebCookies) uses
+    //     specifically to validate the sessionid without triggering false checkpoints.
+    //   - It returns HTTP 200 with the real user object — the only scenario where
+    //     Instagram reliably sends ig-set-authorization in the response headers.
+    //   - IgApiClient processes ig-set-authorization into ig.state.authorization
+    //     automatically; _absorbIgClientState then persists it to igDeviceState.
+    //
+    // A fresh ig2d instance is created (instead of reusing the one from the
+    // claimAlreadyPresent==false branch above) so this phase is self-contained
+    // and works whether or not claim was already present.
     if (!this._deviceAuthorization) {
       try {
-        const csrf2d = this.mobileCsrf || this.csrfToken || "missing";
-        const r2d = await igReq({
-          host: "i.instagram.com",
-          path: "/api/v1/accounts/current_user/?edit=true",
-          method: "GET",
-          headers: this._buildMobileHeaders(csrf2d),
-          cookieJar: this.mobileCookieJar,
-          proxyUrl: this.proxyUrl,
-        });
-        this._absorbResponseHeaders(r2d.responseHeaders);
-        if (r2d.cookies.length) {
-          this.mobileCookieJar = mergeCookies(this.mobileCookieJar, r2d.cookies);
-          const newCsrf = extractCsrf(r2d.cookies);
-          if (newCsrf) this.mobileCsrf = newCsrf;
+        const pairs2d = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+        let uid2d = pairs2d.find(p => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+        const sess2d = pairs2d.find(p => p.toLowerCase().startsWith("sessionid="));
+        if (!uid2d && sess2d) {
+          const rawVal2d = sess2d.slice("sessionid=".length);
+          let decoded2d = rawVal2d;
+          try { decoded2d = decodeURIComponent(rawVal2d); } catch {}
+          uid2d = decoded2d.split(":")[0] ?? "";
         }
-        const gotAuth = !!this._deviceAuthorization;
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user (direct igReq) → status=${r2d.status} authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
+
+        if (!uid2d) {
+          console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped — cannot parse userId from igApiCookies`);
+        } else {
+          const ig2d = this._newBootstrapIgClient();
+          const deviceSeed2d = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+          if (this.igDeviceState) {
+            try {
+              const saved2d = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string };
+              ig2d.state.generateDevice(deviceSeed2d);
+              if (saved2d.deviceId)      ig2d.state.deviceId      = saved2d.deviceId;
+              if (saved2d.uuid)          ig2d.state.uuid          = saved2d.uuid;
+              if (saved2d.phoneId)       ig2d.state.phoneId       = saved2d.phoneId;
+              if (saved2d.adid)          ig2d.state.adid          = saved2d.adid;
+              if (saved2d.deviceString)  ig2d.state.deviceString  = saved2d.deviceString;
+              // intentionally do NOT pre-load authorization — we are here precisely
+              // because it is missing; starting fresh lets us capture the new token
+            } catch { ig2d.state.generateDevice(deviceSeed2d); }
+          } else {
+            ig2d.state.generateDevice(deviceSeed2d);
+          }
+          ig2d.state.constants.APP_VERSION      = MOBILE_VERSION;
+          ig2d.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+          patchDeviceStringVersionCode(ig2d, MOBILE_VERSION_CODE);
+          if (this.proxyUrl) ig2d.state.proxyUrl = this.proxyUrl;
+          patchIgClientTls(ig2d, this.proxyUrl);
+
+          const cwuId2d = uid2d ? `${this.igApiCookies};ds_user_id=${uid2d}` : this.igApiCookies;
+          await this._deserializeIgCookies(ig2d, cwuId2d);
+
+          try {
+            await ig2d.request.send({
+              url: `/api/v1/users/${uid2d}/info/`,
+              method: "GET",
+            });
+          } catch (innerErr: any) {
+            // Absorb state even from error responses — ig-set-authorization can
+            // arrive on any authenticated response, including 4xx.
+            this._absorbIgClientState(ig2d);
+            console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d users/${uid2d}/info threw (non-fatal): ${innerErr?.message}`);
+          }
+
+          const gotAuth = !!this._deviceAuthorization;
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d users/${uid2d}/info → authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
+        }
       } catch (e: any) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user threw (non-fatal): ${e?.message}`);
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d setup threw (non-fatal): ${e?.message}`);
       }
     } else {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped — authorization already present`);

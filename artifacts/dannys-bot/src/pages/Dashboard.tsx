@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.274",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool: replaced the Authorization token fetch with a call to users/{id}/info through the full Android API pipeline — this is the same endpoint the verify flow uses, and the only one Instagram reliably returns the Bearer token on. The previous current_user/?edit=true call was not returning the token for personal accounts." },
+    ],
+  },
+  {
     version: "1.1.273",
     date: "1 Jul 2026",
     items: [
