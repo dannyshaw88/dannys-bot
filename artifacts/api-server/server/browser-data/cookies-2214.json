@@ -1,0 +1,57 @@
+[
+  {
+    "name": "sessionid",
+    "value": "15934164001%3AzeM3ayjoze0szD%3A27%3AAYjDMUksv9Iz59sGpPzyGYhspLRqNowLDqkq4jEK0Q",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "csrftoken",
+    "value": "j1sg8ZzOqvArPCWyyECqqarMShko8v0g",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "ds_user_id",
+    "value": "15934164001",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "mid",
+    "value": "akOyYQABAAHAbc40Atd1cu4m1Xtl",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "ig_did",
+    "value": "BA4CCD4E-9D81-405D-9C3A-40DBD21C708B",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  }
+]
