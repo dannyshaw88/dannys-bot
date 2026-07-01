@@ -78,6 +78,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.269",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Debug", text: "Follow: added full wire logging (all headers, proxy, full response) to help diagnose the 'something went wrong' rejection from Instagram after the JA3 transport switch." },
+      { category: "Fix", text: "Follow: stripped Host, Connection, and Content-Length headers from CycleTLS requests — these headers are forbidden in HTTP/2 and caused Instagram to reject every follow attempt." },
+      { category: "Fix", text: "DB: fixed startup crash caused by a column referenced in a migration step before its CREATE TABLE had run." },
+    ],
+  },
+  {
     version: "1.1.268",
     date: "1 Jul 2026",
     items: [

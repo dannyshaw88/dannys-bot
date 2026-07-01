@@ -180,7 +180,10 @@ export async function tlsRequest(opts: {
   const allHeaders: Record<string, string> = {
     ...headers,
     ...(cookieJar.length ? { Cookie: cookieJar.join("; ") } : {}),
-    ...(body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}),
+    // NOTE: Content-Length is NOT added here for the CycleTLS path — Go's fhttp
+    // transport derives it automatically from the body string. Passing it as a
+    // regular header produces a duplicate Content-Length which some Instagram
+    // servers reject. It IS added for the forceNodeTls (Node.js HTTPS) path below.
   };
 
   const client = await getClient();
@@ -199,13 +202,43 @@ export async function tlsRequest(opts: {
 
     const url = `https://${host}${path}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
-    // CycleTLS takes User-Agent as a dedicated field — remove from header map.
-    // Accept-Encoding is intentionally NOT set here: Go's fhttp transport adds
-    // "Accept-Encoding: gzip" to the wire automatically and transparently
-    // decompresses the response before returning resp.data, so the body is
-    // always clean JSON. Explicitly setting "identity" was a visible bot signal
-    // on every single API call — real OkHttp4 always advertises gzip.
-    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
+    // Strip headers that Go's HTTP/2 transport manages automatically or explicitly
+    // forbids as regular headers (RFC 7540 §8.1.2.2):
+    //
+    //   User-Agent    → CycleTLS takes it as a dedicated top-level field, not a header.
+    //   Accept-Encoding → Go's fhttp adds "gzip" automatically and decompresses before
+    //                     returning resp.data; setting "identity" manually was a bot signal.
+    //   Host          → In HTTP/2 Go derives :authority from the URL.  Passing Host as a
+    //                   regular header alongside the auto-generated :authority causes a
+    //                   header conflict that Instagram rejects with "something went wrong".
+    //   Connection    → Hop-by-hop; FORBIDDEN in HTTP/2.  IgApiClient injects
+    //                   "Connection: close" via getDefaultHeaders(); removing it here
+    //                   prevents the generic 200 status:"fail" rejection on write calls.
+    //   Content-Length → Go sets it automatically from the body parameter.  Passing it
+    //                    manually produces a duplicate Content-Length header which can
+    //                    cause Instagram to reject the request.
+    const {
+      "User-Agent": _ua,
+      "Accept-Encoding": _ae,
+      "Host": _host,
+      "Connection": _conn,
+      "Content-Length": _cl,
+      ...headersWithoutUA
+    } = allHeaders;
+
+    // ── FULL WIRE DIAG (fires for every POST to friendships/create) ─────────────
+    const isFriendshipCall = path.includes("/friendships/");
+    if (isFriendshipCall) {
+      const maskedProxy = proxyUrl
+        .replace(/:[^:@]+@/, ":***@")        // hide proxy password
+        .replace(/^(https?:\/\/)[^:]+:/, "$1***:"); // hide proxy user too
+      console.warn(
+        `[tls:WIRE] ${method} ${url} via proxy=${maskedProxy}\n` +
+        `  userAgent: ${userAgent.slice(0, 80)}\n` +
+        `  headers: ${JSON.stringify(headersWithoutUA, null, 2)}\n` +
+        `  body(full): ${body ?? ""}`,
+      );
+    }
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };
@@ -260,6 +293,59 @@ export async function tlsRequest(opts: {
         // resp.data may already be a parsed object when responseType==="json"
         if (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data)) json = resp.data;
       }
+
+      if (isFriendshipCall) {
+        console.warn(
+          `[tls:WIRE] ${method} ${url} → HTTP ${resp.status} elapsed=${elapsed}ms\n` +
+          `  resp_headers: ${JSON.stringify(resp.headers)}\n` +
+          `  resp_body(full): ${rawBody}`,
+        );
+      }
+
+      // ── Diagnostic: log full context when Instagram returns the generic technical
+      // rejection ("something went wrong" HTTP 200, status:"fail", no spam/feedback_required).
+      // This fires for all direct igReq() callers (follow, unfollow, DM, etc.) and tells
+      // us immediately whether it's a CSRF mismatch, missing fields, or an unknown cause.
+      if (
+        resp.status === 200 &&
+        json && typeof json === "object" &&
+        json.status === "fail" &&
+        !("spam" in json) && !("feedback_required" in json) &&
+        /something went wrong|sorry/i.test(String(json.message ?? ""))
+      ) {
+        const cookieStr = cookieJar.join("; ");
+        const cookieCsrf = cookieStr.match(/csrftoken=([^;]+)/)?.[1];
+        let signedCsrf: string | undefined;
+        let signedUuid: string | undefined;
+        if (typeof body === "string" && body.includes("signed_body=")) {
+          const m = body.match(/signed_body=([^&]+)/);
+          if (m) {
+            const raw = m[1];
+            const dotIdx = raw.indexOf(".");
+            const jsonPart = dotIdx !== -1 ? raw.slice(dotIdx + 1) : raw;
+            try {
+              const payload = JSON.parse(jsonPart);
+              signedCsrf = payload._csrftoken;
+              signedUuid = payload._uuid;
+            } catch { /* ignore parse errors */ }
+          }
+        }
+        const csrfMismatch = signedCsrf != null && cookieCsrf != null && signedCsrf !== cookieCsrf;
+        console.warn(
+          `[tls:req][DIAG] ${method} ${host}${path} — generic rejection (HTTP 200, status:fail). ` +
+          `cookie_csrf=${cookieCsrf ?? "MISSING"} signed_csrf=${signedCsrf ?? "n/a"} ` +
+          `csrf_MISMATCH=${csrfMismatch} uuid=${signedUuid ?? "n/a"} ` +
+          `req_body_preview=${(body ?? "").slice(0, 300)}`,
+        );
+        if (csrfMismatch) {
+          console.error(
+            `[tls:req][DIAG] *** CSRF TOKEN MISMATCH *** signed with csrf=${signedCsrf} ` +
+            `but Cookie header has csrf=${cookieCsrf}. ` +
+            `This is the root cause of "something went wrong" on write calls.`,
+          );
+        }
+      }
+
       return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
     }
 
