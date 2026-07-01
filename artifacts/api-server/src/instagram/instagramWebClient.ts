@@ -2123,6 +2123,12 @@ export class InstagramWebClient {
     }
 
     const _t0 = Date.now();
+    // Bootstrap ig-set-www-claim if missing before the follow attempt.
+    // _bootstrapWwwClaim runs the full Jarvee Phase 0→1→2 sequence through
+    // patchIgClientTls — the only path that makes Instagram issue the token.
+    // Skipped instantly when the claim is already in igDeviceState.
+    // IgApiClient calls inside handle their own throttling via _newAutomationIgClient.
+    await this._bootstrapWwwClaim();
     // apiThrottle MUST come before _bootstrapMobileCsrf (bootstrap makes real HTTP requests)
     await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
@@ -2287,6 +2293,149 @@ export class InstagramWebClient {
       rejectPublicSuffixes: true,
       cookies,
     }));
+  }
+
+  // Bootstrap ig-set-www-claim by running the same Jarvee cold-start sequence that
+  // verifyInstagramCredentials uses.  This is the ONLY way Instagram issues the
+  // www-claim token — bare igReq calls (even launcher/sync or current_user) do NOT
+  // trigger it because they bypass the IgApiClient pipeline.
+  //
+  // Sequence (mirrors instagramLogin.ts Phase 0 → Phase 1 → Phase 2a exactly):
+  //   Phase 0a: anonymous zr/token/result  (pre-auth device probe)
+  //   Phase 0b: anonymous launcher/sync    (SendMobileConfig, no sessionid)
+  //   Phase 1:  inject sessionid into IgApiClient tough-cookie jar
+  //   Phase 2:  authenticated accounts/get_account_family/ — Instagram responds
+  //             with ig-set-www-claim in headers → library sets ig.state.igWWWClaim
+  //             → _newAutomationIgClient hook fires _absorbIgClientState → claim
+  //             written to this.igDeviceState → onDeviceStateUpdate persists to DB.
+  //
+  // Called from _followViaMobileSession when igDeviceState.igWWWClaim is absent.
+  // Skipped (returns immediately) if the claim is already present.
+  private async _bootstrapWwwClaim(): Promise<void> {
+    if (!this.igApiCookies) return;
+
+    // Skip if a real claim is already stored
+    let existingClaim: string | undefined;
+    if (this.igDeviceState) {
+      try { existingClaim = (JSON.parse(this.igDeviceState) as any).igWWWClaim; } catch {}
+    }
+    if (existingClaim && existingClaim !== "0") return;
+
+    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing — running Jarvee Phase 0→1→2 via IgApiClient`);
+
+    // ── Build IgApiClient (same setup as _buildWarmedIgClient) ──────────────
+    // _newAutomationIgClient hooks ig.request.send → _absorbIgClientState(ig)
+    // so every response that carries ig-set-www-claim is automatically synced.
+    const ig = this._newAutomationIgClient();
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
+        if (saved.uuid)          ig.state.uuid          = saved.uuid;
+        if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
+        if (saved.adid)          ig.state.adid          = saved.adid;
+        if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        // intentionally do NOT restore igWWWClaim — that is what we are bootstrapping
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
+
+    // ── Phase 0a: anonymous GetTokenResult ────────────────────────────────────
+    // No cookies loaded yet — matches Jarvee's very first pre-auth device probe.
+    try {
+      await ig.request.send({
+        url: "/api/v1/zr/token/result/",
+        method: "GET",
+        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
+    } catch (e: any) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
+    }
+
+    // ── Phase 0b: anonymous launcher/sync (SendMobileConfig) ─────────────────
+    // Still no sessionid — Instagram sees a clean device probe, not a checkpointed
+    // session.  Hard-capped at 20 s (large config download on high-latency proxies).
+    try {
+      await Promise.race([
+        ig.launcher.preLoginSync()
+          .then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`))
+          .catch((e: any) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
+        new Promise<void>(r => setTimeout(r, 20_000)),
+      ]);
+    } catch {}
+
+    // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────────────
+    // Jarvee calls zr/token/result a second time right after launcher/sync.
+    // Mirrors instagramLogin.ts Phase 0c exactly.
+    try {
+      await ig.request.send({
+        url: "/api/v1/zr/token/result/",
+        method: "GET",
+        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
+    } catch (e: any) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
+    }
+
+    // ── Phase 1: inject sessionid ─────────────────────────────────────────────
+    // Load AFTER the unauthenticated Phase 0 calls — exact Jarvee ordering.
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const sessionPair = pairs.find(p => p.toLowerCase().startsWith("sessionid="));
+    let ownUserId = pairs.find(p => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+    if (!ownUserId && sessionPair) {
+      const rawVal = sessionPair.slice("sessionid=".length);
+      let decoded = rawVal;
+      try { decoded = decodeURIComponent(rawVal); } catch {}
+      ownUserId = decoded.split(":")[0] ?? "";
+    }
+    const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
+    await this._deserializeIgCookies(ig, cwuId);
+    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+
+    // ── Phase 2: first authenticated IgApiClient call ────────────────────────
+    // accounts/get_account_family/ is the first authenticated call in the Jarvee
+    // verify sequence.  Instagram returns ig-set-www-claim here — even a 404
+    // (endpoint not applicable for this account type) still carries the header.
+    // The library's handleResponseHeaders() picks it up → ig.state.igWWWClaim set
+    // → _absorbIgClientState (hooked in _newAutomationIgClient) → igDeviceState updated.
+    try {
+      await ig.request.send({
+        url: "/api/v1/accounts/get_account_family/",
+        method: "POST",
+        form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken }),
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family OK`);
+    } catch (e: any) {
+      // Non-fatal — the claim header is returned even on 4xx error responses.
+      // On a throw the library skips handleResponseHeaders, so we absorb manually.
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family threw (non-fatal): ${e?.message}`);
+      const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+      this._absorbResponseHeaders(errHeaders);
+      // Also absorb from ig.state in case the library partially processed it
+      this._absorbIgClientState(ig);
+    }
+
+    // Confirm result in the log
+    let resultClaim: string | undefined;
+    if (this.igDeviceState) {
+      try { resultClaim = (JSON.parse(this.igDeviceState) as any).igWWWClaim; } catch {}
+    }
+    if (resultClaim && resultClaim !== "0") {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
+    } else {
+      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2 — follow will use claim=0`);
+    }
   }
 
   // Build and warm up an IgApiClient for DM inbox access, following the exact

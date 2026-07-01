@@ -152152,6 +152152,7 @@ var InstagramWebClient = class {
       return { ok: false, status: "follow_blocked", reason: "no igApiCookies session \u2014 cannot follow" };
     }
     const _t0 = Date.now();
+    await this._bootstrapWwwClaim();
     await this.apiThrottle();
     if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
       await this._bootstrapMobileCsrf();
@@ -152301,6 +152302,124 @@ var InstagramWebClient = class {
       rejectPublicSuffixes: true,
       cookies
     }));
+  }
+  // Bootstrap ig-set-www-claim by running the same Jarvee cold-start sequence that
+  // verifyInstagramCredentials uses.  This is the ONLY way Instagram issues the
+  // www-claim token — bare igReq calls (even launcher/sync or current_user) do NOT
+  // trigger it because they bypass the IgApiClient pipeline.
+  //
+  // Sequence (mirrors instagramLogin.ts Phase 0 → Phase 1 → Phase 2a exactly):
+  //   Phase 0a: anonymous zr/token/result  (pre-auth device probe)
+  //   Phase 0b: anonymous launcher/sync    (SendMobileConfig, no sessionid)
+  //   Phase 1:  inject sessionid into IgApiClient tough-cookie jar
+  //   Phase 2:  authenticated accounts/get_account_family/ — Instagram responds
+  //             with ig-set-www-claim in headers → library sets ig.state.igWWWClaim
+  //             → _newAutomationIgClient hook fires _absorbIgClientState → claim
+  //             written to this.igDeviceState → onDeviceStateUpdate persists to DB.
+  //
+  // Called from _followViaMobileSession when igDeviceState.igWWWClaim is absent.
+  // Skipped (returns immediately) if the claim is already present.
+  async _bootstrapWwwClaim() {
+    if (!this.igApiCookies) return;
+    let existingClaim;
+    if (this.igDeviceState) {
+      try {
+        existingClaim = JSON.parse(this.igDeviceState).igWWWClaim;
+      } catch {
+      }
+    }
+    if (existingClaim && existingClaim !== "0") return;
+    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing \u2014 running Jarvee Phase 0\u21921\u21922 via IgApiClient`);
+    const ig = this._newAutomationIgClient();
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState);
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+        if (saved.uuid) ig.state.uuid = saved.uuid;
+        if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+        if (saved.adid) ig.state.adid = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+      } catch {
+        ig.state.generateDevice(deviceSeed);
+      }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+    ig.state.constants.APP_VERSION = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
+    try {
+      await ig.request.send({
+        url: "/api/v1/zr/token/result/",
+        method: "GET",
+        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
+    } catch (e) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
+    }
+    try {
+      await Promise.race([
+        ig.launcher.preLoginSync().then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`)).catch((e) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
+        new Promise((r2) => setTimeout(r2, 2e4))
+      ]);
+    } catch {
+    }
+    try {
+      await ig.request.send({
+        url: "/api/v1/zr/token/result/",
+        method: "GET",
+        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
+    } catch (e) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
+    }
+    const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+    const sessionPair = pairs.find((p) => p.toLowerCase().startsWith("sessionid="));
+    let ownUserId = pairs.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+    if (!ownUserId && sessionPair) {
+      const rawVal = sessionPair.slice("sessionid=".length);
+      let decoded = rawVal;
+      try {
+        decoded = decodeURIComponent(rawVal);
+      } catch {
+      }
+      ownUserId = decoded.split(":")[0] ?? "";
+    }
+    const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
+    await this._deserializeIgCookies(ig, cwuId);
+    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+    try {
+      await ig.request.send({
+        url: "/api/v1/accounts/get_account_family/",
+        method: "POST",
+        form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken })
+      });
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family OK`);
+    } catch (e) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family threw (non-fatal): ${e?.message}`);
+      const errHeaders = e?.response?.headers ?? {};
+      this._absorbResponseHeaders(errHeaders);
+      this._absorbIgClientState(ig);
+    }
+    let resultClaim;
+    if (this.igDeviceState) {
+      try {
+        resultClaim = JSON.parse(this.igDeviceState).igWWWClaim;
+      } catch {
+      }
+    }
+    if (resultClaim && resultClaim !== "0") {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: \u2713 claim obtained (${resultClaim.slice(0, 16)}\u2026)`);
+    } else {
+      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2 \u2014 follow will use claim=0`);
+    }
   }
   // Build and warm up an IgApiClient for DM inbox access, following the exact
   // Jarvee cold-start sequence that prevents the 4415001 "Prompt has contribution"
