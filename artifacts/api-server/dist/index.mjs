@@ -150314,6 +150314,20 @@ function patchIgClientTls(ig, proxyUrl) {
       } catch {
       }
     }
+    const rawIgAuth = resp.headers["ig-set-authorization"];
+    if (rawIgAuth) {
+      const authVal = Array.isArray(rawIgAuth) ? rawIgAuth[0] : rawIgAuth;
+      if (authVal && authVal.startsWith("IGT:")) {
+        ig.state.authorization = authVal;
+      }
+    }
+    const rawIgClaim = resp.headers["ig-set-www-claim"];
+    if (rawIgClaim) {
+      const claimVal = Array.isArray(rawIgClaim) ? rawIgClaim[0] : rawIgClaim;
+      if (claimVal && claimVal !== "0") {
+        ig.state.igWWWClaim = claimVal;
+      }
+    }
     const rawBody = typeof resp.data === "string" ? resp.data : Buffer.isBuffer(resp.data) ? resp.data.toString("utf8") : resp.data != null ? JSON.stringify(resp.data) : "";
     let parsedBody = resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data) ? resp.data : rawBody;
     if (typeof parsedBody === "string") {
@@ -152204,7 +152218,10 @@ var InstagramWebClient = class {
       nav_chain: navChain,
       surface: "profile"
     });
-    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026)`);
+    if (!this._deviceAuthorization) {
+      console.warn(`[webClient] follow ${userId}: WARNING \u2014 no Authorization Bearer token in igDeviceState after Phase 2d; follow will proceed without it (may cause 'something went wrong')`);
+    }
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
@@ -152354,73 +152371,8 @@ var InstagramWebClient = class {
       } catch {
       }
     }
-    if (existingClaim && existingClaim !== "0") return;
-    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing \u2014 running Jarvee Phase 0\u21921\u21922 via IgApiClient`);
-    const ig = this._newBootstrapIgClient();
-    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
-    if (this.igDeviceState) {
-      try {
-        const saved = JSON.parse(this.igDeviceState);
-        ig.state.generateDevice(deviceSeed);
-        if (saved.deviceId) ig.state.deviceId = saved.deviceId;
-        if (saved.uuid) ig.state.uuid = saved.uuid;
-        if (saved.phoneId) ig.state.phoneId = saved.phoneId;
-        if (saved.adid) ig.state.adid = saved.adid;
-        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-        if (saved.authorization) ig.state.authorization = saved.authorization;
-      } catch {
-        ig.state.generateDevice(deviceSeed);
-      }
-    } else {
-      ig.state.generateDevice(deviceSeed);
-    }
-    ig.state.constants.APP_VERSION = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
-    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
-    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
-    patchIgClientTls(ig, this.proxyUrl);
-    try {
-      await ig.request.send({
-        url: "/api/v1/zr/token/result/",
-        method: "GET",
-        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
-    } catch (e) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
-    }
-    try {
-      await Promise.race([
-        ig.launcher.preLoginSync().then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`)).catch((e) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
-        new Promise((r2) => setTimeout(r2, 2e4))
-      ]);
-    } catch {
-    }
-    try {
-      await ig.request.send({
-        url: "/api/v1/zr/token/result/",
-        method: "GET",
-        qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
-    } catch (e) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
-    }
-    const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
-    const sessionPair = pairs.find((p) => p.toLowerCase().startsWith("sessionid="));
-    let ownUserId = pairs.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
-    if (!ownUserId && sessionPair) {
-      const rawVal = sessionPair.slice("sessionid=".length);
-      let decoded = rawVal;
-      try {
-        decoded = decodeURIComponent(rawVal);
-      } catch {
-      }
-      ownUserId = decoded.split(":")[0] ?? "";
-    }
-    const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
-    await this._deserializeIgCookies(ig, cwuId);
-    console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+    const claimAlreadyPresent = !!(existingClaim && existingClaim !== "0");
+    if (claimAlreadyPresent && this._deviceAuthorization) return;
     const claimNow = () => {
       if (!this.igDeviceState) return void 0;
       try {
@@ -152429,69 +152381,215 @@ var InstagramWebClient = class {
         return void 0;
       }
     };
-    try {
-      await ig.request.send({
-        url: "/api/v1/accounts/get_account_family/",
-        method: "POST",
-        form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken })
-      });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
-    } catch (e) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
-      const errHeaders = e?.response?.headers ?? {};
-      this._absorbResponseHeaders(errHeaders);
-      this._absorbIgClientState(ig);
-    }
-    if (!claimNow() || claimNow() === "0") {
+    if (!claimAlreadyPresent) {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing \u2014 running Jarvee Phase 0\u21921\u21922 via IgApiClient`);
+      const ig = this._newBootstrapIgClient();
+      const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+      if (this.igDeviceState) {
+        try {
+          const saved = JSON.parse(this.igDeviceState);
+          ig.state.generateDevice(deviceSeed);
+          if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+          if (saved.uuid) ig.state.uuid = saved.uuid;
+          if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+          if (saved.adid) ig.state.adid = saved.adid;
+          if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+          if (saved.authorization) ig.state.authorization = saved.authorization;
+        } catch {
+          ig.state.generateDevice(deviceSeed);
+        }
+      } else {
+        ig.state.generateDevice(deviceSeed);
+      }
+      ig.state.constants.APP_VERSION = MOBILE_VERSION;
+      ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+      patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+      if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+      patchIgClientTls(ig, this.proxyUrl);
       try {
-        await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+        await ig.request.send({
+          url: "/api/v1/zr/token/result/",
+          method: "GET",
+          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
       } catch (e) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
+      }
+      try {
+        await Promise.race([
+          ig.launcher.preLoginSync().then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`)).catch((e) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
+          new Promise((r2) => setTimeout(r2, 2e4))
+        ]);
+      } catch {
+      }
+      try {
+        await ig.request.send({
+          url: "/api/v1/zr/token/result/",
+          method: "GET",
+          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
+      } catch (e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
+      }
+      const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+      const sessionPair = pairs.find((p) => p.toLowerCase().startsWith("sessionid="));
+      let ownUserId = pairs.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+      if (!ownUserId && sessionPair) {
+        const rawVal = sessionPair.slice("sessionid=".length);
+        let decoded = rawVal;
+        try {
+          decoded = decodeURIComponent(rawVal);
+        } catch {
+        }
+        ownUserId = decoded.split(":")[0] ?? "";
+      }
+      const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
+      await this._deserializeIgCookies(ig, cwuId);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+      try {
+        await ig.request.send({
+          url: "/api/v1/accounts/get_account_family/",
+          method: "POST",
+          form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken })
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
+      } catch (e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
         const errHeaders = e?.response?.headers ?? {};
         this._absorbResponseHeaders(errHeaders);
         this._absorbIgClientState(ig);
       }
-    }
-    if (!claimNow() || claimNow() === "0") {
-      try {
-        await ig.request.send({
-          url: "/api/v1/banyan/banyan/",
-          method: "POST",
-          form: ig.request.sign({
-            _csrftoken: ig.state.cookieCsrfToken,
-            _uid: ownUserId,
-            _uuid: ig.state.uuid,
-            surfaces_to_queries: JSON.stringify([
-              { surface: "interstitial_link_loading" },
-              { surface: "interstitial_link_prefetch" }
-            ])
-          })
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
-      } catch (e) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
-        const errHeaders = e?.response?.headers ?? {};
-        this._absorbResponseHeaders(errHeaders);
-        this._absorbIgClientState(ig);
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+        } catch (e) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+          const errHeaders = e?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({
+            url: "/api/v1/banyan/banyan/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: ownUserId,
+              _uuid: ig.state.uuid,
+              surfaces_to_queries: JSON.stringify([
+                { surface: "interstitial_link_loading" },
+                { surface: "interstitial_link_prefetch" }
+              ])
+            })
+          });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
+        } catch (e) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
+          const errHeaders = e?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({
+            url: "/api/v1/launcher/sync/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uuid: ig.state.uuid,
+              id: ig.state.uuid,
+              server_config_retrieval: "1"
+            })
+          });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c' launcher/sync OK`);
+        } catch (e) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c' launcher/sync threw (non-fatal): ${e?.message}`);
+          const errHeaders = e?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+      const resultClaim = claimNow();
+      if (resultClaim && resultClaim !== "0") {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: \u2713 claim obtained (${resultClaim.slice(0, 16)}\u2026)`);
+      } else {
+        console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2c' \u2014 follow will proceed with claim=0`);
       }
     }
     if (!this._deviceAuthorization) {
       try {
-        await ig.account.currentUser();
-        const gotAuth = !!this._deviceAuthorization;
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user \u2192 authorization=${gotAuth ? `obtained (${this._deviceAuthorization.slice(0, 16)}\u2026)` : "not returned by Instagram"}`);
+        const pairs2d = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+        let uid2d = pairs2d.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+        const sess2d = pairs2d.find((p) => p.toLowerCase().startsWith("sessionid="));
+        if (!uid2d && sess2d) {
+          const rawVal2d = sess2d.slice("sessionid=".length);
+          let decoded2d = rawVal2d;
+          try {
+            decoded2d = decodeURIComponent(rawVal2d);
+          } catch {
+          }
+          uid2d = decoded2d.split(":")[0] ?? "";
+        }
+        if (!uid2d) {
+          console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped \u2014 cannot parse userId from igApiCookies`);
+        } else {
+          const ig2d = this._newBootstrapIgClient();
+          const deviceSeed2d = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+          if (this.igDeviceState) {
+            try {
+              const saved2d = JSON.parse(this.igDeviceState);
+              ig2d.state.generateDevice(deviceSeed2d);
+              if (saved2d.deviceId) ig2d.state.deviceId = saved2d.deviceId;
+              if (saved2d.uuid) ig2d.state.uuid = saved2d.uuid;
+              if (saved2d.phoneId) ig2d.state.phoneId = saved2d.phoneId;
+              if (saved2d.adid) ig2d.state.adid = saved2d.adid;
+              if (saved2d.deviceString) ig2d.state.deviceString = saved2d.deviceString;
+            } catch {
+              ig2d.state.generateDevice(deviceSeed2d);
+            }
+          } else {
+            ig2d.state.generateDevice(deviceSeed2d);
+          }
+          ig2d.state.constants.APP_VERSION = MOBILE_VERSION;
+          ig2d.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+          patchDeviceStringVersionCode(ig2d, MOBILE_VERSION_CODE);
+          if (this.proxyUrl) ig2d.state.proxyUrl = this.proxyUrl;
+          patchIgClientTls(ig2d, this.proxyUrl);
+          const cwuId2d = uid2d ? `${this.igApiCookies};ds_user_id=${uid2d}` : this.igApiCookies;
+          await this._deserializeIgCookies(ig2d, cwuId2d);
+          const phase2dProbes = [
+            {
+              label: "launcher/sync",
+              url: "/api/v1/launcher/sync/",
+              method: "POST",
+              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) }
+            },
+            { label: `accounts/current_user`, url: "/api/v1/accounts/current_user/", method: "GET", extra: { qs: { edit: "false" } } },
+            { label: `users/${uid2d}/info`, url: `/api/v1/users/${uid2d}/info/`, method: "GET" }
+          ];
+          for (const probe of phase2dProbes) {
+            if (this._deviceAuthorization) break;
+            try {
+              await ig2d.request.send({ url: probe.url, method: probe.method, ...probe.extra ?? {} });
+            } catch (innerErr) {
+              this._absorbIgClientState(ig2d);
+              console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d ${probe.label} threw (non-fatal): ${innerErr?.message}`);
+            }
+          }
+          const gotAuth = !!this._deviceAuthorization;
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d \u2192 authorization=${gotAuth ? `obtained (${this._deviceAuthorization.slice(0, 16)}\u2026)` : "not returned by Instagram (all probes exhausted)"}`);
+        }
       } catch (e) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user threw (non-fatal): ${e?.message}`);
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d setup threw (non-fatal): ${e?.message}`);
       }
     } else {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped \u2014 authorization already present`);
-    }
-    const resultClaim = claimNow();
-    if (resultClaim && resultClaim !== "0") {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: \u2713 claim obtained (${resultClaim.slice(0, 16)}\u2026)`);
-    } else {
-      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2d \u2014 follow will use claim=0`);
     }
   }
   // Build and warm up an IgApiClient for DM inbox access, following the exact
