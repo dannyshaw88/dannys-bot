@@ -752,6 +752,7 @@ export class InstagramWebClient {
     const _origSend = _igReq.send.bind(_igReq);
     const _throttle = this.apiThrottle.bind(this);
     const _logT = this._logTransport.bind(this);
+    const _self = this;
     _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
       await _throttle();
       const t0 = Date.now();
@@ -792,6 +793,12 @@ export class InstagramWebClient {
           successMsg = "Comment posted";
         }
         _logT(igPath, igMethod, Date.now() - t0, false, successMsg);
+        // Persist updated Bearer/claim tokens back to device state after each
+        // successful IgApiClient call. The library updates ig.state.authorization
+        // and ig.state.igWWWClaim from response headers in memory — without this,
+        // those updates are lost when the ephemeral ig instance is discarded and
+        // the next call reloads the stale token from DB (Instagram rejects it).
+        _self._absorbIgClientState(ig);
         return result;
       } catch (err) {
         _logT(igPath, igMethod, Date.now() - t0, true);
@@ -1814,6 +1821,36 @@ export class InstagramWebClient {
     this.onDeviceStateUpdate?.(this.igDeviceState);
   }
 
+  // After any IgApiClient call, read the updated Bearer/claim tokens from the
+  // library's in-memory state and persist them back to igDeviceState + DB.
+  // The instagram-private-api library updates ig.state.authorization and
+  // ig.state.igWWWClaim in memory based on response headers (ig-set-authorization,
+  // ig-set-www-claim), but those updates are lost when the ephemeral `ig` instance
+  // is discarded.  Calling this after every ig.* send (via the patched dispatcher
+  // in _newAutomationIgClient) ensures the DB always holds the latest token values
+  // so the next call — which builds a fresh IgApiClient — starts with current creds.
+  private _absorbIgClientState(ig: IgApiClient): void {
+    const newAuth  = (ig.state as any).authorization as string | undefined;
+    const newClaim = (ig.state as any).igWWWClaim    as string | undefined;
+    if (!newAuth && !newClaim) return;
+    let ds: Record<string, unknown> = {};
+    if (this.igDeviceState) {
+      try { ds = JSON.parse(this.igDeviceState) as Record<string, unknown>; } catch { /* keep empty */ }
+    }
+    let changed = false;
+    if (newAuth && newAuth !== (ds.authorization as string | undefined)) {
+      ds.authorization = newAuth;
+      changed = true;
+    }
+    if (newClaim && newClaim !== "0" && newClaim !== (ds.igWWWClaim as string | undefined)) {
+      ds.igWWWClaim = newClaim;
+      changed = true;
+    }
+    if (!changed) return;
+    this.igDeviceState = JSON.stringify(ds);
+    this.onDeviceStateUpdate?.(this.igDeviceState);
+  }
+
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
@@ -2175,13 +2212,18 @@ export class InstagramWebClient {
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
         ig.state.generateDevice(deviceSeed);
-        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
-        if (saved.uuid)         ig.state.uuid         = saved.uuid;
-        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
-        if (saved.adid)         ig.state.adid         = saved.adid;
-        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+        if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
+        if (saved.uuid)          ig.state.uuid          = saved.uuid;
+        if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
+        if (saved.adid)          ig.state.adid          = saved.adid;
+        if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
+        // Restore Bearer token and WWW-Claim so DM calls start with the latest
+        // session credentials — without these, every warm-up begins with no token
+        // and Instagram rejects the first authenticated call until a new token arrives.
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
       } catch { ig.state.generateDevice(deviceSeed); }
     } else {
       ig.state.generateDevice(deviceSeed);

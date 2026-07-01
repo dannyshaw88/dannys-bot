@@ -78,6 +78,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.267",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow / DM / Like: fixed a bug where the Authorization Bearer token and X-IG-WWW-Claim were never saved back to storage after each action. Every new IgApiClient instance was reloading the original (stale) token from the database, causing Instagram to reject the request with 'something went wrong' even though cookies and CSRF were fine. Tokens are now persisted after every call." },
+      { category: "Fix", text: "DM: the warmed IgApiClient used for inbox/DM sends was not restoring the saved Authorization Bearer token and WWW-Claim when building the client, so every DM session started without a token. Both values are now correctly loaded from device state before the first DM call." },
+    ],
+  },
+  {
     version: "1.1.266",
     date: "30 Jun 2026",
     items: [
