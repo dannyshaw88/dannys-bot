@@ -78,6 +78,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.272",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool: added nav_chain and surface fields to the signed follow request body — Instagram app v431+ requires these navigation context fields on friendship/create and returns 'something went wrong' when they are absent." },
+    ],
+  },
+  {
     version: "1.1.271",
     date: "1 Jul 2026",
     items: [

@@ -2169,6 +2169,8 @@ export class InstagramWebClient {
     // Do NOT URL-encode the JSON part (Instagram's parser splits on '.' — encoding breaks it).
     // _uuid, _uid, _csrftoken, device_id are required fields — omitting them causes
     // Instagram to return "We're sorry, but something went wrong" (status: fail).
+    // nav_chain and surface are required by Instagram app v431+ for friendship/create —
+    // omitting them causes "something went wrong" on newer app versions.
     let _uuid = "";
     let _deviceId = "";
     if (this.igDeviceState) {
@@ -2179,6 +2181,11 @@ export class InstagramWebClient {
       } catch { /* keep empty */ }
     }
     const _uid = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1] ?? "";
+    // nav_chain: navigation chain — traces how the user reached the target profile.
+    // Format: "4:ProfileUserDetailFragment:profile:<timestamp>:<seq>"
+    // Instagram app v431+ requires this on friendship/create; omitting it returns
+    // HTTP 200 {"message":"We're sorry, but something went wrong","status":"fail"}.
+    const navChain = `4:ProfileUserDetailFragment:profile:${Date.now()}:1`;
     const body = signBody({
       user_id: userId,
       _uuid,
@@ -2187,6 +2194,8 @@ export class InstagramWebClient {
       device_id: _deviceId,
       radio_type: "wifi-none",
       container_module: "profile",
+      nav_chain: navChain,
+      surface: "profile",
     });
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…)`);
