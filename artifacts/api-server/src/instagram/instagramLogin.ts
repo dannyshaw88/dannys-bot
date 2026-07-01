@@ -165,7 +165,7 @@ const RANDOM_LOGIN_ENDPOINT_POOL: Array<{ name: string; fn: (ig: IgApiClient) =>
   { name: "GetCurrentUser",            fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/accounts/current_user/", method: "GET", qs: { edit: "false" } }); } },
   { name: "LauncherSync",              fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, id: ig.state.uuid, server_config_retrieval: "1" }) }); } },
+      await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uid: ig.state.cookieUserId ?? "", _uuid: ig.state.uuid, id: ig.state.uuid, server_config_retrieval: "1" }) }); } },
   // Replaced broken .getItems() call — fetches pending (unread) DM requests instead
   { name: "GetPendingInbox",           fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/direct_v2/pending_inbox/", method: "GET" }); } },
@@ -1198,6 +1198,32 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // this matches Jarvee exactly and avoids false checkpoints on pre-auth calls.
         await restoreSessionCookies(ig, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
+
+        // ── Phase 1.5: Authenticated launcher/sync with _uid ──────────────
+        // The real Android app POSTs launcher/sync immediately after injecting the
+        // session cookie.  Including _uid ties the request to the specific user —
+        // without it Instagram treats it as an anonymous config probe and will NOT
+        // include ig-set-authorization or ig-set-www-claim in the response.
+        // This is the earliest point in the sequence where Instagram can issue
+        // the Bearer token; capturing it here means it is saved to igDeviceState
+        // and ready for the Follow/Like/DM tools without a separate bootstrap.
+        try {
+          await loginApiThrottle(apiLimitsRaw);
+          await ig.request.send({
+            url: "/api/v1/launcher/sync/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid:       userId,
+              _uuid:      ig.state.uuid,
+              id:         ig.state.uuid,
+              server_config_retrieval: "1",
+            }),
+          });
+          console.error(`[instagramLogin] @${profile.username} — Phase 1.5 launcher/sync OK (authenticated)`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — Phase 1.5 launcher/sync failed (non-fatal): ${e?.message}`);
+        }
 
         // ── Phase 2a: Session validation ──────────────────────────────────
         // Strategy:

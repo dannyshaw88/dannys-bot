@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.279",
+    date: "1 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow Tool: fixed 'Session tokens (www-claim / Bearer) are absent' for freshly logged-in accounts — the Instagram API was not issuing the Bearer token because the user ID was missing from the launcher/sync request.",
+        technical: [
+          "Root cause: all authenticated launcher/sync POST calls were missing the _uid field. Without it Instagram treats the request as an anonymous config probe and does not include ig-set-authorization or ig-set-www-claim in the response, regardless of whether a valid sessionid cookie is present.",
+          "Fix: added _uid to Phase 2c' and Phase 2d bootstrap launcher/sync calls in _bootstrapWwwClaim (instagramWebClient.ts), to the new Phase 1.5 authenticated launcher/sync inserted into the verify cold-start sequence (instagramLogin.ts), and to the LauncherSync entry in the random post-login endpoint pool.",
+          "Phase 1.5 runs immediately after session cookie injection (Phase 1) during Verify — this is the earliest point where Instagram can issue the Bearer token, so it is captured into igDeviceState before any automation tools run.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.278",
     date: "1 Jul 2026",
     items: [

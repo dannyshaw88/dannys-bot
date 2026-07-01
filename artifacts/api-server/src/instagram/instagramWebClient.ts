@@ -2556,6 +2556,7 @@ export class InstagramWebClient {
             method: "POST",
             form: ig.request.sign({
               _csrftoken: ig.state.cookieCsrfToken,
+              _uid:       ownUserId,
               _uuid:      ig.state.uuid,
               id:         ig.state.uuid,
               server_config_retrieval: "1",
@@ -2659,7 +2660,7 @@ export class InstagramWebClient {
               label: "launcher/sync",
               url:   "/api/v1/launcher/sync/",
               method: "POST",
-              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) },
+              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uid: uid2d, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) },
             },
             { label: "news/inbox",          url: "/api/v1/news/inbox/",           method: "GET" },
             { label: `users/${uid2d}/info`, url: `/api/v1/users/${uid2d}/info/`,  method: "GET" },
