@@ -147612,14 +147612,14 @@ if (!colNames.has("leak_snapshot")) {
 if (!colNames.has("is_template")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN is_template INTEGER DEFAULT 0;`);
 }
+if (!colNames.has("template_id")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
+}
 sqlite.exec(`
   UPDATE profiles
   SET is_template = 0
   WHERE is_template = 1 AND (template_id IS NULL OR template_id = '');
 `);
-if (!colNames.has("template_id")) {
-  sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
-}
 if (!colNames.has("resuming_until")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN resuming_until TEXT;`);
 }
@@ -150032,8 +150032,11 @@ async function tlsRequest(opts) {
   }
   const allHeaders = {
     ...headers,
-    ...cookieJar.length ? { Cookie: cookieJar.join("; ") } : {},
-    ...body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}
+    ...cookieJar.length ? { Cookie: cookieJar.join("; ") } : {}
+    // NOTE: Content-Length is NOT added here for the CycleTLS path — Go's fhttp
+    // transport derives it automatically from the body string. Passing it as a
+    // regular header produces a duplicate Content-Length which some Instagram
+    // servers reject. It IS added for the forceNodeTls (Node.js HTTPS) path below.
   };
   const client = await getClient();
   if (!forceNodeTls) {
@@ -150044,7 +150047,24 @@ async function tlsRequest(opts) {
     }
     const url2 = `https://${host}${path6}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
-    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
+    const {
+      "User-Agent": _ua,
+      "Accept-Encoding": _ae,
+      "Host": _host,
+      "Connection": _conn,
+      "Content-Length": _cl,
+      ...headersWithoutUA
+    } = allHeaders;
+    const isFriendshipCall = path6.includes("/friendships/");
+    if (isFriendshipCall) {
+      const maskedProxy = proxyUrl.replace(/:[^:@]+@/, ":***@").replace(/^(https?:\/\/)[^:]+:/, "$1***:");
+      console.warn(
+        `[tls:WIRE] ${method} ${url2} via proxy=${maskedProxy}
+  userAgent: ${userAgent.slice(0, 80)}
+  headers: ${JSON.stringify(headersWithoutUA, null, 2)}
+  body(full): ${body ?? ""}`
+      );
+    }
     const t02 = Date.now();
     let resp;
     try {
@@ -150089,6 +150109,42 @@ async function tlsRequest(opts) {
         json2 = JSON.parse(rawBody);
       } catch {
         if (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data)) json2 = resp.data;
+      }
+      if (isFriendshipCall) {
+        console.warn(
+          `[tls:WIRE] ${method} ${url2} \u2192 HTTP ${resp.status} elapsed=${elapsed}ms
+  resp_headers: ${JSON.stringify(resp.headers)}
+  resp_body(full): ${rawBody}`
+        );
+      }
+      if (resp.status === 200 && json2 && typeof json2 === "object" && json2.status === "fail" && !("spam" in json2) && !("feedback_required" in json2) && /something went wrong|sorry/i.test(String(json2.message ?? ""))) {
+        const cookieStr = cookieJar.join("; ");
+        const cookieCsrf = cookieStr.match(/csrftoken=([^;]+)/)?.[1];
+        let signedCsrf;
+        let signedUuid;
+        if (typeof body === "string" && body.includes("signed_body=")) {
+          const m2 = body.match(/signed_body=([^&]+)/);
+          if (m2) {
+            const raw = m2[1];
+            const dotIdx = raw.indexOf(".");
+            const jsonPart = dotIdx !== -1 ? raw.slice(dotIdx + 1) : raw;
+            try {
+              const payload = JSON.parse(jsonPart);
+              signedCsrf = payload._csrftoken;
+              signedUuid = payload._uuid;
+            } catch {
+            }
+          }
+        }
+        const csrfMismatch = signedCsrf != null && cookieCsrf != null && signedCsrf !== cookieCsrf;
+        console.warn(
+          `[tls:req][DIAG] ${method} ${host}${path6} \u2014 generic rejection (HTTP 200, status:fail). cookie_csrf=${cookieCsrf ?? "MISSING"} signed_csrf=${signedCsrf ?? "n/a"} csrf_MISMATCH=${csrfMismatch} uuid=${signedUuid ?? "n/a"} req_body_preview=${(body ?? "").slice(0, 300)}`
+        );
+        if (csrfMismatch) {
+          console.error(
+            `[tls:req][DIAG] *** CSRF TOKEN MISMATCH *** signed with csrf=${signedCsrf} but Cookie header has csrf=${cookieCsrf}. This is the root cause of "something went wrong" on write calls.`
+          );
+        }
       }
       return { status: resp.status, cookies, json: json2, rawBody, responseHeaders: resp.headers };
     }
@@ -152081,6 +152137,99 @@ var InstagramWebClient = class {
       return { ok: false, status: "follow_blocked", reason: msg || "IgApiClient follow failed" };
     }
   }
+  // ── Follow via mobileSessionPost with HMAC-signed body ──────────────────
+  // Replaces _followViaIgClient.  Root cause of IgApiClient failures:
+  //   • IgApiClient sends X-IG-Device-ID = uuid  (session UUID — wrong device token)
+  //   • IgApiClient sends X-IG-Bandwidth-Speed-KBPS = -1.000  (bot signal)
+  //   • IgApiClient omits X-CSRFToken
+  // _buildMobileHeaders() sends the correct igDid for X-IG-Device-ID, realistic
+  // WiFi bandwidth values, and X-CSRFToken — identical to how verify/unfollow/DM work.
+  // signBody() adds the HMAC-SHA256 signature that Instagram requires on write calls.
+  async _followViaMobileSession(userId) {
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some((c3) => c3.startsWith("sessionid=")) || !!authorization;
+    if (!hasMobileSession) {
+      return { ok: false, status: "follow_blocked", reason: "no igApiCookies session \u2014 cannot follow" };
+    }
+    const _t0 = Date.now();
+    await this.apiThrottle();
+    if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
+    }
+    const csrf = this.mobileCsrf || this.csrfToken || "missing";
+    let _uuid2 = "";
+    let _deviceId = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState);
+        _uuid2 = ds.uuid ?? "";
+        _deviceId = ds.deviceId ?? "";
+      } catch {
+      }
+    }
+    const _uid = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1] ?? "";
+    const body = signBody({
+      user_id: userId,
+      _uuid: _uuid2,
+      _uid,
+      _csrftoken: csrf,
+      device_id: _deviceId,
+      radio_type: "wifi-none",
+      container_module: "profile"
+    });
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026)`);
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: `/api/v1/friendships/create/${userId}/`,
+      method: "POST",
+      headers: this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8"),
+      body,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl
+    });
+    if (res.cookies.length) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) this.mobileCsrf = newCsrf;
+    }
+    this._absorbResponseHeaders(res.responseHeaders);
+    this._logTransport(`/api/v1/friendships/create/${userId}/`, "POST", Date.now() - _t0, res.status >= 400);
+    if (res.status >= 400) {
+      console.warn(`[webClient] follow ${userId}: _followViaMobileSession status=${res.status} body:`, res.rawBody.slice(0, 400));
+    }
+    const j = res.json;
+    if (!j) return { ok: false, status: "follow_blocked", reason: "no response from mobile API" };
+    console.log(`[webClient] follow ${userId} (_followViaMobileSession):`, JSON.stringify(j).slice(0, 400));
+    if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
+      return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: j?.checkpoint_url ?? "" };
+    }
+    if (j?.spam === true) return { ok: false, status: "follow_blocked", reason: "spam \u2014 Instagram flagged this follow attempt" };
+    if (j?.feedback_required === true || /feedback_required|ActionBlocked/i.test(j?.message ?? "")) {
+      return { ok: false, status: "follow_blocked", reason: j?.message ?? "feedback_required" };
+    }
+    if (j?.require_login || j?.message === "login_required") {
+      return { ok: false, status: "follow_blocked", reason: "session expired \u2014 re-verify account" };
+    }
+    if (j?.message && /please wait/i.test(String(j.message))) {
+      return { ok: false, status: "follow_blocked", reason: j.message };
+    }
+    if (j?.friendship_status) {
+      const fs6 = j.friendship_status;
+      return { ok: true, status: fs6.following ? "following" : "requested" };
+    }
+    if (j?.following !== void 0 || j?.outgoing_request !== void 0) {
+      if (j.following || j.outgoing_request) return { ok: true, status: j.following ? "following" : "requested" };
+      return { ok: false, status: "follow_blocked", reason: "Instagram silently declined follow (following=false, outgoing_request=false)" };
+    }
+    if (j?.status === "fail") {
+      const msg = j?.message || "Instagram declined (status: fail)";
+      if (/something went wrong|sorry/i.test(msg)) return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
+      return { ok: false, status: "follow_blocked", reason: msg };
+    }
+    if (j?.status === "ok") return { ok: true, status: "following" };
+    console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
+    return { ok: false, status: "follow_blocked", reason: "unexpected response: " + JSON.stringify(j).slice(0, 200) };
+  }
   // ── Programmatic consent acceptance ──────────────────────────────────────
   // When Instagram's mobile API returns consent_required, it means the account
   // must accept the updated Terms of Service / Privacy Policy before any API
@@ -152334,7 +152483,7 @@ var InstagramWebClient = class {
       "FollowedUser",
       async () => {
         if (this.igApiCookies) {
-          return this._followViaIgClient(userId);
+          return this._followViaMobileSession(userId);
         }
         const body = new URLSearchParams({ user_id: userId }).toString();
         const j = await this.mobileSessionPost(`/api/v1/friendships/create/${userId}/`, body);
