@@ -746,6 +746,34 @@ export class InstagramWebClient {
   //
   // Do NOT use this for non-automation clients (verify, mobile login bootstrap,
   // TOS consent, ABD dismiss) — those have their own timing logic.
+
+  // Like _newAutomationIgClient but WITHOUT the apiThrottle hook.
+  // Used for internal bootstrap sequences (_bootstrapWwwClaim) where the
+  // calls are warm-up plumbing, not user-facing API actions.  Throttling
+  // each Phase-0/1/2 step at 125–250 s per call wastes 9+ minutes before
+  // the claim is even attempted.  State absorption (_absorbIgClientState)
+  // is still applied so ig-set-www-claim is picked up from every response.
+  private _newBootstrapIgClient(): IgApiClient {
+    const ig = newIgClient();
+    const _igReq = ig.request as any;
+    const _origSend = _igReq.send.bind(_igReq);
+    const _self = this;
+    _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
+      // NO apiThrottle here — bootstrap calls must fire without delay
+      try {
+        const result = await _origSend(opts, onlyCheckHttpStatus);
+        _self._absorbIgClientState(ig);
+        return result;
+      } catch (err) {
+        // Still absorb state from error responses — ig-set-www-claim can
+        // arrive on 4xx replies and we must not discard it on throw.
+        _self._absorbIgClientState(ig);
+        throw err;
+      }
+    };
+    return ig;
+  }
+
   private _newAutomationIgClient(): IgApiClient {
     const ig = newIgClient();
     const _igReq = ig.request as any;
@@ -2324,9 +2352,11 @@ export class InstagramWebClient {
     console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing — running Jarvee Phase 0→1→2 via IgApiClient`);
 
     // ── Build IgApiClient (same setup as _buildWarmedIgClient) ──────────────
-    // _newAutomationIgClient hooks ig.request.send → _absorbIgClientState(ig)
-    // so every response that carries ig-set-www-claim is automatically synced.
-    const ig = this._newAutomationIgClient();
+    // _newBootstrapIgClient hooks ig.request.send → _absorbIgClientState(ig)
+    // so every response that carries ig-set-www-claim is automatically synced,
+    // WITHOUT the apiThrottle delay (bootstrap calls are internal plumbing,
+    // not user-facing API calls — throttling wastes 9+ minutes per session).
+    const ig = this._newBootstrapIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -3539,12 +3569,22 @@ export class InstagramWebClient {
       };
     };
 
-    // ── Step 2: fetch inbox overview ─────────────────────────────────────────
-    // The first probe is SILENT (no timed() wrapper) because Instagram ALWAYS
-    // returns 4415001 "Prompt has contribution" on the first call of a session —
-    // it is a soft warm-up gate, not an error.  Logging the first attempt as
-    // "GetDirectMessages ERROR" was misleading.  Only the final result (after
-    // warm-up + retry if needed) is logged via timed().
+    // ── Step 2: news/inbox warm-up ───────────────────────────────────────────
+    // Instagram gates direct_v2/inbox/ behind a "prompt has contribution"
+    // (error 4415001) until the client has fired news/inbox first in the
+    // session.  viewTimelineFeed does NOT lift this gate — only news/inbox does.
+    // This is the same warm-up step used in _buildWarmedIgClient.
+    // Failure is non-fatal: we still attempt direct_v2/inbox below.
+    try {
+      const warmJ = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
+      console.log(`[webClient] getDirectMessagesInternal: news/inbox warm-up OK (result=${warmJ ? "ok" : "null"})`);
+    } catch (warmErr: any) {
+      console.warn(`[webClient] getDirectMessagesInternal: news/inbox warm-up failed (non-fatal): ${warmErr?.message}`);
+    }
+
+    // ── Step 3: fetch inbox overview ─────────────────────────────────────────
+    // Now that news/inbox has been called, Instagram will serve direct_v2/inbox
+    // without the 4415001 gate.
     let inboxThreads: any[] = [];
     let firstProbeOk = false;
     let firstProbeErr: any = null;
@@ -3555,7 +3595,7 @@ export class InstagramWebClient {
       if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
       inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
       firstProbeOk = true;
-      console.log(`[webClient] getDirectMessagesInternal: first-probe OK — ${inboxThreads.length} thread(s)`);
+      console.log(`[webClient] getDirectMessagesInternal: inbox probe OK — ${inboxThreads.length} thread(s)`);
     } catch (e: any) {
       firstProbeErr = e;
     }
@@ -3563,7 +3603,6 @@ export class InstagramWebClient {
     if (!firstProbeOk) {
       const msg = String(firstProbeErr?.message ?? "");
       console.warn(`[webClient] getDirectMessagesInternal: inbox probe failed — ${msg}`);
-      // 4415001 = Instagram soft gate (never retry — if it failed it failed).
       // Account-level errors (checkpoint, session expired, etc.) are re-thrown so
       // the engine can classify them.  All other errors swallowed → ok:false.
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {

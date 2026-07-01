@@ -78,6 +78,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.1.270",
+    date: "1 Jul 2026",
+    items: [
+      { category: "Fix", text: "DM check: added news/inbox warm-up call before reading the inbox — Instagram gates the DM inbox behind this call and was returning a soft block on every check." },
+      { category: "Fix", text: "Follow: www-claim bootstrap no longer throttles each setup step at 125–250 seconds per call — the whole sequence now completes in seconds instead of 9 minutes, so follows get a valid claim token." },
+    ],
+  },
+  {
     version: "1.1.269",
     date: "1 Jul 2026",
     items: [
