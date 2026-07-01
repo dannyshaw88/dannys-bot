@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.278",
+    date: "1 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Version number is now correctly baked into the installer — previous builds were shipping v1.1.275 regardless of which Actions run you downloaded.",
+      },
+    ],
+  },
+  {
     version: "1.1.275",
     date: "1 Jul 2026",
     items: [
