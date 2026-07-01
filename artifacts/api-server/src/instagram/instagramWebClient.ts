@@ -2530,12 +2530,41 @@ export class InstagramWebClient {
         }
       }
 
+      // ── Phase 2c': authenticated launcher/sync POST ───────────────────────────
+      // Real Android apps POST /api/v1/launcher/sync/ after every session restore.
+      // Instagram reliably returns ig-set-www-claim AND ig-set-authorization on
+      // this endpoint for authenticated sessions — making it the most reliable
+      // single bootstrap call for both tokens.  The ig client here already has
+      // the session cookies loaded from Phase 1, so this fires as an authenticated
+      // request.  Root fix for "We're sorry, something went wrong" follow failures
+      // caused by X-IG-WWW-Claim: 0 and missing Authorization Bearer header.
+      if (!claimNow() || claimNow() === "0") {
+        try {
+          await ig.request.send({
+            url: "/api/v1/launcher/sync/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uuid:      ig.state.uuid,
+              id:         ig.state.uuid,
+              server_config_retrieval: "1",
+            }),
+          });
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c' launcher/sync OK`);
+        } catch (e: any) {
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c' launcher/sync threw (non-fatal): ${e?.message}`);
+          const errHeaders: Record<string, string | string[] | undefined> = (e as any)?.response?.headers ?? {};
+          this._absorbResponseHeaders(errHeaders);
+          this._absorbIgClientState(ig);
+        }
+      }
+
       // Confirm claim result
       const resultClaim = claimNow();
       if (resultClaim && resultClaim !== "0") {
         console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
       } else {
-        console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c — follow will use claim=0`);
+        console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2c' — follow will proceed with claim=0`);
       }
     }
 
@@ -2603,20 +2632,34 @@ export class InstagramWebClient {
           const cwuId2d = uid2d ? `${this.igApiCookies};ds_user_id=${uid2d}` : this.igApiCookies;
           await this._deserializeIgCookies(ig2d, cwuId2d);
 
-          try {
-            await ig2d.request.send({
-              url: `/api/v1/users/${uid2d}/info/`,
-              method: "GET",
-            });
-          } catch (innerErr: any) {
-            // Absorb state even from error responses — ig-set-authorization can
-            // arrive on any authenticated response, including 4xx.
-            this._absorbIgClientState(ig2d);
-            console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d users/${uid2d}/info threw (non-fatal): ${innerErr?.message}`);
+          // Try multiple endpoints — whichever Instagram returns ig-set-authorization
+          // on for this session.  launcher/sync is tried first because it is the
+          // most reliable across all session ages; users/{id}/info is kept as the
+          // final fallback (original behaviour).
+          const phase2dProbes: Array<{ label: string; url: string; method: "GET" | "POST"; extra?: Record<string, unknown> }> = [
+            {
+              label: "launcher/sync",
+              url:   "/api/v1/launcher/sync/",
+              method: "POST",
+              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) },
+            },
+            { label: `accounts/current_user`,  url: "/api/v1/accounts/current_user/", method: "GET", extra: { qs: { edit: "false" } } },
+            { label: `users/${uid2d}/info`,     url: `/api/v1/users/${uid2d}/info/`,   method: "GET" },
+          ];
+          for (const probe of phase2dProbes) {
+            if (this._deviceAuthorization) break; // already captured
+            try {
+              await ig2d.request.send({ url: probe.url, method: probe.method, ...(probe.extra ?? {}) });
+            } catch (innerErr: any) {
+              // Absorb state even from error responses — ig-set-authorization can
+              // arrive on any authenticated response, including 4xx.
+              this._absorbIgClientState(ig2d);
+              console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d ${probe.label} threw (non-fatal): ${innerErr?.message}`);
+            }
           }
 
           const gotAuth = !!this._deviceAuthorization;
-          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d users/${uid2d}/info → authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
+          console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d → authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram (all probes exhausted)"}`);
         }
       } catch (e: any) {
         console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d setup threw (non-fatal): ${e?.message}`);
