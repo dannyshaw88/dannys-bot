@@ -453,8 +453,23 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
     // decompresses the response before returning resp.data, so the body is
     // always clean JSON. Explicitly setting "identity" was a visible bot signal
     // on every single API call — real OkHttp4 always advertises gzip.
+    //
+    // Host — derived from the URL by Go's HTTP transport; forwarding it as a
+    // regular header causes a duplicate :authority / Host mismatch in HTTP/2.
+    //
+    // Connection — hop-by-hop header FORBIDDEN in HTTP/2 per RFC 7540 §8.1.2.2.
+    // IgApiClient's getDefaultHeaders() always includes "Connection: close",
+    // which causes Instagram's HTTP/2 server to reject the request with a generic
+    // 200 status:"fail" "We're sorry, but something went wrong." error — the
+    // exact failure seen on every friendship.create call through CycleTLS.
     const userAgent = headers["User-Agent"] ?? "";
-    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = headers;
+    const {
+      "User-Agent": _ua,
+      "Accept-Encoding": _ae,
+      "Host": _host,
+      "Connection": _conn,
+      ...headersWithoutUA
+    } = headers;
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };
@@ -469,6 +484,9 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
           proxy: proxyUrl,
           timeout: 30,
           disableRedirect: false,
+          // Allow MITM proxies that present their own cert inside the CONNECT
+          // tunnel (matches the same flag in tlsRequest used by mobileSessionPost).
+          insecureSkipVerify: true,
         },
         method.toLowerCase(),
       );

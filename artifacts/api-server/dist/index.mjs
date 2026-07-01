@@ -150207,7 +150207,13 @@ function patchIgClientTls(ig, proxyUrl) {
       body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
     }
     const userAgent = headers["User-Agent"] ?? "";
-    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = headers;
+    const {
+      "User-Agent": _ua,
+      "Accept-Encoding": _ae,
+      "Host": _host,
+      "Connection": _conn,
+      ...headersWithoutUA
+    } = headers;
     const t0 = Date.now();
     let resp;
     try {
@@ -150220,7 +150226,10 @@ function patchIgClientTls(ig, proxyUrl) {
           headers: headersWithoutUA,
           proxy: proxyUrl,
           timeout: 30,
-          disableRedirect: false
+          disableRedirect: false,
+          // Allow MITM proxies that present their own cert inside the CONNECT
+          // tunnel (matches the same flag in tlsRequest used by mobileSessionPost).
+          insecureSkipVerify: true
         },
         method.toLowerCase()
       );
