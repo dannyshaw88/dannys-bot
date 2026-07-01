@@ -2260,7 +2260,16 @@ export class InstagramWebClient {
     }
     if (j?.status === "fail") {
       const msg: string = j?.message || "Instagram declined (status: fail)";
-      if (/something went wrong|sorry/i.test(msg)) return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
+      if (/something went wrong|sorry/i.test(msg)) {
+        // Generic technical rejection — almost always means the session is missing
+        // ig-set-www-claim and/or the Authorization Bearer token.  Surface an
+        // actionable message so the operator knows to re-verify via the EB.
+        const missingTokens = !this._deviceAuthorization;
+        const actionHint = missingTokens
+          ? " Session tokens (www-claim / Bearer) are absent — re-verify this account via the Embedded Browser to restore follow capability."
+          : "";
+        return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}${actionHint}` };
+      }
       return { ok: false, status: "follow_blocked", reason: msg };
     }
     if (j?.status === "ok") return { ok: true, status: "following" };
@@ -2375,6 +2384,8 @@ export class InstagramWebClient {
     if (claimAlreadyPresent && this._deviceAuthorization) return;
 
     // Helper: read current claim from igDeviceState (updated mid-sequence).
+    // Defined here (outside the claimAlreadyPresent block) so Phase 2e can
+    // reference it regardless of which branch ran.
     const claimNow = (): string | undefined => {
       if (!this.igDeviceState) return undefined;
       try { return (JSON.parse(this.igDeviceState) as any).igWWWClaim ?? undefined; } catch { return undefined; }
@@ -2634,8 +2645,15 @@ export class InstagramWebClient {
 
           // Try multiple endpoints — whichever Instagram returns ig-set-authorization
           // on for this session.  launcher/sync is tried first because it is the
-          // most reliable across all session ages; users/{id}/info is kept as the
-          // final fallback (original behaviour).
+          // most reliable across all session ages.
+          //
+          // accounts/current_user is intentionally EXCLUDED: sending it with
+          // X-IG-WWW-Claim: 0 (the state when Phase 2d runs) consistently triggers
+          // "We're sorry, something went wrong" (status:"fail") from Instagram — it
+          // enforces a valid claim on that endpoint.  news/inbox is used instead:
+          // it's a social read endpoint that Instagram allows with claim=0 and that
+          // _buildWarmedIgClient (DM bootstrap) specifically relies on to trigger
+          // ig-set-authorization issuance.
           const phase2dProbes: Array<{ label: string; url: string; method: "GET" | "POST"; extra?: Record<string, unknown> }> = [
             {
               label: "launcher/sync",
@@ -2643,8 +2661,8 @@ export class InstagramWebClient {
               method: "POST",
               extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) },
             },
-            { label: `accounts/current_user`,  url: "/api/v1/accounts/current_user/", method: "GET", extra: { qs: { edit: "false" } } },
-            { label: `users/${uid2d}/info`,     url: `/api/v1/users/${uid2d}/info/`,   method: "GET" },
+            { label: "news/inbox",          url: "/api/v1/news/inbox/",           method: "GET" },
+            { label: `users/${uid2d}/info`, url: `/api/v1/users/${uid2d}/info/`,  method: "GET" },
           ];
           for (const probe of phase2dProbes) {
             if (this._deviceAuthorization) break; // already captured
@@ -2666,6 +2684,75 @@ export class InstagramWebClient {
       }
     } else {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped — authorization already present`);
+    }
+
+    // ── Phase 2e: direct igReq probes with full _buildMobileHeaders ────────────
+    // IgApiClient-based probes (Phase 2a–2d) send a subset of Android app headers.
+    // _buildMobileHeaders adds X-Bloks-Version-Id, X-Pigeon-Session-Id,
+    // X-Pigeon-Rawclienttime, X-IG-App-Locale, X-IG-Device-Locale,
+    // X-IG-Mapped-Locale, X-IG-Timezone-Offset, and realistic bandwidth metrics —
+    // the same complete header set the real follow request uses.
+    // Instagram may require this "real app" signature before issuing tokens on an
+    // established (non-fresh-login) session.  _absorbResponseHeaders captures any
+    // returned ig-set-www-claim / ig-set-authorization directly into igDeviceState.
+    //
+    // Only runs when either token is still missing — skip if Phase 2d already got both.
+    const phase2eClaimMissing = !claimNow() || claimNow() === "0";
+    const phase2eAuthMissing  = !this._deviceAuthorization;
+    if (phase2eClaimMissing || phase2eAuthMissing) {
+      try {
+        const csrf2e = this.mobileCsrf || extractCsrf(this.mobileCookieJar) || "missing";
+        const uid2e  = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1]?.trim()
+          ?? this.mobileCookieJar.find(c => c.startsWith("ds_user_id="))?.split("=").slice(1).join("=");
+
+        const phase2eProbes: Array<{ label: string; path: string; method: "GET" | "POST" }> = [
+          { label: "news/inbox",         path: "/api/v1/news/inbox/",          method: "GET" },
+          ...(uid2e ? [{ label: `users/${uid2e}/info`, path: `/api/v1/users/${uid2e}/info/`, method: "GET" as const }] : []),
+        ];
+
+        for (const probe of phase2eProbes) {
+          const nowClaimOk = !!(claimNow() && claimNow() !== "0");
+          if (nowClaimOk && this._deviceAuthorization) break; // both tokens obtained — done
+
+          try {
+            const res2e = await igReq({
+              host:      "i.instagram.com",
+              path:      probe.path,
+              method:    probe.method,
+              headers:   this._buildMobileHeaders(csrf2e),
+              cookieJar: this.mobileCookieJar,
+              proxyUrl:  this.proxyUrl ?? undefined,
+            });
+            if (res2e.cookies.length) {
+              this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res2e.cookies);
+              const nc = extractCsrf(res2e.cookies);
+              if (nc) this.mobileCsrf = nc;
+            }
+            this._absorbResponseHeaders(res2e.responseHeaders);
+            console.log(
+              `[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e ${probe.label} → ` +
+              `HTTP ${res2e.status}, claim=${claimNow() || "none"}, auth=${this._deviceAuthorization ? "obtained" : "none"}`,
+            );
+          } catch (e2e: any) {
+            console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e ${probe.label} threw (non-fatal): ${e2e?.message}`);
+          }
+        }
+      } catch (e2e: any) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e setup threw (non-fatal): ${e2e?.message}`);
+      }
+
+      // Final summary — log remaining gaps so the operator knows what's missing.
+      const finalClaim   = claimNow();
+      const finalAuth    = this._deviceAuthorization;
+      const claimOkFinal = !!(finalClaim && finalClaim !== "0");
+      if (!claimOkFinal || !finalAuth) {
+        console.warn(
+          `[webClient:${this.profileId}] _bootstrapWwwClaim: ⚠ session tokens still missing after all phases — ` +
+          `claim=${claimOkFinal ? "ok" : "MISSING"}, auth=${finalAuth ? "ok" : "MISSING"}. ` +
+          `This usually means the account session has expired or was never fully established. ` +
+          `ACTION REQUIRED: re-verify this account via the Embedded Browser (EB) to restore follow capability.`,
+        );
+      }
     }
   }
 

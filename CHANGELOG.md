@@ -4,6 +4,36 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.277] — 2026-07-01
+
+### Fixed
+
+#### Bootstrap deadlock: Phase 2d and Phase 2e overhaul
+
+**Symptom**: Even after v1.1.276, follows continued returning "something went wrong" on live accounts. Logs showed `launcher/sync` returning HTTP 200 (Phase 2c' OK) but no `ig-set-www-claim` or `ig-set-authorization` in the response headers. The Phase 2d `accounts/current_user` probe then failed immediately with "something went wrong" (it enforces a valid claim on the request, creating a deadlock), leaving both tokens missing.
+
+**Root cause**: `accounts/current_user` requires a valid `X-IG-WWW-Claim` in the **request**. When Phase 2d sends it with claim=0 (because claim bootstrap failed), Instagram returns the same generic rejection — the probe itself contributes to the failure it is trying to fix. Additionally, IgApiClient-based probes send a reduced header set (no `X-Bloks-Version-Id`, `X-Pigeon-*`, locale, or bandwidth headers) which may prevent Instagram from treating them as real Android app calls.
+
+**Fix (instagramWebClient.ts — `_bootstrapWwwClaim`)**:
+
+**Phase 2d** — replaced `accounts/current_user` probe with `news/inbox` GET:
+- `accounts/current_user` always fails with "something went wrong" when `X-IG-WWW-Claim: 0`; excluded.
+- `news/inbox` is a social-read endpoint that Instagram allows with claim=0 and that `_buildWarmedIgClient` (DM bootstrap) specifically relies on to trigger token issuance.
+- New probe order: `launcher/sync` → `news/inbox` → `users/{id}/info`
+
+**Phase 2e** (new) — direct `igReq` probes with **full** `_buildMobileHeaders` after Phase 2d:
+- Sends the complete Android app header set: `X-Bloks-Version-Id`, `X-Pigeon-Session-Id`, `X-Pigeon-Rawclienttime`, `X-IG-App-Locale`, `X-IG-Device-Locale`, `X-IG-Mapped-Locale`, `X-IG-Timezone-Offset`, and realistic bandwidth metrics — identical to the actual follow request headers.
+- Uses `this.mobileCookieJar` directly (same as `mobileSessionGet` / `mobileSessionPost`), bypassing the IgApiClient pipeline entirely.
+- `_absorbResponseHeaders` captures any returned `ig-set-www-claim` / `ig-set-authorization` directly into `igDeviceState`.
+- Probes: `news/inbox` GET → `users/{uid}/info` GET. Stops as soon as both tokens are obtained.
+- Only runs when at least one token is still missing after Phase 2d.
+
+**Actionable error surfacing**:
+- When all phases complete with tokens still absent, a `⚠ ACTION REQUIRED` warning is logged recommending the operator re-verify the account via the Embedded Browser.
+- When the follow itself fails with "something went wrong" and the Bearer token is absent, the error reason now appends: _"Session tokens (www-claim / Bearer) are absent — re-verify this account via the Embedded Browser to restore follow capability."_
+
+---
+
 ## [1.1.276] — 2026-07-01
 
 ### Fixed
@@ -29,14 +59,12 @@ Result: `X-IG-WWW-Claim: 0` and no `Authorization` header on every follow → In
 
 **Fix (instagramWebClient.ts — `_bootstrapWwwClaim`)**:
 
-Added **Phase 2c'** — an authenticated `POST /api/v1/launcher/sync/` call using the same `ig` IgApiClient instance that already has the session cookies loaded from Phase 1. Real Android apps call `launcher/sync` with `server_config_retrieval: 1` after every session restore. Instagram reliably returns **both** `ig-set-www-claim` and `ig-set-authorization` in the response headers on this endpoint for authenticated sessions, regardless of session age.
+Added **Phase 2c'** — an authenticated `POST /api/v1/launcher/sync/` call using the same `ig` IgApiClient instance that already has the session cookies loaded from Phase 1. Real Android apps call `launcher/sync` with `server_config_retrieval: 1` after every session restore.
 
 Updated **Phase 2d** to probe multiple endpoints in sequence (stopping as soon as `ig-set-authorization` is obtained):
 1. `POST /api/v1/launcher/sync/` — primary (most reliable)
 2. `GET /api/v1/accounts/current_user/?edit=false` — does not trigger checkpoint unlike `?edit=true`
 3. `GET /api/v1/users/{id}/info/` — original fallback
-
-These changes ensure that follows always send a valid `X-IG-WWW-Claim` token and `Authorization` Bearer header, resolving the "something went wrong" rejection.
 
 ---
 
