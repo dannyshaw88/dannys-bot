@@ -150964,6 +150964,29 @@ var InstagramWebClient = class {
   //
   // Do NOT use this for non-automation clients (verify, mobile login bootstrap,
   // TOS consent, ABD dismiss) — those have their own timing logic.
+  // Like _newAutomationIgClient but WITHOUT the apiThrottle hook.
+  // Used for internal bootstrap sequences (_bootstrapWwwClaim) where the
+  // calls are warm-up plumbing, not user-facing API actions.  Throttling
+  // each Phase-0/1/2 step at 125–250 s per call wastes 9+ minutes before
+  // the claim is even attempted.  State absorption (_absorbIgClientState)
+  // is still applied so ig-set-www-claim is picked up from every response.
+  _newBootstrapIgClient() {
+    const ig = newIgClient();
+    const _igReq = ig.request;
+    const _origSend = _igReq.send.bind(_igReq);
+    const _self = this;
+    _igReq.send = async function(opts, onlyCheckHttpStatus) {
+      try {
+        const result = await _origSend(opts, onlyCheckHttpStatus);
+        _self._absorbIgClientState(ig);
+        return result;
+      } catch (err) {
+        _self._absorbIgClientState(ig);
+        throw err;
+      }
+    };
+    return ig;
+  }
   _newAutomationIgClient() {
     const ig = newIgClient();
     const _igReq = ig.request;
@@ -152169,6 +152192,7 @@ var InstagramWebClient = class {
       }
     }
     const _uid = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1] ?? "";
+    const navChain = `4:ProfileUserDetailFragment:profile:${Date.now()}:1`;
     const body = signBody({
       user_id: userId,
       _uuid: _uuid2,
@@ -152176,7 +152200,9 @@ var InstagramWebClient = class {
       _csrftoken: csrf,
       device_id: _deviceId,
       radio_type: "wifi-none",
-      container_module: "profile"
+      container_module: "profile",
+      nav_chain: navChain,
+      surface: "profile"
     });
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026)`);
     const res = await igReq({
@@ -152330,7 +152356,7 @@ var InstagramWebClient = class {
     }
     if (existingClaim && existingClaim !== "0") return;
     console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim missing \u2014 running Jarvee Phase 0\u21921\u21922 via IgApiClient`);
-    const ig = this._newAutomationIgClient();
+    const ig = this._newBootstrapIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -152395,30 +152421,77 @@ var InstagramWebClient = class {
     const cwuId = ownUserId ? `${this.igApiCookies};ds_user_id=${ownUserId}` : this.igApiCookies;
     await this._deserializeIgCookies(ig, cwuId);
     console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 1 cookies loaded (userId=${ownUserId || "unknown"})`);
+    const claimNow = () => {
+      if (!this.igDeviceState) return void 0;
+      try {
+        return JSON.parse(this.igDeviceState).igWWWClaim ?? void 0;
+      } catch {
+        return void 0;
+      }
+    };
     try {
       await ig.request.send({
         url: "/api/v1/accounts/get_account_family/",
         method: "POST",
         form: ig.request.sign({ _uuid: ig.state.uuid, _uid: ownUserId, _csrftoken: ig.state.cookieCsrfToken })
       });
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family OK`);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family OK`);
     } catch (e) {
-      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2 get_account_family threw (non-fatal): ${e?.message}`);
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2a get_account_family threw (non-fatal): ${e?.message}`);
       const errHeaders = e?.response?.headers ?? {};
       this._absorbResponseHeaders(errHeaders);
       this._absorbIgClientState(ig);
     }
-    let resultClaim;
-    if (this.igDeviceState) {
+    if (!claimNow() || claimNow() === "0") {
       try {
-        resultClaim = JSON.parse(this.igDeviceState).igWWWClaim;
-      } catch {
+        await ig.request.send({ url: "/api/v1/qe/sync/", method: "POST" });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync OK`);
+      } catch (e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2b qe/sync threw (non-fatal): ${e?.message}`);
+        const errHeaders = e?.response?.headers ?? {};
+        this._absorbResponseHeaders(errHeaders);
+        this._absorbIgClientState(ig);
       }
     }
+    if (!claimNow() || claimNow() === "0") {
+      try {
+        await ig.request.send({
+          url: "/api/v1/banyan/banyan/",
+          method: "POST",
+          form: ig.request.sign({
+            _csrftoken: ig.state.cookieCsrfToken,
+            _uid: ownUserId,
+            _uuid: ig.state.uuid,
+            surfaces_to_queries: JSON.stringify([
+              { surface: "interstitial_link_loading" },
+              { surface: "interstitial_link_prefetch" }
+            ])
+          })
+        });
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan OK`);
+      } catch (e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2c banyan/banyan threw (non-fatal): ${e?.message}`);
+        const errHeaders = e?.response?.headers ?? {};
+        this._absorbResponseHeaders(errHeaders);
+        this._absorbIgClientState(ig);
+      }
+    }
+    if (!this._deviceAuthorization) {
+      try {
+        await ig.account.currentUser();
+        const gotAuth = !!this._deviceAuthorization;
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user \u2192 authorization=${gotAuth ? `obtained (${this._deviceAuthorization.slice(0, 16)}\u2026)` : "not returned by Instagram"}`);
+      } catch (e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user threw (non-fatal): ${e?.message}`);
+      }
+    } else {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped \u2014 authorization already present`);
+    }
+    const resultClaim = claimNow();
     if (resultClaim && resultClaim !== "0") {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: \u2713 claim obtained (${resultClaim.slice(0, 16)}\u2026)`);
     } else {
-      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2 \u2014 follow will use claim=0`);
+      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2d \u2014 follow will use claim=0`);
     }
   }
   // Build and warm up an IgApiClient for DM inbox access, following the exact
@@ -153283,6 +153356,12 @@ var InstagramWebClient = class {
         items
       };
     };
+    try {
+      const warmJ = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
+      console.log(`[webClient] getDirectMessagesInternal: news/inbox warm-up OK (result=${warmJ ? "ok" : "null"})`);
+    } catch (warmErr) {
+      console.warn(`[webClient] getDirectMessagesInternal: news/inbox warm-up failed (non-fatal): ${warmErr?.message}`);
+    }
     let inboxThreads = [];
     let firstProbeOk = false;
     let firstProbeErr = null;
@@ -153293,7 +153372,7 @@ var InstagramWebClient = class {
       if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
       inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
       firstProbeOk = true;
-      console.log(`[webClient] getDirectMessagesInternal: first-probe OK \u2014 ${inboxThreads.length} thread(s)`);
+      console.log(`[webClient] getDirectMessagesInternal: inbox probe OK \u2014 ${inboxThreads.length} thread(s)`);
     } catch (e) {
       firstProbeErr = e;
     }

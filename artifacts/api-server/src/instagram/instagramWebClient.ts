@@ -2198,7 +2198,16 @@ export class InstagramWebClient {
       surface: "profile",
     });
 
-    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…)`);
+    // Invariant check: Authorization header should be present for all app v431+
+    // follow requests.  If Phase 2d failed to obtain it (e.g. current_user also
+    // returned no ig-set-authorization), warn loudly so it is visible in logs
+    // without blocking the attempt — the follow may still succeed on some
+    // account/proxy combinations, and we want the WIRE log to capture the result.
+    if (!this._deviceAuthorization) {
+      console.warn(`[webClient] follow ${userId}: WARNING — no Authorization Bearer token in igDeviceState after Phase 2d; follow will proceed without it (may cause 'something went wrong')`);
+    }
+
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
 
     const res = await igReq({
       host: "i.instagram.com",
@@ -2513,12 +2522,40 @@ export class InstagramWebClient {
       }
     }
 
+    // ── Phase 2d: current_user GET — acquire ig-set-authorization Bearer token ─
+    // For personal accounts, Phase 2a/2b/2c all return 404/400 and Instagram
+    // does NOT include ig-set-authorization in error responses.  Without the
+    // Bearer token, _buildMobileHeaders sends no Authorization header and
+    // friendships/create is rejected with "something went wrong" (confirmed in
+    // WIRE log: no Authorization header present on the follow POST).
+    //
+    // A GET to /accounts/current_user/ is a lightweight authenticated call that
+    // real Instagram apps make immediately after loading cookies.  Instagram
+    // reliably returns ig-set-authorization on this endpoint for all account
+    // types.  The patched ig.request.send dispatcher calls _absorbIgClientState
+    // automatically, which captures the token into this.igDeviceState so that
+    // _buildMobileHeaders (→ _deviceAuthorization) includes Authorization on
+    // every subsequent call.
+    if (!this._deviceAuthorization) {
+      try {
+        await ig.account.currentUser();
+        const gotAuth = !!this._deviceAuthorization;
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user → authorization=${gotAuth ? `obtained (${this._deviceAuthorization!.slice(0, 16)}…)` : "not returned by Instagram"}`);
+      } catch (e: any) {
+        // Non-fatal — if current_user itself fails (e.g. session revoked) the
+        // subsequent follow will surface the real error.
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d current_user threw (non-fatal): ${e?.message}`);
+      }
+    } else {
+      console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped — authorization already present`);
+    }
+
     // Confirm result in the log
     const resultClaim = claimNow();
     if (resultClaim && resultClaim !== "0") {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: ✓ claim obtained (${resultClaim.slice(0, 16)}…)`);
     } else {
-      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c — follow will use claim=0`);
+      console.warn(`[webClient:${this.profileId}] _bootstrapWwwClaim: claim still missing after Phase 2a/2b/2c/2d — follow will use claim=0`);
     }
   }
 
