@@ -146961,6 +146961,8 @@ var profiles = sqliteTable("profiles", {
   activeTimerEnabled: integer("active_timer_enabled", { mode: "boolean" }).default(false),
   activeTimerStart: text("active_timer_start"),
   activeTimerEnd: text("active_timer_end"),
+  followViaBrowser: integer("follow_via_browser", { mode: "boolean" }).default(false),
+  postViaBrowser: integer("post_via_browser", { mode: "boolean" }).default(false),
   syncEnabled: integer("sync_enabled", { mode: "boolean" }).default(false),
   syncIntervalMin: integer("sync_interval_min"),
   syncIntervalMax: integer("sync_interval_max"),
@@ -147349,6 +147351,7 @@ sqlite.exec(`
     active_timer_enabled INTEGER DEFAULT 0,
     active_timer_start TEXT,
     active_timer_end TEXT,
+    follow_via_browser INTEGER DEFAULT 0,
     sync_enabled INTEGER DEFAULT 0,
     sync_interval_min INTEGER,
     sync_interval_max INTEGER,
@@ -147651,6 +147654,12 @@ if (!colNames.has("created_at")) {
 }
 if (!colNames.has("valid_since")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN valid_since TEXT;`);
+}
+if (!colNames.has("follow_via_browser")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN follow_via_browser INTEGER DEFAULT 0;`);
+}
+if (!colNames.has("post_via_browser")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN post_via_browser INTEGER DEFAULT 0;`);
 }
 sqlite.exec(`
   UPDATE profiles
@@ -149964,6 +149973,7 @@ var import_instagram_private_api2 = __toESM(require_dist2(), 1);
 // src/instagram/tlsTransport.ts
 var import_instagram_private_api = __toESM(require_dist2(), 1);
 var OKHTTP4_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-43-17513-27-21,29-23-24,0";
+var CHROME120_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0";
 var _client = null;
 var _initPromise = null;
 var _initFailed = false;
@@ -152237,7 +152247,7 @@ var InstagramWebClient = class {
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
-      forceNodeTls: true
+      ja3Override: CHROME120_JA3
     });
     if (res.cookies.length) {
       this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
@@ -152413,33 +152423,6 @@ var InstagramWebClient = class {
       patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
       if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
       patchIgClientTls(ig, this.proxyUrl);
-      try {
-        await ig.request.send({
-          url: "/api/v1/zr/token/result/",
-          method: "GET",
-          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
-      } catch (e) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
-      }
-      try {
-        await Promise.race([
-          ig.launcher.preLoginSync().then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`)).catch((e) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
-          new Promise((r2) => setTimeout(r2, 2e4))
-        ]);
-      } catch {
-      }
-      try {
-        await ig.request.send({
-          url: "/api/v1/zr/token/result/",
-          method: "GET",
-          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" }
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
-      } catch (e) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
-      }
       const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
       const sessionPair = pairs.find((p) => p.toLowerCase().startsWith("sessionid="));
       let ownUserId = pairs.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
@@ -153214,10 +153197,14 @@ var InstagramWebClient = class {
     return { viewed, items: viewedItems, reelWatches };
   }
   // ── Open / view a single feed post (simulates tapping into it) ───────────
-  // No HTTP call is made — the media/seen POST (fired in bulk by the caller)
-  // is sufficient to register the view. Nothing to log here.
-  async viewFeedPost(_mediaId) {
-    return true;
+  // Fetches /media/{mediaId}/info/ — the call Instagram makes when you tap a post.
+  // Produces a "ViewPost" entry in the API-call log so per-post views from
+  // inject-browsing appear individually in the Export API Calls CSV.
+  async viewFeedPost(mediaId) {
+    return this.timed("ViewPost", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
+      return !!j?.items?.length;
+    }, `View post ${mediaId}`);
   }
   // ── Open and play a reel from the feed (simulates tapping + watching) ────
   // /api/v1/clips/clips_viewed/ returns 404 HTML — dead endpoint.
@@ -153226,9 +153213,14 @@ var InstagramWebClient = class {
     return true;
   }
   // ── Visit a user's profile page ──────────────────────────────────────────
-  // No HTTP call — scraped users/{id}/info/ was removed. Nothing to log here.
-  async visitUserProfile(_userId, _fromModule = "profile") {
-    return true;
+  // Fetches /users/{id}/info/ — the same call Instagram makes when you tap a profile.
+  // Produces a "VisitProfile" entry in the API-call log so profile visits from
+  // inject-browsing appear in the Export API Calls CSV.
+  async visitUserProfile(userId, _fromModule = "profile") {
+    return this.timed("VisitProfile", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+      return !!j?.user;
+    }, `Visit profile ${userId}`);
   }
   // ── Scroll through a user's post feed (profile grid) ────────────────────
   // Fetches up to `count` posts from the user's feed and marks them as seen,
@@ -153534,6 +153526,51 @@ var InstagramWebClient = class {
       console.warn(`[webClient] getDirectMessagesInternal: inbox probe failed \u2014 ${msg}`);
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
         throw firstProbeErr;
+      }
+      if (msg === "prompt_required_4415001" || msg.includes("4415001")) {
+        console.log(`[webClient] getDirectMessagesInternal: retrying via _buildWarmedIgClient fallback`);
+        try {
+          const warmed = await this._buildWarmedIgClient();
+          if (warmed) {
+            const { ig } = warmed;
+            const myUserId2 = String(ig.state.cookieUserId ?? "");
+            const inbox = ig.feed.directInbox();
+            const page = await inbox.items();
+            inboxThreads = page ?? [];
+            firstProbeOk = true;
+            console.log(`[webClient] getDirectMessagesInternal: warmedClient fallback OK \u2014 ${inboxThreads.length} thread(s)`);
+            this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
+            const mappedFallback = inboxThreads.map((t2) => {
+              const otherUser = (t2.users ?? [])[0];
+              if (!t2.thread_id || !otherUser?.username) return null;
+              const items = (t2.items ?? []).filter((i2) => i2?.item_type === "text" && i2?.text).map((i2) => ({
+                itemId: String(i2.item_id ?? ""),
+                text: String(i2.text ?? ""),
+                fromMe: myUserId2 ? String(i2.user_id) === myUserId2 : false
+              }));
+              const rawFullName = String(otherUser.full_name ?? "").trim();
+              const firstName = rawFullName.split(/\s+/)[0] || String(otherUser.username);
+              return { threadId: String(t2.thread_id), username: String(otherUser.username), userId: String(otherUser.pk ?? ""), firstName, items };
+            }).filter((t2) => t2 !== null);
+            if (inboxThreads.length === 0) return { count: 0, ok: true, threads: [] };
+            const toOpen2 = inboxThreads.slice(0, count);
+            let opened2 = 0;
+            for (const thread of toOpen2) {
+              const threadId = String(thread.thread_id ?? "");
+              if (!threadId) continue;
+              try {
+                await ig.feed.directThread({ thread_id: threadId, oldest_cursor: void 0 }).items();
+                this.logCallFn?.("GetDirectMessageThread", 0, `Opened DM thread`, false);
+                opened2++;
+              } catch {
+              }
+              if (opened2 < toOpen2.length) await new Promise((r2) => setTimeout(r2, 1500 + Math.floor(Math.random() * 2500)));
+            }
+            return { count: opened2, ok: true, threads: mappedFallback };
+          }
+        } catch (fbErr) {
+          console.warn(`[webClient] getDirectMessagesInternal: warmedClient fallback failed \u2014 ${fbErr?.message}`);
+        }
       }
       return { count: 0, ok: false, threads: [] };
     } else {
@@ -163611,6 +163648,7 @@ async function makeUniqueVideo(inputPath) {
 var ProxySlotManager = class {
   slots = /* @__PURE__ */ new Map();
   settings = {
+    enabled: true,
     maxConcurrent: 2,
     cooldownMinMs: 30 * 60 * 1e3,
     cooldownMaxMs: 35 * 60 * 1e3
@@ -163627,7 +163665,7 @@ var ProxySlotManager = class {
     }
   }
   updateSettings(s) {
-    this.settings = { ...s };
+    this.settings = { ...this.settings, ...s };
   }
   getSettings() {
     return { ...this.settings };
@@ -163658,6 +163696,7 @@ var ProxySlotManager = class {
   }
   /** Returns whether this profileId can acquire a slot on the proxy right now. */
   canAcquire(proxyId, profileId) {
+    if (!this.settings.enabled) return { ok: true };
     const entry = this.getEntry(proxyId);
     this.purgeExpiredCooldowns(entry);
     if (entry.active.has(profileId)) return { ok: true };
@@ -163924,6 +163963,53 @@ var AutomationEngine = class {
   // contact tool runners
   humanSessionStates = /* @__PURE__ */ new Map();
   // independent human session runners
+  // Wake signals for HS runners — set to interrupt the idle 10s sleep immediately.
+  // Keyed by profileId.  Runner resets wake=false after waking; triggerHumanSession sets wake=true.
+  hsWakeSignals = /* @__PURE__ */ new Map();
+  /** Follow a user by opening a hidden embedded browser, navigating to their profile,
+   *  and clicking the Follow button.  Used when the account has "Do Actions Via Browser
+   *  → Follows" enabled.  Calls the EB IPC server (Electron main process) which manages
+   *  the BrowserWindow lifecycle.  Resolves with the same shape as client.followUser(). */
+  async followUserViaBrowser(profileId, targetUsername) {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) {
+      return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
+    }
+    try {
+      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId, targetUsername }),
+        signal: AbortSignal.timeout(35e3)
+      });
+      if (!r2.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r2.status}` };
+      return await r2.json();
+    } catch (err) {
+      return { ok: false, status: "follow_blocked", reason: `Browser-follow error: ${err?.message}` };
+    }
+  }
+  async postPhotoViaBrowser(profileId, imageBuffer, caption) {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) {
+      return { ok: false, message: "Browser-post not available outside Electron" };
+    }
+    try {
+      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-post`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId,
+          imageBase64: imageBuffer.toString("base64"),
+          caption
+        }),
+        signal: AbortSignal.timeout(12e4)
+      });
+      if (!r2.ok) return { ok: false, message: `EB IPC HTTP ${r2.status}` };
+      return await r2.json();
+    } catch (err) {
+      return { ok: false, message: `Browser-post error: ${err?.message}` };
+    }
+  }
   cookieBakerStates = /* @__PURE__ */ new Map();
   // cookie baker runners
   cookieBakerForceRun = /* @__PURE__ */ new Set();
@@ -164431,6 +164517,8 @@ ${err?.stack ?? ""}`);
       console.log(`[engine] @${profile.username}: randomise timing \u2014 first human session in ${Math.round(waitMs / 6e4)}min`);
     }
     this.humanSessionStates.set(profile.id, state);
+    const wakeSignal = { wake: false };
+    this.hsWakeSignals.set(profile.id, wakeSignal);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
     const loop = async () => {
       while (!state.stop.stopped) {
@@ -164498,14 +164586,20 @@ ${err?.stack ?? ""}`);
           state.nextHumanSessionAt = Date.now() + waitMs;
           console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 6e4)}min`);
         }
-        await sleepInterruptible(1e4, state.stop);
+        const tickEnd = Date.now() + 1e4;
+        while (!state.stop.stopped && !wakeSignal.wake && Date.now() < tickEnd) {
+          await sleep(1e3);
+        }
+        wakeSignal.wake = false;
       }
       this.humanSessionStates.delete(profile.id);
+      this.hsWakeSignals.delete(profile.id);
       console.log(`[engine] Human session runner exited for @${profile.username}`);
     };
     loop().catch((err) => {
       this.runnerCrashedIds.add(profile.id);
       this.humanSessionStates.delete(profile.id);
+      this.hsWakeSignals.delete(profile.id);
       console.error(`[engine] Fatal human session error for @${profile.username}:`, err?.message);
     });
   }
@@ -167364,7 +167458,11 @@ ${err?.stack ?? ""}`);
       let result;
       try {
         const sourceLabel = source.value ? source.type === "hashtag" ? `#${source.value}` : source.value : void 0;
-        result = await client.followUser(user.pk, user.username, sourceLabel);
+        if (profile.followViaBrowser) {
+          result = await this.followUserViaBrowser(profile.id, user.username);
+        } else {
+          result = await client.followUser(user.pk, user.username, sourceLabel);
+        }
       } catch (err) {
         const msg = err?.message ?? "";
         const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
@@ -167576,7 +167674,11 @@ ${err?.stack ?? ""}`);
           let result;
           try {
             const sourceLabel = rescrapeSource.value ? rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value : void 0;
-            result = await client.followUser(user.pk, user.username, sourceLabel);
+            if (profile.followViaBrowser) {
+              result = await this.followUserViaBrowser(profile.id, user.username);
+            } else {
+              result = await client.followUser(user.pk, user.username, sourceLabel);
+            }
           } catch (err) {
             const msg = err?.message ?? "";
             const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
@@ -167740,8 +167842,15 @@ ${err?.stack ?? ""}`);
       const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
       const captionTemplate = String(s.repostCaptionText ?? "").trim();
       const finalCaption = captionTemplate ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username) : candidate.caption.slice(0, 2200);
-      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
-      if (!postedMediaId) return { ok: false, message: client.lastUploadError || "Upload failed \u2014 Instagram rejected the photo" };
+      let postedMediaId;
+      if (profile.postViaBrowser) {
+        const ebResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, finalCaption);
+        if (!ebResult.ok) return { ok: false, message: ebResult.message || "Browser post failed \u2014 check the embedded browser session is active" };
+        postedMediaId = ebResult.mediaId ?? String(Date.now());
+      } else {
+        postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+        if (!postedMediaId) return { ok: false, message: client.lastUploadError || "Upload failed \u2014 Instagram rejected the photo" };
+      }
       if (s.repostDisableComments) {
         try {
           await client.disableComments(postedMediaId);
@@ -167781,6 +167890,8 @@ ${err?.stack ?? ""}`);
     const state = this.humanSessionStates.get(profileId);
     if (state) {
       state.nextHumanSessionAt = 0;
+      const wakeSignal = this.hsWakeSignals.get(profileId);
+      if (wakeSignal) wakeSignal.wake = true;
     } else {
       this.reconcile().catch(() => {
       });
@@ -168606,7 +168717,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const maxConcurrent = parseInt(gs["proxySlotMaxConcurrent"] ?? "2", 10) || 2;
     const cooldownMinMins = parseFloat(gs["proxySlotCooldownMinMins"] ?? "30") || 30;
     const cooldownMaxMins = parseFloat(gs["proxySlotCooldownMaxMins"] ?? "35") || 35;
+    const slotEnabled = gs["proxySlotEnabled"] !== "false";
     proxySlotManager.updateSettings({
+      enabled: slotEnabled,
       maxConcurrent,
       cooldownMinMs: Math.round(cooldownMinMins * 60 * 1e3),
       cooldownMaxMs: Math.round(cooldownMaxMins * 60 * 1e3)
@@ -168948,8 +169061,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const rows = await db.select().from(tools).where(eq(tools.type, "human_sessions"));
     const result = {};
     for (const row of rows) {
-      const s = row.settings ?? {};
-      result[row.profileId] = s.humanSessionEnabled !== false;
+      result[row.profileId] = row.enabled === true;
     }
     res.json(result);
   });
@@ -169114,6 +169226,8 @@ ${stamp}` : stamp;
       "activeTimerEnabled",
       "activeTimerStart",
       "activeTimerEnd",
+      "followViaBrowser",
+      "postViaBrowser",
       "syncEnabled",
       "syncIntervalMin",
       "syncIntervalMax",
@@ -169928,34 +170042,38 @@ ${stamp_l}` : stamp_l });
   app2.get("/api/proxy-slots/settings", async (_req, res) => {
     const s = proxySlotManager.getSettings();
     res.json({
+      enabled: s.enabled ?? true,
       maxConcurrent: s.maxConcurrent,
       cooldownMinMins: s.cooldownMinMs / 6e4,
       cooldownMaxMins: s.cooldownMaxMs / 6e4
     });
   });
   app2.put("/api/proxy-slots/settings", async (req, res) => {
-    const { maxConcurrent, cooldownMinMins, cooldownMaxMins } = req.body;
+    const { enabled, maxConcurrent, cooldownMinMins, cooldownMaxMins } = req.body;
+    const en = enabled !== void 0 ? Boolean(enabled) : proxySlotManager.getSettings().enabled ?? true;
     const mc = Math.max(1, parseInt(maxConcurrent ?? "2", 10) || 2);
     const min = Math.max(0, parseFloat(cooldownMinMins ?? "30") || 30);
     const max = Math.max(min, parseFloat(cooldownMaxMins ?? "35") || 35);
     proxySlotManager.updateSettings({
+      enabled: en,
       maxConcurrent: mc,
       cooldownMinMs: Math.round(min * 6e4),
       cooldownMaxMs: Math.round(max * 6e4)
     });
+    await storage.setGlobalSetting("proxySlotEnabled", String(en));
     await storage.setGlobalSetting("proxySlotMaxConcurrent", String(mc));
     await storage.setGlobalSetting("proxySlotCooldownMinMins", String(min));
     await storage.setGlobalSetting("proxySlotCooldownMaxMins", String(max));
-    res.json({ ok: true, maxConcurrent: mc, cooldownMinMins: min, cooldownMaxMins: max });
+    res.json({ ok: true, enabled: en, maxConcurrent: mc, cooldownMinMins: min, cooldownMaxMins: max });
   });
   app2.get("/api/proxy-slots/status", (_req, res) => {
     const statuses = proxySlotManager.getStatus();
-    const settings = proxySlotManager.getSettings();
+    const s = proxySlotManager.getSettings();
     const slots = {};
-    for (const s of statuses) {
-      slots[s.proxyId] = { active: s.active, onCooldown: s.onCooldown, max: s.max, available: s.available, activeProfileIds: s.activeProfileIds };
+    for (const st of statuses) {
+      slots[st.proxyId] = { active: st.active, onCooldown: st.onCooldown, max: st.max, available: st.available, activeProfileIds: st.activeProfileIds };
     }
-    res.json({ slots, settings });
+    res.json({ slots, settings: { enabled: s.enabled ?? true, maxConcurrent: s.maxConcurrent, cooldownMinMs: s.cooldownMinMs, cooldownMaxMs: s.cooldownMaxMs } });
   });
   app2.get("/api/profiles/:id/eb-state", async (req, res) => {
     const profileId = Number(req.params.id);
@@ -170479,6 +170597,8 @@ ${stamp}` : stamp;
           if (updated.type === "follow") automationEngine.triggerFollow(updated.profileId);
           if (updated.type === "contact") automationEngine.triggerReconcile();
         }
+      } else if (input.enabled === false && updated.type === "human_sessions") {
+        automationEngine.triggerReconcile();
       }
       res.json(updated);
     } catch (err) {

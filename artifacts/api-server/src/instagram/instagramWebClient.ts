@@ -3472,10 +3472,14 @@ export class InstagramWebClient {
   }
 
   // ── Open / view a single feed post (simulates tapping into it) ───────────
-  // No HTTP call is made — the media/seen POST (fired in bulk by the caller)
-  // is sufficient to register the view. Nothing to log here.
-  async viewFeedPost(_mediaId: string): Promise<boolean> {
-    return true;
+  // Fetches /media/{mediaId}/info/ — the call Instagram makes when you tap a post.
+  // Produces a "ViewPost" entry in the API-call log so per-post views from
+  // inject-browsing appear individually in the Export API Calls CSV.
+  async viewFeedPost(mediaId: string): Promise<boolean> {
+    return this.timed("ViewPost", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
+      return !!(j?.items?.length);
+    }, `View post ${mediaId}`);
   }
 
   // ── Open and play a reel from the feed (simulates tapping + watching) ────
@@ -3486,9 +3490,14 @@ export class InstagramWebClient {
   }
 
   // ── Visit a user's profile page ──────────────────────────────────────────
-  // No HTTP call — scraped users/{id}/info/ was removed. Nothing to log here.
-  async visitUserProfile(_userId: string, _fromModule: string = "profile"): Promise<boolean> {
-    return true;
+  // Fetches /users/{id}/info/ — the same call Instagram makes when you tap a profile.
+  // Produces a "VisitProfile" entry in the API-call log so profile visits from
+  // inject-browsing appear in the Export API Calls CSV.
+  async visitUserProfile(userId: string, _fromModule: string = "profile"): Promise<boolean> {
+    return this.timed("VisitProfile", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+      return !!(j?.user);
+    }, `Visit profile ${userId}`);
   }
 
   // ── Scroll through a user's post feed (profile grid) ────────────────────
