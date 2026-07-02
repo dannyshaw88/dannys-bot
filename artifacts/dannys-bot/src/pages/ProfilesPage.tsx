@@ -113,7 +113,7 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
       title={tooltip}
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${tooltip ? " cursor-help" : ""}`}
     >
-      <Icon className={`w-2.5 h-2.5${isResuming ? " animate-spin" : ""}`} />
+      <Icon className={`w-2.5 h-2.5${(isResuming || displayStatus === "verifying") ? " animate-spin" : ""}`} />
       <span className="uppercase">{meta.label}</span>
       {isResuming && <ResumingCountdown until={resumingUntil} onExpired={onResumingExpired} />}
     </span>
@@ -435,7 +435,7 @@ export function ProfilesPage() {
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   // ── Proxy slot status — polls /api/proxy-slots/status every 10s ──────────
   const [slotStatusMap, setSlotStatusMap] = useState<Record<number, { active: number; onCooldown: number; cooldownUntil: number | null; activeProfileIds: number[] }>>({});
-  const [slotManager, setSlotManager] = useState<{ settings: { maxConcurrent: number; cooldownMinMs: number; cooldownMaxMs: number } }>({ settings: { maxConcurrent: 2, cooldownMinMs: 30 * 60000, cooldownMaxMs: 35 * 60000 } });
+  const [slotManager, setSlotManager] = useState<{ settings: { enabled: boolean; maxConcurrent: number; cooldownMinMs: number; cooldownMaxMs: number } }>({ settings: { enabled: true, maxConcurrent: 2, cooldownMinMs: 30 * 60000, cooldownMaxMs: 35 * 60000 } });
   useEffect(() => {
     const fetchSlots = () => {
       fetch("/api/proxy-slots/status").then(r => r.json()).then((d: any) => {
@@ -1357,7 +1357,7 @@ export function ProfilesPage() {
                 ACCOUNT NAME
               </button>
             </div>
-            {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
+            {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE] && (k !== "ipslots" || slotManager.settings.enabled !== false)).map(key => {
               const isDragTarget = profDragOverCol === key;
               const dragBorder = isDragTarget ? "border-l-2 border-l-primary bg-primary/5" : "";
               const dragProps = {
@@ -1533,7 +1533,7 @@ export function ProfilesPage() {
                       </button>
                     )}
                   </div>
-                  {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
+                  {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE] && (k !== "ipslots" || slotManager.settings.enabled !== false)).map(key => {
                     if (key === "status") return (
                       <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-center gap-1.5 shrink-0">
                         {hasProxy

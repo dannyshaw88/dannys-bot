@@ -488,6 +488,7 @@ export function ProxiesPage() {
 
   // ── Proxy Slot Settings ───────────────────────────────────────────────────
   const [slotSettingsOpen, setSlotSettingsOpen] = useState(false);
+  const [slotEnabled, setSlotEnabled] = useState(true);
   const [slotMax, setSlotMax] = useState(2);
   const [slotCooldownMin, setSlotCooldownMin] = useState(30);
   const [slotCooldownMax, setSlotCooldownMax] = useState(35);
@@ -497,6 +498,7 @@ export function ProxiesPage() {
     apiRequest("GET", "/api/proxy-slots/settings")
       .then(r => r.json())
       .then((d: any) => {
+        setSlotEnabled(d.enabled !== false);
         setSlotMax(d.maxConcurrent ?? 2);
         setSlotCooldownMin(d.cooldownMinMins ?? 30);
         setSlotCooldownMax(d.cooldownMaxMins ?? 35);
@@ -508,6 +510,7 @@ export function ProxiesPage() {
     setSlotSaving(true);
     try {
       await apiRequest("PUT", "/api/proxy-slots/settings", {
+        enabled: slotEnabled,
         maxConcurrent: slotMax,
         cooldownMinMins: slotCooldownMin,
         cooldownMaxMins: slotCooldownMax,
@@ -990,7 +993,19 @@ export function ProxiesPage() {
                 <button onClick={() => setSlotSettingsOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 space-y-4 text-sm">
+                <div className="flex items-center gap-3 pb-1 border-b border-border">
+                  <Switch
+                    checked={slotEnabled}
+                    onCheckedChange={setSlotEnabled}
+                    className="data-[state=checked]:bg-green-500"
+                  />
+                  <div>
+                    <p className="text-xs font-semibold">Enable Proxy Slots</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">When off, all accounts can run on a proxy simultaneously with no limits</p>
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">Limits how many accounts can work on the same proxy at once, and enforces a cooldown gap before a freed slot can be reused.</p>
+                <div className={`space-y-4${!slotEnabled ? " opacity-40 pointer-events-none" : ""}`}>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold">Max accounts per proxy at the same time</Label>
                   <input
@@ -1025,6 +1040,7 @@ export function ProxiesPage() {
                   </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground">After a slot is freed, it enters cooldown for {slotCooldownMin}–{slotCooldownMax} min before a new account can use it.</p>
+                </div>
                 <Button className="w-full" onClick={handleSaveSlotSettings} disabled={slotSaving}>
                   {slotSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
                 </Button>

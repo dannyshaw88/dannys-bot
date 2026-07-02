@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.286",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Accounts Manager: the Verifying status badge icon now spins while an account is being verified, so it's clear the process is actively running rather than paused.",
+      },
+      {
+        category: "Feature",
+        text: "Proxy Manager — Proxy Slots: added an Enable/Disable toggle at the top of the Proxy Slots settings dialog. When disabled, all accounts can run on a proxy simultaneously with no slot limits or cooldowns.",
+      },
+      {
+        category: "Feature",
+        text: "Accounts Manager: the SLOTS column now automatically disappears when the Proxy Slots feature is turned off in Proxy Manager.",
+      },
+    ],
+  },
+  {
     version: "1.1.285",
     date: "2 Jul 2026",
     items: [

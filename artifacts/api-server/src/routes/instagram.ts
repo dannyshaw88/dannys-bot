@@ -354,7 +354,9 @@ export async function registerInstagramRoutes(
     const maxConcurrent   = parseInt(gs["proxySlotMaxConcurrent"]   ?? "2",  10) || 2;
     const cooldownMinMins = parseFloat(gs["proxySlotCooldownMinMins"] ?? "30") || 30;
     const cooldownMaxMins = parseFloat(gs["proxySlotCooldownMaxMins"] ?? "35") || 35;
+    const slotEnabled     = gs["proxySlotEnabled"] !== "false";
     proxySlotManager.updateSettings({
+      enabled: slotEnabled,
       maxConcurrent,
       cooldownMinMs: Math.round(cooldownMinMins * 60 * 1000),
       cooldownMaxMs: Math.round(cooldownMaxMins * 60 * 1000),
@@ -1951,6 +1953,7 @@ export async function registerInstagramRoutes(
   app.get("/api/proxy-slots/settings", async (_req, res) => {
     const s = proxySlotManager.getSettings();
     res.json({
+      enabled:           s.enabled ?? true,
       maxConcurrent:     s.maxConcurrent,
       cooldownMinMins:   s.cooldownMinMs  / 60000,
       cooldownMaxMins:   s.cooldownMaxMs  / 60000,
@@ -1958,29 +1961,32 @@ export async function registerInstagramRoutes(
   });
 
   app.put("/api/proxy-slots/settings", async (req, res) => {
-    const { maxConcurrent, cooldownMinMins, cooldownMaxMins } = req.body as any;
+    const { enabled, maxConcurrent, cooldownMinMins, cooldownMaxMins } = req.body as any;
+    const en  = enabled !== undefined ? Boolean(enabled) : (proxySlotManager.getSettings().enabled ?? true);
     const mc  = Math.max(1, parseInt(maxConcurrent  ?? "2",  10) || 2);
     const min = Math.max(0, parseFloat(cooldownMinMins ?? "30") || 30);
     const max = Math.max(min, parseFloat(cooldownMaxMins ?? "35") || 35);
     proxySlotManager.updateSettings({
+      enabled: en,
       maxConcurrent: mc,
       cooldownMinMs: Math.round(min * 60000),
       cooldownMaxMs: Math.round(max * 60000),
     });
+    await storage.setGlobalSetting("proxySlotEnabled",         String(en));
     await storage.setGlobalSetting("proxySlotMaxConcurrent",   String(mc));
     await storage.setGlobalSetting("proxySlotCooldownMinMins", String(min));
     await storage.setGlobalSetting("proxySlotCooldownMaxMins", String(max));
-    res.json({ ok: true, maxConcurrent: mc, cooldownMinMins: min, cooldownMaxMins: max });
+    res.json({ ok: true, enabled: en, maxConcurrent: mc, cooldownMinMins: min, cooldownMaxMins: max });
   });
 
   app.get("/api/proxy-slots/status", (_req, res) => {
     const statuses  = proxySlotManager.getStatus();
-    const settings  = proxySlotManager.getSettings();
+    const s         = proxySlotManager.getSettings();
     const slots: Record<number, { active: number; onCooldown: number; max: number; available: number; activeProfileIds: number[] }> = {};
-    for (const s of statuses) {
-      slots[s.proxyId] = { active: s.active, onCooldown: s.onCooldown, max: s.max, available: s.available, activeProfileIds: s.activeProfileIds };
+    for (const st of statuses) {
+      slots[st.proxyId] = { active: st.active, onCooldown: st.onCooldown, max: st.max, available: st.available, activeProfileIds: st.activeProfileIds };
     }
-    res.json({ slots, settings });
+    res.json({ slots, settings: { enabled: s.enabled ?? true, maxConcurrent: s.maxConcurrent, cooldownMinMs: s.cooldownMinMs, cooldownMaxMs: s.cooldownMaxMs } });
   });
 
   // ── EB State (Electron native window mode) ────────────────────────────────

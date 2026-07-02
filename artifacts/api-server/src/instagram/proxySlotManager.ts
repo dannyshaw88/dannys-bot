@@ -21,6 +21,7 @@
 // entry is kept so it can be restored if the EB closes before the expiry.
 
 export interface ProxySlotSettings {
+  enabled: boolean;
   maxConcurrent: number;
   cooldownMinMs: number;
   cooldownMaxMs: number;
@@ -43,6 +44,7 @@ interface SlotEntry {
 class ProxySlotManager {
   private slots = new Map<number, SlotEntry>();
   private settings: ProxySlotSettings = {
+    enabled: true,
     maxConcurrent: 2,
     cooldownMinMs: 30 * 60 * 1000,
     cooldownMaxMs: 35 * 60 * 1000,
@@ -58,8 +60,8 @@ class ProxySlotManager {
     try { this.saveFn?.(); } catch { /* non-fatal */ }
   }
 
-  updateSettings(s: ProxySlotSettings) {
-    this.settings = { ...s };
+  updateSettings(s: Partial<ProxySlotSettings>) {
+    this.settings = { ...this.settings, ...s };
   }
 
   getSettings(): ProxySlotSettings {
@@ -95,6 +97,7 @@ class ProxySlotManager {
 
   /** Returns whether this profileId can acquire a slot on the proxy right now. */
   canAcquire(proxyId: number, profileId: number): { ok: boolean; reason?: string } {
+    if (!this.settings.enabled) return { ok: true };
     const entry = this.getEntry(proxyId);
     this.purgeExpiredCooldowns(entry);
 
