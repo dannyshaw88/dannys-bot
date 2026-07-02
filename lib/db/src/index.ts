@@ -369,6 +369,9 @@ if (!colNames.has("valid_since")) {
 if (!colNames.has("follow_via_browser")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN follow_via_browser INTEGER DEFAULT 0;`);
 }
+if (!colNames.has("post_via_browser")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN post_via_browser INTEGER DEFAULT 0;`);
+}
 // Backfill: any account currently "valid" with no valid_since gets created_at as the
 // starting point (falls back to NOW if created_at is also null).  Runs every startup
 // but only touches rows that still have a null valid_since, so it's fully idempotent.

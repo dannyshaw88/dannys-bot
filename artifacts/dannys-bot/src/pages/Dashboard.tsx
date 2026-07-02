@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.288",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Critical: all profiles were missing after the last update because the new post_via_browser database column was not being added to existing installations. Startup migration added — profiles are restored immediately on next launch.",
+      },
+    ],
+  },
+  {
     version: "1.1.287",
     date: "2 Jul 2026",
     items: [
