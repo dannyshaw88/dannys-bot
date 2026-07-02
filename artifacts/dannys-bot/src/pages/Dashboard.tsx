@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.280",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow: removed misleading 'please re-verify' message from follow errors — re-verifying does not fix the 'something went wrong' response and the message was causing confusion.",
+      },
+    ],
+  },
+  {
     version: "1.1.279",
     date: "1 Jul 2026",
     items: [

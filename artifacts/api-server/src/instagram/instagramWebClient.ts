@@ -2260,17 +2260,7 @@ export class InstagramWebClient {
     }
     if (j?.status === "fail") {
       const msg: string = j?.message || "Instagram declined (status: fail)";
-      if (/something went wrong|sorry/i.test(msg)) {
-        // Generic technical rejection — almost always means the session is missing
-        // ig-set-www-claim and/or the Authorization Bearer token.  Surface an
-        // actionable message so the operator knows to re-verify via the EB.
-        const missingTokens = !this._deviceAuthorization;
-        const actionHint = missingTokens
-          ? " Session tokens (www-claim / Bearer) are absent — re-verify this account via the Embedded Browser to restore follow capability."
-          : "";
-        return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}${actionHint}` };
-      }
-      return { ok: false, status: "follow_blocked", reason: msg };
+      return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
     }
     if (j?.status === "ok") return { ok: true, status: "following" };
     console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
@@ -2742,16 +2732,14 @@ export class InstagramWebClient {
         console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e setup threw (non-fatal): ${e2e?.message}`);
       }
 
-      // Final summary — log remaining gaps so the operator knows what's missing.
+      // Final summary — log remaining token state for diagnostics.
       const finalClaim   = claimNow();
       const finalAuth    = this._deviceAuthorization;
       const claimOkFinal = !!(finalClaim && finalClaim !== "0");
       if (!claimOkFinal || !finalAuth) {
-        console.warn(
-          `[webClient:${this.profileId}] _bootstrapWwwClaim: ⚠ session tokens still missing after all phases — ` +
-          `claim=${claimOkFinal ? "ok" : "MISSING"}, auth=${finalAuth ? "ok" : "MISSING"}. ` +
-          `This usually means the account session has expired or was never fully established. ` +
-          `ACTION REQUIRED: re-verify this account via the Embedded Browser (EB) to restore follow capability.`,
+        console.log(
+          `[webClient:${this.profileId}] _bootstrapWwwClaim: ℹ session tokens unavailable after all phases — ` +
+          `claim=${claimOkFinal ? "ok" : "none"}, auth=${finalAuth ? "ok" : "none"}. Proceeding with cookies only.`,
         );
       }
     }
