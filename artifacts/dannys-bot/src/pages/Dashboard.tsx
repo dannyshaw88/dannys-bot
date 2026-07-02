@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.291",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Critical crash fix: opening an account EB no longer crashes the app. The previous update attempted to fix the layout by forcing a mobile viewport at the Chromium engine level — this call (setDeviceMetricsOverride) crashes Electron 33 on Windows regardless of how it is called. It has been removed.",
+      },
+      {
+        category: "Fix",
+        text: "Embedded browser now shows the full Instagram desktop experience — matching what you see in Chrome on your PC (sidebar navigation, feed, all features). Root cause: accounts had a mobile Android user agent applied to the EB window, so Instagram was serving a mobile-optimised page. The EB now always uses a Windows desktop Chrome user agent, which makes Instagram serve the full desktop layout. The mobile user agent is still used by the automation engine where it is needed.",
+      },
+    ],
+  },
+  {
     version: "1.1.290",
     date: "2 Jul 2026",
     items: [

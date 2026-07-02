@@ -2174,7 +2174,7 @@ export async function openEbWindow(opts: {
   // start, so @media queries evaluate correctly without any CDP override at all.
   const _isApiFormat = !!userAgent && isApiFormatUA(userAgent);
   const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(userAgent!) : null;
-  const _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
+  let _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
   const _resolvedApiUA = _isApiFormat ? userAgent! : (apiUA ?? null);
   const _androidVer  = _apiParsed?.androidVersion ?? (
     _browserUA?.match(/Android\s+(\d+)/i)?.[1] ?? "14"
@@ -2185,12 +2185,28 @@ export async function openEbWindow(opts: {
   if (_isApiFormat) {
     console.log(`[ebManager:${profileId}] API-format UA converted → browserUA="${_browserUA}" apiUA="${userAgent}"`);
   }
-  const _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
+  let _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
   const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+  // ── Desktop UA override for regular account EB windows ────────────────────
+  // Regular account EBs always use a Windows desktop Chrome UA so Instagram
+  // serves the full desktop web experience with the full sidebar, all features,
+  // and the create-post Next button — identical to what Chrome on a PC shows.
+  //
+  // The stored user_agent_embedded (mobile Android UA) is used only by the
+  // mobile API client, not by the EB browser display.
+  //
+  // Emulation.setDeviceMetricsOverride is intentionally NOT used — it causes a
+  // SIGSEGV crash in Electron 33 on Windows regardless of call serialisation.
+  // A desktop UA + real 1280×820 window means Chromium's CSS engine already
+  // sees a desktop viewport and Instagram renders the full desktop UI without
+  // any CDP viewport override at all.
+  if (!isGhostBrowser && !verifyMode && _fpIsMobile) {
+    _browserUA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_fpChromeMajor}.0.0.0 Safari/537.36`;
+    _fpIsMobile = false;
+  }
   const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
   const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
-  // Mobile profile for BrowserWindow dimensions — only for real account EBs
-  // (ghost and verify windows always use 430×700).
+  // Mobile profile — only for ghost/verify windows (regular windows are now desktop).
   const _mobileProfile = (!isGhostBrowser && !verifyMode && _fpIsMobile)
     ? getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null)
     : null;
@@ -2441,58 +2457,25 @@ export async function openEbWindow(opts: {
   await new Promise(r => setTimeout(r, 100));
   if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1b: window destroyed after UA CDP — returning early"); return; }
 
-  // ── Device metrics + touch emulation (serialised via _cdpEmuLock) ──────────
-  // setDeviceMetricsOverride was previously removed because it caused a SIGSEGV
-  // in Electron 33 when multiple windows called it concurrently.  The root cause
-  // was concurrent calls, not the command itself.  The _cdpEmuLock serialises
-  // all Emulation.* CDP calls across every BrowserWindow so only one runs at a
-  // time — this is safe to re-add under the lock.
-  //
-  // WHY setDeviceMetricsOverride is required:
-  //   Without it, Chromium's layout engine uses the real BrowserWindow size
-  //   (1280×820 maximized).  CSS @media queries evaluate at the C++ level, so
-  //   Instagram's React app renders the desktop layout regardless of UA.  JS
-  //   overrides to screen.width / visualViewport.width only affect JS reads —
-  //   they have zero effect on CSS layout, @media breakpoints, or pointer type.
-  //   Result: EB shows bare-bones desktop Instagram instead of the full mobile UI.
-  if (_fpIsMobile && _mobileProfile && !win.isDestroyed()) {
-    _ebCrashLog(profileId, `STEP-20: acquiring CDP emu lock for setDeviceMetricsOverride (${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr})`);
-    await _acquireCdpEmuLock();
+  // ── Touch emulation (ghost/verify windows only) ───────────────────────────
+  // setDeviceMetricsOverride is NOT used — it causes a SIGSEGV crash in
+  // Electron 33 on Windows regardless of call serialisation.
+  // Regular account EB windows use a desktop UA (see above), so _fpIsMobile is
+  // false for them and this block never runs.  Ghost/verify windows may still
+  // have a mobile UA and receive touch emulation only.
+  if (_fpIsMobile && !win.isDestroyed()) {
+    _ebCrashLog(profileId, `STEP-20: setTouchEmulationEnabled (mobile ghost/verify window)`);
     try {
-      if (!win.isDestroyed()) {
-        await Promise.race([
-          win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-            width:             _mobileProfile.width,
-            height:            _mobileProfile.height,
-            deviceScaleFactor: _mobileProfile.dpr,
-            mobile:            true,
-            screenWidth:       _mobileProfile.width,
-            screenHeight:      _mobileProfile.height,
-          }),
-          new Promise<void>(r => setTimeout(r, 3000)),
-        ]);
-        _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride applied");
-      }
-    } catch (dme) {
-      _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dme as any)?.message}`);
-    } finally {
-      _releaseCdpEmuLock();
-    }
-
-    if (!win.isDestroyed()) {
-      _ebCrashLog(profileId, "STEP-20c: setTouchEmulationEnabled");
-      try {
-        await Promise.race([
-          win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-            enabled:        true,
-            maxTouchPoints: 10,
-          }),
-          new Promise<void>(r => setTimeout(r, 3000)),
-        ]);
-        _ebCrashLog(profileId, "STEP-20d: touch emulation enabled");
-      } catch (teErr) {
-        _ebCrashLog(profileId, `STEP-20d: touch emulation FAILED: ${(teErr as any)?.message}`);
-      }
+      await Promise.race([
+        win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+          enabled:        true,
+          maxTouchPoints: 10,
+        }),
+        new Promise<void>(r => setTimeout(r, 3000)),
+      ]);
+      _ebCrashLog(profileId, "STEP-20b: touch emulation enabled");
+    } catch (teErr) {
+      _ebCrashLog(profileId, `STEP-20b: touch emulation FAILED: ${(teErr as any)?.message}`);
     }
   }
 
