@@ -362,10 +362,13 @@ export async function tlsRequest(opts: {
     );
   }
 
-  // ── Node.js TLS — forceNodeTls=true ONLY (account creation) ─────────────────
-  // This path is intentionally reached only when forceNodeTls=true.  Account
-  // creation has no stored device fingerprint so the OkHttp4 JA3 fingerprint
-  // is not required (and would be inconsistent with the Chrome User-Agent).
+  // ── Node.js TLS — forceNodeTls=true ──────────────────────────────────────────
+  // Used for account creation AND for action calls (follow, like, unfollow, DM)
+  // where CycleTLS/OkHttp4 introduced a regression (HTTP 200 status:fail "something
+  // went wrong") that did not exist with the original got-based transport.
+  // Jarvee confirms Android JA3 is not required on i.instagram.com — plain
+  // Node.js HTTPS works and follows succeed.
+  if (body) allHeaders["Content-Length"] = String(Buffer.byteLength(body, "utf8"));
   console.log(`[tls:req] forceNodeTls — using Node.js TLS for ${method} ${host}${path}`);
   const { HttpsProxyAgent } = await import("https-proxy-agent");
   const https = await import("node:https");

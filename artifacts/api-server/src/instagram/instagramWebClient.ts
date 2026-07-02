@@ -2209,6 +2209,11 @@ export class InstagramWebClient {
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
 
+    // Use Node.js TLS (not CycleTLS/OkHttp4 JA3) for this request.
+    // Jarvee confirms Android JA3 is not required for i.instagram.com API calls —
+    // they use plain Node.js HTTP and follows work. CycleTLS introduced a regression
+    // (follows returning "something went wrong") that did not exist with the original
+    // got-based transport. forceNodeTls restores the pre-CycleTLS behaviour for this call.
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
@@ -2217,6 +2222,7 @@ export class InstagramWebClient {
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
+      forceNodeTls: true,
     });
 
     // Merge cookies/headers back (same as mobileSessionPost)

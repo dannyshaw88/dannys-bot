@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.281",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow Tool: switched back to Node.js HTTPS for the follow request — CycleTLS (OkHttp4 JA3) was the root cause of 'something went wrong' since it was introduced. Jarvee uses plain Node.js HTTP for all mobile API calls without JA3 and follows work fine. The JA3 fingerprint is not checked by Instagram on i.instagram.com action calls.",
+        technical: [
+          "forceNodeTls: true added to the igReq call in _followViaMobileSession. CycleTLS is retained for bootstrap/verify (launcher/sync, users/info etc.) where it causes no issues.",
+          "Content-Length header is now correctly set in the forceNodeTls path (Node.js https.request does not auto-set it, unlike CycleTLS Go transport).",
+          "Like, unfollow, DM, and other action calls are likely affected the same way and should be switched to forceNodeTls in a follow-up if they exhibit the same rejection.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.280",
     date: "2 Jul 2026",
     items: [
