@@ -4425,6 +4425,131 @@ export function startEbIpcServer(
         return send(res, 200, { ok: true });
       }
 
+      // ── POST /eb/silent-follow ─────────────────────────────────────────────────
+      // Opens a hidden BrowserWindow, navigates to the target's Instagram profile,
+      // clicks the Follow button, then immediately destroys the window.
+      // Used by the automation engine when "Do Actions Via Browser → Follows" is
+      // enabled on an account.  The browser is NEVER shown to the user.
+      if (req.method === "POST" && u.pathname === "/eb/silent-follow") {
+        const targetUsername: string = (body.targetUsername ?? "").trim();
+        if (!pid || !targetUsername) return send(res, 400, { error: "profileId and targetUsername required" });
+
+        // Fetch proxy + UA from the API server (same endpoint used by the normal EB open).
+        let sfProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
+        let sfUA: string | undefined;
+        let sfUseHomeIp = false;
+        try {
+          const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
+          if (proxyRes.ok) {
+            const pd: any = await proxyRes.json();
+            sfProxy     = pd.proxy     || undefined;
+            sfUA        = pd.userAgent || undefined;
+            sfUseHomeIp = !!pd.useHomeIp;
+          }
+        } catch { /* proceed without — might still work if session already has cookies */ }
+
+        // Use the account's persisted session partition so the window is already logged in.
+        const sfPartition = `persist:eb-${pid}`;
+        const sfSes = electronSession.fromPartition(sfPartition);
+
+        // Apply proxy (double-set with cache clear — identical to silent-verify pattern).
+        if (sfProxy && !sfUseHomeIp) {
+          const sfCfg = buildProxyConfig(sfProxy);
+          await sfSes.setProxy(sfCfg).catch(() => {});
+          try { await sfSes.clearHostResolverCache(); } catch {}
+          await new Promise(r => setTimeout(r, 150));
+          await sfSes.setProxy(sfCfg).catch(() => {});
+        }
+
+        // Seed the session with cookies from the cookie file in case the user has
+        // not opened the EB for this account yet (partition may be empty).
+        try {
+          const cfPath = cookieFilePath(pid);
+          if (fs.existsSync(cfPath)) {
+            const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
+            for (const c of rawCookies) {
+              await sfSes.cookies.set({
+                url:      "https://www.instagram.com",
+                name:     c.name,
+                value:    c.value,
+                domain:   c.domain  ?? ".instagram.com",
+                path:     c.path    ?? "/",
+                secure:   true,
+                sameSite: "no_restriction",
+              }).catch(() => {});
+            }
+          }
+        } catch { /* no file — rely on partition's persisted cookies */ }
+
+        const sfWin = new BrowserWindow({
+          show:   false,
+          width:  390,
+          height: 844,
+          webPreferences: {
+            partition:        sfPartition,
+            nodeIntegration:  false,
+            contextIsolation: true,
+          },
+        });
+
+        try {
+          if (sfUA) sfWin.webContents.setUserAgent(sfUA);
+
+          // Navigate directly to the target's profile page.
+          const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
+          console.log(`[eb:silent-follow:${pid}] navigating → ${profileUrl}`);
+          await sfWin.webContents.loadURL(profileUrl).catch(() => {});
+
+          // Poll for the Follow button (Instagram renders async via React).
+          // Returns { clicked }, { alreadyFollowing }, or { timedOut }.
+          const clickResult: any = await sfWin.webContents.executeJavaScript(`
+            new Promise(function(resolve) {
+              var tries = 0, MAX = 40; // 20 s
+              function check() {
+                var btns = Array.from(document.querySelectorAll('button'));
+                var followBtn = btns.find(function(b) {
+                  var t = (b.textContent || '').trim();
+                  return t === 'Follow' || t === 'Follow Back';
+                });
+                if (followBtn && !followBtn.disabled) {
+                  followBtn.click();
+                  resolve({ clicked: true });
+                  return;
+                }
+                var alreadyBtn = btns.find(function(b) {
+                  var t = (b.textContent || '').trim();
+                  return t === 'Following' || t === 'Requested';
+                });
+                if (alreadyBtn) { resolve({ clicked: false, alreadyFollowing: true }); return; }
+                if (++tries >= MAX) { resolve({ clicked: false, timedOut: true }); return; }
+                setTimeout(check, 500);
+              }
+              check();
+            })
+          `, true).catch(() => ({ clicked: false, timedOut: true }));
+
+          if (clickResult?.clicked) {
+            // Give Instagram 2 s to register the follow request before destroying the window.
+            await new Promise(r => setTimeout(r, 2000));
+            console.log(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓`);
+            sfWin.destroy();
+            return send(res, 200, { ok: true });
+          } else if (clickResult?.alreadyFollowing) {
+            console.log(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
+            sfWin.destroy();
+            return send(res, 200, { ok: true, status: "already_following", reason: "Already following" });
+          } else {
+            console.warn(`[eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out)`);
+            sfWin.destroy();
+            return send(res, 200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
+          }
+        } catch (sfErr: any) {
+          try { sfWin.destroy(); } catch {}
+          console.error(`[eb:silent-follow:${pid}] error: ${sfErr?.message}`);
+          return send(res, 200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
+        }
+      }
+
       // ── POST /eb/auto-login ────────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/auto-login") {
         // Ensure window is open

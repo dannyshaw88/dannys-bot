@@ -985,6 +985,7 @@ export async function registerInstagramRoutes(
       "tags",
       "apiLimits",
       "activeTimerEnabled", "activeTimerStart", "activeTimerEnd",
+      "followViaBrowser",
       "syncEnabled", "syncIntervalMin", "syncIntervalMax", "syncUseHiker",
     ]);
     const safePatch: Record<string, unknown> = {};

@@ -229,6 +229,32 @@ class AutomationEngine {
   private dmStates             = new Map<number, ProfileState>(); // dm runners
   private contactStates        = new Map<number, ProfileState>(); // contact tool runners
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
+
+  /** Follow a user by opening a hidden embedded browser, navigating to their profile,
+   *  and clicking the Follow button.  Used when the account has "Do Actions Via Browser
+   *  → Follows" enabled.  Calls the EB IPC server (Electron main process) which manages
+   *  the BrowserWindow lifecycle.  Resolves with the same shape as client.followUser(). */
+  private async followUserViaBrowser(
+    profileId: number,
+    targetUsername: string,
+  ): Promise<{ ok: boolean; status?: string; reason?: string }> {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) {
+      return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ profileId, targetUsername }),
+        signal:  AbortSignal.timeout(35_000),
+      });
+      if (!r.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r.status}` };
+      return await r.json() as { ok: boolean; status?: string; reason?: string };
+    } catch (err: any) {
+      return { ok: false, status: "follow_blocked", reason: `Browser-follow error: ${err?.message}` };
+    }
+  }
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
   private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
   private cookieBakerActivity  = new Map<number, CookieBakerSessionActivity[]>(); // last sessions per profile
@@ -4181,7 +4207,11 @@ class AutomationEngine {
       let result: { ok: boolean; status?: string; reason?: string };
       try {
         const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
-        result = await client.followUser(user.pk, user.username, sourceLabel);
+        if ((profile as any).followViaBrowser) {
+          result = await this.followUserViaBrowser(profile.id, user.username);
+        } else {
+          result = await client.followUser(user.pk, user.username, sourceLabel);
+        }
       } catch (err: any) {
         const msg = err?.message ?? "";
         const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
@@ -4421,7 +4451,11 @@ class AutomationEngine {
           let result: { ok: boolean; status?: string; reason?: string };
           try {
             const sourceLabel = rescrapeSource.value ? (rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value) : undefined;
-            result = await client.followUser(user.pk, user.username, sourceLabel);
+            if ((profile as any).followViaBrowser) {
+              result = await this.followUserViaBrowser(profile.id, user.username);
+            } else {
+              result = await client.followUser(user.pk, user.username, sourceLabel);
+            }
           } catch (err: any) {
             const msg = err?.message ?? "";
             const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);

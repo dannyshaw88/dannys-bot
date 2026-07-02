@@ -116,7 +116,7 @@ The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSess
 ## Product
 
 46. Multi-account Instagram manager
-47. Follow/Unfollow tools with proxy support
+47. Follow/Unfollow tools with proxy support — actions use the mobile API by default, unless stated otherwise in per-account settings (e.g. "Do Actions Via Browser → Follows" uses the embedded browser instead)
 48. DM and contact messaging tools
 49. Human session (embedded browser) for cookie/session management
 50. Auto-reply tool

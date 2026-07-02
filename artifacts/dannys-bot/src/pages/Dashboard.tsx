@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.284",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Feature",
+        text: "Account Settings: new 'Do Actions Via Browser' section added between Device Fingerprint and Active Timer. Enable the Follows toggle to have the follow tool silently open the embedded browser in the background, navigate to the target's profile page, click the blue Follow button, then close instantly — no popup, no visible window.",
+      },
+      {
+        category: "Fix",
+        text: "Font Fingerprint: all 28 fonts tested by the leak tool and external fingerprinters are now fully controlled per-account. Previously only 12 fonts were in scope and real installed Windows fonts (Arial, Calibri, Segoe UI, etc.) leaked through unchanged, making all accounts share an identical font list. The hook now hides genuine Windows fonts and fakes a per-account subset, making each of the 1,000 accounts report a different profile.",
+      },
+    ],
+  },
+  {
     version: "1.1.283",
     date: "2 Jul 2026",
     items: [

@@ -1891,6 +1891,28 @@ export function ProfileDetailsPage() {
                     </AlertDialog>
                   </div>
 
+                  {/* ── Do Actions Via Browser ── */}
+                  <div className="space-y-3 pt-4 border-t border-border mt-4">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-bold">Do Actions Via Browser</h4>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      When enabled, the selected actions use the embedded browser in the background
+                      instead of the mobile API. The browser is never shown and closes immediately
+                      after each action completes.
+                    </p>
+                    <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+                      <div>
+                        <p className="text-xs font-semibold">Follows</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Navigate to the target's profile page and click the Follow button</p>
+                      </div>
+                      <Switch
+                        checked={!!formData.followViaBrowser}
+                        onCheckedChange={checked => updateField({ followViaBrowser: checked })}
+                      />
+                    </div>
+                  </div>
 
                   {/* ── Active Timer ── */}
                   <div className="space-y-4 pt-4 border-t border-border mt-4">

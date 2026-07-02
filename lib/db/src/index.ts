@@ -55,6 +55,7 @@ sqlite.exec(`
     active_timer_enabled INTEGER DEFAULT 0,
     active_timer_start TEXT,
     active_timer_end TEXT,
+    follow_via_browser INTEGER DEFAULT 0,
     sync_enabled INTEGER DEFAULT 0,
     sync_interval_min INTEGER,
     sync_interval_max INTEGER,
@@ -364,6 +365,9 @@ if (!colNames.has("created_at")) {
 }
 if (!colNames.has("valid_since")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN valid_since TEXT;`);
+}
+if (!colNames.has("follow_via_browser")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN follow_via_browser INTEGER DEFAULT 0;`);
 }
 // Backfill: any account currently "valid" with no valid_since gets created_at as the
 // starting point (falls back to NOW if created_at is also null).  Runs every startup

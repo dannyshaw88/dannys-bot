@@ -95,6 +95,7 @@ export const profiles = sqliteTable("profiles", {
   activeTimerEnabled: integer("active_timer_enabled", { mode: "boolean" }).default(false),
   activeTimerStart: text("active_timer_start"),
   activeTimerEnd: text("active_timer_end"),
+  followViaBrowser: integer("follow_via_browser", { mode: "boolean" }).default(false),
   syncEnabled: integer("sync_enabled", { mode: "boolean" }).default(false),
   syncIntervalMin: integer("sync_interval_min"),
   syncIntervalMax: integer("sync_interval_max"),
