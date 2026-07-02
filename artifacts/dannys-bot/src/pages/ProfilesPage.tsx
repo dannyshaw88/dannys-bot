@@ -1555,7 +1555,7 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "humanSession") {
-                      const hsEnabled = hsStatusMap[profile.id] !== false;
+                      const hsEnabled = hsStatusMap[profile.id] === true;
                       return (
                         <div key={key} style={{ width: (profColWidths as any).humanSession }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
                           <Switch checked={hsEnabled} onCheckedChange={() => toggleHumanSession(profile.id, hsEnabled)} className="data-[state=checked]:bg-green-500" title="Toggle Human Session tool on/off" />

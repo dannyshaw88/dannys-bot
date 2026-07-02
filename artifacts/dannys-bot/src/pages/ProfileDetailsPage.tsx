@@ -409,6 +409,12 @@ export function ProfileDetailsPage() {
         { key: "profileSync", label: "Profile Sync", description: "Auto sync toggle, interval and HikerAPI option" },
       ],
     },
+    {
+      label: "Browser Actions",
+      options: [
+        { key: "followViaBrowser", label: "Do Actions Via Browser — Follows", description: "Use the embedded browser in the background for follow actions instead of the mobile API" },
+      ],
+    },
   ];
 
   const [syncNowStatus, setSyncNowStatus] = useState<"idle" | "syncing" | "done" | "fail">("idle");
@@ -460,6 +466,9 @@ export function ProfileDetailsPage() {
       patch.syncIntervalMin = formData.syncIntervalMin;
       patch.syncIntervalMax = formData.syncIntervalMax;
       patch.syncUseHiker = formData.syncUseHiker;
+    }
+    if (expandedKeys.includes("followViaBrowser")) {
+      patch.followViaBrowser = formData.followViaBrowser ?? false;
     }
 
     // loginRandomEndpoints is stored inside apiLimits JSON.
@@ -607,6 +616,8 @@ export function ProfileDetailsPage() {
         syncIntervalMin: profile.syncIntervalMin ?? 60,
         syncIntervalMax: profile.syncIntervalMax ?? 120,
         syncUseHiker: profile.syncUseHiker ?? false,
+        // Browser actions
+        followViaBrowser: profile.followViaBrowser ?? false,
 
       });
     }
@@ -1902,15 +1913,16 @@ export function ProfileDetailsPage() {
                       instead of the mobile API. The browser is never shown and closes immediately
                       after each action completes.
                     </p>
-                    <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+                    <div className="flex items-center gap-3 py-1">
+                      <Switch
+                        checked={!!formData.followViaBrowser}
+                        onCheckedChange={checked => updateField({ followViaBrowser: checked })}
+                        className="data-[state=checked]:bg-green-500"
+                      />
                       <div>
                         <p className="text-xs font-semibold">Follows</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">Navigate to the target's profile page and click the Follow button</p>
                       </div>
-                      <Switch
-                        checked={!!formData.followViaBrowser}
-                        onCheckedChange={checked => updateField({ followViaBrowser: checked })}
-                      />
                     </div>
                   </div>
 

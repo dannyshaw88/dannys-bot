@@ -754,8 +754,7 @@ export async function registerInstagramRoutes(
     const rows = await db.select().from(tools).where(eq(tools.type, "human_sessions"));
     const result: Record<number, boolean> = {};
     for (const row of rows) {
-      const s = (row.settings ?? {}) as Record<string, unknown>;
-      result[row.profileId] = s.humanSessionEnabled !== false;
+      result[row.profileId] = row.enabled === true;
     }
     res.json(result);
   });

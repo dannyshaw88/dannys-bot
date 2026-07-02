@@ -78,6 +78,32 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.285",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Do Actions Via Browser — Follows toggle: the toggle was resetting to off every time you navigated away from the account settings page. The setting is now correctly loaded from the database when the page opens and persists across navigation.",
+      },
+      {
+        category: "Improvement",
+        text: "Do Actions Via Browser — Follows toggle: redesigned to a simple green toggle (matching the style on the Accounts Manager page) positioned on the left, with no bordered card around it.",
+      },
+      {
+        category: "Feature",
+        text: "Do Actions Via Browser settings can now be copied to other accounts via the Copy Settings button on the Account Settings page — a new 'Browser Actions' section appears in the copy dialog.",
+      },
+      {
+        category: "Fix",
+        text: "Accounts Manager HS column: the Human Session toggle now correctly reflects whether the Human Session tool is actually enabled for each account. Previously it defaulted to showing ON for accounts where the tool had never been configured.",
+      },
+      {
+        category: "Fix",
+        text: "Embedded Browser: removed the custom 'Connection Failed' error overlay that appeared when a proxy timed out or refused. The browser now shows Chromium's own native error page instead.",
+      },
+    ],
+  },
+  {
     version: "1.1.284",
     date: "2 Jul 2026",
     items: [
