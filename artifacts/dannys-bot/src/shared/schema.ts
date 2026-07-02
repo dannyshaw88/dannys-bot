@@ -115,6 +115,7 @@ export type Source = {
   value: string;
   rank: number | null;
   nrPosts: number | null;
+  enabled: boolean;
 };
 
 export type InsertSource = Omit<Source, 'id' | 'rank' | 'nrPosts'> & { rank?: number | null; nrPosts?: number | null };
