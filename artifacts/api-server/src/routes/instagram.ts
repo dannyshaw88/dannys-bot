@@ -2725,6 +2725,13 @@ export async function registerInstagramRoutes(
           if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);
           if (updated.type === "contact")        automationEngine.triggerReconcile();
         }
+      } else if (input.enabled === false && updated.type === "human_sessions") {
+        // Manual toggle-OFF: kick an immediate reconcile so the HS runner's stop flag is
+        // set right away.  Without this the runner can remain alive for up to 10 s
+        // (the scheduled reconcile interval), and if the user quickly toggles back ON
+        // during that window triggerHumanSession finds a live-but-stopping runner and
+        // just resets its timer instead of launching a fresh immediate one.
+        automationEngine.triggerReconcile();
       }
       res.json(updated);
     } catch (err) {

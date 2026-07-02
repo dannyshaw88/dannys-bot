@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.294",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Human Session toggle now starts the session instantly on the first click — no more needing to toggle it off and back on. Previously, clicking the toggle on while the runner was sleeping between sessions could take up to 10 seconds to respond (the runner was mid-sleep and couldn't be interrupted). The runner's idle sleep now wakes within 1 second when the toggle is turned on.",
+      },
+      {
+        category: "Fix",
+        text: "Human Session toggle-off now stops the runner immediately. Previously the runner could remain alive for up to 10 seconds after toggling off, causing a race condition where toggling back on quickly would find a still-alive runner and fail to restart it cleanly. Toggle-off now triggers an immediate engine reconcile to stop the runner right away.",
+      },
+    ],
+  },
+  {
     version: "1.1.293",
     date: "2 Jul 2026",
     items: [

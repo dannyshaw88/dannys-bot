@@ -229,6 +229,9 @@ class AutomationEngine {
   private dmStates             = new Map<number, ProfileState>(); // dm runners
   private contactStates        = new Map<number, ProfileState>(); // contact tool runners
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
+  // Wake signals for HS runners — set to interrupt the idle 10s sleep immediately.
+  // Keyed by profileId.  Runner resets wake=false after waking; triggerHumanSession sets wake=true.
+  private hsWakeSignals        = new Map<number, { wake: boolean }>();
 
   /** Follow a user by opening a hidden embedded browser, navigating to their profile,
    *  and clicking the Follow button.  Used when the account has "Do Actions Via Browser
@@ -898,6 +901,8 @@ class AutomationEngine {
       console.log(`[engine] @${profile.username}: randomise timing — first human session in ${Math.round(waitMs / 60000)}min`);
     }
     this.humanSessionStates.set(profile.id, state);
+    const wakeSignal = { wake: false };
+    this.hsWakeSignals.set(profile.id, wakeSignal);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
 
     const loop = async () => {
@@ -978,15 +983,23 @@ class AutomationEngine {
           console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 60000)}min`);
         }
 
-        await sleepInterruptible(10_000, state.stop);
+        // Idle tick: sleep 1 s at a time so triggerHumanSession's wake signal
+        // interrupts within ≤1 s instead of waiting up to 10 s.
+        const tickEnd = Date.now() + 10_000;
+        while (!state.stop.stopped && !wakeSignal.wake && Date.now() < tickEnd) {
+          await sleep(1_000);
+        }
+        wakeSignal.wake = false;
       }
       this.humanSessionStates.delete(profile.id);
+      this.hsWakeSignals.delete(profile.id);
       console.log(`[engine] Human session runner exited for @${profile.username}`);
     };
 
     loop().catch(err => {
       this.runnerCrashedIds.add(profile.id);
       this.humanSessionStates.delete(profile.id);
+      this.hsWakeSignals.delete(profile.id);
       console.error(`[engine] Fatal human session error for @${profile.username}:`, err?.message);
     });
   }
@@ -4712,8 +4725,15 @@ class AutomationEngine {
   triggerHumanSession(profileId: number) {
     const state = this.humanSessionStates.get(profileId);
     if (state) {
+      // Runner is alive — reset its session timer and wake it from the idle sleep
+      // immediately (≤1 s) rather than waiting up to 10 s for the next tick.
       state.nextHumanSessionAt = 0;
+      const wakeSignal = this.hsWakeSignals.get(profileId);
+      if (wakeSignal) wakeSignal.wake = true;
     } else {
+      // No live runner — launch one via reconcile.  runImmediately=true applies
+      // because this.initialized is true, so nextHumanSessionAt stays 0 and the
+      // session fires on the runner's very first tick.
       this.reconcile().catch(() => {});
     }
   }
