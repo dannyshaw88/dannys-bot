@@ -1557,7 +1557,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   key={tok}
                   type="button"
                   title={`Click to insert ${tok}`}
-                  className="h-5 px-1.5 text-[9px] font-mono rounded bg-muted/60 border border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors"
+                  className="h-6 px-2 text-[11px] font-mono rounded bg-muted/60 border border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors"
                   onClick={() => {
                     const cur = (settings as any).repostCaptionText ?? "";
                     setSettings({ ...settings, repostCaptionText: cur ? `${cur}\n${tok}` : tok } as any);
@@ -1779,96 +1779,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
                       Delete from PC after upload
                     </label>
-                  </div>
-
-                  {/* ── README-REPLIT: Make a Post API Attempt Log ────────────────────────
-                      AGENT: Read this EVERY time before attempting to fix Make a Post.
-                      This is a chronological record of every approach tried and its outcome.
-                      Do NOT repeat anything listed here without a fundamentally different approach.
-                      Add a new entry at the top when you make a new attempt.
-                  ──────────────────────────────────────────────────────────────────────── */}
-                  <div className="mt-2 rounded border border-amber-500/40 bg-amber-950/20 overflow-hidden">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-amber-500/10 border-b border-amber-500/30">
-                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">📋 README-REPLIT — Make a Post Attempt Log</span>
-                      <span className="text-[9px] text-amber-500/70 ml-auto">AGENT: read before every fix attempt</span>
-                    </div>
-                    <div className="overflow-y-auto max-h-[7.5rem] px-2.5 py-1.5 space-y-1.5 font-mono">
-
-                      {/* ── ENTRY: ATTEMPT 4 (2026-06-26) ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/80">
-                        <span className="text-amber-400 font-bold">2026-06-26 ATTEMPT 4 &nbsp;</span>
-                        <span className="text-amber-300/60">[IN BUILD — AWAITING CONFIRMATION]</span>
-                        {" "}ROOT CAUSE (new theory): image_compression rupload header (lib_name:"moz",quality:"80") causes Instagram's
-                        transcoder to apply MozJPEG decompression on the server side — but the actual JPEG payload was produced by
-                        sharp (libjpeg-turbo), not MozJPEG. Mismatch between claimed encoder and actual encoder → transcoder stores
-                        the upload under an internal key that the configure shard cannot find → "upload id is missing" (500).
-                        Evidence: rur cookie confirmed missing from mobileCookieJar in ALL Attempt 3 logs even after sharedAgent
-                        fix — configure hit a different shard. But removing image_compression also eliminates the transcoder mismatch.
-                        FIX: (1) Removed image_compression param entirely from rupload headers.
-                        (2) Added first-4-bytes JPEG magic logging (FF D8 FF) before upload.
-                        (3) Added configure retry loop (up to 3× with 2 s delay) to tolerate transient shard propagation lag.
-                        (4) Fixed null-proxy guard: only create HttpsProxyAgent when this.proxyUrl is set (prevents crash on direct-IP accounts).
-                        DM FIX (same session): both mobile API DM paths were failing with error 4415001 "Prompt has contribution".
-                        Added browserSendDM() fallback in automationEngine contact DM loop — uses page.evaluate+fetch on www.instagram.com
-                        which bypasses the mobile-API 4415001 gate by sending from within the browser's authenticated context.
-                        UI FIX: Added placeholderData:keepPreviousData to useProfiles hook — prevents isLoading flash after invalidateQueries
-                        post-delete, which was causing the skeleton overlay to grey out all controls on the Accounts page.
-                      </div>
-
-                      {/* ── ENTRY: ATTEMPT 3 (2026-06-25) ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">2026-06-25 ATTEMPT 3 &nbsp;</span>
-                        <span className="text-amber-300/60">[FAILED — "upload id is missing" still, different root cause]</span>
-                        {" "}ROOT CAUSE: sharp's .toColorspace("srgb") embeds a 3-4KB sRGB ICC profile (APP2 marker) into the JPEG.
-                        Instagram's rupload transcoder rejects JPEGs with embedded ICC profiles → ProcessingFailedError (retriable:false).
-                        FIX: removed .toColorspace() from all 3 encode paths — sharp's jpeg() converts to sRGB internally WITHOUT embedding the ICC profile.
-                        Also changed quality 92→80 to match the image_compression rupload header (lib_name:"moz",quality:"80").
-                        Added chromaSubsampling:"4:2:0" to match the real Instagram Android client JPEG structure.
-                        Evidence: PATH A + PATH B both failed identically after Attempt 2 re-encode — the only new factor introduced was the ICC profile.
-                        Outcome: rupload still succeeds, configure still returns "upload id is missing" → ICC profile was not the root cause.
-                      </div>
-
-                      {/* ── ENTRY: ATTEMPT 2 (2026-06-25) ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">2026-06-25 ATTEMPT 2 &nbsp;</span>
-                        <span className="text-amber-300/50">[FAILED — introduced ICC profile bug]</span>
-                        {" "}Added re-encoding via sharp (.flatten → .toColorspace("srgb") → .jpeg(q92, progressive:false)) to all 3 aspect-ratio paths.
-                        Theory: raw downloaded JPEG was progressive/CMYK causing transcode failure.
-                        Result: STILL ProcessingFailedError. Re-encode worked (173124B→186505B) but toColorspace embedded sRGB ICC profile which the transcoder rejected.
-                        Also switched PATH B from Node.js HTTPS to CycleTLS (v1.1.160) — no effect.
-                      </div>
-
-                      {/* ── ENTRY: ATTEMPT 1 (all prior sessions) ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">PRE-2026-06-25 ~20 ATTEMPTS &nbsp;</span>
-                        <span className="text-amber-300/50">[ALL FAILED]</span>
-                        {" "}Agent cycled through: fix media upload endpoint → fix configure step → add retry logic → change Content-Type headers → repeat.
-                        PATH A (ig.publish.photo) fails. PATH B (hand-rolled rupload+configure) fails.
-                        CONFIRMED: follows/unfollows WORK on same session — upload-specific failure only.
-                      </div>
-
-                      {/* ── ENTRY: CONFIRMED DEAD ENDS ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">CONFIRMED DEAD ENDS &nbsp;</span>
-                        (1) www.instagram.com endpoints — blocked (architecture forbids it).
-                        (2) Puppeteer/EB automation — architecture forbids automated EB actions.
-                        (3) Node.js HTTPS for PATH B — NEVER worked.
-                        (4) .toColorspace("srgb") in sharp — embeds ICC profile, transcoder rejects it. DO NOT add back.
-                        (5) quality:92 in sharp encode — use quality:80 to match image_compression rupload header claim.
-                      </div>
-
-                      {/* ── ENTRY: IF ATTEMPT 3 FAILS → NEXT STEPS ── */}
-                      <div className="text-[10px] leading-relaxed text-amber-200/60 border-t border-amber-500/20 pt-1.5">
-                        <span className="text-amber-400 font-bold">IF ATTEMPT 3 FAILS → NEXT &nbsp;</span>
-                        (1) Remove image_compression param entirely from rupload headers — maybe the "moz" claim itself causes the transcoder to apply MozJPEG decompression and fail on a non-MozJPEG file.
-                        (2) Log first 4 bytes of the image buffer BEFORE re-encoding: JPEG=FFD8FFE0, WebP=52494646, PNG=89504E47. Confirm the source format.
-                        (3) Try a known-good synthetic 1080x1080 sRGB JPEG (0 metadata) to isolate image vs protocol.
-                        (4) If all fail: the issue is account-level, not image format — re-verify the account and retry.
-                      </div>
-
-                      {/* ── ADD NEW ENTRIES ABOVE THIS LINE, NEWEST AT TOP ── */}
-
-                    </div>
                   </div>
 
                 </div>

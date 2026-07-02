@@ -255,6 +255,33 @@ class AutomationEngine {
       return { ok: false, status: "follow_blocked", reason: `Browser-follow error: ${err?.message}` };
     }
   }
+
+  private async postPhotoViaBrowser(
+    profileId: number,
+    imageBuffer: Buffer,
+    caption: string,
+  ): Promise<{ ok: boolean; mediaId?: string; message?: string }> {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) {
+      return { ok: false, message: "Browser-post not available outside Electron" };
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-post`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          profileId,
+          imageBase64: imageBuffer.toString("base64"),
+          caption,
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!r.ok) return { ok: false, message: `EB IPC HTTP ${r.status}` };
+      return await r.json() as { ok: boolean; mediaId?: string; message?: string };
+    } catch (err: any) {
+      return { ok: false, message: `Browser-post error: ${err?.message}` };
+    }
+  }
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
   private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
   private cookieBakerActivity  = new Map<number, CookieBakerSessionActivity[]>(); // last sessions per profile
@@ -4633,9 +4660,16 @@ class AutomationEngine {
         ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
         : candidate.caption.slice(0, 2200);
 
-      // Upload via private API
-      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
-      if (!postedMediaId) return { ok: false, message: client.lastUploadError || "Upload failed — Instagram rejected the photo" };
+      // Upload — browser or private API
+      let postedMediaId: string | null;
+      if ((profile as any).postViaBrowser) {
+        const ebResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, finalCaption);
+        if (!ebResult.ok) return { ok: false, message: ebResult.message || "Browser post failed — check the embedded browser session is active" };
+        postedMediaId = ebResult.mediaId ?? String(Date.now());
+      } else {
+        postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+        if (!postedMediaId) return { ok: false, message: client.lastUploadError || "Upload failed — Instagram rejected the photo" };
+      }
 
       if (s.repostDisableComments) {
         try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }

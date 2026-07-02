@@ -4539,6 +4539,275 @@ export function startEbIpcServer(
         }
       }
 
+      // ── POST /eb/silent-post ───────────────────────────────────────────────────
+      // Opens a hidden BrowserWindow, navigates to Instagram, uploads an image via
+      // the web Create-post flow, types a caption, clicks Share, waits for the
+      // "Your post has been shared" confirmation, clicks Done, then destroys the
+      // window.  Used by the automation engine when "Do Actions Via Browser →
+      // Make a Post" is enabled.  The browser is NEVER shown to the user.
+      if (req.method === "POST" && u.pathname === "/eb/silent-post") {
+        const imageBase64: string = body.imageBase64 ?? "";
+        const caption: string     = String(body.caption ?? "");
+        if (!pid || !imageBase64) return send(res, 400, { error: "profileId and imageBase64 required" });
+
+        const tmpPath = path.join(_cookiesDir, `silent-post-${pid}-${Date.now()}.jpg`);
+        try { fs.writeFileSync(tmpPath, Buffer.from(imageBase64, "base64")); }
+        catch (we: any) { return send(res, 500, { ok: false, message: `Failed to write temp image: ${we?.message}` }); }
+
+        let spProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
+        let spUA: string | undefined;
+        let spUseHomeIp = false;
+        try {
+          const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
+          if (proxyRes.ok) {
+            const pd: any = await proxyRes.json();
+            spProxy     = pd.proxy     || undefined;
+            spUA        = pd.userAgent || undefined;
+            spUseHomeIp = !!pd.useHomeIp;
+          }
+        } catch { /* proceed without */ }
+
+        const spPartition = `persist:eb-${pid}`;
+        const spSes = electronSession.fromPartition(spPartition);
+
+        if (spProxy && !spUseHomeIp) {
+          const spCfg = buildProxyConfig(spProxy);
+          await spSes.setProxy(spCfg).catch(() => {});
+          try { await spSes.clearHostResolverCache(); } catch {}
+          await new Promise(r => setTimeout(r, 150));
+          await spSes.setProxy(spCfg).catch(() => {});
+        }
+
+        try {
+          const cfPath = cookieFilePath(pid);
+          if (fs.existsSync(cfPath)) {
+            const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
+            for (const c of rawCookies) {
+              await spSes.cookies.set({
+                url: "https://www.instagram.com",
+                name: c.name, value: c.value,
+                domain: c.domain ?? ".instagram.com",
+                path:   c.path   ?? "/",
+                secure: true, sameSite: "no_restriction",
+              }).catch(() => {});
+            }
+          }
+        } catch { /* rely on partition cookies */ }
+
+        const spWin = new BrowserWindow({
+          show: false, width: 390, height: 844,
+          webPreferences: {
+            partition: spPartition,
+            nodeIntegration: false,
+            contextIsolation: true,
+          },
+        });
+
+        try {
+          if (spUA) spWin.webContents.setUserAgent(spUA);
+
+          // Attach CDP debugger for file-input injection
+          const dbg = spWin.webContents.debugger;
+          try { dbg.attach("1.3"); } catch { /* already attached */ }
+          await dbg.sendCommand("DOM.enable").catch(() => {});
+
+          console.log(`[eb:silent-post:${pid}] navigating to instagram.com`);
+          await spWin.webContents.loadURL("https://www.instagram.com/").catch(() => {});
+
+          // Wait until logged in (URL is not the login page)
+          const loggedIn = await new Promise<boolean>(resolve => {
+            let tries = 0;
+            const t = setInterval(() => {
+              const url = spWin.isDestroyed() ? "" : spWin.webContents.getURL();
+              if (
+                url.includes("instagram.com") &&
+                !url.includes("/accounts/login") &&
+                !url.includes("/auth_platform/") &&
+                url !== "about:blank"
+              ) { clearInterval(t); resolve(true); return; }
+              if (++tries >= 60) { clearInterval(t); resolve(false); }
+            }, 500);
+          });
+          if (!loggedIn) throw new Error("Instagram page not ready — not logged in");
+          await new Promise(r => setTimeout(r, 2500));
+
+          // ── Try to click the "+" / New-post create button ─────────────────
+          const clickedCreate: boolean = await spWin.webContents.executeJavaScript(`
+            (function() {
+              var allWithLabel = Array.from(document.querySelectorAll('[aria-label]'));
+              var target = allWithLabel.find(function(el) {
+                var lbl = (el.getAttribute('aria-label') || '').toLowerCase();
+                return lbl.includes('new post') || lbl === 'create' || lbl.includes('create');
+              });
+              if (target) {
+                var btn = target.closest('[role="button"], button, a') || target;
+                btn.click(); return true;
+              }
+              var createLink = document.querySelector('a[href*="/create"]');
+              if (createLink) { createLink.click(); return true; }
+              return false;
+            })()
+          `, true).catch(() => false);
+
+          if (!clickedCreate) {
+            // ── Fallback: profile page "Share your first photo" (0-posts accounts) ─
+            console.log(`[eb:silent-post:${pid}] create button not found — trying profile page`);
+            let profileUsername = "";
+            try {
+              const pRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}`);
+              if (pRes.ok) { const pData: any = await pRes.json(); profileUsername = pData.username ?? ""; }
+            } catch {}
+
+            if (profileUsername) {
+              await spWin.webContents.loadURL(
+                `https://www.instagram.com/${encodeURIComponent(profileUsername)}/`
+              ).catch(() => {});
+              await new Promise(r => setTimeout(r, 3000));
+            }
+
+            const clickedShareFirst: boolean = await spWin.webContents.executeJavaScript(`
+              (function() {
+                var btns = Array.from(document.querySelectorAll('a, button'));
+                var btn = btns.find(function(b) {
+                  var t = (b.textContent || '').toLowerCase();
+                  return t.includes('share your first photo') || t.includes('share photos') || t.includes('your first photo');
+                });
+                if (btn) { btn.click(); return true; }
+                return false;
+              })()
+            `, true).catch(() => false);
+
+            if (!clickedShareFirst) throw new Error("Could not find create-post button or Share your first photo button");
+          }
+
+          await new Promise(r => setTimeout(r, 2000));
+
+          // Handle format picker (Post / Story / Reel) if shown
+          await spWin.webContents.executeJavaScript(`
+            (function() {
+              var items = Array.from(document.querySelectorAll('button, [role="menuitem"], li'));
+              var postItem = items.find(function(el) { return (el.textContent || '').trim() === 'Post'; });
+              if (postItem) postItem.click();
+            })()
+          `, true).catch(() => {});
+          await new Promise(r => setTimeout(r, 1000));
+
+          // ── Wait for the file input and inject file via CDP ───────────────
+          console.log(`[eb:silent-post:${pid}] waiting for file input`);
+          const fileInputFound = await new Promise<boolean>(resolve => {
+            let tries = 0;
+            const poll = setInterval(async () => {
+              if (spWin.isDestroyed()) { clearInterval(poll); resolve(false); return; }
+              const found: boolean = await spWin.webContents.executeJavaScript(
+                `!!document.querySelector("input[type='file']")`, true
+              ).catch(() => false);
+              if (found) { clearInterval(poll); resolve(true); return; }
+              if (++tries >= 24) { clearInterval(poll); resolve(false); }
+            }, 500);
+          });
+          if (!fileInputFound) throw new Error("File input not found — Create new post dialog did not open");
+
+          const docResult = await dbg.sendCommand("DOM.getDocument", { depth: -1 });
+          const inputResult = await dbg.sendCommand("DOM.querySelector", {
+            nodeId: (docResult as any).root.nodeId,
+            selector: "input[type='file']",
+          }).catch(() => ({ nodeId: 0 }));
+          if (!(inputResult as any).nodeId) throw new Error("CDP could not locate file input node");
+          await dbg.sendCommand("DOM.setFileInputFiles", {
+            files: [tmpPath],
+            nodeId: (inputResult as any).nodeId,
+          });
+          console.log(`[eb:silent-post:${pid}] image injected via CDP`);
+          await new Promise(r => setTimeout(r, 2500));
+
+          // ── Helper: poll-click a button by its exact visible text ─────────
+          const clickBtnText = async (text: string, timeoutMs: number): Promise<boolean> => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              if (spWin.isDestroyed()) return false;
+              const clicked: boolean = await spWin.webContents.executeJavaScript(`
+                (function(t) {
+                  var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
+                  var btn = all.find(function(el) { return (el.textContent || '').trim() === t; });
+                  if (btn) { btn.click(); return true; }
+                  return false;
+                })(${JSON.stringify(text)})
+              `, true).catch(() => false);
+              if (clicked) return true;
+              await new Promise(r => setTimeout(r, 500));
+            }
+            return false;
+          };
+
+          // ── Crop step → Next ──────────────────────────────────────────────
+          console.log(`[eb:silent-post:${pid}] clicking Next (crop)`);
+          if (!await clickBtnText("Next", 12000)) throw new Error("Crop Next button not found");
+          await new Promise(r => setTimeout(r, 2000));
+
+          // ── Filter step → Next ────────────────────────────────────────────
+          console.log(`[eb:silent-post:${pid}] clicking Next (filter)`);
+          await clickBtnText("Next", 12000);
+          await new Promise(r => setTimeout(r, 2000));
+
+          // ── Caption step ──────────────────────────────────────────────────
+          if (caption) {
+            console.log(`[eb:silent-post:${pid}] typing caption`);
+            await spWin.webContents.executeJavaScript(`
+              (function() {
+                var el = document.querySelector("textarea[aria-label*='caption'], textarea[aria-label*='Caption']")
+                  || document.querySelector("div[aria-label*='caption'] textarea")
+                  || document.querySelector("div[contenteditable='true']")
+                  || document.querySelector("textarea");
+                if (el) { el.focus(); el.click(); }
+              })()
+            `, true).catch(() => {});
+            await new Promise(r => setTimeout(r, 300));
+            for (const char of caption.slice(0, 2200)) {
+              await dbg.sendCommand("Input.dispatchKeyEvent", { type: "char", text: char }).catch(() => {});
+            }
+            await new Promise(r => setTimeout(r, 500));
+          }
+
+          // ── Click Share ───────────────────────────────────────────────────
+          console.log(`[eb:silent-post:${pid}] clicking Share`);
+          if (!await clickBtnText("Share", 15000)) throw new Error("Share button not found");
+
+          // ── Wait for "Your post has been shared" confirmation ─────────────
+          console.log(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);
+          const confirmed = await new Promise<boolean>(resolve => {
+            let tries = 0;
+            const poll = setInterval(async () => {
+              if (spWin.isDestroyed()) { clearInterval(poll); resolve(false); return; }
+              const found: boolean = await spWin.webContents.executeJavaScript(`
+                (function() {
+                  var t = document.body.innerText || '';
+                  return t.includes('Your post has been shared') || t.includes('Post shared');
+                })()
+              `, true).catch(() => false);
+              if (found) { clearInterval(poll); resolve(true); return; }
+              if (++tries >= 30) { clearInterval(poll); resolve(false); }
+            }, 500);
+          });
+
+          if (confirmed) {
+            console.log(`[eb:silent-post:${pid}] clicking Done`);
+            await clickBtnText("Done", 5000);
+            await new Promise(r => setTimeout(r, 500));
+          }
+
+          console.log(`[eb:silent-post:${pid}] post completed ✓`);
+          spWin.destroy();
+          return send(res, 200, { ok: true, mediaId: String(Date.now()) });
+
+        } catch (spErr: any) {
+          try { spWin.destroy(); } catch {}
+          console.error(`[eb:silent-post:${pid}] error: ${spErr?.message}`);
+          return send(res, 200, { ok: false, message: spErr?.message ?? "Unknown error" });
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* already removed */ }
+        }
+      }
+
       // ── POST /eb/auto-login ────────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/auto-login") {
         // Ensure window is open

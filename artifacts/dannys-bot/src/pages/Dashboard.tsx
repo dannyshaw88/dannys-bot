@@ -78,6 +78,34 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.293",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "DM check no longer fails with 'DM check failed' when Instagram's prompt gate (4415001) blocks the inbox endpoint. The app now falls back to the full Jarvee-warmed session path, which reliably clears the gate and fetches the inbox correctly.",
+      },
+      {
+        category: "Improvement",
+        text: "Caption token chips in Make a Post are now larger and easier to read and click.",
+      },
+      {
+        category: "Improvement",
+        text: "Removed the internal debug attempt log panel from the Make a Post section — it was only for agent diagnostics and is no longer needed in the UI.",
+      },
+    ],
+  },
+  {
+    version: "1.1.292",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "New",
+        text: "Do Actions Via Browser — Make a Post: when this is ticked in account settings, posts are made through the embedded browser running silently in the background instead of the mobile API. Handles both new accounts (0 posts — uses the Share your first photo button on the profile page) and existing accounts (uses the + create button). After posting, the browser is closed automatically.",
+      },
+    ],
+  },
+  {
     version: "1.1.291",
     date: "2 Jul 2026",
     items: [
