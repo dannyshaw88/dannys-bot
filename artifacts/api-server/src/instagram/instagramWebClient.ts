@@ -82,7 +82,7 @@ import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes, con
 import { generateSync as totpGenerate } from "otplib";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
-import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls } from "./tlsTransport.js";
+import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls, CHROME120_JA3 } from "./tlsTransport.js";
 
 
 // Warm up the CycleTLS Go subprocess at module load so the first real request
@@ -245,6 +245,8 @@ async function igReq(opts: {
   proxyUrl?: string;
   /** Pass through to tlsRequest — bypasses CycleTLS when true (see tlsRequest docs). */
   forceNodeTls?: boolean;
+  /** Override the JA3 fingerprint. Pass CHROME120_JA3 for EB-session write calls. */
+  ja3Override?: string;
 }): Promise<{ status: number; cookies: string[]; json: any; rawBody: string; responseHeaders: Record<string, string | string[] | undefined> }> {
   // Delegate entirely to tlsTransport.ts which routes all Instagram API calls
   // through the CycleTLS OkHttp4 TLS stack (or falls back to Node.js HTTPS if
@@ -2209,11 +2211,13 @@ export class InstagramWebClient {
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
 
-    // Use Node.js TLS (not CycleTLS/OkHttp4 JA3) for this request.
-    // Jarvee confirms Android JA3 is not required for i.instagram.com API calls —
-    // they use plain Node.js HTTP and follows work. CycleTLS introduced a regression
-    // (follows returning "something went wrong") that did not exist with the original
-    // got-based transport. forceNodeTls restores the pre-CycleTLS behaviour for this call.
+    // Use Chrome 120 JA3 (not OkHttp4/Android) for this write call.
+    // Instagram's backend requires a Bearer token for write calls from Android-JA3
+    // clients — because real Android apps always carry one.  EB sessions use Chrome
+    // web cookies and never issue a Bearer token, so the Android fingerprint always
+    // fails on friendships/create.  Chrome JA3 removes that Bearer requirement:
+    // Instagram accepts the write call on cookies alone, matching the pre-CycleTLS
+    // behaviour where Node.js OpenSSL JA3 also didn't trigger the Android gate.
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
@@ -2222,7 +2226,7 @@ export class InstagramWebClient {
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
-      forceNodeTls: true,
+      ja3Override: CHROME120_JA3,
     });
 
     // Merge cookies/headers back (same as mobileSessionPost)

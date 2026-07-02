@@ -78,16 +78,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
-    version: "1.1.281",
+    version: "1.1.282",
     date: "2 Jul 2026",
     items: [
       {
         category: "Fix",
-        text: "Follow Tool: switched back to Node.js HTTPS for the follow request — CycleTLS (OkHttp4 JA3) was the root cause of 'something went wrong' since it was introduced. Jarvee uses plain Node.js HTTP for all mobile API calls without JA3 and follows work fine. The JA3 fingerprint is not checked by Instagram on i.instagram.com action calls.",
+        text: "Follow Tool: root cause found and fixed. Instagram requires a Bearer token for write calls (follow, like, DM) when it sees an Android/OkHttp4 JA3 fingerprint — because real Android apps always carry one. EB sessions use Chrome web cookies and never receive a Bearer token, so the Android fingerprint was silently blocking every follow. The fix switches friendships/create to Chrome 120 JA3 — matching the actual session origin — which removes the Bearer requirement. Bootstrap and verify calls keep OkHttp4 JA3 (read-only, work fine without Bearer).",
         technical: [
-          "forceNodeTls: true added to the igReq call in _followViaMobileSession. CycleTLS is retained for bootstrap/verify (launcher/sync, users/info etc.) where it causes no issues.",
-          "Content-Length header is now correctly set in the forceNodeTls path (Node.js https.request does not auto-set it, unlike CycleTLS Go transport).",
-          "Like, unfollow, DM, and other action calls are likely affected the same way and should be switched to forceNodeTls in a follow-up if they exhibit the same rejection.",
+          "Added CHROME120_JA3 constant and ja3Override parameter to tlsRequest/igReq. Bootstrap/verify still use OKHTTP4_JA3. _followViaMobileSession now passes ja3Override: CHROME120_JA3.",
+          "Root cause confirmed from wire log: all bootstrap phases (0a/0b/2a/2b/2c/2c'/2d/2e) returned HTTP 200 but claim=none auth=none because web sessions never issue Bearer tokens. OkHttp4 JA3 then caused friendships/create to require Bearer → rejected.",
         ],
       },
     ],

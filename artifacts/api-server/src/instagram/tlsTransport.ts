@@ -43,6 +43,22 @@ const OKHTTP4_JA3 =
   "29-23-24," +
   "0";
 
+// ── Chrome 120 JA3 fingerprint ────────────────────────────────────────────────
+// Used for action calls (follow, like, DM, unfollow) that originate from a
+// Chrome-based EB session.  Instagram's backend gates write-operation endpoints
+// (friendships/create etc.) on the presence of a Bearer token when it sees the
+// OkHttp4 Android JA3 fingerprint — because real Android apps always carry one.
+// EB sessions use web cookies (Chrome origin) so no Bearer token is ever issued.
+// Switching these calls to Chrome JA3 removes the Bearer requirement: Instagram
+// treats the request as a browser-origin write call and accepts it on cookies alone.
+// Bootstrap/verify calls stay on OkHttp4_JA3 — they are read-only and work fine.
+export const CHROME120_JA3 =
+  "771," +
+  "4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53," +
+  "0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513," +
+  "29-23-24," +
+  "0";
+
 // ── Singleton CycleTLS client ─────────────────────────────────────────────────
 
 type CycleTLSClient = {
@@ -142,6 +158,15 @@ export async function tlsRequest(opts: {
    */
   forceNodeTls?: boolean;
   /**
+   * Override the JA3 fingerprint used for this specific request.
+   * Defaults to OKHTTP4_JA3 (Android) when omitted.
+   * Pass CHROME120_JA3 for write-operation endpoints (friendships/create,
+   * media/like, etc.) that originate from EB web sessions — Instagram requires
+   * a Bearer token for Android-fingerprinted write calls but not for Chrome ones.
+   * Only used when forceNodeTls=false (the CycleTLS path).
+   */
+  ja3Override?: string;
+  /**
    * Pre-created HttpsProxyAgent to reuse for this request.
    * When supplied the agent is NOT destroyed after the request — the caller
    * owns the lifecycle and must destroy it when done.
@@ -166,6 +191,7 @@ export async function tlsRequest(opts: {
     cookieJar = [],
     proxyUrl,
     forceNodeTls = false,
+    ja3Override,
     agentOverride,
   } = opts;
 
@@ -247,7 +273,7 @@ export async function tlsRequest(opts: {
         url,
         {
           body: body ?? "",
-          ja3: OKHTTP4_JA3,
+          ja3: ja3Override ?? OKHTTP4_JA3,
           userAgent,
           headers: headersWithoutUA,
           proxy: proxyUrl,
