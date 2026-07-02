@@ -2441,26 +2441,58 @@ export async function openEbWindow(opts: {
   await new Promise(r => setTimeout(r, 100));
   if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-1b: window destroyed after UA CDP — returning early"); return; }
 
-  // ── Touch emulation — setDeviceMetricsOverride REMOVED ───────────────────
-  // setDeviceMetricsOverride was crashing Chromium (SIGSEGV) in Electron 33 on
-  // Windows even when only one window called it, so it is not used.
-  // Only setTouchEmulationEnabled remains — it enables Chromium's native touch
-  // input stack so Input.synthesizeTapGesture produces real touchstart/touchend
-  // events (not mouse events).  This call does NOT touch the rendering pipeline
-  // and does not cause a SIGSEGV.
-  if (_fpIsMobile && !win.isDestroyed()) {
-    _ebCrashLog(profileId, `STEP-20: setTouchEmulationEnabled (native dims ${_mobileProfile?.width ?? "?"}x${_mobileProfile?.height ?? "?"} — no setDeviceMetricsOverride)`);
+  // ── Device metrics + touch emulation (serialised via _cdpEmuLock) ──────────
+  // setDeviceMetricsOverride was previously removed because it caused a SIGSEGV
+  // in Electron 33 when multiple windows called it concurrently.  The root cause
+  // was concurrent calls, not the command itself.  The _cdpEmuLock serialises
+  // all Emulation.* CDP calls across every BrowserWindow so only one runs at a
+  // time — this is safe to re-add under the lock.
+  //
+  // WHY setDeviceMetricsOverride is required:
+  //   Without it, Chromium's layout engine uses the real BrowserWindow size
+  //   (1280×820 maximized).  CSS @media queries evaluate at the C++ level, so
+  //   Instagram's React app renders the desktop layout regardless of UA.  JS
+  //   overrides to screen.width / visualViewport.width only affect JS reads —
+  //   they have zero effect on CSS layout, @media breakpoints, or pointer type.
+  //   Result: EB shows bare-bones desktop Instagram instead of the full mobile UI.
+  if (_fpIsMobile && _mobileProfile && !win.isDestroyed()) {
+    _ebCrashLog(profileId, `STEP-20: acquiring CDP emu lock for setDeviceMetricsOverride (${_mobileProfile.width}x${_mobileProfile.height} dpr=${_mobileProfile.dpr})`);
+    await _acquireCdpEmuLock();
     try {
-      await Promise.race([
-        win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-          enabled:        true,
-          maxTouchPoints: 10,
-        }),
-        new Promise<void>(r => setTimeout(r, 3000)),
-      ]);
-      _ebCrashLog(profileId, "STEP-20b: touch emulation enabled");
-    } catch (teErr) {
-      _ebCrashLog(profileId, `STEP-20b: touch emulation FAILED: ${(teErr as any)?.message}`);
+      if (!win.isDestroyed()) {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+            width:             _mobileProfile.width,
+            height:            _mobileProfile.height,
+            deviceScaleFactor: _mobileProfile.dpr,
+            mobile:            true,
+            screenWidth:       _mobileProfile.width,
+            screenHeight:      _mobileProfile.height,
+          }),
+          new Promise<void>(r => setTimeout(r, 3000)),
+        ]);
+        _ebCrashLog(profileId, "STEP-20b: setDeviceMetricsOverride applied");
+      }
+    } catch (dme) {
+      _ebCrashLog(profileId, `STEP-20b: setDeviceMetricsOverride FAILED: ${(dme as any)?.message}`);
+    } finally {
+      _releaseCdpEmuLock();
+    }
+
+    if (!win.isDestroyed()) {
+      _ebCrashLog(profileId, "STEP-20c: setTouchEmulationEnabled");
+      try {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+            enabled:        true,
+            maxTouchPoints: 10,
+          }),
+          new Promise<void>(r => setTimeout(r, 3000)),
+        ]);
+        _ebCrashLog(profileId, "STEP-20d: touch emulation enabled");
+      } catch (teErr) {
+        _ebCrashLog(profileId, `STEP-20d: touch emulation FAILED: ${(teErr as any)?.message}`);
+      }
     }
   }
 

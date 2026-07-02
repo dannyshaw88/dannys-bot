@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.290",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Embedded browser now renders the full mobile Instagram layout instead of the bare-bones desktop version. The root cause was that Instagram's layout is driven by CSS screen-width rules that Chromium evaluates at the engine level — the mobile user agent alone was not enough. The viewport is now correctly set to phone dimensions (e.g. 393×851) at the Chromium rendering layer, so the mobile UI, navigation, and all features appear exactly as they do in Chrome on a real phone.",
+      },
+    ],
+  },
+  {
     version: "1.1.289",
     date: "2 Jul 2026",
     items: [
