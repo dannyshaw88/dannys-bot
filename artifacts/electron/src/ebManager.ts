@@ -1062,18 +1062,60 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     });
   }catch(e){}
   try{
-    var _FVAR=['Garamond','Gill Sans MT','Bookman Old Style','Century Gothic','Franklin Gothic Medium','Webdings','Wingdings','Palatino Linotype','Lucida Sans Unicode','Trebuchet MS','Symbol','Comic Sans MS'];
+    // All 28 fonts probed by the leak test + common external fingerprinters.
+    // Per-account fontSeed (_FN, range 1-99) controls which subset appears
+    // "installed" so 1,000 accounts each report a different font profile.
+    // The hook fully controls measureText width for every controlled font:
+    //   • present  → width clearly differs from monospace baseline
+    //   • absent   → width equals monospace baseline (font appears not installed)
+    // This hides genuine Windows fonts AND fakes absent fonts, per-account.
+    // Sorted longest-first so indexOf matching is unambiguous:
+    // 'Arial Black' / 'Arial Narrow' are found before the shorter 'Arial'.
+    var _FVAR=['Franklin Gothic Medium','Microsoft Sans Serif','Lucida Sans Unicode',
+      'Palatino Linotype','Bookman Old Style','Times New Roman','Century Gothic',
+      'Lucida Console','Comic Sans MS','Arial Narrow','Trebuchet MS','Gill Sans MT',
+      'Courier New','Arial Black','Arial','Calibri','Cambria','Courier','Georgia',
+      'Helvetica','Impact','Segoe UI','Tahoma','Verdana','Wingdings','Symbol',
+      'Webdings','Garamond'];
+    // These fonts have Noto/metric-compatible equivalents on Android Chrome —
+    // always shown as present so the account looks like a real mobile browser.
+    var _FCORE=['Arial','Courier New','Georgia','Times New Roman','Verdana'];
     var _FP={};
-    (function(){var _fh=function(f,s){var h=s>>>0;for(var i=0;i<f.length;i++){h=((h<<5)+h+f.charCodeAt(i))>>>0;}return h;};
-      for(var _fi=0;_fi<_FVAR.length;_fi++){var _ff=_FVAR[_fi];_FP[_ff]=(_fh(_ff,_FN)%100)<_FN;}})();
+    (function(){
+      var _fh=function(f,s){var h=s>>>0;for(var i=0;i<f.length;i++){h=((h<<5)+h+f.charCodeAt(i))>>>0;}return h;};
+      for(var _fi=0;_fi<_FVAR.length;_fi++){
+        var _ff=_FVAR[_fi];
+        if(_FCORE.indexOf(_ff)>=0){_FP[_ff]=true;continue;}
+        // Non-core: 10-30% probability, unique per account via fontSeed
+        _FP[_ff]=(_fh(_ff,_FN)%100)<Math.max(10,Math.min(30,Math.round(_FN/3)));
+      }
+    })();
+    // Separate OffscreenCanvas for monospace baseline measurement — avoids
+    // mutating this.font inside the hook which would be a detectable side-effect.
+    var _fpC=new OffscreenCanvas(400,40),_fpX=_fpC.getContext('2d');
     var _oMT=CanvasRenderingContext2D.prototype.measureText;
     CanvasRenderingContext2D.prototype.measureText=function(text){
       var r=_oMT.call(this,text);
       var fs=this.font||'';
-      for(var _fn in _FP){if(_FP[_fn]&&fs.indexOf(_fn)>=0){
-        return new Proxy(r,{get:function(t,k){return k==='width'?t.width+0.01:Reflect.get(t,k,t);}});
-      }}
-      return r;
+      // Find the first controlled font name present in this font string
+      var _mf=null;
+      for(var _fi=0;_fi<_FVAR.length;_fi++){if(fs.indexOf(_FVAR[_fi])>=0){_mf=_FVAR[_fi];break;}}
+      if(_mf===null)return r;
+      // Extract font size (e.g. "72px") to use the same size on the helper canvas
+      var _sz=(fs.match(/\d+(?:\.\d+)?(?:px|pt|em|rem)/)||['16px'])[0];
+      _fpX.font=_sz+' monospace';
+      var _bw=_oMT.call(_fpX,text).width;
+      if(_FP[_mf]){
+        // Font should appear present: width must differ from monospace baseline
+        if(Math.abs(r.width-_bw)<0.01){
+          // Font not truly installed — inject a detectable width difference
+          return new Proxy(r,{get:function(t,k,rv){return k==='width'?_bw+1.5:Reflect.get(t,k,rv);}});
+        }
+        return r; // Truly installed and already different — pass through
+      }else{
+        // Font should appear NOT present: clamp to monospace baseline width
+        return new Proxy(r,{get:function(t,k,rv){return k==='width'?_bw:Reflect.get(t,k,rv);}});
+      }
     };
   }catch(e){}
   try{
