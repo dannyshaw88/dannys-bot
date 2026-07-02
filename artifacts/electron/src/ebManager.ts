@@ -2244,8 +2244,15 @@ export async function openEbWindow(opts: {
       } else {
         win.show();
       }
+    } else if (_mobileProfile) {
+      // Mobile UA accounts — open at the profile dimensions, do NOT maximize.
+      // Maximizing a mobile-UA window to the full screen causes Instagram's
+      // mobile web create-post flow to break (the "Next" button disappears
+      // because the page renders at a desktop-sized viewport despite the
+      // mobile UA, confusing Instagram's responsive layout).
+      win.show();
     } else {
-      // Regular manual open — truly maximized so the OS title-bar maximize
+      // Desktop UA accounts — truly maximized so the OS title-bar maximize
       // button shows as inactive (window is already maximized).
       // win.maximize() both maximizes AND shows the window, but calling
       // show() first ensures the window is visible before maximize fires.

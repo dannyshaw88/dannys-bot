@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.287",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Cold-start bootstrap: removed duplicate launcher/sync (FetchConfig) call. The pre-login anonymous probe was firing alongside the authenticated post-session-restore sync, producing two launcher/sync calls per bootstrap. Now only the authenticated sync runs.",
+      },
+      {
+        category: "Feature",
+        text: "Account Settings — Do Actions Via Browser: added a 'Make a Post' toggle. When on, the embedded browser is used in the background to post via instagram.com instead of the mobile API.",
+      },
+      {
+        category: "Fix",
+        text: "Embedded browser viewport: accounts using a mobile user agent no longer open in a maximised window. The browser now opens at the correct mobile phone dimensions so Instagram's create-post flow (including the Next button) renders as expected.",
+      },
+    ],
+  },
+  {
     version: "1.1.286",
     date: "2 Jul 2026",
     items: [

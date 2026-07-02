@@ -2448,44 +2448,16 @@ export class InstagramWebClient {
       if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
       patchIgClientTls(ig, this.proxyUrl);
 
-      // ── Phase 0a: anonymous GetTokenResult ──────────────────────────────────
-      // No cookies loaded yet — matches Jarvee's very first pre-auth device probe.
-      try {
-        await ig.request.send({
-          url: "/api/v1/zr/token/result/",
-          method: "GET",
-          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result OK`);
-      } catch (e: any) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0a zr/token/result failed (non-fatal): ${e?.message}`);
-      }
-
-      // ── Phase 0b: anonymous launcher/sync (SendMobileConfig) ──────────────
-      // Still no sessionid — Instagram sees a clean device probe, not a checkpointed
-      // session.  Hard-capped at 20 s (large config download on high-latency proxies).
-      try {
-        await Promise.race([
-          ig.launcher.preLoginSync()
-            .then(() => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync OK`))
-            .catch((e: any) => console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0b launcher/sync failed (non-fatal): ${e?.message}`)),
-          new Promise<void>(r => setTimeout(r, 20_000)),
-        ]);
-      } catch {}
-
-      // ── Phase 0c: GetTokenResult #2 ─────────────────────────────────────────
-      // Jarvee calls zr/token/result a second time right after launcher/sync.
-      // Mirrors instagramLogin.ts Phase 0c exactly.
-      try {
-        await ig.request.send({
-          url: "/api/v1/zr/token/result/",
-          method: "GET",
-          qs: { token_hash_method: "TokenHashMethodHmacSHA256", identifier: "WeakStringAuth" },
-        });
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 OK`);
-      } catch (e: any) {
-        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 0c zr/token/result #2 failed (non-fatal): ${e?.message}`);
-      }
+      // NOTE: Phase 0 (anonymous zr/token/result + launcher/sync) was intentionally
+      // removed from this path.  _bootstrapWwwClaim is only called for existing
+      // authenticated sessions (igApiCookies is required — see line 2396).  The
+      // pre-login anonymous probes belong to the verify cold-start sequence in
+      // instagramLogin.ts, where they fire once as a fresh-device simulation.
+      // Keeping them here caused a duplicate launcher/sync per bootstrap run:
+      //   Phase 0b (anonymous launcher/sync) + Phase 2c' (authenticated launcher/sync)
+      // = two /api/v1/launcher/sync/ calls in one cold-start, which is abnormal
+      // device behaviour.  Removed Phase 0a/0b/0c; Phase 2c' is the one that
+      // actually returns ig-set-www-claim and ig-set-authorization for session restores.
 
       // ── Phase 1: inject sessionid ───────────────────────────────────────────
       // Load AFTER the unauthenticated Phase 0 calls — exact Jarvee ordering.

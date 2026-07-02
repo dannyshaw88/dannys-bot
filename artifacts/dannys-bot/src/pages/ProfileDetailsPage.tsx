@@ -413,6 +413,7 @@ export function ProfileDetailsPage() {
       label: "Browser Actions",
       options: [
         { key: "followViaBrowser", label: "Do Actions Via Browser — Follows", description: "Use the embedded browser in the background for follow actions instead of the mobile API" },
+        { key: "postViaBrowser", label: "Do Actions Via Browser — Make a Post", description: "Use the embedded browser in the background to post instead of the mobile API" },
       ],
     },
   ];
@@ -469,6 +470,9 @@ export function ProfileDetailsPage() {
     }
     if (expandedKeys.includes("followViaBrowser")) {
       patch.followViaBrowser = formData.followViaBrowser ?? false;
+    }
+    if (expandedKeys.includes("postViaBrowser")) {
+      patch.postViaBrowser = formData.postViaBrowser ?? false;
     }
 
     // loginRandomEndpoints is stored inside apiLimits JSON.
@@ -618,6 +622,7 @@ export function ProfileDetailsPage() {
         syncUseHiker: profile.syncUseHiker ?? false,
         // Browser actions
         followViaBrowser: profile.followViaBrowser ?? false,
+        postViaBrowser: profile.postViaBrowser ?? false,
 
       });
     }
@@ -1922,6 +1927,17 @@ export function ProfileDetailsPage() {
                       <div>
                         <p className="text-xs font-semibold">Follows</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">Navigate to the target's profile page and click the Follow button</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 py-1">
+                      <Switch
+                        checked={!!formData.postViaBrowser}
+                        onCheckedChange={checked => updateField({ postViaBrowser: checked })}
+                        className="data-[state=checked]:bg-green-500"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold">Make a Post</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Open the embedded browser in the background and post via instagram.com instead of the mobile API</p>
                       </div>
                     </div>
                   </div>
