@@ -2209,7 +2209,28 @@ export class InstagramWebClient {
       console.warn(`[webClient] follow ${userId}: WARNING — no Authorization Bearer token in igDeviceState after Phase 2d; follow will proceed without it (may cause 'something went wrong')`);
     }
 
-    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
+    const followHeaders = this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8");
+
+    // When auth is MISSING and we are using Chrome120 JA3, strip the two headers
+    // that contradict the Chrome fingerprint:
+    //
+    //   X-IG-WWW-Claim: "0"   — real Chrome browsers never send this header at all.
+    //                            Sending "0" signals "Android client with no claim yet",
+    //                            which triggers Instagram's Android Bearer-token gate
+    //                            even when the JA3 says Chrome.
+    //
+    //   X-FB-HTTP-Engine: Liger — OkHttp4/Android-specific header not present in any
+    //                              Chrome/browser traffic.  Its presence alongside a
+    //                              Chrome JA3 is a detectable inconsistency.
+    //
+    // When Authorization IS present the claim header is meaningful (real value) and
+    // these headers should be kept — real Android app v431+ sends both on follow calls.
+    if (!this._deviceAuthorization) {
+      if (followHeaders["X-IG-WWW-Claim"] === "0") delete followHeaders["X-IG-WWW-Claim"];
+      delete followHeaders["X-FB-HTTP-Engine"];
+    }
+
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"}, claim=${followHeaders["X-IG-WWW-Claim"] ?? "omitted"})`);
 
     // Use Chrome 120 JA3 (not OkHttp4/Android) for this write call.
     // Instagram's backend requires a Bearer token for write calls from Android-JA3
@@ -2218,11 +2239,15 @@ export class InstagramWebClient {
     // fails on friendships/create.  Chrome JA3 removes that Bearer requirement:
     // Instagram accepts the write call on cookies alone, matching the pre-CycleTLS
     // behaviour where Node.js OpenSSL JA3 also didn't trigger the Android gate.
+    //
+    // Combined with stripping X-IG-WWW-Claim/"0" and X-FB-HTTP-Engine when auth is
+    // missing, this eliminates the Android-vs-Chrome contradiction that was causing
+    // Instagram to still apply the Bearer gate despite the Chrome JA3.
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
       method: "POST",
-      headers: this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8"),
+      headers: followHeaders,
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
@@ -2276,6 +2301,7 @@ export class InstagramWebClient {
     console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
     return { ok: false, status: "follow_blocked", reason: "unexpected response: " + JSON.stringify(j).slice(0, 200) };
   }
+
 
   // ── Programmatic consent acceptance ──────────────────────────────────────
   // When Instagram's mobile API returns consent_required, it means the account

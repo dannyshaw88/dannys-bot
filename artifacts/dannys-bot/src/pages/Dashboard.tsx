@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.283",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow Tool: fixed 'something went wrong' that persisted even after switching to Chrome 120 JA3. The root cause was two Android-only headers being sent alongside the Chrome fingerprint — Instagram's servers saw the contradiction and still applied the Android Bearer-token gate. The fix strips X-IG-WWW-Claim (when value is the placeholder '0') and X-FB-HTTP-Engine: Liger from follow requests when no Bearer token is present. Real Chrome browsers never send these headers, so removing them completes the Chrome fingerprint and lifts the Bearer requirement.",
+        technical: [
+          "X-IG-WWW-Claim: '0' is the Android app's placeholder for 'no claim yet'. Chrome browsers omit this header entirely. Sending '0' alongside Chrome120 JA3 caused Instagram to still treat the request as Android-origin and require Bearer.",
+          "X-FB-HTTP-Engine: Liger is an OkHttp4/Android-specific header absent from all Chrome traffic. Its presence with Chrome120 JA3 was a detectable contradiction.",
+          "Both headers are only stripped when Authorization is MISSING (auth=MISSING path). When Bearer token is present (verified sessions), both headers are kept — they are legitimate on a real Android session with a known claim.",
+          "Change is localised to _followViaMobileSession in instagramWebClient.ts. All other mobile API calls (_buildMobileHeaders) are unchanged.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.282",
     date: "2 Jul 2026",
     items: [
