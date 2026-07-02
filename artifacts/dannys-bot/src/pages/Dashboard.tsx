@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.295",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "New",
+        text: "Source priority ranking — every source (hashtag or target followers) now has a pick-priority % input (1–100) shown directly in the Follow Tool. Set one source to 100 and it will be used 100% of the time. Set multiple sources with different values and they will be picked in proportion (e.g. 70 + 30 = 70% vs 30% split). The priority input is visible in both the compact sources panel and the full sources list.",
+      },
+      {
+        category: "Fix",
+        text: "Export API Calls now includes VisitProfile and ViewPost entries from inject-browsing sessions. Previously, visiting a target profile and opening individual posts were no-ops with no HTTP call, so they never appeared in the export. They now call the correct Instagram endpoints (/users/{id}/info/ and /media/{id}/info/) and produce their own log entries.",
+      },
+      {
+        category: "Fix",
+        text: "Follow Tool no-sources error now gives a clearer message when the account has sources configured but all of them are disabled — previously it showed the generic 'No follow sources configured' message even when sources existed but were toggled off.",
+      },
+      {
+        category: "Fix",
+        text: "Copy Settings — source priority (%) and enabled/disabled state are now preserved when copying sources to other accounts.",
+      },
+    ],
+  },
+  {
     version: "1.1.294",
     date: "2 Jul 2026",
     items: [

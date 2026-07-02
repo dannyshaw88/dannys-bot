@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
-import { useSources, useCreateSource, useDeleteSource, useImportSources, useClearSources, useClearSourcesByType, parseJarveeHashtagFile } from "@/hooks/use-sources";
+import { useSources, useCreateSource, useDeleteSource, useUpdateSource, useImportSources, useClearSources, useClearSourcesByType, parseJarveeHashtagFile } from "@/hooks/use-sources";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const createSourceMutation = useCreateSource();
   const deleteSourceMutation = useDeleteSource();
   const importSourcesMutation = useImportSources();
+  const updateSourceMutation = useUpdateSource();
   const clearSourcesMutation = useClearSources();
   const clearSourcesByTypeMutation = useClearSourcesByType();
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -214,6 +215,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
   const [newSourceType, setNewSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newSourceValue, setNewSourceValue] = useState("");
+  const [localPriorities, setLocalPriorities] = useState<Record<number, string>>({});
   const [sourceSearch, setSourceSearch] = useState("");
   const [showSources, setShowSources] = useState(false);
   const [newHashtagValue, setNewHashtagValue] = useState("");
@@ -518,33 +520,54 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     const hashtags = sources?.filter(s => s.type === 'hashtag') ?? [];
     const followers = sources?.filter(s => s.type === 'target_followers') ?? [];
 
-    const SourceRow = ({ source }: { source: NonNullable<typeof sources>[number] }) => (
-      <div className="flex items-center justify-between px-2.5 py-1.5 rounded border border-border bg-background hover:bg-accent/30 transition-colors">
-        <div className="flex items-center gap-2 min-w-0">
-          {source.type === 'hashtag'
-            ? <Hash className="w-3.5 h-3.5 text-primary shrink-0" />
-            : <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
-          <span className="text-sm font-medium truncate">
-            {source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}
-          </span>
-          {source.rank != null && <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">Rank {source.rank}/1000</span>}
-          {source.nrPosts != null && (
-            <span className="text-[10px] text-muted-foreground shrink-0">
-              {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
-                : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
-                : source.nrPosts} posts
+    const SourceRow = ({ source }: { source: NonNullable<typeof sources>[number] }) => {
+      const displayPriority = localPriorities[source.id] !== undefined
+        ? localPriorities[source.id]
+        : String(source.rank ?? 100);
+      return (
+        <div className="flex items-center justify-between px-2.5 py-1.5 rounded border border-border bg-background hover:bg-accent/30 transition-colors">
+          <div className="flex items-center gap-2 min-w-0">
+            {source.type === 'hashtag'
+              ? <Hash className="w-3.5 h-3.5 text-primary shrink-0" />
+              : <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
+            <span className="text-sm font-medium truncate">
+              {source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}
             </span>
-          )}
+            {source.nrPosts != null && (
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
+                  : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
+                  : source.nrPosts} posts
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={displayPriority}
+              title="Pick priority 1–100. Higher = picked more often. Set one source to 100 to use it exclusively."
+              onChange={(e) => setLocalPriorities(p => ({ ...p, [source.id]: e.target.value }))}
+              onBlur={() => {
+                const v = Math.max(1, Math.min(100, parseInt(displayPriority, 10) || 1));
+                setLocalPriorities(p => { const n = { ...p }; delete n[source.id]; return n; });
+                updateSourceMutation.mutate({ id: source.id, toolId: tool.id, rank: v, enabled: source.enabled !== false });
+              }}
+              className="w-12 h-5 text-[10px] text-center border border-border rounded px-1 bg-background"
+            />
+            <span className="text-[10px] text-muted-foreground">%</span>
+            <button
+              className="ml-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 transition-colors"
+              onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
+              disabled={deleteSourceMutation.isPending}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         </div>
-        <button
-          className="ml-2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 transition-colors"
-          onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
-          disabled={deleteSourceMutation.isPending}
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-    );
+      );
+    };
 
     return (
       <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -1595,46 +1618,64 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 if (filtered.length === 0) return (
                   <div className="text-center py-8 text-muted-foreground text-sm">No sources match "{sourceSearch}"</div>
                 );
-                return filtered.map(source => (
-                  <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{source.type === 'hashtag' ? `#${source.value}` : source.value}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {source.rank != null && (
-                            <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                              Rank {source.rank}/1000
-                            </span>
-                          )}
-                          {source.nrPosts != null && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {source.nrPosts >= 1_000_000
-                                ? `${(source.nrPosts / 1_000_000).toFixed(1)}M`
-                                : source.nrPosts >= 1_000
-                                ? `${(source.nrPosts / 1_000).toFixed(0)}K`
-                                : source.nrPosts} posts
-                            </span>
-                          )}
-                          {source.rank == null && source.nrPosts == null && (
-                            <span className="text-xs text-muted-foreground capitalize">{source.type.replace('_', ' ')}</span>
-                          )}
+                return filtered.map(source => {
+                  const detailPriority = localPriorities[source.id] !== undefined
+                    ? localPriorities[source.id]
+                    : String(source.rank ?? 100);
+                  return (
+                    <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{source.type === 'hashtag' ? `#${source.value}` : source.value}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {source.nrPosts != null && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {source.nrPosts >= 1_000_000
+                                  ? `${(source.nrPosts / 1_000_000).toFixed(1)}M`
+                                  : source.nrPosts >= 1_000
+                                  ? `${(source.nrPosts / 1_000).toFixed(0)}K`
+                                  : source.nrPosts} posts
+                              </span>
+                            )}
+                            {source.nrPosts == null && (
+                              <span className="text-xs text-muted-foreground capitalize">{source.type.replace('_', ' ')}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1" title="Pick priority 1–100. Higher = picked more often. Set one source to 100 to use it exclusively.">
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={detailPriority}
+                            onChange={(e) => setLocalPriorities(p => ({ ...p, [source.id]: e.target.value }))}
+                            onBlur={() => {
+                              const v = Math.max(1, Math.min(100, parseInt(detailPriority, 10) || 1));
+                              setLocalPriorities(p => { const n = { ...p }; delete n[source.id]; return n; });
+                              updateSourceMutation.mutate({ id: source.id, toolId: tool.id, rank: v, enabled: source.enabled !== false });
+                            }}
+                            className="w-14 h-7 text-xs text-center border border-border rounded px-1 bg-background"
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
+                          disabled={deleteSourceMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
-                      disabled={deleteSourceMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ));
+                  );
+                });
               })()}
             </div>
           </div>

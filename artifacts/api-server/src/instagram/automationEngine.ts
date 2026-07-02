@@ -3674,9 +3674,13 @@ class AutomationEngine {
 
     // Pick source
     const sources = await storage.getSourcesByTool(tool.id);
-    if (!sources.length) {
-      engineLog("WARN", `@${profile.username}: follow tool has no sources — add hashtags or accounts in Follow Tool settings`);
-      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured  add hashtag or account sources in Follow Tool settings");
+    const enabledSources = sources.filter(s => s.enabled !== false);
+    if (!enabledSources.length) {
+      const msg = sources.length
+        ? "All follow sources are disabled — enable at least one source in Follow Tool target sources"
+        : "No follow sources configured  add hashtag or account sources in Follow Tool settings";
+      engineLog("WARN", `@${profile.username}: follow tool: ${msg}`);
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", msg);
       await sleep(300_000);
       return zero;
     }
