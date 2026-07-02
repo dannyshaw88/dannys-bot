@@ -149964,6 +149964,7 @@ var import_instagram_private_api2 = __toESM(require_dist2(), 1);
 // src/instagram/tlsTransport.ts
 var import_instagram_private_api = __toESM(require_dist2(), 1);
 var OKHTTP4_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-43-17513-27-21,29-23-24,0";
+var CHROME120_JA3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0";
 var _client = null;
 var _initPromise = null;
 var _initFailed = false;
@@ -150023,6 +150024,7 @@ async function tlsRequest(opts) {
     cookieJar = [],
     proxyUrl,
     forceNodeTls = false,
+    ja3Override,
     agentOverride
   } = opts;
   if (!proxyUrl) {
@@ -150072,7 +150074,7 @@ async function tlsRequest(opts) {
         url2,
         {
           body: body ?? "",
-          ja3: OKHTTP4_JA3,
+          ja3: ja3Override ?? OKHTTP4_JA3,
           userAgent,
           headers: headersWithoutUA,
           proxy: proxyUrl,
@@ -150153,6 +150155,7 @@ async function tlsRequest(opts) {
       `[TLS-BLOCKED] CycleTLS returned status 0 for ${method} ${host}${path6} (proxy blocked Go subprocess \u2014 check proxy settings). err=${cycleTlsErr.slice(0, 200) || "(empty)"}`
     );
   }
+  if (body) allHeaders["Content-Length"] = String(Buffer.byteLength(body, "utf8"));
   console.log(`[tls:req] forceNodeTls \u2014 using Node.js TLS for ${method} ${host}${path6}`);
   const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
   const https4 = await import("node:https");
@@ -152221,15 +152224,21 @@ var InstagramWebClient = class {
     if (!this._deviceAuthorization) {
       console.warn(`[webClient] follow ${userId}: WARNING \u2014 no Authorization Bearer token in igDeviceState after Phase 2d; follow will proceed without it (may cause 'something went wrong')`);
     }
-    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026, auth=${this._deviceAuthorization ? "present" : "MISSING"})`);
+    const followHeaders = this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8");
+    if (!this._deviceAuthorization) {
+      if (followHeaders["X-IG-WWW-Claim"] === "0") delete followHeaders["X-IG-WWW-Claim"];
+      delete followHeaders["X-FB-HTTP-Engine"];
+    }
+    console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}\u2026, auth=${this._deviceAuthorization ? "present" : "MISSING"}, claim=${followHeaders["X-IG-WWW-Claim"] ?? "omitted"})`);
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
       method: "POST",
-      headers: this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8"),
+      headers: followHeaders,
       body,
       cookieJar: this.mobileCookieJar,
-      proxyUrl: this.proxyUrl
+      proxyUrl: this.proxyUrl,
+      ja3Override: CHROME120_JA3
     });
     if (res.cookies.length) {
       this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
@@ -152267,8 +152276,7 @@ var InstagramWebClient = class {
     }
     if (j?.status === "fail") {
       const msg = j?.message || "Instagram declined (status: fail)";
-      if (/something went wrong|sorry/i.test(msg)) return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
-      return { ok: false, status: "follow_blocked", reason: msg };
+      return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
     }
     if (j?.status === "ok") return { ok: true, status: "following" };
     console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
@@ -152502,6 +152510,7 @@ var InstagramWebClient = class {
             method: "POST",
             form: ig.request.sign({
               _csrftoken: ig.state.cookieCsrfToken,
+              _uid: ownUserId,
               _uuid: ig.state.uuid,
               id: ig.state.uuid,
               server_config_retrieval: "1"
@@ -152568,9 +152577,9 @@ var InstagramWebClient = class {
               label: "launcher/sync",
               url: "/api/v1/launcher/sync/",
               method: "POST",
-              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) }
+              extra: { form: ig2d.request.sign({ _csrftoken: ig2d.state.cookieCsrfToken, _uid: uid2d, _uuid: ig2d.state.uuid, id: ig2d.state.uuid, server_config_retrieval: "1" }) }
             },
-            { label: `accounts/current_user`, url: "/api/v1/accounts/current_user/", method: "GET", extra: { qs: { edit: "false" } } },
+            { label: "news/inbox", url: "/api/v1/news/inbox/", method: "GET" },
             { label: `users/${uid2d}/info`, url: `/api/v1/users/${uid2d}/info/`, method: "GET" }
           ];
           for (const probe of phase2dProbes) {
@@ -152590,6 +152599,53 @@ var InstagramWebClient = class {
       }
     } else {
       console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2d skipped \u2014 authorization already present`);
+    }
+    const phase2eClaimMissing = !claimNow() || claimNow() === "0";
+    const phase2eAuthMissing = !this._deviceAuthorization;
+    if (phase2eClaimMissing || phase2eAuthMissing) {
+      try {
+        const csrf2e = this.mobileCsrf || extractCsrf(this.mobileCookieJar) || "missing";
+        const uid2e = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/)?.[1]?.trim() ?? this.mobileCookieJar.find((c3) => c3.startsWith("ds_user_id="))?.split("=").slice(1).join("=");
+        const phase2eProbes = [
+          { label: "news/inbox", path: "/api/v1/news/inbox/", method: "GET" },
+          ...uid2e ? [{ label: `users/${uid2e}/info`, path: `/api/v1/users/${uid2e}/info/`, method: "GET" }] : []
+        ];
+        for (const probe of phase2eProbes) {
+          const nowClaimOk = !!(claimNow() && claimNow() !== "0");
+          if (nowClaimOk && this._deviceAuthorization) break;
+          try {
+            const res2e = await igReq({
+              host: "i.instagram.com",
+              path: probe.path,
+              method: probe.method,
+              headers: this._buildMobileHeaders(csrf2e),
+              cookieJar: this.mobileCookieJar,
+              proxyUrl: this.proxyUrl ?? void 0
+            });
+            if (res2e.cookies.length) {
+              this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res2e.cookies);
+              const nc = extractCsrf(res2e.cookies);
+              if (nc) this.mobileCsrf = nc;
+            }
+            this._absorbResponseHeaders(res2e.responseHeaders);
+            console.log(
+              `[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e ${probe.label} \u2192 HTTP ${res2e.status}, claim=${claimNow() || "none"}, auth=${this._deviceAuthorization ? "obtained" : "none"}`
+            );
+          } catch (e2e) {
+            console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e ${probe.label} threw (non-fatal): ${e2e?.message}`);
+          }
+        }
+      } catch (e2e) {
+        console.log(`[webClient:${this.profileId}] _bootstrapWwwClaim: Phase 2e setup threw (non-fatal): ${e2e?.message}`);
+      }
+      const finalClaim = claimNow();
+      const finalAuth = this._deviceAuthorization;
+      const claimOkFinal = !!(finalClaim && finalClaim !== "0");
+      if (!claimOkFinal || !finalAuth) {
+        console.log(
+          `[webClient:${this.profileId}] _bootstrapWwwClaim: \u2139 session tokens unavailable after all phases \u2014 claim=${claimOkFinal ? "ok" : "none"}, auth=${finalAuth ? "ok" : "none"}. Proceeding with cookies only.`
+        );
+      }
     }
   }
   // Build and warm up an IgApiClient for DM inbox access, following the exact
@@ -156051,7 +156107,7 @@ var RANDOM_LOGIN_ENDPOINT_POOL = [
     await ig.request.send({ url: "/api/v1/accounts/current_user/", method: "GET", qs: { edit: "false" } });
   } },
   { name: "LauncherSync", fn: async (ig) => {
-    await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, id: ig.state.uuid, server_config_retrieval: "1" }) });
+    await ig.request.send({ url: "/api/v1/launcher/sync/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uid: ig.state.cookieUserId ?? "", _uuid: ig.state.uuid, id: ig.state.uuid, server_config_retrieval: "1" }) });
   } },
   // Replaced broken .getItems() call — fetches pending (unread) DM requests instead
   { name: "GetPendingInbox", fn: async (ig) => {
@@ -156772,6 +156828,23 @@ async function verifyInstagramCredentials(profile) {
         }
         await restoreSessionCookies(ig, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
+        try {
+          await loginApiThrottle(apiLimitsRaw);
+          await ig.request.send({
+            url: "/api/v1/launcher/sync/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig.state.uuid,
+              id: ig.state.uuid,
+              server_config_retrieval: "1"
+            })
+          });
+          console.error(`[instagramLogin] @${profile.username} \u2014 Phase 1.5 launcher/sync OK (authenticated)`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 Phase 1.5 launcher/sync failed (non-fatal): ${e?.message}`);
+        }
         const classifyAuthError = (err, source) => {
           const msg = err?.message ?? "";
           const body = err?.response?.body ?? {};
