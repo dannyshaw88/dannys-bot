@@ -2216,8 +2216,8 @@ export async function openEbWindow(opts: {
     }
   }
   const win = new BrowserWindow({
-    width:           (isGhostBrowser || verifyMode) ? 430 : (_mobileProfile?.width ?? 1280),
-    height:          (isGhostBrowser || verifyMode) ? 700 : (_mobileProfile?.height ?? 820),
+    width:           (isGhostBrowser || verifyMode) ? 430 : 1280,
+    height:          (isGhostBrowser || verifyMode) ? 700 : 820,
     x:               _initX,
     y:               _initY,
     title:           `@${username} — Equinox Browser`,
@@ -2244,15 +2244,8 @@ export async function openEbWindow(opts: {
       } else {
         win.show();
       }
-    } else if (_mobileProfile) {
-      // Mobile UA accounts — open at the profile dimensions, do NOT maximize.
-      // Maximizing a mobile-UA window to the full screen causes Instagram's
-      // mobile web create-post flow to break (the "Next" button disappears
-      // because the page renders at a desktop-sized viewport despite the
-      // mobile UA, confusing Instagram's responsive layout).
-      win.show();
     } else {
-      // Desktop UA accounts — truly maximized so the OS title-bar maximize
+      // All regular account EBs — maximize so the OS title-bar maximize
       // button shows as inactive (window is already maximized).
       // win.maximize() both maximizes AND shows the window, but calling
       // show() first ensures the window is visible before maximize fires.
@@ -2450,11 +2443,7 @@ export async function openEbWindow(opts: {
 
   // ── Touch emulation — setDeviceMetricsOverride REMOVED ───────────────────
   // setDeviceMetricsOverride was crashing Chromium (SIGSEGV) in Electron 33 on
-  // Windows even when only one window called it.  The fix: BrowserWindow is now
-  // created at the correct mobile dimensions (width×height from _mobileProfile
-  // above), so Chromium's layout engine sees a real mobile-sized viewport from
-  // creation time.  @media queries, CSS layout, and pointer classification all
-  // work correctly without any CDP viewport override.
+  // Windows even when only one window called it, so it is not used.
   // Only setTouchEmulationEnabled remains — it enables Chromium's native touch
   // input stack so Input.synthesizeTapGesture produces real touchstart/touchend
   // events (not mouse events).  This call does NOT touch the rendering pipeline

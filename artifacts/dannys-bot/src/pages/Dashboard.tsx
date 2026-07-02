@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.289",
+    date: "2 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Make a Post via browser: the 'Next' button was hidden because the Puppeteer page was locked to 1280px width for frame-streaming, causing Instagram's mobile web CSS to never fire. The viewport now switches to real mobile dimensions (412×915) for the duration of the create-post flow, then restores to 1280px when done.",
+      },
+      {
+        category: "Fix",
+        text: "Embedded browser window dimensions: reverted the previous change that opened mobile-UA accounts at small phone dimensions. The window now maximises correctly for all accounts as before — the Next button fix is handled at the Puppeteer layer, not the window size.",
+      },
+    ],
+  },
+  {
     version: "1.1.288",
     date: "2 Jul 2026",
     items: [

@@ -6508,6 +6508,19 @@ export async function uploadPhotoViaBrowser(
     const page = s.page;
     page.on("response", onResponse);
 
+    // ── Switch to mobile viewport for the create-post flow ──────────────────
+    // The main EB page is permanently set to 1280×760 so the frame-stream canvas
+    // doesn't stretch. But at 1280 px, Instagram's mobile-web CSS (@media rules)
+    // never fires, so the create-post UI renders in a broken half-desktop layout
+    // where the "Next" button is either display:none or off-screen.
+    // Temporarily setting viewportForUA() here makes Chromium's layout engine see
+    // the correct mobile width (e.g. 412 px) so Instagram's responsive CSS kicks
+    // in and the full create-post flow renders as expected. We restore the original
+    // viewport in the finally block regardless of success or failure.
+    const mobileVp = viewportForUA(s.userAgent);
+    await page.setViewport(mobileVp);
+    log(`uploadPhotoViaBrowser [${profileId}]: viewport set to ${mobileVp.width}×${mobileVp.height} for create-post flow`);
+
     // Do NOT call page.goto() here — the session-init already navigates to Instagram
     // home after restoring cookies. A second navigation triggers Instagram's recaptcha.
     // Instead, wait for the session-init navigation to settle on the feed.
@@ -6618,6 +6631,9 @@ export async function uploadPhotoViaBrowser(
   } finally {
     s.page.off("response", onResponse);
     try { fs.unlinkSync(tmpPath); } catch { /* already removed */ }
+    // Restore the permanent 1280×760 canvas viewport so frame-streaming
+    // continues without distortion after the create-post flow finishes.
+    await s.page.setViewport({ width: 1280, height: 760 }).catch(() => {});
   }
 }
 
