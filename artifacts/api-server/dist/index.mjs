@@ -153501,15 +153501,8 @@ var InstagramWebClient = class {
         items
       };
     };
-    try {
-      const warmJ = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
-      console.log(`[webClient] getDirectMessagesInternal: news/inbox warm-up OK (result=${warmJ ? "ok" : "null"})`);
-    } catch (warmErr) {
-      console.warn(`[webClient] getDirectMessagesInternal: news/inbox warm-up failed (non-fatal): ${warmErr?.message}`);
-    }
     let inboxThreads = [];
     let firstProbeOk = false;
-    let firstProbeErr = null;
     try {
       const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
@@ -153517,64 +153510,15 @@ var InstagramWebClient = class {
       if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
       inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
       firstProbeOk = true;
-      console.log(`[webClient] getDirectMessagesInternal: inbox probe OK \u2014 ${inboxThreads.length} thread(s)`);
+      console.log(`[webClient] getDirectMessagesInternal: inbox OK \u2014 ${inboxThreads.length} thread(s)`);
+      this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
     } catch (e) {
-      firstProbeErr = e;
-    }
-    if (!firstProbeOk) {
-      const msg = String(firstProbeErr?.message ?? "");
-      console.warn(`[webClient] getDirectMessagesInternal: inbox probe failed \u2014 ${msg}`);
+      const msg = String(e?.message ?? "");
+      console.warn(`[webClient] getDirectMessagesInternal: inbox failed \u2014 ${msg}`);
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
-        throw firstProbeErr;
-      }
-      if (msg === "prompt_required_4415001" || msg.includes("4415001")) {
-        console.log(`[webClient] getDirectMessagesInternal: retrying via _buildWarmedIgClient fallback`);
-        try {
-          const warmed = await this._buildWarmedIgClient();
-          if (warmed) {
-            const { ig } = warmed;
-            const myUserId2 = String(ig.state.cookieUserId ?? "");
-            const inbox = ig.feed.directInbox();
-            const page = await inbox.items();
-            inboxThreads = page ?? [];
-            firstProbeOk = true;
-            console.log(`[webClient] getDirectMessagesInternal: warmedClient fallback OK \u2014 ${inboxThreads.length} thread(s)`);
-            this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
-            const mappedFallback = inboxThreads.map((t2) => {
-              const otherUser = (t2.users ?? [])[0];
-              if (!t2.thread_id || !otherUser?.username) return null;
-              const items = (t2.items ?? []).filter((i2) => i2?.item_type === "text" && i2?.text).map((i2) => ({
-                itemId: String(i2.item_id ?? ""),
-                text: String(i2.text ?? ""),
-                fromMe: myUserId2 ? String(i2.user_id) === myUserId2 : false
-              }));
-              const rawFullName = String(otherUser.full_name ?? "").trim();
-              const firstName = rawFullName.split(/\s+/)[0] || String(otherUser.username);
-              return { threadId: String(t2.thread_id), username: String(otherUser.username), userId: String(otherUser.pk ?? ""), firstName, items };
-            }).filter((t2) => t2 !== null);
-            if (inboxThreads.length === 0) return { count: 0, ok: true, threads: [] };
-            const toOpen2 = inboxThreads.slice(0, count);
-            let opened2 = 0;
-            for (const thread of toOpen2) {
-              const threadId = String(thread.thread_id ?? "");
-              if (!threadId) continue;
-              try {
-                await ig.feed.directThread({ thread_id: threadId, oldest_cursor: void 0 }).items();
-                this.logCallFn?.("GetDirectMessageThread", 0, `Opened DM thread`, false);
-                opened2++;
-              } catch {
-              }
-              if (opened2 < toOpen2.length) await new Promise((r2) => setTimeout(r2, 1500 + Math.floor(Math.random() * 2500)));
-            }
-            return { count: opened2, ok: true, threads: mappedFallback };
-          }
-        } catch (fbErr) {
-          console.warn(`[webClient] getDirectMessagesInternal: warmedClient fallback failed \u2014 ${fbErr?.message}`);
-        }
+        throw e;
       }
       return { count: 0, ok: false, threads: [] };
-    } else {
-      this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
     }
     const mappedThreads = inboxThreads.map(mapThread).filter((t2) => t2 !== null);
     if (inboxThreads.length === 0) return { count: 0, ok: true, threads: [] };
@@ -162566,8 +162510,18 @@ async function createInstagramAccountViaEBForm(params) {
     const tap = async (x3, y2) => {
       if (!cdp) return;
       try {
-        await cdp.send("Input.synthesizeTapGesture", { x: x3, y: y2, duration: 60, tapCount: 1, gestureSourceType: "touch" });
-        await delay(120);
+        const force = 0.35 + Math.random() * 0.37;
+        const radiusX = 8 + Math.random() * 6;
+        const radiusY = radiusX - 1 + Math.random() * 2;
+        const rotationAngle = Math.random() * 25;
+        const touchPoint = { x: x3, y: y2, radiusX, radiusY, rotationAngle, force, id: 0 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touchPoint] });
+        await delay(40 + Math.floor(Math.random() * 30));
+        const wobbleX = x3 + (Math.random() - 0.5) * 2;
+        const wobbleY = y2 + (Math.random() - 0.5) * 2;
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...touchPoint, x: wobbleX, y: wobbleY }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await delay(100 + Math.floor(Math.random() * 40));
       } catch {
       }
     };
@@ -163199,7 +163153,15 @@ async function submitSignupCodeViaEB(sessionId, code) {
     const tapTouch = async (x3, y2) => {
       if (!cdp) return;
       try {
-        await cdp.send("Input.synthesizeTapGesture", { x: x3, y: y2, duration: 60, tapCount: 1, gestureSourceType: "touch" });
+        const force = 0.35 + Math.random() * 0.37;
+        const radiusX = 8 + Math.random() * 6;
+        const radiusY = radiusX - 1 + Math.random() * 2;
+        const rotationAngle = Math.random() * 25;
+        const touchPoint = { x: x3, y: y2, radiusX, radiusY, rotationAngle, force, id: 0 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touchPoint] });
+        await delay(40 + Math.floor(Math.random() * 30));
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...touchPoint, x: x3 + (Math.random() - 0.5) * 2, y: y2 + (Math.random() - 0.5) * 2 }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       } catch {
       }
       await delay(120);
@@ -166953,9 +166915,11 @@ ${err?.stack ?? ""}`);
     }
     client.setApiCallSource("Follow Tool");
     const sources2 = await storage.getSourcesByTool(tool.id);
-    if (!sources2.length) {
-      engineLog("WARN", `@${profile.username}: follow tool has no sources \u2014 add hashtags or accounts in Follow Tool settings`);
-      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured  add hashtag or account sources in Follow Tool settings");
+    const enabledSources = sources2.filter((s2) => s2.enabled !== false);
+    if (!enabledSources.length) {
+      const msg = sources2.length ? "All follow sources are disabled \u2014 enable at least one source in Follow Tool target sources" : "No follow sources configured  add hashtag or account sources in Follow Tool settings";
+      engineLog("WARN", `@${profile.username}: follow tool: ${msg}`);
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", msg);
       await sleep(3e5);
       return zero;
     }
@@ -167533,6 +167497,12 @@ ${err?.stack ?? ""}`);
         await sleep(randInt2(followMin, followMax));
         continue;
       }
+      if (result.status === "already_following") {
+        console.log(`[engine] @${profile.username}: skip @${user.username} (already following via browser)`);
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following");
+        skipped++;
+        continue;
+      }
       if (!result.ok) {
         console.log(`[engine] @${profile.username}: skip @${user.username} (already following / private)`);
         this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following or private account");
@@ -167552,7 +167522,11 @@ ${err?.stack ?? ""}`);
         console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
       }
       this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
-      await storage.incrementStat(profile.id, "follow");
+      try {
+        await storage.incrementStat(profile.id, "follow");
+      } catch (statErr) {
+        console.error(`[engine] @${profile.username}: \u26A0 incrementStat("follow") failed \u2014 stat NOT recorded for @${user.username}: ${statErr?.message}`);
+      }
       this.bump(state);
       followed++;
       console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
@@ -167730,6 +167704,10 @@ ${err?.stack ?? ""}`);
             await sleep(randInt2(followMin, followMax));
             continue;
           }
+          if (result.status === "already_following") {
+            skipped++;
+            continue;
+          }
           if (!result.ok) {
             skipped++;
             continue;
@@ -167739,7 +167717,11 @@ ${err?.stack ?? ""}`);
           } catch {
           }
           this.logAction(profile.id, tool.id, "follow", user.username, rescrapeSource.value, rescrapeSource.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
-          await storage.incrementStat(profile.id, "follow");
+          try {
+            await storage.incrementStat(profile.id, "follow");
+          } catch (statErr) {
+            console.error(`[engine] @${profile.username}: \u26A0 incrementStat("follow") failed \u2014 stat NOT recorded for @${user.username} (rescrape): ${statErr?.message}`);
+          }
           this.bump(state);
           followed++;
           console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
