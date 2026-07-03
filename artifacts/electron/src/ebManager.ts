@@ -4603,22 +4603,24 @@ export function startEbIpcServer(
       }
 
       // ── POST /eb/silent-follow ──────────────────────────────────────────────────
-      // Uses the EXISTING open EB window (already logged in to Instagram) to
-      // navigate to the target's profile, click Follow, then navigate back.
+      // Performs a browser-based follow without requiring the user to have the EB
+      // window open.  Two modes:
       //
-      // One browser per account.  Do NOT create a second BrowserWindow — two
-      // sessions on the same account is an instant automation signal to Instagram.
+      // A) EB is already open → reuse that window (navigate to target, follow,
+      //    navigate back to previous page — same as before).
+      //
+      // B) EB is NOT open → create a temporary hidden BrowserWindow using the
+      //    same session partition (persist:eb-{pid}) which already has the
+      //    account's Instagram cookies from the last EB login.  Perform the
+      //    follow in the hidden window, then destroy it when done.
+      //
+      // ONE session per account is the rule.  In mode B the hidden window uses
+      // the same persist: partition as the regular EB so Chrome sees it as the
+      // same profile — not a new device.  We never register it in ebMap so the
+      // frontend correctly shows the EB as "not open".
       if (req.method === "POST" && u.pathname === "/eb/silent-follow") {
         const targetUsername: string = (body.targetUsername ?? "").trim();
         if (!pid || !targetUsername) return send(res, 400, { error: "profileId and targetUsername required" });
-
-        // Get the existing open EB window for this account.
-        const ebEntry = ebMap.get(pid);
-        if (!ebEntry || ebEntry.win.isDestroyed()) {
-          _ipcLog(`[eb:silent-follow:${pid}] no open EB window — EB must be open before browser-follows can run`);
-          return send(res, 200, { ok: false, status: "follow_blocked", reason: "EB not open — open the embedded browser for this account first" });
-        }
-        const sfWin = ebEntry.win;
 
         // Serialise follows per-account — the engine should not send two
         // simultaneous follows for the same profile, but guard here too.
@@ -4628,24 +4630,82 @@ export function startEbIpcServer(
         }
         _sfInProgress.add(pid);
 
-        // Remember where the browser is now so we can restore it when done.
-        const prevUrl = (() => {
+        // Determine whether to use the existing open EB window (mode A) or a
+        // temporary hidden window (mode B).
+        const ebEntry = ebMap.get(pid);
+        const ebIsOpen = !!(ebEntry && !ebEntry.win.isDestroyed());
+
+        let sfWin: BrowserWindow;
+        let sfTempWin: BrowserWindow | null = null; // created only in mode B
+
+        if (ebIsOpen) {
+          // Mode A — reuse the existing open EB window.
+          sfWin = ebEntry!.win;
+          _ipcLog(`[eb:silent-follow:${pid}] mode A — reusing open EB window for @${targetUsername}`);
+        } else {
+          // Mode B — create a temporary hidden BrowserWindow.
+          // The persist: partition already holds the account's Instagram cookies
+          // so the hidden window is logged in without any extra login step.
+          const sfPartition = `persist:eb-${pid}`;
+          const sfSes = electronSession.fromPartition(sfPartition);
+
+          // Apply the account's proxy so the hidden window routes through the
+          // same exit IP as the real EB would.
+          const bodyProxy = body.proxy as { host?: string; port?: number; user?: string; pass?: string; type?: string } | null | undefined;
+          if (bodyProxy?.host && bodyProxy?.port) {
+            try {
+              await sfSes.clearHostResolverCache();
+              await sfSes.setProxy(buildProxyConfig(bodyProxy as any));
+            } catch (proxyErr: any) {
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] mode B — proxy set failed: ${proxyErr?.message}`);
+            }
+          }
+
+          sfTempWin = new BrowserWindow({
+            width:       1280,
+            height:      820,
+            x:           999999,
+            y:           999999,
+            show:        false,
+            skipTaskbar: true,
+            webPreferences: {
+              nodeIntegration:  false,
+              contextIsolation: true,
+              partition:        sfPartition,
+            },
+          });
+          sfWin = sfTempWin;
+          _ipcLog(`[eb:silent-follow:${pid}] mode B — created hidden background window (partition=${sfPartition}) for @${targetUsername}`);
+        }
+
+        // Remember where the browser is now so we can restore it when done
+        // (only relevant in mode A — mode B destroys the window).
+        const prevUrl = ebIsOpen ? (() => {
           try {
             const u2 = sfWin.webContents.getURL();
             return u2 && u2 !== "about:blank" ? u2 : "https://www.instagram.com/";
           } catch { return "https://www.instagram.com/"; }
-        })();
+        })() : "https://www.instagram.com/";
 
-        // Watchdog — if the whole operation hangs, navigate back and respond.
-        // Does NOT destroy sfWin — it is the user's main EB window.
+        // Cleanup helper: mode A navigates back; mode B destroys the temp window.
+        const sfCleanup = () => {
+          if (sfTempWin) {
+            try { if (!sfTempWin.isDestroyed()) sfTempWin.destroy(); } catch {}
+            sfTempWin = null;
+          } else {
+            try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
+          }
+        };
+
+        // Watchdog — if the whole operation hangs, clean up and respond.
         let sfSettled = false;
         const sfWatchdog = setTimeout(() => {
           if (sfSettled) return;
           sfSettled = true;
           _sfInProgress.delete(pid);
-          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, restoring browser to ${prevUrl.slice(0, 100)}`);
-          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
-          try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — follow took too long, browser restored to previous page" }); } catch {}
+          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}`);
+          sfCleanup();
+          try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — follow took too long" }); } catch {}
         }, 80_000);
 
         const sfRespond = (status: number, payload: any) => {
@@ -4655,11 +4715,9 @@ export function startEbIpcServer(
           send(res, status, payload);
         };
 
-        // Helper: navigate back to prevUrl after follow (success or failure).
-        // Fire-and-forget — we've already sent the response.
-        const sfRestoreUrl = () => {
-          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
-        };
+        // Back-compat alias so all existing sfRestoreUrl() calls below work
+        // without touching the rest of the handler.
+        const sfRestoreUrl = sfCleanup;
 
         try {
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
@@ -4932,7 +4990,7 @@ export function startEbIpcServer(
           }
         } catch (sfErr: any) {
           _ipcLog(`[ERROR] [eb:silent-follow:${pid}] error: ${sfErr?.message}`);
-          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
+          sfRestoreUrl();
           return sfRespond(200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
         } finally {
           _sfInProgress.delete(pid);

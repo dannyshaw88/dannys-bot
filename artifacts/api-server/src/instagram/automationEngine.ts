@@ -240,6 +240,7 @@ class AutomationEngine {
   private async followUserViaBrowser(
     profileId: number,
     targetUsername: string,
+    proxy?: { host?: string | null; port?: number | null; username?: string | null; password?: string | null; type?: string | null } | null,
   ): Promise<{ ok: boolean; status?: string; reason?: string }> {
     const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
@@ -247,10 +248,17 @@ class AutomationEngine {
     }
     try {
       console.log(`[engine] followViaBrowser: sending IPC for profile ${profileId} → @${targetUsername}`);
+      const proxyPayload = (proxy?.host && proxy?.port) ? {
+        host: proxy.host,
+        port: proxy.port,
+        user: proxy.username ?? undefined,
+        pass: proxy.password ?? undefined,
+        type: proxy.type ?? "http",
+      } : null;
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ profileId, targetUsername }),
+        body:    JSON.stringify({ profileId, targetUsername, proxy: proxyPayload }),
         signal:  AbortSignal.timeout(90_000),
       });
       if (!r.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r.status}` };
@@ -4282,7 +4290,11 @@ class AutomationEngine {
       try {
         const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
         if ((profile as any).followViaBrowser) {
-          result = await this.followUserViaBrowser(profile.id, user.username);
+          result = await this.followUserViaBrowser(profile.id, user.username, {
+            host: (profile as any).proxyHost, port: (profile as any).proxyPort,
+            username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
+            type: (profile as any).proxyType,
+          });
         } else {
           result = await client.followUser(user.pk, user.username, sourceLabel);
         }
@@ -4554,7 +4566,11 @@ class AutomationEngine {
           try {
             const sourceLabel = rescrapeSource.value ? (rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value) : undefined;
             if ((profile as any).followViaBrowser) {
-              result = await this.followUserViaBrowser(profile.id, user.username);
+              result = await this.followUserViaBrowser(profile.id, user.username, {
+                host: (profile as any).proxyHost, port: (profile as any).proxyPort,
+                username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
+                type: (profile as any).proxyType,
+              });
             } else {
               result = await client.followUser(user.pk, user.username, sourceLabel);
             }

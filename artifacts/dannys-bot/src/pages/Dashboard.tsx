@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.309",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Browser-follows now work without the embedded browser window being open. Accounts can run follow tasks silently in the background using their saved session — no need to manually open the browser first.",
+      },
+    ],
+  },
+  {
     version: "1.1.308",
     date: "3 Jul 2026",
     items: [
