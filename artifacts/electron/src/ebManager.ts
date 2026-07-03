@@ -4751,6 +4751,7 @@ export function startEbIpcServer(
 
           // ── Poll for Follow button ────────────────────────────────────────────
           _ipcLog(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
+          let _btnOuterTimer: ReturnType<typeof setTimeout>;
           const btnInfo: any = await Promise.race([
             sfWin.webContents.executeJavaScript(`
               new Promise(function(resolve) {
@@ -4780,13 +4781,14 @@ export function startEbIpcServer(
                 check();
               })
             `, true).catch(() => ({ found: false, timedOut: true })),
-            new Promise<{ found: false; timedOut: true; contextDestroyed: true }>(r =>
-              setTimeout(() => {
+            new Promise<{ found: false; timedOut: true; contextDestroyed: true }>(r => {
+              _btnOuterTimer = setTimeout(() => {
                 _ipcLog(`[WARN] [eb:silent-follow:${pid}] btnInfo poll hit 25s outer timeout`);
                 r({ found: false, timedOut: true, contextDestroyed: true });
-              }, 25_000)
-            ),
+              }, 25_000);
+            }),
           ]);
+          clearTimeout(_btnOuterTimer!);
 
           if (btnInfo?.found) {
             const acctSeed = ((pid * 2654435761) >>> 0) / 0x100000000;
