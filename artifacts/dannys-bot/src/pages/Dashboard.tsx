@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.297",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Follow via browser now taps the Follow button using a real touch event with genuine finger physics instead of a JavaScript click. The tap lands at a slightly different spot on the button each time based on the account — so each account has its own consistent tap position, pressure, and timing rather than every account doing an identical click at the exact same coordinate.",
+      },
+      {
+        category: "Fix",
+        text: "Follow tap position is re-checked immediately before firing — if Instagram's page shifted during the pre-tap pause (banners loading, React re-renders) the tap lands on the actual current button position rather than stale coordinates.",
+      },
+      {
+        category: "Fix",
+        text: "Follow via browser now confirms the follow actually registered before moving on. The app polls for the Following / Requested state after tapping and only marks the follow as done once Instagram's UI confirms it. If the tap missed due to a layout shift, a warning is logged instead of silently reporting success.",
+      },
+      {
+        category: "Fix",
+        text: "DM check now makes exactly 1 API call instead of 3. Previously, when Instagram's prompt gate (error 4415001) blocked the inbox, the app ran a warm-up call then retried — making 3 calls total on an already-scrutinised session. This extra burst was causing accounts to be kicked out on the subsequent timeline call. Now if the prompt gate fires, the DM check is skipped cleanly for that session with no retries.",
+      },
+    ],
+  },
+  {
     version: "1.1.295",
     date: "2 Jul 2026",
     items: [
