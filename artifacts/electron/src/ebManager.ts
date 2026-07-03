@@ -195,6 +195,23 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
 let _serverPort = 0;
 let _cookiesDir  = "";
 let _iconPath    = "";
+
+// ── Silent-follow concurrency gate ─────────────────────────────────────────
+// At most 2 hidden follow-windows open simultaneously.  Extra calls queue and
+// wait so they don't compete for CPU/proxy bandwidth and blow the 90 s IPC
+// timeout.  Each window is destroyed immediately after use so slots free fast.
+let _sfActive = 0;
+const _SF_MAX  = 2;
+const _sfWaiters: Array<() => void> = [];
+function _sfAcquire(): Promise<void> {
+  if (_sfActive < _SF_MAX) { _sfActive++; return Promise.resolve(); }
+  return new Promise(resolve => _sfWaiters.push(() => { _sfActive++; resolve(); }));
+}
+function _sfRelease(): void {
+  _sfActive = Math.max(0, _sfActive - 1);
+  const next = _sfWaiters.shift();
+  if (next) next();
+}
 // Bumped every time a ghost-signup starts OR the ghost browser is closed/reset.
 // Each ghost-signup async block captures its own token at start and checks it
 // before every long-running step — ensures a stale run cannot bleed into the next.
@@ -4582,6 +4599,13 @@ export function startEbIpcServer(
         const targetUsername: string = (body.targetUsername ?? "").trim();
         if (!pid || !targetUsername) return send(res, 400, { error: "profileId and targetUsername required" });
 
+        // Wait for a concurrency slot before opening a BrowserWindow.
+        // Without this, N simultaneous follow calls spawn N Chrome processes that
+        // compete for proxy bandwidth and CPU — each slowing the others until all
+        // hit the IPC timeout.
+        await _sfAcquire();
+        console.log(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX}) queued=${_sfWaiters.length}`);
+
         // Fetch proxy + UA from the API server (same endpoint used by the normal EB open).
         let sfProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
         let sfUA: string | undefined;
@@ -4698,8 +4722,11 @@ export function startEbIpcServer(
           // loadURL silently leave the URL as about:blank, which then passes the
           // login-wall check and times out as "Follow button not found" instead of
           // giving a clear network/proxy error.
+          const _sfT0 = Date.now();
+          console.log(`[eb:silent-follow:${pid}] loadURL start at T+0ms`);
           let sfNavError: Error | null = null;
           await sfWin.webContents.loadURL(profileUrl).catch((e: Error) => { sfNavError = e; });
+          console.log(`[eb:silent-follow:${pid}] loadURL done in ${Date.now() - _sfT0}ms`);
           if (sfNavError) {
             const msg = (sfNavError as Error).message ?? String(sfNavError);
             console.warn(`[eb:silent-follow:${pid}] loadURL failed — ${msg}`);
@@ -4762,6 +4789,7 @@ export function startEbIpcServer(
           // Poll for the Follow button (Instagram renders async via React).
           // Returns the button's bounding rect so we can CDP-tap it at real coordinates,
           // or { alreadyFollowing } / { timedOut } — does NOT click the button itself.
+          console.log(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
           const btnInfo: any = await sfWin.webContents.executeJavaScript(`
             new Promise(function(resolve) {
               var tries = 0, MAX = 40; // 20 s
@@ -4951,6 +4979,10 @@ export function startEbIpcServer(
           try { sfWin.destroy(); } catch {}
           console.error(`[eb:silent-follow:${pid}] error: ${sfErr?.message}`);
           return send(res, 200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
+        } finally {
+          // Always release the concurrency slot so the next queued follow can run.
+          _sfRelease();
+          console.log(`[eb:silent-follow:${pid}] slot released (active=${_sfActive}/${_SF_MAX})`);
         }
       }
 

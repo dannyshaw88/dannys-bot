@@ -246,11 +246,12 @@ class AutomationEngine {
       return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
     }
     try {
+      console.log(`[engine] followViaBrowser: sending IPC for profile ${profileId} → @${targetUsername}`);
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ profileId, targetUsername }),
-        signal:  AbortSignal.timeout(35_000),
+        signal:  AbortSignal.timeout(90_000),
       });
       if (!r.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r.status}` };
       return await r.json() as { ok: boolean; status?: string; reason?: string };

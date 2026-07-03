@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.306",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Browser-follows were timing out with 'The operation was aborted due to timeout' on every attempt. Root cause: the hidden follow window takes up to 35 seconds (proxy page load + 20-second button poll + pre-tap dwell) and the IPC timeout was only 35 seconds — it was firing before the follow could complete. Timeout raised to 90 seconds so all legitimate follows now finish.",
+      },
+      {
+        category: "Fix",
+        text: "When multiple accounts had browser-follows enabled they all opened hidden Chrome windows simultaneously, competing for proxy bandwidth and CPU — each slowing the others until both timed out. A concurrency gate now limits the number of open follow windows to 2 at a time; extra calls queue and wait for a slot instead of fighting each other.",
+      },
+      {
+        category: "Diagnostic",
+        text: "The API server log now shows exactly when each browser-follow IPC call is sent (profile ID and target), how long the page load took, when the button poll starts, and when the slot is released — so future follow failures will show precisely where the time was spent.",
+      },
+    ],
+  },
+  {
     version: "1.1.305",
     date: "3 Jul 2026",
     items: [
