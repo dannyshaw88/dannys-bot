@@ -150785,6 +150785,14 @@ var InstagramWebClient = class {
   // Derived once from igDid (80% WIFI, 20% LTE). Caching avoids repeated JSON
   // parses; null means not yet resolved.
   _connectionType = null;
+  // Bandwidth measurement cache — real Android devices measure once and hold
+  // the result stable for the session, updating only on network-condition changes.
+  // Re-randomizing on every call creates 50 different BW readings per session —
+  // a fleet-wide bot fingerprint Instagram can trivially detect.
+  _cachedBwKbps = null;
+  _cachedBwBytes = null;
+  _cachedBwMs = null;
+  _cachedBwDriftCount = 0;
   // Locale derived from the proxy's exit country — resolved in constructor via
   // ip-api.com. Matching locale to the proxy's country removes the mismatch
   // between X-IG-App-Locale and the connecting IP's region (bot signal).
@@ -151928,9 +151936,20 @@ var InstagramWebClient = class {
       }
     }
     const connType = this._getConnectionType();
-    const bwKbps = this._getConnectionSpeedKbps(connType);
-    const bwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
-    const bwMs = 300 + Math.floor(Math.random() * 2e3);
+    if (this._cachedBwKbps === null) {
+      this._cachedBwKbps = this._getConnectionSpeedKbps(connType);
+      this._cachedBwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
+      this._cachedBwMs = 300 + Math.floor(Math.random() * 2e3);
+    } else {
+      this._cachedBwDriftCount++;
+      if (this._cachedBwDriftCount % 20 === 0) {
+        const fresh = this._getConnectionSpeedKbps(connType);
+        this._cachedBwKbps = Math.round(this._cachedBwKbps * 0.92 + fresh * 0.08);
+      }
+    }
+    const bwKbps = this._cachedBwKbps;
+    const bwBytes = this._cachedBwBytes;
+    const bwMs = this._cachedBwMs;
     const headers = {
       "Host": "i.instagram.com",
       "User-Agent": this._fullMobileUA,
@@ -151942,7 +151961,7 @@ var InstagramWebClient = class {
       "X-IG-Nav-Chain": this._buildNavChainHeader(),
       "X-IG-Connection-Type": connType,
       "X-IG-Connection-Speed": `${bwKbps}kbps`,
-      "X-IG-Bandwidth-Speed-KBPS": `${bwKbps}.000`,
+      "X-IG-Bandwidth-Speed-KBPS": String(bwKbps),
       "X-IG-Bandwidth-TotalBytes-B": String(bwBytes),
       "X-IG-Bandwidth-TotalTime-MS": String(bwMs),
       "X-Bloks-Version-Id": BLOKS_VERSION_ID,
@@ -151963,6 +151982,8 @@ var InstagramWebClient = class {
     };
     if (igDid) headers["X-IG-Device-ID"] = igDid;
     if (androidId) headers["X-IG-Android-ID"] = androidId;
+    const userId = this._userId;
+    if (userId) headers["ig-intended-user-id"] = userId;
     if (contentType) {
       headers["Content-Type"] = contentType;
     }
@@ -152035,6 +152056,13 @@ var InstagramWebClient = class {
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
+  // Extracts the numeric user ID from mobileCookieJar (ds_user_id cookie).
+  // Used for ig-intended-user-id header — real Android app sends this on every
+  // authenticated request to prove the client knows its own account identity.
+  get _userId() {
+    const c3 = this.mobileCookieJar.find((c4) => c4.startsWith("ds_user_id="));
+    return c3 ? c3.split("=")[1].split(";")[0].trim() : "";
+  }
   get _deviceAuthorization() {
     if (!this.igDeviceState) return void 0;
     try {
@@ -152078,10 +152106,12 @@ var InstagramWebClient = class {
         throw new Error("prompt_required_4415001");
       }
       const bodyMsg = res.json?.message ?? "";
+      const logoutReason = res.json?.logout_reason;
       const errMsg = bodyMsg || "login_required";
-      console.warn(`[webClient] mobileSessionGet ${path6} \u2192 HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      const throwMsg = logoutReason !== void 0 ? `session_expired \u2014 ${errMsg} | logout_reason:${logoutReason}` : errMsg;
+      console.warn(`[webClient] mobileSessionGet ${path6} \u2192 HTTP ${res.status} (${errMsg}${logoutReason !== void 0 ? ` [SESSION-KILL logout_reason:${logoutReason}]` : ""}): ${res.rawBody.slice(0, 200)}`);
       this._logTransport(path6, "GET", Date.now() - _t0, true);
-      throw new Error(errMsg);
+      throw new Error(throwMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path6} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     this._logTransport(path6, "GET", Date.now() - _t0, false, msgFn?.(res.json));
@@ -155568,7 +155598,7 @@ async function createInstagramAccountViaApi(params) {
     "User-Agent": effectiveUA,
     "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip",
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTvwE=",
@@ -167335,7 +167365,12 @@ ${err?.stack ?? ""}`);
                   this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
                   await storage.incrementStat(profile.id, "story");
                 }
-              } catch {
+              } catch (err) {
+                const msg = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewStories \u2014 ${msg} \u2014 marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
               }
             }
           }
@@ -167355,7 +167390,12 @@ ${err?.stack ?? ""}`);
                   engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
                   this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
                 }
-              } catch {
+              } catch (err) {
+                const msg = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewHighlights \u2014 ${msg} \u2014 marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
               }
             }
           }
