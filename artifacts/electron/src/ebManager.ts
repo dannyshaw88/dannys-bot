@@ -4576,21 +4576,25 @@ export function startEbIpcServer(
           const btnInfo: any = await sfWin.webContents.executeJavaScript(`
             new Promise(function(resolve) {
               var tries = 0, MAX = 40; // 20 s
+              function norm(el) {
+                var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                var txt = (el.innerText || el.textContent || '');
+                // collapse all whitespace (SVG alt-text, newlines, etc.) then lowercase
+                return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+              }
+              function isFollow(el)   { var n = norm(el); return n === 'follow' || n === 'follow back'; }
+              function isAlready(el)  { var n = norm(el); return n === 'following' || n === 'requested'; }
               function check() {
-                var btns = Array.from(document.querySelectorAll('button'));
-                var followBtn = btns.find(function(b) {
-                  var t = (b.textContent || '').trim();
-                  return t === 'Follow' || t === 'Follow Back';
-                });
-                if (followBtn && !followBtn.disabled) {
+                var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
+                var followBtn = cands.find(function(b) { return !b.disabled && isFollow(b); });
+                if (followBtn) {
                   var r = followBtn.getBoundingClientRect();
-                  resolve({ found: true, x: r.left, y: r.top, w: r.width, h: r.height });
-                  return;
+                  if (r.width > 0 && r.height > 0) {
+                    resolve({ found: true, x: r.left, y: r.top, w: r.width, h: r.height });
+                    return;
+                  }
                 }
-                var alreadyBtn = btns.find(function(b) {
-                  var t = (b.textContent || '').trim();
-                  return t === 'Following' || t === 'Requested';
-                });
+                var alreadyBtn = cands.find(function(b) { return isAlready(b); });
                 if (alreadyBtn) { resolve({ found: false, alreadyFollowing: true }); return; }
                 if (++tries >= MAX) { resolve({ found: false, timedOut: true }); return; }
                 setTimeout(check, 500);
@@ -4617,12 +4621,17 @@ export function startEbIpcServer(
             // scroll position can all move the button during the wait window.
             const freshRect: any = await sfWin.webContents.executeJavaScript(`
               (function() {
-                var btn = Array.from(document.querySelectorAll('button')).find(function(b) {
-                  var t = (b.textContent || '').trim();
-                  return t === 'Follow' || t === 'Follow Back';
+                function norm(el) {
+                  var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                  var txt = (el.innerText || el.textContent || '');
+                  return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                }
+                var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
+                  var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
                 });
-                if (!btn || btn.disabled) return null;
+                if (!btn) return null;
                 var r = btn.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) return null;
                 return { x: r.left, y: r.top, w: r.width, h: r.height };
               })()
             `, true).catch(() => null);
@@ -4651,9 +4660,13 @@ export function startEbIpcServer(
               if (!followed) {
                 await sfWin.webContents.executeJavaScript(`
                   (function() {
-                    var btn = Array.from(document.querySelectorAll('button')).find(function(b) {
-                      var t = (b.textContent || '').trim();
-                      return t === 'Follow' || t === 'Follow Back';
+                    function norm(el) {
+                      var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                      var txt = (el.innerText || el.textContent || '');
+                      return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                    }
+                    var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
+                      var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
                     });
                     if (btn) btn.click();
                   })()
@@ -4670,11 +4683,15 @@ export function startEbIpcServer(
                 await new Promise(r => setTimeout(r, 300));
                 const state: any = await sfWin.webContents.executeJavaScript(`
                   (function() {
-                    var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
-                      return (b.textContent || '').trim();
-                    });
-                    var done = btns.some(function(t) { return t === 'Following' || t === 'Requested'; });
-                    var stillFollow = btns.some(function(t) { return t === 'Follow' || t === 'Follow Back'; });
+                    function norm(el) {
+                      var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                      var txt = (el.innerText || el.textContent || '');
+                      return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                    }
+                    var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
+                    var norms = cands.map(norm);
+                    var done        = norms.some(function(n) { return n === 'following' || n === 'requested'; });
+                    var stillFollow = norms.some(function(n) { return n === 'follow' || n === 'follow back'; });
                     return { done: done, stillFollow: stillFollow };
                   })()
                 `, true).catch(() => null);
@@ -4703,8 +4720,10 @@ export function startEbIpcServer(
             try {
               diagInfo = await sfWin.webContents.executeJavaScript(`
                 (function() {
-                  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
-                    return (b.textContent || '').trim().slice(0, 40);
+                  var btns = Array.from(document.querySelectorAll('button, [role="button"]')).map(function(b) {
+                    var lbl = (b.getAttribute('aria-label') || '').trim();
+                    var txt = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').trim();
+                    return (lbl || txt).slice(0, 40);
                   }).filter(function(t) { return t.length > 0; });
                   return JSON.stringify({
                     url:   location.href,
