@@ -2232,6 +2232,48 @@ export class InstagramWebClient {
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"}, claim=${followHeaders["X-IG-WWW-Claim"] ?? "omitted"})`);
 
+    // Pre-follow context sequence — real Instagram app always GETs users/info and
+    // friendships/show before POSTing friendships/create.  A cold follow POST with
+    // no preceding context requests is a strong bot signal.  Non-fatal: if either
+    // GET fails we still attempt the follow.
+    try {
+      const getHeaders = { ...followHeaders };
+      delete (getHeaders as any)["Content-Type"];
+      const _infoT0 = Date.now();
+      const infoRes = await igReq({
+        host: "i.instagram.com",
+        path: `/api/v1/users/${userId}/info/`,
+        method: "GET",
+        headers: getHeaders,
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+        ja3Override: CHROME120_JA3,
+      });
+      if (infoRes.cookies.length) this.mobileCookieJar = mergeCookies(this.mobileCookieJar, infoRes.cookies);
+      this._absorbResponseHeaders(infoRes.responseHeaders);
+      this._logTransport(`/api/v1/users/${userId}/info/`, "GET", Date.now() - _infoT0, infoRes.status >= 400);
+
+      await new Promise<void>(r => setTimeout(r, 400 + Math.floor(Math.random() * 600))); // 0.4–1s between GETs
+
+      const _showT0 = Date.now();
+      const showRes = await igReq({
+        host: "i.instagram.com",
+        path: `/api/v1/friendships/show/${userId}/`,
+        method: "GET",
+        headers: getHeaders,
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+        ja3Override: CHROME120_JA3,
+      });
+      if (showRes.cookies.length) this.mobileCookieJar = mergeCookies(this.mobileCookieJar, showRes.cookies);
+      this._absorbResponseHeaders(showRes.responseHeaders);
+      this._logTransport(`/api/v1/friendships/show/${userId}/`, "GET", Date.now() - _showT0, showRes.status >= 400);
+    } catch (e) {
+      console.warn(`[webClient] follow ${userId}: pre-follow context GETs failed (non-fatal):`, (e as Error)?.message ?? e);
+    }
+    // Real user "looks at" the profile for 2–8 seconds before tapping Follow
+    await new Promise<void>(r => setTimeout(r, 2000 + Math.floor(Math.random() * 6000)));
+
     // Use Chrome 120 JA3 (not OkHttp4/Android) for this write call.
     // Instagram's backend requires a Bearer token for write calls from Android-JA3
     // clients — because real Android apps always carry one.  EB sessions use Chrome

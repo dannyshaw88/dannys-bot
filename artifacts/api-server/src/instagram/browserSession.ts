@@ -7569,13 +7569,29 @@ export async function createInstagramAccountViaEBForm(params: {
       });
     } catch { /* non-fatal */ }
 
-    // synthesizeTapGesture — fires touchstart/touchend/click with pointerType="touch",
-    // identical to a real Android device. No mouse events, no desktop fingerprint.
+    // dispatchTouchEvent — real finger physics: non-zero pressure, elliptical contact
+    // area, slight rotation angle, and a 1–3px wobble via touchMove before lift-off.
+    // synthesizeTapGesture doesn't expose force/radius so we use the lower-level CDP
+    // call instead.  touchStart → touchMove (wobble) → touchEnd [] is the correct CDP
+    // sequence; touchEnd MUST have touchPoints:[] (empty = finger lifted, non-empty is
+    // invalid and causes silent failures that break EB form focus).
     const tap = async (x: number, y: number) => {
       if (!cdp) return;
       try {
-        await cdp.send("Input.synthesizeTapGesture", { x, y, duration: 60, tapCount: 1, gestureSourceType: "touch" });
-        await delay(120);
+        const force         = 0.35 + Math.random() * 0.37;           // 0.35–0.72
+        const radiusX       = 8 + Math.random() * 6;                 // 8–14px
+        const radiusY       = radiusX - 1 + Math.random() * 2;       // slightly elliptical
+        const rotationAngle = Math.random() * 25;                    // 0–25°
+        const touchPoint    = { x, y, radiusX, radiusY, rotationAngle, force, id: 0 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touchPoint] });
+        await delay(40 + Math.floor(Math.random() * 30));            // 40–70ms contact time
+        // Tiny finger wobble (1–3px) via touchMove — stationary taps don't exist on real devices
+        const wobbleX = x + (Math.random() - 0.5) * 2;
+        const wobbleY = y + (Math.random() - 0.5) * 2;
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...touchPoint, x: wobbleX, y: wobbleY }] });
+        // touchEnd MUST be empty: CDP spec — touchPoints:[] means the finger lifted
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await delay(100 + Math.floor(Math.random() * 40));           // 100–140ms post-tap pause
       } catch {}
     };
 
@@ -8198,7 +8214,17 @@ export async function submitSignupCodeViaEB(sessionId: string, code: string): Pr
 
     const tapTouch = async (x: number, y: number) => {
       if (!cdp) return;
-      try { await cdp.send("Input.synthesizeTapGesture", { x, y, duration: 60, tapCount: 1, gestureSourceType: "touch" }); } catch {}
+      try {
+        const force         = 0.35 + Math.random() * 0.37;
+        const radiusX       = 8 + Math.random() * 6;
+        const radiusY       = radiusX - 1 + Math.random() * 2;
+        const rotationAngle = Math.random() * 25;
+        const touchPoint    = { x, y, radiusX, radiusY, rotationAngle, force, id: 0 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touchPoint] });
+        await delay(40 + Math.floor(Math.random() * 30));
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...touchPoint, x: x + (Math.random() - 0.5) * 2, y: y + (Math.random() - 0.5) * 2 }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); // empty = finger lifted
+      } catch {}
       await delay(120);
     };
 
