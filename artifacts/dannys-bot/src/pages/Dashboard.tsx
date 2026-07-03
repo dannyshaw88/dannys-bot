@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.300",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Instagram's 'You've reached your daily limit' screen-time overlay is now automatically dismissed. The overlay previously blocked all browser interaction until manually closed. The embedded browser now detects it the moment Instagram injects it and clicks the × close button automatically, so running accounts are never silently stalled by it.",
+      },
+    ],
+  },
+  {
     version: "1.1.299",
     date: "3 Jul 2026",
     items: [

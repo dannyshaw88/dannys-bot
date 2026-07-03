@@ -476,6 +476,88 @@ const GHOST_MOUSE_BLOCKER_JS = `(function(){
   }
 })();`;
 
+// Auto-dismisses Instagram's "You've reached your daily limit" screen-time overlay.
+// Instagram injects this modal mid-session (no navigation change) — it blocks all
+// interaction until explicitly closed by clicking the × in the top-right corner.
+// The script uses MutationObserver so it fires whenever the overlay is injected,
+// not just at page load.  Multiple click strategies are tried in order so it stays
+// robust as Instagram A/B tests different markup for the dismiss button.
+const DAILY_LIMIT_DISMISSER_JS = `(function(){
+  'use strict';
+  function _tryDismiss(){
+    var b=document.body;
+    if(!b)return;
+    // Fast bail — don't touch the DOM unless the overlay text is present
+    var txt=b.innerText||'';
+    if(txt.indexOf('daily limit')===-1&&txt.indexOf('Daily limit')===-1)return;
+
+    // Strategy 1 — button with a close-like aria-label (most reliable)
+    var btns=document.querySelectorAll('button,[role="button"]');
+    for(var i=0;i<btns.length;i++){
+      var lbl=(btns[i].getAttribute('aria-label')||'').toLowerCase().trim();
+      if(lbl==='close'||lbl==='dismiss'||lbl==='not now'||lbl==='maybe later'){
+        btns[i].click();
+        console.log('[daily-limit-dismisser] clicked close via aria-label="'+lbl+'"');
+        return;
+      }
+    }
+
+    // Strategy 2 — SVG element with aria-label containing "close" or "dismiss"
+    var svgs=document.querySelectorAll('svg[aria-label]');
+    for(var i=0;i<svgs.length;i++){
+      var slbl=(svgs[i].getAttribute('aria-label')||'').toLowerCase();
+      if(slbl.indexOf('close')!==-1||slbl.indexOf('dismiss')!==-1){
+        var t=svgs[i].closest('button,[role="button"]')||svgs[i];
+        t.click();
+        console.log('[daily-limit-dismisser] clicked close via SVG aria-label');
+        return;
+      }
+    }
+
+    // Strategy 3 — find the container holding the overlay text, click its first button
+    // Instagram's daily-limit modal typically has only one interactive element (×).
+    var roots=document.querySelectorAll('[role="dialog"],[role="alertdialog"],section,article,div');
+    for(var i=0;i<roots.length;i++){
+      var r=roots[i];
+      // Only check elements that directly contain the text (not every div)
+      var ownText=(r.childNodes&&Array.from(r.childNodes).map(function(n){return n.textContent||'';}).join(''))||'';
+      if(ownText.indexOf('daily limit')===-1&&ownText.indexOf('Daily limit')===-1)continue;
+      var rb=r.querySelectorAll('button,[role="button"]');
+      if(rb.length>0){
+        rb[0].click();
+        console.log('[daily-limit-dismisser] clicked first button in overlay container');
+        return;
+      }
+    }
+
+    // Strategy 4 — any button whose visible text is a close glyph (×, ✕, ✖, ⨯)
+    for(var i=0;i<btns.length;i++){
+      var tc=(btns[i].textContent||'').trim();
+      if(tc==='×'||tc==='✕'||tc==='✖'||tc==='⨯'||tc==='⊗'){
+        btns[i].click();
+        console.log('[daily-limit-dismisser] clicked × glyph button');
+        return;
+      }
+    }
+  }
+
+  // Run immediately in case modal is already in the DOM when this script executes
+  try{_tryDismiss();}catch(_e){}
+
+  // MutationObserver catches the overlay whenever Instagram injects it mid-session
+  try{
+    var _obs=new MutationObserver(function(){try{_tryDismiss();}catch(_e){}});
+    function _start(){
+      _obs.observe(document.body||document.documentElement,{childList:true,subtree:true});
+    }
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',_start,{once:true});
+    }else{
+      _start();
+    }
+  }catch(_e){}
+})();`;
+
 // Ghost signup mobile fingerprint patch — injected AFTER the main _fpScript so it
 // can override the values the desktop-mode fp script set.
 //
@@ -2428,6 +2510,7 @@ export async function openEbWindow(opts: {
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
+      await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: DAILY_LIMIT_DISMISSER_JS });
     } catch (err) {
       console.warn(`[ebManager:${profileId}] Page/script injection (fire-and-forget) failed:`, err);
     }
@@ -2602,6 +2685,7 @@ export async function openEbWindow(opts: {
     if (win.isDestroyed()) return;
     win.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
     win.webContents.executeJavaScript(_fpScript).catch(() => {});
+    win.webContents.executeJavaScript(DAILY_LIMIT_DISMISSER_JS).catch(() => {});
     // Ghost browser: keep mobile viewport active on every navigation so
     // Instagram always serves the mobile UI, even during manual browsing.
     if (isGhostBrowser) {
