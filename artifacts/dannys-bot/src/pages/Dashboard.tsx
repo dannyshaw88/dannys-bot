@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.307",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Browser-follows were still timing out even after the 90 s IPC timeout increase. Root cause: the page load (loadURL) was waiting for ALL sub-resources to finish loading — through a slow proxy, Instagram's CDN scripts and images can take over 90 s. Fixed by capping the page load wait at 30 s and proceeding regardless. The Follow button is in the initial HTML, not in lazy CDN assets, so the button poll works correctly as soon as the main DOM is ready.",
+      },
+      {
+        category: "Fix",
+        text: "The concurrency gate was causing new timeouts by blocking inside the IPC handler. When both slots were occupied, the third follow request would wait up to 60 s for a slot and then need another 60 s for its own follow — exceeding the 90 s budget. Gate is now non-blocking: if both slots are occupied the request returns immediately and the engine retries on the next session cycle (125–250 s later).",
+      },
+      {
+        category: "Improved",
+        text: "The 'CSV Export Timezone' setting in Settings → Data has been renamed to 'Display Timezone' and now applies to all timestamps across the app — the activity log, CSV exports, and all other time displays. Toggle 'Use PC's Local Time' on to see your PC's local clock time; off shows server UTC.",
+      },
+    ],
+  },
+  {
     version: "1.1.306",
     date: "3 Jul 2026",
     items: [
@@ -9397,10 +9415,30 @@ export function Dashboard() {
   const lastSessionIdRef = useRef<number>(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logMaxRowsRef = useRef<number>(2000);
-  const { data: globalSettings } = useQuery<{ logMaxRows?: number }>({ queryKey: ["/api/settings"] });
+  const { data: globalSettings } = useQuery<{ logMaxRows?: number; useLocalTime?: boolean }>({ queryKey: ["/api/settings"] });
   useEffect(() => {
     if (globalSettings?.logMaxRows != null) logMaxRowsRef.current = globalSettings.logMaxRows;
   }, [globalSettings]);
+  // useLocalTime defaults true so timestamps show PC local time unless the user
+  // explicitly turns off "Display Timezone → Use PC's Local Time" in Settings.
+  const _useLocal = globalSettings?.useLocalTime !== false;
+  const fmtTs = (ts: number, forExport = false): string => {
+    const d = new Date(ts);
+    if (_useLocal) {
+      return forExport ? format(d, "yyyy-MM-dd HH:mm:ss") : format(d, "MMM d yyyy, HH:mm:ss");
+    }
+    const Y = d.getUTCFullYear();
+    const Mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
+    const h = String(d.getUTCHours()).padStart(2,"0");
+    const mi = String(d.getUTCMinutes()).padStart(2,"0");
+    const s = String(d.getUTCSeconds()).padStart(2,"0");
+    if (forExport) {
+      const Mo2 = String(d.getUTCMonth()+1).padStart(2,"0");
+      const D2 = String(d.getUTCDate()).padStart(2,"0");
+      return `${Y}-${Mo2}-${D2} ${h}:${mi}:${s}`;
+    }
+    return `${Mo} ${d.getUTCDate()} ${Y}, ${h}:${mi}:${s} UTC`;
+  };
   const [feedPage, setFeedPage] = useState(0);
   const [feedJumpOpen, setFeedJumpOpen] = useState(false);
   useEffect(() => { setFeedPage(0); setFeedJumpOpen(false); }, [apiLogSearch, selectedProfileId, showOnlyErrors, clearedAt]);
@@ -9538,7 +9576,7 @@ export function Dashboard() {
           if (col === "event") return "Profile Import";
           if (col === "target") return imp.fileName;
           if (col === "detail") return `${imp.created} created, ${imp.updated} updated, ${imp.failed} failed`;
-          return format(new Date(imp.ts), "yyyy-MM-dd HH:mm:ss");
+          return fmtTs(imp.ts, true);
         });
       }
       const label = getUsername(item.profileId, item.profileLabel);
@@ -9550,7 +9588,7 @@ export function Dashboard() {
         }
         if (col === "target") return item.targetUsername ? `@${item.targetUsername}` : "";
         if (col === "detail") return item.detail ?? "";
-        return format(new Date(item.ts), "yyyy-MM-dd HH:mm:ss");
+        return fmtTs(item.ts, true);
       });
     });
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
@@ -9900,14 +9938,14 @@ export function Dashboard() {
                           if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Profile Import</span></td>;
                           if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate text-center" title={imp.fileName}>{imp.fileName}</td>;
                           if (col === "detail") return <td key={col} className="px-3 py-3 text-xs truncate"><span className="flex items-center gap-2">{imp.created > 0 && <span className="font-semibold text-emerald-600">{imp.created} created</span>}{imp.updated > 0 && <span className="font-semibold text-blue-600">{imp.updated} updated</span>}{imp.failed > 0 && <span className="font-semibold text-destructive">{imp.failed} failed</span>}</span></td>;
-                          return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(imp.ts), "MMM d yyyy, HH:mm:ss")}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
+                          return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{fmtTs(imp.ts)}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
                         if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
                         if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
                         if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-foreground/80 truncate text-center" title={item.targetUsername || undefined}>{item.targetUsername ? `@${item.targetUsername}` : " "}</td>;
                         if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>{item.detail || " "}</td>;
-                        return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span></span></td>;
+                        return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{fmtTs(item.ts)}</span></span></td>;
                       };
 
                       const rowCls = item.kind === "import"

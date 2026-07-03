@@ -1302,17 +1302,17 @@ export function SettingsPage() {
 
 
 
-        {/* CSV Export Timezone */}
+        {/* Display Timezone */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "data" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-cyan-100 text-cyan-600">
               <RefreshCw className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-semibold">CSV Export Timezone</h3>
+            <h3 className="text-base font-semibold">Display Timezone</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            When enabled, exported timestamps are automatically converted to your PC's local time.
-            The timezone is detected from your browser no manual offset needed.
+            Controls how timestamps are shown across the entire app — activity log, CSV exports, and all other time displays.
+            The timezone is detected automatically from your browser, no manual offset needed.
           </p>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1320,7 +1320,7 @@ export function SettingsPage() {
                 Use PC's Local Time
               </Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Timestamps in exported CSV files will match your local clock instead of server UTC.
+                All timestamps show your local clock time. When off, timestamps show server UTC.
               </p>
             </div>
             <Switch

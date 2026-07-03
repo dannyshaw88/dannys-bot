@@ -197,20 +197,15 @@ let _cookiesDir  = "";
 let _iconPath    = "";
 
 // ── Silent-follow concurrency gate ─────────────────────────────────────────
-// At most 2 hidden follow-windows open simultaneously.  Extra calls queue and
-// wait so they don't compete for CPU/proxy bandwidth and blow the 90 s IPC
-// timeout.  Each window is destroyed immediately after use so slots free fast.
+// At most 2 hidden follow-windows open simultaneously.  If the limit is reached
+// the IPC call returns immediately so the caller isn't blocked waiting inside
+// the 90 s timeout budget.  The engine retries on its next session cycle
+// (125–250 s later).  Each window is destroyed immediately after use so slots
+// free fast.
 let _sfActive = 0;
 const _SF_MAX  = 2;
-const _sfWaiters: Array<() => void> = [];
-function _sfAcquire(): Promise<void> {
-  if (_sfActive < _SF_MAX) { _sfActive++; return Promise.resolve(); }
-  return new Promise(resolve => _sfWaiters.push(() => { _sfActive++; resolve(); }));
-}
 function _sfRelease(): void {
   _sfActive = Math.max(0, _sfActive - 1);
-  const next = _sfWaiters.shift();
-  if (next) next();
 }
 // Bumped every time a ghost-signup starts OR the ghost browser is closed/reset.
 // Each ghost-signup async block captures its own token at start and checks it
@@ -4599,12 +4594,16 @@ export function startEbIpcServer(
         const targetUsername: string = (body.targetUsername ?? "").trim();
         if (!pid || !targetUsername) return send(res, 400, { error: "profileId and targetUsername required" });
 
-        // Wait for a concurrency slot before opening a BrowserWindow.
-        // Without this, N simultaneous follow calls spawn N Chrome processes that
-        // compete for proxy bandwidth and CPU — each slowing the others until all
-        // hit the IPC timeout.
-        await _sfAcquire();
-        console.log(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX}) queued=${_sfWaiters.length}`);
+        // Concurrency gate — non-blocking.
+        // If both slots are occupied, return immediately so this IPC call completes
+        // fast and does not burn into the 90 s timeout budget while waiting.
+        // The engine will retry this follow on its next session cycle (125–250 s later).
+        if (_sfActive >= _SF_MAX) {
+          console.log(`[eb:silent-follow:${pid}] concurrency limit (active=${_sfActive}/${_SF_MAX}) — returning retry-next-cycle`);
+          return send(res, 200, { ok: false, status: "follow_blocked", reason: "concurrent-limit — will retry automatically next cycle" });
+        }
+        _sfActive++;
+        console.log(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX})`);
 
         // Fetch proxy + UA from the API server (same endpoint used by the normal EB open).
         let sfProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
@@ -4725,8 +4724,22 @@ export function startEbIpcServer(
           const _sfT0 = Date.now();
           console.log(`[eb:silent-follow:${pid}] loadURL start at T+0ms`);
           let sfNavError: Error | null = null;
-          await sfWin.webContents.loadURL(profileUrl).catch((e: Error) => { sfNavError = e; });
-          console.log(`[eb:silent-follow:${pid}] loadURL done in ${Date.now() - _sfT0}ms`);
+          // Race loadURL against a 30 s hard cap.
+          // loadURL waits for did-finish-load (ALL sub-resources including CDN JS/images).
+          // Through a slow proxy the CDN resources alone can take >60 s, but the Follow
+          // button is in the initial HTML DOM — not in lazy-loaded assets — so we proceed
+          // as soon as the cap fires and let the button-poll determine if the page is usable.
+          const _sfLoadResult = await Promise.race([
+            sfWin.webContents.loadURL(profileUrl)
+              .then(() => "ok" as const)
+              .catch((e: Error) => { sfNavError = e; return "err" as const; }),
+            new Promise<"timeout">(r => setTimeout(() => r("timeout"), 30_000)),
+          ]);
+          if (_sfLoadResult === "timeout") {
+            console.warn(`[eb:silent-follow:${pid}] loadURL hit 30 s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
+          } else {
+            console.log(`[eb:silent-follow:${pid}] loadURL ${_sfLoadResult} in ${Date.now() - _sfT0}ms`);
+          }
           if (sfNavError) {
             const msg = (sfNavError as Error).message ?? String(sfNavError);
             console.warn(`[eb:silent-follow:${pid}] loadURL failed — ${msg}`);
