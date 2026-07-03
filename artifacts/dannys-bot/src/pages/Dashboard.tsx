@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.303",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Diagnostic",
+        text: "Heavy logging added for the browser-logout issue. The logs now show: the exact URL the EB was on before Instagram redirected it to login, every URL hop made by the hidden follow window, the final landing URL of every follow attempt, and the main EB's current URL immediately after — so the next log will show exactly what is causing the logout.",
+      },
+    ],
+  },
+  {
     version: "1.1.302",
     date: "3 Jul 2026",
     items: [

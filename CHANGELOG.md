@@ -4,6 +4,21 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.303] — 2026-07-03
+
+### Added
+
+#### Heavy diagnostic logging for browser session logout (`ebManager.ts`)
+
+- **`[eb-session-dead:ID]`** — the session-death handler now tracks the last URL the EB was on *before* the login redirect and logs it alongside the login URL, exact timestamp, and partition name. Makes it possible to see what page triggered the logout.
+- **CookieCheck login-page guard** — if the EB is already on the login page when a CookieCheck cycle fires, it now logs `detect=LOGIN-PAGE` with a loud warning instead of silently breaking on the banner check.
+- **Silent-follow navigation chain** — `did-navigate` and `did-redirect-navigation` listeners on the hidden follow window log every URL hop so the full redirect chain from profile → wherever Instagram sends it is visible in the log.
+- **Silent-follow START line** — logs partition name, target username, and profile URL before `loadURL` fires so the exact moment a follow attempt begins is unambiguous.
+- **Silent-follow landed URL** — always logs the final URL after `loadURL` with `loginPage=true/false`, even on success.
+- **Main-EB URL after follow** — immediately after the temp window lands, logs the *main* EB window's current URL (`main-EB url=…`) so isolation can be confirmed: if the fix is working the main EB must NOT be on the login page even when the temp partition is.
+
+---
+
 ## [1.1.302] — 2026-07-03
 
 ### Fixed

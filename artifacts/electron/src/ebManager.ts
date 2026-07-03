@@ -2421,9 +2421,20 @@ export async function openEbWindow(opts: {
   //   - Subdomain/www:      www.instagram.com/accounts/login
   //   - Mid-redirect chain: will-redirect / did-redirect-navigation fire
   //     before the final did-navigate (we must handle all three so no path slips through)
+  let _lastKnownGoodUrl = ""; // track last non-login URL so we know what page was active before death
   const _detectSessionDeath = (_evt: any, url: string) => {
     if (/instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(url)) {
-      console.warn(`[ebManager:eb-session-dead] @${username} (profile:${profileId}): browser routed to Instagram login page — URL=${url.slice(0, 200)} — server-side session revocation detected. Account needs re-verify.`);
+      console.warn(
+        `[eb-session-dead:${profileId}] ` +
+        `@${username} BROWSER LOGGED OUT ` +
+        `— login redirect detected at ${new Date().toISOString()} ` +
+        `— login URL="${url.slice(0, 200)}" ` +
+        `— prior URL="${_lastKnownGoodUrl.slice(0, 200)}" ` +
+        `— partition=persist:eb-${profileId} ` +
+        `— server-side session revocation; account needs re-verify`
+      );
+    } else if (url.includes("instagram.com")) {
+      _lastKnownGoodUrl = url;
     }
   };
   win.webContents.on("did-navigate", _detectSessionDeath);
@@ -2999,10 +3010,21 @@ export async function openEbWindow(opts: {
         await new Promise(r => setTimeout(r, attempt === 0 ? 2500 : 1500));
         if (win.isDestroyed()) break;
 
+        const _ccUrl = win.webContents.getURL();
+
+        // ── Login-page guard ─────────────────────────────────────────────────
+        // If the EB is on the Instagram login page during a CookieCheck cycle,
+        // the session is already dead — log loudly so it's visible in the log.
+        if (/instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_ccUrl)) {
+          _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 120)}" detect=LOGIN-PAGE — session expired, browser is logged out`);
+          console.warn(`[eb-session-dead:${profileId}] @${username} CookieCheck detected login page — session is dead at CookieCheck#${attempt + 1}, url="${_ccUrl.slice(0, 200)}"`);
+          break;
+        }
+
         const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
           { x: number; y: number; label: string } | null;
 
-        _ebLog(`CookieCheck#${attempt + 1} url="${win.webContents.getURL().slice(0, 80)}" detect=${pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner"}`);
+        _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 80)}" detect=${pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner"}`);
 
         if (!pos) break; // banner gone (or never appeared) — stop
 
@@ -4602,9 +4624,19 @@ export function startEbIpcServer(
         try {
           if (sfUA) sfWin.webContents.setUserAgent(sfUA);
 
+          // ── Navigation chain diagnostic ───────────────────────────────────────
+          // Log every URL the hidden window visits so we can see exactly where
+          // Instagram redirects (profile → login, profile → onetap, etc.).
+          sfWin.webContents.on("did-navigate", (_e: any, navUrl: string, httpCode: number) => {
+            console.log(`[eb:silent-follow:${pid}] did-navigate → ${navUrl.slice(0, 200)} [HTTP ${httpCode}]`);
+          });
+          sfWin.webContents.on("did-redirect-navigation", (_e: any, url: string, isInPlace: boolean, isMainFrame: boolean, frameId: number, requestId: number, initiatorPol?: any) => {
+            console.log(`[eb:silent-follow:${pid}] redirect → ${url.slice(0, 200)}`);
+          });
+
           // Navigate directly to the target's profile page.
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
-          console.log(`[eb:silent-follow:${pid}] navigating → ${profileUrl}`);
+          console.log(`[eb:silent-follow:${pid}] START partition=${sfTempPartition} target=@${targetUsername} url=${profileUrl}`);
           await sfWin.webContents.loadURL(profileUrl).catch(() => {});
 
           // ── Login-wall check — detect session expiry immediately ──────────────
@@ -4617,8 +4649,25 @@ export function startEbIpcServer(
           const isLoginPage = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(landedUrl)
             || landedUrl.includes("/accounts/onetap/")
             || landedUrl.includes("/accounts/suspended/");
+
+          // Always log the final landing URL so we can see where Instagram sent us.
+          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginPage=${isLoginPage}`);
+
+          // Also log the main EB partition's current URL — if the fix is working,
+          // this must NOT be a login page even when isLoginPage=true above.
+          try {
+            const mainSesCheck = electronSession.fromPartition(`persist:eb-${pid}`);
+            // We can't get a window URL from the session directly — look up the
+            // entry in ebMap to read the live BrowserWindow URL instead.
+            const mainEntry = ebMap.get(pid);
+            const mainUrl = (mainEntry && !mainEntry.win.isDestroyed())
+              ? mainEntry.win.webContents.getURL()
+              : "(main EB not open)";
+            console.log(`[eb:silent-follow:${pid}] main-EB url="${mainUrl.slice(0, 200)}" — should NOT be login page if isolation is working`);
+          } catch { /* non-fatal */ }
+
           if (isLoginPage) {
-            console.warn(`[eb:silent-follow:${pid}] session expired — browser redirected to login page (${landedUrl.slice(0, 120)}). Account needs re-verify.`);
+            console.warn(`[eb:silent-follow:${pid}] SESSION EXPIRED — temp partition was logged out before follow attempt. Temp partition="${sfTempPartition}". Account needs re-verify.`);
             sfWin.destroy();
             return send(res, 200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
           }
