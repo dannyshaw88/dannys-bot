@@ -3990,125 +3990,36 @@ function setupToolbarIpc(): void {
       }
 
       case "totp": {
-        // Fill the TOTP code into the OTP input via CDP (isTrusted = true).
-        // The old approach used JS setter.call + dispatchEvent — all isTrusted=false,
-        // identical to the bot signal the login form fix addressed.
+        // 2FA toolbar button macro.
+        // The 2FA input field is already selected/focused by default, so:
+        //   generate TOTP ("Generate Code" from account settings 2FA section)
+        //   → paste code into browser (Input.insertText)
+        //   → Tab × 4 → Enter
         try {
-          // TAB TAB first — moves focus from wherever it was (nav bar, cookie button, etc.)
-          // into the 2FA code field area before the automation searches for and taps it.
           try { wc.debugger.attach("1.3"); } catch {}
-          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-          await new Promise<void>(r => setTimeout(r, 60));
-          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-          await new Promise<void>(r => setTimeout(r, 150));
-          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-          await new Promise<void>(r => setTimeout(r, 60));
-          await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-          await new Promise<void>(r => setTimeout(r, 300));
-
-          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
-          const p = await r.json() as any;
-          const key = (p.twoFASecretKey ?? "").trim();
-          if (key) {
-            const code = generateTotp(key);
+          const _r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
+          const _p = await _r.json() as any;
+          const _key = (_p.twoFASecretKey ?? "").trim();
+          if (_key) {
+            const _code = generateTotp(_key);
             const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
             const _d = wc.debugger;
 
-            // Step 1: find the OTP input centre via JS (read-only — no events fired here)
-            const _OTP_SELS = [
-              'input[autocomplete="one-time-code"]',
-              'input[name="verificationCode"]',
-              'input[name="verification_code"]',
-              'input[name="security_code"]',
-              'input[name="totp_code"]',
-              'input[name="code"]',
-              'input[inputmode="numeric"]',
-              'input[inputmode="numeric"][maxlength="6"]',
-              'input[maxlength="6"]',
-              'input[aria-label*="security" i]',
-              'input[aria-label*="code" i]',
-              'input[aria-label*="verif" i]',
-              'input[aria-label*="authenticat" i]',
-              'input[type="tel"][maxlength="6"]',
-              'input[data-testid*="verification" i]',
-              'input[data-testid*="code" i]',
-            ].join(",");
-            // Bring the EB window to front before CDP tap (same OS-focus fix as login).
-            foundWin.focus();
-            await new Promise<void>(r => setTimeout(r, 120));
-            // Retry loop: Instagram's 2FA page may take a moment to render the input.
-            let totpPos: { x: number; y: number } | null = null;
-            for (let _ti = 0; _ti < 10 && !totpPos; _ti++) {
-              totpPos = await wc.executeJavaScript(`(function(){
-                var SELS=${JSON.stringify(_OTP_SELS)};
-                var el=document.querySelector(SELS)||null;
-                if(!el){
-                  // Broad fallback: any visible input that isn't username/password/email.
-                  // If exactly one such input exists on the page, that must be the code field.
-                  var all=Array.from(document.querySelectorAll('input'));
-                  var visible=all.filter(function(i){
-                    if(i.type==='password'||i.type==='email'||i.name==='username'||i.name==='password')return false;
-                    var r=i.getBoundingClientRect();
-                    return r.width>0&&r.height>0;
-                  });
-                  if(visible.length===1){el=visible[0];}
-                  else{el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+' '+i.id+' '+i.placeholder);});}
-                  if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
-                }
-                if(!el||el.tagName!=='INPUT')return null;
-                var r=el.getBoundingClientRect();
-                if(r.width<=0||r.height<=0)return null;
-                return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
-              })()`).catch(() => null) as { x: number; y: number } | null;
-              if (!totpPos) await _ms(500);
-            }
+            // Paste the generated code into the already-focused 2FA input
+            await _d.sendCommand("Input.insertText", { text: _code });
+            await _ms(200);
 
-            if (totpPos) {
-              // Step 2: touch tap to focus the field
-              await cdpTapGesture(_d, totpPos.x, totpPos.y);
+            // Tab × 4 → Enter (submit 2FA form)
+            for (let _ti = 0; _ti < 4; _ti++) {
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
               await _ms(120);
-
-              // Step 3: type each digit via typeTextCDP (isTrusted=true, human timing)
-              // Wider 50–230ms range with occasional longer pauses — humans glance
-              // back at the authenticator app between digits, so timing is uneven.
-              await typeTextCDP(_d, code, { minDelay: 200, maxDelay: 600 });
-
-              // TAB TAB — advance focus out of the OTP field so the submit button
-              // becomes active before we go looking for it.
-              await _ms(150);
-              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-              await _ms(150);
-              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-              await _ms(60);
-              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-
-              // Natural pause: a real person reads the code, checks it looks right,
-              // then moves to click Submit. 700–1500ms is the realistic human range.
-              await _ms(700 + Math.floor(Math.random() * 800));
-
-              // Step 4: find + click the submit/confirm/continue button via CDP
-              for (let _bi = 0; _bi < 16; _bi++) {
-                const _bp = await wc.executeJavaScript(`(function(){
-                  var SUBMIT=['confirm','continue','submit','verify','next','done','ok'];
-                  var btns=Array.from(document.querySelectorAll('button[type="submit"],button,[role="button"]'));
-                  for(var i=0;i<btns.length;i++){
-                    var t=(btns[i].innerText||btns[i].textContent||'').trim().toLowerCase();
-                    var rc=btns[i].getBoundingClientRect();
-                    if(rc.width>0&&rc.height>0&&SUBMIT.some(function(s){return t.indexOf(s)!==-1;})){
-                      return{x:Math.round(rc.left+rc.width/2),y:Math.round(rc.top+rc.height/2)};
-                    }
-                  }
-                  return null;
-                })()`).catch(() => null) as { x: number; y: number } | null;
-                if (_bp) {
-                  await cdpTapGesture(_d, _bp.x, _bp.y);
-                  break;
-                }
-                await _ms(200);
-              }
             }
+            await _ms(200);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
           }
         } catch {}
         break;
