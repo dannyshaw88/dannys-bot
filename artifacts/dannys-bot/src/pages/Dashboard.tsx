@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.308",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Found and fixed the bug behind accounts getting logged out / suspended during browser-follows. If a follow attempt got stuck (slow proxy, a hung page), the hidden browser window could keep running in the background even after the app had already given up and moved on to the next follow — leaving more than one browser open on the same account at once, which looks suspicious to Instagram. The app now force-closes any follow attempt that runs too long, so this can no longer happen.",
+      },
+      {
+        category: "Fix",
+        text: "Browser-follows now recognise Instagram's 'suspicious activity' / security-checkpoint screens. Previously the app couldn't tell a checkpoint apart from a normal 'button not found' hiccup and just kept sending more follows at the same account. Now, as soon as a checkpoint is detected the account is paused and flagged for review in the embedded browser instead of continuing to act on it.",
+      },
+    ],
+  },
+  {
     version: "1.1.307",
     date: "3 Jul 2026",
     items: [

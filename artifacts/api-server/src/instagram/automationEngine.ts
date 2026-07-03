@@ -4308,6 +4308,21 @@ class AutomationEngine {
         hitHardLimit = true; break;
       }
 
+      // Browser-follow reports "checkpoint_detected" when the hidden window landed on an
+      // Instagram checkpoint / suspicious-activity page rather than the target's profile.
+      // Previously this had no distinct status and fell through as a generic "follow_blocked"
+      // "Follow button not found" skip — the session then kept queuing MORE follow attempts
+      // against an account Instagram had already flagged mid-session. Continuing automated
+      // actions on a flagged account through an active challenge is what escalates a soft
+      // checkpoint into a full suspension. Treat it the same as checkpoint_required: stop
+      // the session immediately and require manual review via the embedded browser.
+      if (result.status === "checkpoint_detected") {
+        console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow on @${user.username} — halting session, setting status to captcha`);
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", "Instagram checkpoint/suspicious-activity page detected — complete review in embedded browser");
+        await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow — complete review in embedded browser" });
+        hitHardLimit = true; break;
+      }
+
       if (result.status === "user_not_found") {
         const reason = result.reason ?? `user ${user.username} not found (404)`;
         console.warn(`[engine] @${profile.username}: follow skipped @${user.username} — deleted/non-existent user (404)`);
@@ -4552,6 +4567,16 @@ class AutomationEngine {
           }
           if (result.status === "checkpoint_required") {
             await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / security challenge required — complete in embedded browser" });
+            hitHardLimit = true; break;
+          }
+          // See the primary-round handler above for the full rationale: a browser-follow
+          // that lands on an IG checkpoint/suspicious-activity page must halt the session
+          // immediately rather than being treated as a generic "button not found" skip,
+          // or the re-scrape loop keeps hammering an already-flagged account.
+          if (result.status === "checkpoint_detected") {
+            console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow (rescrape) on @${user.username} — halting session, setting status to captcha`);
+            this.logAction(profile.id, tool.id, "follow_blocked", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", "Instagram checkpoint/suspicious-activity page detected — complete review in embedded browser");
+            await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow — complete review in embedded browser" });
             hitHardLimit = true; break;
           }
           if (result.status === "follow_blocked") {

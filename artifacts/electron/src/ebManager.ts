@@ -4605,6 +4605,36 @@ export function startEbIpcServer(
         _sfActive++;
         console.log(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX})`);
 
+        // ── Server-side watchdog ──────────────────────────────────────────────
+        // The caller (automationEngine) aborts its fetch after 90 s via
+        // AbortSignal.timeout(90_000), but an aborted client-side fetch does NOT
+        // cancel this handler — Node keeps running it to completion. If any step
+        // below hangs past 90 s (slow proxy, stuck executeJavaScript, a
+        // checkpoint page that never resolves), the hidden BrowserWindow and its
+        // isolated session partition stay alive indefinitely. The engine then
+        // moves on to the NEXT follow target while this zombie window keeps
+        // holding a live IG session open and can still fire real requests in the
+        // background — multiple overlapping windows hitting Instagram from the
+        // same account is a classic automation-detection trigger and was traced
+        // as a likely contributor to at least one account suspension.
+        // This watchdog forces cleanup at 80 s (before the caller's 90 s abort)
+        // so no window ever survives past the point the engine has given up on it.
+        let sfSettled = false;
+        const sfWatchdog = setTimeout(() => {
+          if (sfSettled) return;
+          sfSettled = true;
+          console.error(`[eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, forcing window destroy + slot release to prevent a zombie session`);
+          try { sfWin.destroy(); } catch {}
+          _sfRelease();
+          try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — forced cleanup after 80s, likely a stuck page" }); } catch {}
+        }, 80_000);
+        const sfRespond = (status: number, payload: any) => {
+          if (sfSettled) return;
+          sfSettled = true;
+          clearTimeout(sfWatchdog);
+          send(res, status, payload);
+        };
+
         // Fetch proxy + UA from the API server (same endpoint used by the normal EB open).
         let sfProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
         let sfUA: string | undefined;
@@ -4744,7 +4774,7 @@ export function startEbIpcServer(
             const msg = (sfNavError as Error).message ?? String(sfNavError);
             console.warn(`[eb:silent-follow:${pid}] loadURL failed — ${msg}`);
             sfWin.destroy();
-            return send(res, 200, { ok: false, status: "follow_blocked", reason: `Browser navigation failed: ${msg}` });
+            return sfRespond(200, { ok: false, status: "follow_blocked", reason: `Browser navigation failed: ${msg}` });
           }
 
           // ── Login-wall detection — URL + DOM ──────────────────────────────────
@@ -4780,8 +4810,43 @@ export function startEbIpcServer(
 
           const isLoginPage = isLoginUrl || isLoginDom;
 
+          // ── Checkpoint / suspicious-activity detection ────────────────────────
+          // Distinct from a login wall: Instagram can also show a "We suspect
+          // automated behaviour" / "Help us confirm it's you" checkpoint while
+          // the session cookie is still perfectly valid. Previously this fell
+          // through to the generic 20 s Follow-button poll, which always timed
+          // out and was logged identically to a normal "button not found" case.
+          // The engine had no way to tell the two apart, so it kept sending
+          // more follow attempts at an account Instagram had already flagged —
+          // continuing to act on a flagged account through a challenge is what
+          // turns a checkpoint into a full suspension. Detect it explicitly so
+          // the engine can stop hitting this account instead of retrying blind.
+          const isCheckpointPage: boolean = isLoginPage ? false : await sfWin.webContents.executeJavaScript(`
+            (function() {
+              var url = location.href.toLowerCase();
+              if (url.includes('/challenge/') || url.includes('/accounts/suspicious')) return true;
+              var bodyText = (document.body ? document.body.innerText : '').toLowerCase();
+              var markers = [
+                'we suspect automated behavior',
+                'we detected unusual activity',
+                'confirm it\\'s you',
+                'help us confirm',
+                'suspicious activity',
+                'action blocked',
+                'try again later',
+              ];
+              return markers.some(function(m) { return bodyText.indexOf(m) !== -1; });
+            })()
+          `, true).catch(() => false);
+
+          if (isCheckpointPage) {
+            console.warn(`[eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}". Stopping immediately instead of polling for the Follow button; account needs manual review before further automated actions.`);
+            sfWin.destroy();
+            return sfRespond(200, { ok: false, status: "checkpoint_detected", reason: "Instagram checkpoint/suspicious-activity page shown — halt further automation on this account until manually reviewed" });
+          }
+
           // Always log the final landing URL + detection result.
-          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom}`);
+          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom} checkpoint=${isCheckpointPage}`);
 
           // Also log the main EB's current URL to confirm isolation is working.
           try {
@@ -4796,7 +4861,7 @@ export function startEbIpcServer(
             const reason = isLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
             console.warn(`[eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Temp partition="${sfTempPartition}". Account needs re-verify.`);
             sfWin.destroy();
-            return send(res, 200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
+            return sfRespond(200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
           }
 
           // Poll for the Follow button (Instagram renders async via React).
@@ -4939,11 +5004,11 @@ export function startEbIpcServer(
 
             console.log(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
             sfWin.destroy();
-            return send(res, 200, { ok: true });
+            return sfRespond(200, { ok: true });
           } else if (btnInfo?.alreadyFollowing) {
             console.log(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
             sfWin.destroy();
-            return send(res, 200, { ok: true, status: "already_following", reason: "Already following" });
+            return sfRespond(200, { ok: true, status: "already_following", reason: "Already following" });
           } else {
             // ── Diagnostic: collect page state before destroying the window ──────────
             let diagInfo = "(diagnostic failed)";
@@ -4986,14 +5051,18 @@ export function startEbIpcServer(
             }
 
             sfWin.destroy();
-            return send(res, 200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
+            return sfRespond(200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
           }
         } catch (sfErr: any) {
           try { sfWin.destroy(); } catch {}
           console.error(`[eb:silent-follow:${pid}] error: ${sfErr?.message}`);
-          return send(res, 200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
+          return sfRespond(200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
         } finally {
-          // Always release the concurrency slot so the next queued follow can run.
+          // Always release the concurrency slot so the next queued follow can run,
+          // and cancel the watchdog if it hasn't already fired. Both _sfRelease()
+          // and the watchdog's own release are idempotent (Math.max(0, ...)), so
+          // it's safe if the watchdog already ran first.
+          clearTimeout(sfWatchdog);
           _sfRelease();
           console.log(`[eb:silent-follow:${pid}] slot released (active=${_sfActive}/${_SF_MAX})`);
         }
