@@ -154,6 +154,52 @@ async function logApiCall(
   } catch { /* never crash on logging failure */ }
 }
 
+// ── Pigeon event payload builder ─────────────────────────────────────────────
+// Builds a realistic analytics_events payload for the /api/v1/analytics/log/
+// endpoint.  A real Instagram Android app sends 2–4 Pigeon events with every
+// analytics/log call — the X-Pigeon-Session-Id and X-Pigeon-Rawclienttime
+// headers without any accompanying events is a known automation fingerprint.
+// Events are back-dated 0.5–3 s relative to now to match how the real app
+// batches events that fired earlier in the session.
+function buildPigeonAnalyticsEvents(): string {
+  const now = Date.now() / 1000;
+  const events = [
+    // App came to foreground (fired at session start)
+    {
+      event_name: "app_lifecycle_change_state",
+      extra: JSON.stringify({ state: "active", previous_state: "background" }),
+      time: +(now - 2.8 - Math.random() * 0.5).toFixed(3),
+    },
+    // User landed on the home feed tab
+    {
+      event_name: "navigation",
+      extra: JSON.stringify({
+        nav_to:   "MainFeedFragment",
+        nav_from: "IG_LAUNCH",
+        tab_type: "home",
+      }),
+      time: +(now - 1.9 - Math.random() * 0.4).toFixed(3),
+    },
+    // First feed impression recorded
+    {
+      event_name: "instagram_organic_viewed_impression_v2",
+      extra: JSON.stringify({
+        module:     "feed_timeline",
+        position:   0,
+        media_type: 1,
+      }),
+      time: +(now - 1.1 - Math.random() * 0.3).toFixed(3),
+    },
+    // Session keep-alive heartbeat
+    {
+      event_name: "session_heartbeat",
+      extra: JSON.stringify({ elapsed_s: Math.floor(2 + Math.random() * 4) }),
+      time: +(now - 0.4 - Math.random() * 0.2).toFixed(3),
+    },
+  ];
+  return JSON.stringify(events);
+}
+
 // ── Random post-login endpoint pool ─────────────────────────────────────────
 // Each entry fires one non-destructive read-only API call that a real Instagram
 // Android session would plausibly make after logging in.  No IDs required.
@@ -170,7 +216,7 @@ const RANDOM_LOGIN_ENDPOINT_POOL: Array<{ name: string; fn: (ig: IgApiClient) =>
   { name: "GetPendingInbox",           fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/direct_v2/pending_inbox/", method: "GET" }); } },
   { name: "AnalyticsLog",              fn: async (ig) => {
-      await ig.request.send({ url: "/api/v1/analytics/log/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, analytics_events: "[]" }) }); } },
+      await ig.request.send({ url: "/api/v1/analytics/log/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid, analytics_events: buildPigeonAnalyticsEvents() }) }); } },
   // FIXED: was /attribution/launch_point/ (404) — correct endpoint is /attribution/launch/
   { name: "AttributionLaunch",         fn: async (ig) => {
       await ig.request.send({ url: "/api/v1/attribution/launch/", method: "POST", form: ig.request.sign({ _csrftoken: ig.state.cookieCsrfToken, _uuid: ig.state.uuid }) }); } },

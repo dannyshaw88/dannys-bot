@@ -465,6 +465,16 @@ export class InstagramWebClient {
   // A real Instagram app generates this once at launch and reuses it on every
   // request. Regenerating a new UUID per-call was a detectable bot signal.
   private _pigeonSessionId: string = randomUUID();
+  // Nav-chain header — tracks the logical screen sequence for X-IG-Nav-Chain.
+  // A real Android app sends this on every API call showing how the user
+  // navigated to the current screen. Omitting it post-login is a detectable
+  // automation fingerprint. Timestamp is stable for the session duration.
+  private _navChainTs: string = (Date.now() / 1000).toFixed(3);
+  private _navChainScreen: "home" | "profile" | "explore" | "reels" = "home";
+  // Connection-type personality — WIFI or LTE-Advanced, stable per account.
+  // Derived once from igDid (80% WIFI, 20% LTE). Caching avoids repeated JSON
+  // parses; null means not yet resolved.
+  private _connectionType: "WIFI" | "LTE-Advanced" | null = null;
   // Locale derived from the proxy's exit country — resolved in constructor via
   // ip-api.com. Matching locale to the proxy's country removes the mismatch
   // between X-IG-App-Locale and the connecting IP's region (bot signal).
@@ -842,6 +852,12 @@ export class InstagramWebClient {
     this.igDeviceState = igDeviceState ?? undefined;
     this.userAgentApi  = userAgentApi  ?? undefined;
     const newCookies   = igApiCookies  ?? undefined;
+
+    // Eagerly resolve and cache connection-type personality when device info
+    // first arrives — ensures it's stable before any mobile API call is made.
+    if (this._connectionType === null) {
+      this._getConnectionType();
+    }
 
     // Track the sessionid portion of igApiCookies so we know when Instagram
     // rotates it.  When rotation is detected we preserve the existing cached
@@ -1742,6 +1758,60 @@ export class InstagramWebClient {
     return res.json;
   }
 
+  // Returns a stable X-IG-Nav-Chain header value for the current screen.
+  // Format mirrors what the real Instagram Android app sends: a colon-delimited
+  // chain of "from:to:seq:action:ts::" where the timestamp is seconds.millis.
+  // The chain is initialised to the home feed on client construction and can
+  // be updated via _navChainScreen before specific actions.
+  private _buildNavChainHeader(): string {
+    const screenMap: Record<string, string> = {
+      home:    "com.bloks.www.ig.na.home",
+      profile: "com.bloks.www.ig.na.profile",
+      explore: "com.bloks.www.ig.na.explore",
+      reels:   "com.bloks.www.ig.na.reels",
+    };
+    const from = "com.bloks.www.ig.na.home";
+    const to   = screenMap[this._navChainScreen] ?? from;
+    return `${from}:${to}:1:button:${this._navChainTs}::`;
+  }
+
+  // Returns the stable per-account connection type, derived once from igDid.
+  // The first hex digit of the UUID gives ~19% LTE-Advanced, ~81% WIFI —
+  // close to real Android fleet distribution.
+  // Always caches the result so the type NEVER flips mid-session — even if
+  // igDeviceState arrives late via setDeviceInfo().
+  private _getConnectionType(): "WIFI" | "LTE-Advanced" {
+    if (this._connectionType !== null) return this._connectionType;
+    // Prefer the persisted igDeviceState (most reliable igDid source).
+    if (this.igDeviceState) {
+      try {
+        const s = JSON.parse(this.igDeviceState) as { igDid?: string };
+        if (s.igDid) {
+          const d = parseInt(s.igDid.replace(/-/g, "")[0], 16);
+          this._connectionType = d < 3 ? "LTE-Advanced" : "WIFI";
+          return this._connectionType;
+        }
+      } catch { /* fall through */ }
+    }
+    // Fall back to the in-memory mobile ig_did if set.
+    if (this._mobileIgDid) {
+      const d = parseInt(this._mobileIgDid.replace(/-/g, "")[0], 16);
+      this._connectionType = d < 3 ? "LTE-Advanced" : "WIFI";
+      return this._connectionType;
+    }
+    // No ID available yet — default WIFI and cache so it can't flip later.
+    this._connectionType = "WIFI";
+    return this._connectionType;
+  }
+
+  // Returns a plausible speed in kbps for the given connection type.
+  // WIFI: 8–40 Mbps; LTE-Advanced: 3–25 Mbps.
+  private _getConnectionSpeedKbps(type: "WIFI" | "LTE-Advanced"): number {
+    return type === "LTE-Advanced"
+      ? 3000  + Math.floor(Math.random() * 22000)
+      : 8000  + Math.floor(Math.random() * 32000);
+  }
+
   // Builds the full real-Android Instagram mobile header set for mobileSessionPost
   // and mobileSessionGet.  This matches the headers sent by the verify flow
   // (verifyInstagramCredentials baseHeaders) so every automation call looks
@@ -1773,8 +1843,9 @@ export class InstagramWebClient {
     }
 
     // Bandwidth: real Android never sends -1/0 (those are "not measured" placeholders).
-    // Pick a plausible WiFi range (8–40 Mbps) identical to the verify flow.
-    const bwKbps  = 8000 + Math.floor(Math.random() * 32000);
+    // Use per-account connection type (WIFI or LTE-Advanced) with matching speed ranges.
+    const connType = this._getConnectionType();
+    const bwKbps  = this._getConnectionSpeedKbps(connType);
     const bwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
     const bwMs    = 300 + Math.floor(Math.random() * 2000);
 
@@ -1786,7 +1857,8 @@ export class InstagramWebClient {
       "X-IG-App-ID":                  MOBILE_APP_ID,
       "X-CSRFToken":                  csrf,
       "X-IG-Capabilities":            "3brTvwE=",
-      "X-IG-Connection-Type":         "WIFI",
+      "X-IG-Nav-Chain":               this._buildNavChainHeader(),
+      "X-IG-Connection-Type":         connType,
       "X-IG-Connection-Speed":        `${bwKbps}kbps`,
       "X-IG-Bandwidth-Speed-KBPS":    `${bwKbps}.000`,
       "X-IG-Bandwidth-TotalBytes-B":  String(bwBytes),
@@ -2988,6 +3060,8 @@ export class InstagramWebClient {
 
   async followUser(userId: string, username?: string, sourceLabel?: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
     return this.timed("FollowedUser", async () => {
+      // Nav chain: user navigated Home → Profile before tapping Follow.
+      this._navChainScreen = "profile";
       // Use _followViaMobileSession: correct _buildMobileHeaders (igDid device ID,
       // realistic bandwidth, X-CSRFToken) + HMAC-signed body via signBody().
       // IgApiClient was sending wrong X-IG-Device-ID (uuid instead of igDid),
@@ -3152,6 +3226,8 @@ export class InstagramWebClient {
   // Marks ALL fetched reels as seen (up to count=6).
   async viewReels(userId: string, username?: string): Promise<string | false> {
     return this.timed("ViewReels", async () => {
+      // Nav chain: user navigated Home → Reels tab before viewing clips.
+      this._navChainScreen = "reels";
       // clips/user requires POST
       const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/user/`, body);
@@ -4138,6 +4214,8 @@ export class InstagramWebClient {
   // Returns true on success, "blocked" on Instagram action-block, false otherwise.
   async unfollowUser(userId: string, username?: string): Promise<true | "blocked" | false> {
     return this.timed("UnfollowUser", async () => {
+      // Nav chain: user navigated Home → Profile before tapping Unfollow.
+      this._navChainScreen = "profile";
       // Use igApiCookies mobile session for unfollow — same reason as follow.
       const body = new URLSearchParams({ user_id: userId }).toString();
       const j = await this.mobileSessionPost(`/api/v1/friendships/destroy/${userId}/`, body);
@@ -5051,7 +5129,7 @@ export class InstagramWebClient {
       "X-IG-App-ID": MOBILE_AID,
       "X-CSRFToken": csrf,
       "X-IG-Capabilities": "3brTvwE=",
-      "X-IG-Connection-Type": "WIFI",
+      "X-IG-Connection-Type": this._getConnectionType(),
       Cookie: this.mobileCookieJar.join("; "),
       ...(authorization ? { Authorization: authorization } : {}),
     };
@@ -5180,7 +5258,7 @@ export class InstagramWebClient {
       "X-IG-App-ID": MOBILE_AID,
       "X-CSRFToken": csrf,
       "X-IG-Capabilities": "3brTvwE=",
-      "X-IG-Connection-Type": "WIFI",
+      "X-IG-Connection-Type": this._getConnectionType(),
       Cookie: this.mobileCookieJar.join("; "),
       ...(authorization ? { Authorization: authorization } : {}),
     };
@@ -6139,6 +6217,8 @@ export class InstagramWebClient {
   // Search/Explore tab in the app), simulating natural discovery browsing.
   async visitExplorePage(scrollCount: number): Promise<Array<{ mediaId: string; shortcode: string; username: string; userId: string }>> {
     return this.timed("VisitExplorePage", async () => {
+      // Nav chain: user navigated Home → Explore tab.
+      this._navChainScreen = "explore";
       const items: Array<{ mediaId: string; shortcode: string; username: string; userId: string }> = [];
       try {
         // Primary endpoint: topical explore (Search & Explore tab)
@@ -6353,12 +6433,20 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTvwE=",
-    "X-IG-Connection-Type": "WIFI",
-    // Simulate a real measured WiFi speed.  The "-1kbps"/0 defaults are the
-    // "not measured" placeholder — no real Android phone ever sends these and
-    // Instagram flags them as a bot signal.  We pick a plausible WiFi range
-    // (8–40 Mbps) and compute a realistic byte count + elapsed time.
-    "X-IG-Connection-Speed": (() => { const k = 8000 + Math.floor(Math.random() * 32000); return `${k}kbps`; })(),
+    // Connection-type personality: derive from ig_did first hex digit.
+    // 3/16 ≈ 19% of new accounts get LTE-Advanced, 81% get WIFI — mirrors
+    // real Android fleet distribution without any extra storage.
+    "X-IG-Connection-Type": (() => {
+      const d = parseInt(ig_did.replace(/-/g, "")[0], 16);
+      return d < 3 ? "LTE-Advanced" : "WIFI";
+    })(),
+    // Simulate a real measured speed. Range varies by connection type:
+    // WIFI 8–40 Mbps, LTE-Advanced 3–25 Mbps.
+    "X-IG-Connection-Speed": (() => {
+      const d = parseInt(ig_did.replace(/-/g, "")[0], 16);
+      const k = d < 3 ? 3000 + Math.floor(Math.random() * 22000) : 8000 + Math.floor(Math.random() * 32000);
+      return `${k}kbps`;
+    })(),
     "X-IG-Bandwidth-Speed-KBPS": (() => { const k = 8000 + Math.floor(Math.random() * 32000); return `${k}.000`; })(),
     "X-IG-Bandwidth-TotalBytes-B": String(512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024)),
     "X-IG-Bandwidth-TotalTime-MS": String(300 + Math.floor(Math.random() * 2000)),
