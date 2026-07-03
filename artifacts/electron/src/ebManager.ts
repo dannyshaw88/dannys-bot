@@ -4637,28 +4637,58 @@ export function startEbIpcServer(
           // Navigate directly to the target's profile page.
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
           console.log(`[eb:silent-follow:${pid}] START partition=${sfTempPartition} target=@${targetUsername} url=${profileUrl}`);
-          await sfWin.webContents.loadURL(profileUrl).catch(() => {});
 
-          // ── Login-wall check — detect session expiry immediately ──────────────
-          // If the session is dead, Instagram redirects to /accounts/login/ or shows
-          // the "Continue as…" screen (same URL but with a login wall).  Check the
-          // final URL right now so we don't waste 20 s polling for a Follow button
-          // that will never appear, and so the engine gets the correct error type
-          // ("session_expired") instead of the misleading "Follow button not found".
+          // Capture navigation errors explicitly — swallowing them lets a failed
+          // loadURL silently leave the URL as about:blank, which then passes the
+          // login-wall check and times out as "Follow button not found" instead of
+          // giving a clear network/proxy error.
+          let sfNavError: Error | null = null;
+          await sfWin.webContents.loadURL(profileUrl).catch((e: Error) => { sfNavError = e; });
+          if (sfNavError) {
+            const msg = (sfNavError as Error).message ?? String(sfNavError);
+            console.warn(`[eb:silent-follow:${pid}] loadURL failed — ${msg}`);
+            sfWin.destroy();
+            return send(res, 200, { ok: false, status: "follow_blocked", reason: `Browser navigation failed: ${msg}` });
+          }
+
+          // ── Login-wall detection — URL + DOM ──────────────────────────────────
+          // Instagram can show a login wall two ways:
+          //   (a) Hard redirect → URL changes to /accounts/login/ or /accounts/onetap/
+          //   (b) Soft overlay  → URL stays on the profile page but React renders
+          //       a "Continue as…" / "Log in" modal on top (the "Continue as" screen)
+          // URL-only checks miss case (b), so we also probe the DOM.
           const landedUrl: string = sfWin.webContents.getURL();
-          const isLoginPage = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(landedUrl)
+          const isLoginUrl = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(landedUrl)
             || landedUrl.includes("/accounts/onetap/")
             || landedUrl.includes("/accounts/suspended/");
 
-          // Always log the final landing URL so we can see where Instagram sent us.
-          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginPage=${isLoginPage}`);
+          // DOM probe: look for login-form inputs or the "Continue as" button text.
+          const isLoginDom: boolean = isLoginUrl ? false : await sfWin.webContents.executeJavaScript(`
+            (function() {
+              // Hard login form: password input visible
+              var pwdInput = document.querySelector('input[type="password"]');
+              if (pwdInput && pwdInput.offsetParent !== null) return true;
+              // "Continue as" / "Log in" modal button (Instagram renders this as
+              // a button whose text is exactly "Log in" or starts with "Continue as")
+              var btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+              for (var i = 0; i < btns.length; i++) {
+                var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
+                if (t === 'log in' || t.startsWith('continue as')) return true;
+              }
+              // Challenge / suspicious-activity pages
+              if (document.title.toLowerCase().includes('log in') ||
+                  document.title.toLowerCase().includes('sign up')) return true;
+              return false;
+            })()
+          `, true).catch(() => false);
 
-          // Also log the main EB partition's current URL — if the fix is working,
-          // this must NOT be a login page even when isLoginPage=true above.
+          const isLoginPage = isLoginUrl || isLoginDom;
+
+          // Always log the final landing URL + detection result.
+          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom}`);
+
+          // Also log the main EB's current URL to confirm isolation is working.
           try {
-            const mainSesCheck = electronSession.fromPartition(`persist:eb-${pid}`);
-            // We can't get a window URL from the session directly — look up the
-            // entry in ebMap to read the live BrowserWindow URL instead.
             const mainEntry = ebMap.get(pid);
             const mainUrl = (mainEntry && !mainEntry.win.isDestroyed())
               ? mainEntry.win.webContents.getURL()
@@ -4667,7 +4697,8 @@ export function startEbIpcServer(
           } catch { /* non-fatal */ }
 
           if (isLoginPage) {
-            console.warn(`[eb:silent-follow:${pid}] SESSION EXPIRED — temp partition was logged out before follow attempt. Temp partition="${sfTempPartition}". Account needs re-verify.`);
+            const reason = isLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
+            console.warn(`[eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Temp partition="${sfTempPartition}". Account needs re-verify.`);
             sfWin.destroy();
             return send(res, 200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
           }

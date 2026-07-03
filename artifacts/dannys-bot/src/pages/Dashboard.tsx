@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.304",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Login-wall detection now also checks the page DOM — catches the 'Continue as…' overlay that stays on the profile URL instead of redirecting, which the previous URL-only check missed.",
+      },
+      {
+        category: "Fix",
+        text: "Browser navigation errors (proxy failure, network timeout etc.) are now caught and reported immediately instead of silently falling through to a 20-second 'Follow button not found' timeout.",
+      },
+    ],
+  },
+  {
     version: "1.1.303",
     date: "3 Jul 2026",
     items: [

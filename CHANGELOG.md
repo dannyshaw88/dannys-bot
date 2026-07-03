@@ -4,6 +4,20 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.304] — 2026-07-03
+
+### Fixed
+
+#### Login-wall detection: DOM check added alongside URL check (`ebManager.ts`)
+
+Instagram shows the "Continue as…" session-expired screen two ways: a hard redirect (URL changes to `/accounts/login/`) and a soft overlay (URL stays on the profile page but a login modal renders on top). The previous URL-only check missed the soft overlay entirely and still timed out as "Follow button not found". The DOM probe now checks for a visible password input, a "Log in" button, or a "Continue as…" button — catching the overlay case immediately.
+
+#### `loadURL` failures now returned as explicit errors (`ebManager.ts`)
+
+Navigation failures (proxy error, network timeout, ERR_NAME_NOT_RESOLVED, etc.) were silently swallowed via `.catch(() => {})`, leaving the URL at `about:blank`. The login-wall check then passed (not a login page) and the follow timed out 20 seconds later as "Follow button not found". Failures are now caught, logged, and immediately returned as `Browser navigation failed: <reason>`.
+
+---
+
 ## [1.1.303] — 2026-07-03
 
 ### Added
