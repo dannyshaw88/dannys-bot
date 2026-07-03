@@ -3863,25 +3863,9 @@ export class InstagramWebClient {
       };
     };
 
-    // ── Step 2: news/inbox warm-up ───────────────────────────────────────────
-    // Instagram gates direct_v2/inbox/ behind a "prompt has contribution"
-    // (error 4415001) until the client has fired news/inbox first in the
-    // session.  viewTimelineFeed does NOT lift this gate — only news/inbox does.
-    // This is the same warm-up step used in _buildWarmedIgClient.
-    // Failure is non-fatal: we still attempt direct_v2/inbox below.
-    try {
-      const warmJ = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
-      console.log(`[webClient] getDirectMessagesInternal: news/inbox warm-up OK (result=${warmJ ? "ok" : "null"})`);
-    } catch (warmErr: any) {
-      console.warn(`[webClient] getDirectMessagesInternal: news/inbox warm-up failed (non-fatal): ${warmErr?.message}`);
-    }
-
-    // ── Step 3: fetch inbox overview ─────────────────────────────────────────
-    // Now that news/inbox has been called, Instagram will serve direct_v2/inbox
-    // without the 4415001 gate.
+    // ── Step 2: fetch inbox — single call, no warm-up, no retry ─────────────
     let inboxThreads: any[] = [];
     let firstProbeOk = false;
-    let firstProbeErr: any = null;
     try {
       const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
@@ -3889,79 +3873,17 @@ export class InstagramWebClient {
       if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
       inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
       firstProbeOk = true;
-      console.log(`[webClient] getDirectMessagesInternal: inbox probe OK — ${inboxThreads.length} thread(s)`);
+      console.log(`[webClient] getDirectMessagesInternal: inbox OK — ${inboxThreads.length} thread(s)`);
+      this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
     } catch (e: any) {
-      firstProbeErr = e;
-    }
-
-    if (!firstProbeOk) {
-      const msg = String(firstProbeErr?.message ?? "");
-      console.warn(`[webClient] getDirectMessagesInternal: inbox probe failed — ${msg}`);
-      // Account-level errors (checkpoint, session expired, etc.) are re-thrown so
-      // the engine can classify them.  All other errors swallowed → ok:false.
+      const msg = String(e?.message ?? "");
+      console.warn(`[webClient] getDirectMessagesInternal: inbox failed — ${msg}`);
+      // Re-throw only hard account-level errors so the engine can mark the account.
+      // prompt_required_4415001 and other soft gates are non-fatal — skip DMs this session.
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
-        throw firstProbeErr;
-      }
-      // ── Fallback: try the Jarvee-warmed IgApiClient path ─────────────────
-      // The 4415001 "Prompt has contribution" gate sometimes blocks even the
-      // news/inbox warm-up itself, making the direct mobileSessionGet path
-      // loop-fail.  _buildWarmedIgClient does the full tokens/keyed →
-      // launcher/sync → users/{id}/info cold-start which reliably clears
-      // Instagram's session gate before touching the inbox endpoint.
-      if (msg === "prompt_required_4415001" || msg.includes("4415001")) {
-        console.log(`[webClient] getDirectMessagesInternal: retrying via _buildWarmedIgClient fallback`);
-        try {
-          const warmed = await this._buildWarmedIgClient();
-          if (warmed) {
-            const { ig } = warmed;
-            const myUserId = String(ig.state.cookieUserId ?? "");
-            const inbox = ig.feed.directInbox();
-            const page: any[] = await inbox.items();
-            inboxThreads = page ?? [];
-            firstProbeOk = true;
-            console.log(`[webClient] getDirectMessagesInternal: warmedClient fallback OK — ${inboxThreads.length} thread(s)`);
-            this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
-            // Re-build mapper with warmed client's user id (threads from ig.feed shape)
-            const mappedFallback = inboxThreads
-              .map((t: any) => {
-                const otherUser = (t.users ?? [])[0];
-                if (!t.thread_id || !otherUser?.username) return null;
-                const items = (t.items ?? [])
-                  .filter((i: any) => i?.item_type === "text" && i?.text)
-                  .map((i: any) => ({
-                    itemId: String(i.item_id ?? ""),
-                    text: String(i.text ?? ""),
-                    fromMe: myUserId ? String(i.user_id) === myUserId : false,
-                  }));
-                const rawFullName = String(otherUser.full_name ?? "").trim();
-                const firstName = rawFullName.split(/\s+/)[0] || String(otherUser.username);
-                return { threadId: String(t.thread_id), username: String(otherUser.username), userId: String(otherUser.pk ?? ""), firstName, items };
-              })
-              .filter((t): t is NonNullable<typeof t> => t !== null);
-            if (inboxThreads.length === 0) return { count: 0, ok: true, threads: [] };
-            // Open individual threads using the warmed ig client
-            const toOpen2 = inboxThreads.slice(0, count);
-            let opened2 = 0;
-            for (const thread of toOpen2) {
-              const threadId = String(thread.thread_id ?? "");
-              if (!threadId) continue;
-              try {
-                await ig.feed.directThread({ thread_id: threadId, oldest_cursor: undefined as any }).items();
-                this.logCallFn?.("GetDirectMessageThread", 0, `Opened DM thread`, false);
-                opened2++;
-              } catch { /* non-fatal per-thread error */ }
-              if (opened2 < toOpen2.length) await new Promise<void>(r => setTimeout(r, 1500 + Math.floor(Math.random() * 2500)));
-            }
-            return { count: opened2, ok: true, threads: mappedFallback };
-          }
-        } catch (fbErr: any) {
-          console.warn(`[webClient] getDirectMessagesInternal: warmedClient fallback failed — ${fbErr?.message}`);
-        }
+        throw e;
       }
       return { count: 0, ok: false, threads: [] };
-    } else {
-      // First probe succeeded — log it now as the GetDirectMessages entry.
-      this.logCallFn?.("GetDirectMessages", 0, `Checked ${inboxThreads.length} direct message${inboxThreads.length === 1 ? "" : "s"}`, false);
     }
 
     // Map ALL inbox threads now so auto-reply can scan the full list later
