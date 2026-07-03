@@ -4661,13 +4661,10 @@ export function startEbIpcServer(
             }
           }
 
-          // CRITICAL: Do NOT use show:false with no subsequent show() call.
-          // Chromium throttles JS timers in windows that were never shown —
-          // setTimeout fires seconds late, executeJavaScript calls hang, and
-          // the 80s watchdog fires before the Follow button is ever found.
-          // Solution (same as verify-mode): position the window completely
-          // off-screen and call showInactive() so Chromium treats it as a
-          // visible window and runs timers at full speed.
+          // Position completely off-screen and call showInactive() immediately
+          // after creation — before ANY loadURL call.  This must happen before
+          // the first navigation, not inside ready-to-show (which only fires
+          // after the page loads, too late to prevent throttling of that load).
           const { width: _sfSw } = eScreen.getPrimaryDisplay().workAreaSize;
           sfTempWin = new BrowserWindow({
             width:       1280,
@@ -4682,11 +4679,10 @@ export function startEbIpcServer(
               partition:        sfPartition,
             },
           });
-          // Show off-screen without stealing focus — MUST NOT be skipped or
-          // Chromium will throttle all timers in this window.
-          sfTempWin.once("ready-to-show", () => {
-            if (sfTempWin && !sfTempWin.isDestroyed()) sfTempWin.showInactive();
-          });
+          // Show immediately — off-screen so user never sees it, but Chromium
+          // treats it as a normal visible window (no timer throttling, no
+          // deferred renderer initialization).
+          sfTempWin.showInactive();
           sfWin = sfTempWin;
           _ipcLog(`[eb:silent-follow:${pid}] mode B — created off-screen background window (partition=${sfPartition}) for @${targetUsername}`);
         }
@@ -4746,7 +4742,13 @@ export function startEbIpcServer(
             new Promise<"timeout">(r => setTimeout(() => r("timeout"), 30_000)),
           ]);
           if (_sfLoadResult === "timeout") {
-            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL hit 30s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
+            // Stop the pending navigation immediately.  If we don't, subsequent
+            // executeJavaScript calls queue behind the in-flight navigation and
+            // block for another 30-60s until the proxy/TCP layer times out —
+            // which is what burns the 80s watchdog even though the individual
+            // JS polls all have their own timeouts.
+            try { sfWin.webContents.stop(); } catch {}
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL hit 30s cap at T+${Date.now() - _sfT0}ms — stopped navigation, proceeding with partially loaded page`);
           } else {
             _ipcLog(`[eb:silent-follow:${pid}] loadURL ${_sfLoadResult} in ${Date.now() - _sfT0}ms`);
           }

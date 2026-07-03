@@ -78,12 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.311",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed background browser-follows hitting the timeout watchdog. Two bugs: the background window was only shown after the page loaded (too late to prevent Chrome throttling the load itself), and if a page took over 30 seconds to load, Chrome queued all follow button searches behind the still-pending navigation — silently eating the entire 80s budget. Both fixed: the window is now shown immediately on creation, and a slow load is explicitly cancelled before any button searching begins.",
+      },
+    ],
+  },
+  {
     version: "1.1.310",
     date: "3 Jul 2026",
     items: [
       {
         category: "Fix",
-        text: "Fixed background browser-follows timing out every time. The hidden follow window was being kept invisible, which caused Chrome to throttle all its JavaScript timers — making the follow button search crawl and triggering the 80s watchdog before any action could complete. The window is now shown off-screen (invisible to you, but Chrome treats it as active), so timers run at full speed and follows complete normally.",
+        text: "Background follow window is now shown off-screen from the moment it is created so Chrome does not throttle its JavaScript timers.",
       },
     ],
   },
