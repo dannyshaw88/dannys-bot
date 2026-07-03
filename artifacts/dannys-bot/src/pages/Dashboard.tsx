@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.305",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Diagnostic",
+        text: "The browser now actively checks every 30 seconds whether the session is still alive by reading the page DOM — not just waiting for a URL change. The 'Continue as…' logout overlay never changes the URL so all previous detection was blind to it. The next logout will appear in the log within 30 seconds of it happening, with the exact reason and what page the browser was on beforehand.",
+      },
+    ],
+  },
+  {
     version: "1.1.304",
     date: "3 Jul 2026",
     items: [

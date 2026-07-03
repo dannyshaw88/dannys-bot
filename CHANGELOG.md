@@ -4,6 +4,25 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.305] — 2026-07-03
+
+### Added
+
+#### Periodic DOM session-alive poll on every open EB window (`ebManager.ts`)
+
+**Problem**: The "Continue as…" logout screen is a React SPA overlay — the URL stays at `https://www.instagram.com/` so `did-navigate` never fires. Every URL-based detection method (including `_detectSessionDeath`) was completely blind to it. Logouts caused by mobile API calls, Instagram server-side revocation, or anything other than a hard page redirect produced zero log output.
+
+**Fix**: A 30-second `setInterval` now runs on every open embedded-browser window. Each tick executes a lightweight DOM probe that checks for:
+- Hard login-page URL (`/accounts/login/`, `/accounts/onetap/`, `/accounts/suspended/`)
+- SPA overlay: a visible "Log in" or "Continue as…" button
+- Login form: a visible `<input type="password">`
+
+On first detection it emits a `[eb-session-dead:ID]` log line containing: `reason` (which trigger matched), `trigger` (the exact button text), current URL, page title, the last non-login URL the EB was on before the death, exact timestamp, and partition name. A 60-second debounce prevents log spam if the poll keeps firing into a dead session. The interval is cleared when the window closes.
+
+This means the next session death — regardless of cause (API call, navigation, Instagram server action) — will appear in the log within 30 seconds.
+
+---
+
 ## [1.1.304] — 2026-07-03
 
 ### Fixed

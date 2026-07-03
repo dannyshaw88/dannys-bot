@@ -3124,6 +3124,62 @@ export async function openEbWindow(opts: {
   // Trigger on every page load — covers initial open AND all subsequent navigations.
   win.webContents.on("did-finish-load", () => { cdpClickCookieBanner().catch(() => {}); });
 
+  // ── Periodic session-alive poll ───────────────────────────────────────────
+  // The "Continue as…" / logged-out state is a React SPA overlay — the URL
+  // NEVER changes to /accounts/login/ so did-navigate never fires and every
+  // URL-based detection method is completely blind to it.  This interval polls
+  // the DOM every 30 s regardless of what the browser is doing, and fires a
+  // loud log the moment a login-wall indicator is detected.
+  //
+  // This catches logouts caused by ANYTHING: mobile API calls, EB navigation,
+  // Instagram server-side session revocation, cookie corruption — all of it.
+  let _sessionAliveLastAlert = 0; // debounce — only log once per death event
+  const _sessionAliveJS = `(function() {
+    var url = location.href;
+    // Hard login page (URL-based)
+    if (/accounts\\/login|accounts\\/onetap|accounts\\/suspended/.test(url)) {
+      return { dead: true, reason: 'login-url', url: url, title: document.title };
+    }
+    // SPA overlay: "Continue as…" button or standard "Log in" button visible
+    var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
+    for (var i = 0; i < btns.length; i++) {
+      var t = (btns[i].innerText || btns[i].textContent || '').trim();
+      var tl = t.toLowerCase();
+      if (tl === 'log in' || tl.startsWith('continue as')) {
+        return { dead: true, reason: 'spa-overlay', trigger: t.slice(0,60), url: url, title: document.title };
+      }
+    }
+    // Password input visible (login form rendered)
+    var pwd = document.querySelector('input[type="password"]');
+    if (pwd && pwd.offsetParent !== null) {
+      return { dead: true, reason: 'password-input', url: url, title: document.title };
+    }
+    return { dead: false };
+  })()`;
+
+  const _sessionAlivePoll = setInterval(async () => {
+    if (win.isDestroyed()) { clearInterval(_sessionAlivePoll); return; }
+    try {
+      const result: any = await win.webContents.executeJavaScript(_sessionAliveJS, true).catch(() => null);
+      if (!result?.dead) return;
+      const now = Date.now();
+      if (now - _sessionAliveLastAlert < 60_000) return; // already logged this death
+      _sessionAliveLastAlert = now;
+      console.warn(
+        `[eb-session-dead:${profileId}] ` +
+        `@${username} SESSION DEAD DETECTED BY POLL ` +
+        `— reason="${result.reason}" ` +
+        `— trigger="${result.trigger ?? ""}" ` +
+        `— url="${(result.url ?? "").slice(0, 200)}" ` +
+        `— title="${(result.title ?? "").slice(0, 80)}" ` +
+        `— priorUrl="${_lastKnownGoodUrl.slice(0, 200)}" ` +
+        `— detectedAt=${new Date(now).toISOString()} ` +
+        `— partition=persist:eb-${profileId}`
+      );
+    } catch { /* non-fatal */ }
+  }, 30_000);
+  win.on("closed", () => clearInterval(_sessionAlivePoll));
+
   // ── Ghost browser: auto-dismiss Instagram login/signup overlay modals ─────
   // When the Ghost browser (profileId === -1) browses Instagram logged out,
   // Instagram shows "Sign up to see more" / "Log in to" / "Save your login
