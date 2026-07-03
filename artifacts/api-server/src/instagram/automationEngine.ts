@@ -4029,7 +4029,17 @@ class AutomationEngine {
                   this.logAction(profile.id, tool.id, "view_stories", targetUser.username, "", "story", "ok", `Watched stories from profile browse`);
                   await storage.incrementStat(profile.id, "story");
                 }
-              } catch { /* non-critical */ }
+              } catch (err: any) {
+                // session_expired / logout_reason:N means the session is server-side dead —
+                // mark the account logged_out immediately so the next human session cycle
+                // re-logs in the EB instead of hitting the login wall silently.
+                const msg: string = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewStories — ${msg} — marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
+                // other errors (network blip, no stories) are non-critical
+              }
             }
           },
         );
@@ -4048,7 +4058,15 @@ class AutomationEngine {
                   engineLog("INFO", `@${profile.username}: [${label}] viewed highlights of @${targetUser.username}`);
                   this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
                 }
-              } catch { /* non-critical */ }
+              } catch (err: any) {
+                // Same as viewStories — logout_reason:N on highlights_tray means
+                // server-side session revocation. Mark logged_out immediately.
+                const msg: string = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewHighlights — ${msg} — marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
+              }
             }
           },
         );

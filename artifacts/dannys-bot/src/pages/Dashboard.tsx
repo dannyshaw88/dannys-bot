@@ -78,6 +78,48 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.299",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Accounts that get force-logged-out while the app is viewing Stories or Highlights (logout_reason:8) are now immediately marked as logged out instead of silently continuing with a dead session. The app now emits a clear structured log and calls applyAccountLevelError, so the next human-session cycle re-logs in automatically.",
+      },
+      {
+        category: "Fix",
+        text: "The embedded browser now logs a [eb-session-dead] warning whenever Instagram redirects any account to the login page — giving a traceable record of exactly when and why the browser session was revoked, for both proxy and no-proxy accounts.",
+      },
+      {
+        category: "Fix",
+        text: "Bandwidth headers (X-IG-Bandwidth-Speed-KBPS) are now stable for the session and drift slowly (~8% every 20 calls) instead of randomising on every single API call. Repeated measurement variance across 50+ calls per session was a detectable fleet-wide bot fingerprint.",
+      },
+      {
+        category: "Fix",
+        text: "Bandwidth speed is now sent as an integer (matching OkHttp4 behaviour) rather than with forced .000 decimal suffix.",
+      },
+      {
+        category: "Fix",
+        text: "Accept-Encoding header on mobile API requests is now 'gzip' only — matching OkHttp4's default. Previously 'gzip, deflate, br' was sent, which is a browser/desktop fingerprint that the real Instagram Android app never sends.",
+      },
+      {
+        category: "Fix",
+        text: "The ig-intended-user-id header is now included on every authenticated mobile API call. The real Instagram app always sends this header to identify which account is making the request — its absence was a detectable gap.",
+      },
+      {
+        category: "Fix",
+        text: "ChromeDriver/Puppeteer artifact variables ($cdc_*, __webdriver_evaluate, etc.) are now explicitly deleted from the window object on every page load in the embedded browser. These leak from Electron's automation internals and are the first thing bot-detection scripts check.",
+      },
+      {
+        category: "Fix",
+        text: "Android WebView accounts no longer expose window.chrome. The real Android Instagram WebView does not have this object — sending the desktop Chrome shape while declaring an Android user-agent is a direct fingerprint contradiction. For desktop-mode accounts the object is kept minimal.",
+      },
+      {
+        category: "Fix",
+        text: "Intl.DateTimeFormat in the embedded browser is now overridden to return the proxy's timezone. Emulation.setTimezoneOverride set V8's OS-level timezone but Intl reads from ICU locale data — so Intl.DateTimeFormat().resolvedOptions().timeZone still returned the server's real timezone, contradicting the proxy's geo location.",
+      },
+    ],
+  },
+  {
     version: "1.1.298",
     date: "3 Jul 2026",
     items: [

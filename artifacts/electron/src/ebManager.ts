@@ -825,7 +825,7 @@ async function cdpTapGesture(
   }
 }
 
-function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null): string {
+function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null, timezone?: string | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
   // Bake real Client Hints values as literals so the injected script can use them
@@ -852,8 +852,9 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
            + `var _FN=_rI(1,99),_SP=_rI(0,7);`;
   }
 
+  const _tzLiteral = timezone ? JSON.stringify(timezone) : 'null';
   const _ebFpSrc = `(function(){try{
-  var _M=${mf},_A=${af};
+  var _M=${mf},_A=${af},_TZ=${_tzLiteral};
   var _ua=navigator.userAgent,_s=5381;
   for(var i=0;i<_ua.length;i++){_s=(((_s<<5)+_s)^_ua.charCodeAt(i))>>>0;}
   _s=_s||1;
@@ -872,6 +873,10 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   var _BCT=_BC?_rI(0,3600):0,_BDT=_BC?Infinity:_rI(1800,28800);
   var _CT=_rp(["wifi","wifi","wifi","cellular"]),_CDL=Math.round(2+_r()*98),_CRT=_rI(10,150);
   ${fpVars}
+  // ── ChromeDriver / Puppeteer artifact removal ────────────────────────────────
+  // Electron injects $cdc_* / $chrome_* properties even with AutomationControlled
+  // disabled.  These are the first thing bot-detection scripts check.
+  try{var _dK=Object.keys(window).filter(function(k){return k.indexOf('$cdc_')===0||k.indexOf('$chrome_')===0||k==='__driver_evaluate'||k==='__webdriver_evaluate'||k==='__selenium_evaluate'||k==='__fxdriver_evaluate';});_dK.forEach(function(k){try{delete window[k];}catch(_e){}});}catch(_e){}
   try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
   if(_M){
     try{Object.defineProperty(screen,"width",{get:function(){return _SW;}});}catch(e){}
@@ -943,7 +948,10 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   try{Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';},configurable:true});}catch(e){}
   try{Object.defineProperty(document,'hidden',{get:function(){return false;},configurable:true});}catch(e){}
   try{Object.defineProperty(navigator,"languages",{get:function(){return ["en-US","en"];}});}catch(e){}
-  try{window.chrome={app:{isInstalled:false},runtime:{},loadTimes:function(){return{};},csi:function(){return{};}};} catch(e){}
+  // Android WebView does NOT expose window.chrome — sending the desktop shape
+  // while also declaring Android UA is an instant contradiction.
+  // Desktop branch keeps a minimal shape (Electron exposes it by default).
+  if(_M){try{delete window.chrome;}catch(_e){try{Object.defineProperty(window,'chrome',{get:function(){return undefined;},configurable:true});}catch(_e2){}}}else{try{if(!window.chrome)window.chrome={runtime:{}};}catch(_e){}}
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
     if(_oq){navigator.permissions.query=function(p){
       return p.name==="notifications"?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};}}catch(e){}
@@ -1170,6 +1178,14 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       try{Object.defineProperty(window.Worker,'name',{value:'Worker'});}catch(e){}
     }
   }catch(e){}
+  // ── Intl.DateTimeFormat timezone override ────────────────────────────────────
+  // Emulation.setTimezoneOverride sets the V8 runtime's OS-level timezone BUT
+  // Intl.DateTimeFormat reads from the ICU locale data, not the V8 timezone —
+  // so Intl.DateTimeFormat().resolvedOptions().timeZone still returns the real
+  // server timezone.  Instagram calls this to validate the session's timezone
+  // against the proxy exit IP.  This override fixes the mismatch by wrapping
+  // the constructor to always inject the correct timeZone option.
+  if(_TZ){try{var _oDTF=Intl.DateTimeFormat;var _pDTF=function(l,o){return new _oDTF(l,Object.assign({},o||{},{timeZone:_TZ}));};_pDTF.prototype=_oDTF.prototype;_pDTF.supportedLocalesOf=_oDTF.supportedLocalesOf.bind(_oDTF);Intl.DateTimeFormat=_pDTF;}catch(_e){}}
 }catch(e){}})();`;
   // Make every Object.defineProperty getter in the fp script configurable:true.
   // Without this, the desktop-mode fp script (which runs when ghost browser
@@ -2205,7 +2221,11 @@ export async function openEbWindow(opts: {
     _fpIsMobile = false;
   }
   const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
-  const _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer);
+  // _fpScript is built AFTER timezone resolution below so the resolved timezone
+  // can be baked into the Intl.DateTimeFormat override inside the injected script.
+  // Declared here so it's in scope for the fire-and-forget injection block.
+  let _resolvedTz: string | null = null;
+  let _fpScript: string; // assigned after timezone fetch
   // Mobile profile — only for ghost/verify windows (regular windows are now desktop).
   const _mobileProfile = (!isGhostBrowser && !verifyMode && _fpIsMobile)
     ? getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null)
@@ -2303,10 +2323,29 @@ export async function openEbWindow(opts: {
     win.webContents.on("did-finish-load", () => {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
     });
-    win.webContents.on("did-navigate", () => {
+    win.webContents.on("did-navigate", (_evt: any, url: string) => {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
     });
   }
+
+  // ── Universal: detect Instagram session-death redirects ──────────────────
+  // When Instagram server-side revokes a session, the browser is redirected to
+  // the login page.  Without this handler there is zero logging — the user
+  // just sees the account needs re-login with no trace of what triggered it.
+  //
+  // Instagram routes revocations via:
+  //   - Clean navigations:  instagram.com/accounts/login/
+  //   - Locale-prefixed:    instagram.com/de/accounts/login/
+  //   - Subdomain/www:      www.instagram.com/accounts/login
+  //   - Mid-redirect chain: will-redirect / did-redirect-navigation fire
+  //     before the final did-navigate (we must handle all three so no path slips through)
+  const _detectSessionDeath = (_evt: any, url: string) => {
+    if (/instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(url)) {
+      console.warn(`[ebManager:eb-session-dead] @${username} (profile:${profileId}): browser routed to Instagram login page — URL=${url.slice(0, 200)} — server-side session revocation detected. Account needs re-verify.`);
+    }
+  };
+  win.webContents.on("did-navigate", _detectSessionDeath);
+  win.webContents.on("did-redirect-navigation", _detectSessionDeath);
 
   // ── Guard: bail if window was destroyed during async setup ───────────────
   // Early ebMap.set (above) lets the frontend see the EB as open immediately.
@@ -2344,7 +2383,6 @@ export async function openEbWindow(opts: {
 
   if (proxy) {
     // Resolve proxy timezone — awaited here (max 5 s) so it's ready before loadURL.
-    let _resolvedTz: string | null = null;
     _ebCrashLog(profileId, `STEP-15: starting timezone fetch for ${proxy.host}`);
     try {
       const _tzAc = new AbortController();
@@ -2375,6 +2413,11 @@ export async function openEbWindow(opts: {
   // No proxy → skip setTimezoneOverride → Chrome uses the real system timezone.
   // No UTC default — a timezone mismatch between Intl and Date.now() is an
   // instant bot signal.
+
+  // Build the fingerprint injection script NOW — after timezone resolution —
+  // so the resolved timezone can be baked into the Intl.DateTimeFormat override.
+  // The timezone is null for no-proxy accounts, leaving Intl behaviour unchanged.
+  _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer, _resolvedTz);
 
   // ── Fire-and-forget: script injection (Page commands CAN hang in packaged build) ─
   // Page.enable and addScriptToEvaluateOnNewDocument are kept fire-and-forget

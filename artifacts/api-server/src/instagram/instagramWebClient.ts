@@ -475,6 +475,14 @@ export class InstagramWebClient {
   // Derived once from igDid (80% WIFI, 20% LTE). Caching avoids repeated JSON
   // parses; null means not yet resolved.
   private _connectionType: "WIFI" | "LTE-Advanced" | null = null;
+  // Bandwidth measurement cache — real Android devices measure once and hold
+  // the result stable for the session, updating only on network-condition changes.
+  // Re-randomizing on every call creates 50 different BW readings per session —
+  // a fleet-wide bot fingerprint Instagram can trivially detect.
+  private _cachedBwKbps: number | null = null;
+  private _cachedBwBytes: number | null = null;
+  private _cachedBwMs: number | null = null;
+  private _cachedBwDriftCount: number = 0;
   // Locale derived from the proxy's exit country — resolved in constructor via
   // ip-api.com. Matching locale to the proxy's country removes the mismatch
   // between X-IG-App-Locale and the connecting IP's region (bot signal).
@@ -1842,12 +1850,25 @@ export class InstagramWebClient {
       } catch { /* keep defaults */ }
     }
 
-    // Bandwidth: real Android never sends -1/0 (those are "not measured" placeholders).
-    // Use per-account connection type (WIFI or LTE-Advanced) with matching speed ranges.
+    // Bandwidth: real Android measures once and holds the result stable for the
+    // session (OkHttp4 caches the last throughput sample). Drifts ~8% every 20
+    // calls to simulate OkHttp4 re-measuring after prolonged network activity.
+    // Re-randomizing on every call is a fleet-wide bot fingerprint.
     const connType = this._getConnectionType();
-    const bwKbps  = this._getConnectionSpeedKbps(connType);
-    const bwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
-    const bwMs    = 300 + Math.floor(Math.random() * 2000);
+    if (this._cachedBwKbps === null) {
+      this._cachedBwKbps  = this._getConnectionSpeedKbps(connType);
+      this._cachedBwBytes = 512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024);
+      this._cachedBwMs    = 300 + Math.floor(Math.random() * 2000);
+    } else {
+      this._cachedBwDriftCount++;
+      if (this._cachedBwDriftCount % 20 === 0) {
+        const fresh = this._getConnectionSpeedKbps(connType);
+        this._cachedBwKbps = Math.round(this._cachedBwKbps * 0.92 + fresh * 0.08);
+      }
+    }
+    const bwKbps  = this._cachedBwKbps;
+    const bwBytes = this._cachedBwBytes!;
+    const bwMs    = this._cachedBwMs!;
 
     const headers: Record<string, string> = {
       "Host":                         "i.instagram.com",
@@ -1860,7 +1881,7 @@ export class InstagramWebClient {
       "X-IG-Nav-Chain":               this._buildNavChainHeader(),
       "X-IG-Connection-Type":         connType,
       "X-IG-Connection-Speed":        `${bwKbps}kbps`,
-      "X-IG-Bandwidth-Speed-KBPS":    `${bwKbps}.000`,
+      "X-IG-Bandwidth-Speed-KBPS":    String(bwKbps),
       "X-IG-Bandwidth-TotalBytes-B":  String(bwBytes),
       "X-IG-Bandwidth-TotalTime-MS":  String(bwMs),
       "X-Bloks-Version-Id":           BLOKS_VERSION_ID,
@@ -1882,6 +1903,12 @@ export class InstagramWebClient {
 
     if (igDid)    headers["X-IG-Device-ID"]   = igDid;
     if (androidId) headers["X-IG-Android-ID"] = androidId;
+
+    // The real IG Android app sends ig-intended-user-id on every authenticated
+    // request — it proves the client knows which account it's operating as.
+    // Absence of this header on authenticated calls is a detectable gap.
+    const userId = this._userId;
+    if (userId) headers["ig-intended-user-id"] = userId;
 
     if (contentType) {
       headers["Content-Type"] = contentType;
@@ -1956,6 +1983,14 @@ export class InstagramWebClient {
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
+  // Extracts the numeric user ID from mobileCookieJar (ds_user_id cookie).
+  // Used for ig-intended-user-id header — real Android app sends this on every
+  // authenticated request to prove the client knows its own account identity.
+  private get _userId(): string {
+    const c = this.mobileCookieJar.find(c => c.startsWith("ds_user_id="));
+    return c ? c.split("=")[1].split(";")[0].trim() : "";
+  }
+
   private get _deviceAuthorization(): string | undefined {
     if (!this.igDeviceState) return undefined;
     try { return (JSON.parse(this.igDeviceState) as any).authorization ?? undefined; } catch { return undefined; }
@@ -2007,10 +2042,22 @@ export class InstagramWebClient {
       // Fall back to "login_required" so getAccountLevelStatus() classifies it as
       // "logged_out" and applyAccountLevelError() marks the account for re-verification.
       const bodyMsg: string = (res.json as any)?.message ?? "";
+      const logoutReason: number | undefined = (res.json as any)?.logout_reason;
       const errMsg = bodyMsg || "login_required";
-      console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      // When Instagram includes logout_reason, the session is server-side dead.
+      // Bake it into the thrown error as "session_expired — ..." so callers like
+      // viewStories / viewHighlights propagate it to the engine's session_expired
+      // catch and call applyAccountLevelError immediately.  Without this,
+      // logout_reason:8 on highlights_tray / media/info is caught by the
+      // generic `catch { /* non-critical */ }` blocks and swallowed — the account
+      // keeps running with a dead session until the next human session cycle hits
+      // the login wall, requiring a manual re-login in the browser.
+      const throwMsg = logoutReason !== undefined
+        ? `session_expired — ${errMsg} | logout_reason:${logoutReason}`
+        : errMsg;
+      console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (${errMsg}${logoutReason !== undefined ? ` [SESSION-KILL logout_reason:${logoutReason}]` : ""}): ${res.rawBody.slice(0, 200)}`);
       this._logTransport(path, "GET", Date.now() - _t0, true);
-      throw new Error(errMsg);
+      throw new Error(throwMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     this._logTransport(path, "GET", Date.now() - _t0, false, msgFn?.(res.json));
@@ -6444,7 +6491,7 @@ export async function createInstagramAccountViaApi(params: {
     "User-Agent": effectiveUA,
     "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip",
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTvwE=",
