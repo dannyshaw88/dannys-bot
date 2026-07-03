@@ -4940,10 +4940,10 @@ export function startEbIpcServer(
                 check();
               })
             `, true).catch(() => ({ found: false, timedOut: true })),
-            new Promise<{ found: false; timedOut: true }>(r =>
+            new Promise<{ found: false; timedOut: true; contextDestroyed: true }>(r =>
               setTimeout(() => {
                 _ipcLog(`[WARN] [eb:silent-follow:${pid}] btnInfo executeJavaScript hit 25 s outer timeout — page context likely destroyed by mid-flight navigation`);
-                r({ found: false, timedOut: true });
+                r({ found: false, timedOut: true, contextDestroyed: true });
               }, 25_000)
             ),
           ]);
@@ -5069,7 +5069,22 @@ export function startEbIpcServer(
             sfWin.destroy();
             return sfRespond(200, { ok: true, status: "already_following", reason: "Already following" });
           } else {
+            // ── Context-dead fast-path ────────────────────────────────────────────
+            // If the *outer* 25 s race won (contextDestroyed flag), the renderer
+            // process is already gone — calling executeJavaScript or capturePage()
+            // on a destroyed context hangs indefinitely (this was the root cause of
+            // the watchdog_timeout bug: capturePage() with no timeout silently
+            // blocked for ~54 s after the btnInfo outer-race fired).
+            // Skip both the diagnostic eval and the screenshot entirely in this case.
+            if ((btnInfo as any)?.contextDestroyed) {
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Follow button not found — outer 25 s timeout fired, renderer context likely destroyed. Skipping diag+screenshot. Destroying window.`);
+              sfWin.destroy();
+              return sfRespond(200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
+            }
+
             // ── Diagnostic: collect page state before destroying the window ──────────
+            // Only reached when the inner JS poll timed out (40 × 500 ms = 20 s) but
+            // the renderer context is still alive (outer race did NOT fire).
             let diagInfo = "(diagnostic failed)";
             try {
               diagInfo = await Promise.race([
@@ -5132,6 +5147,9 @@ export function startEbIpcServer(
             );
 
             // ── Screenshot: save PNG to screenshot-errors/ for post-mortem ──────────
+            // capturePage() is only safe when the renderer context is alive.
+            // We already bailed above if contextDestroyed. Add a 5 s race here as
+            // a belt-and-suspenders guard against unexpected hangs.
             try {
               const screenshotDir = path.join(_cookiesDir, "screenshot-errors");
               fs.mkdirSync(screenshotDir, { recursive: true });
@@ -5140,9 +5158,16 @@ export function startEbIpcServer(
                 screenshotDir,
                 `follow-fail-${pid}-${safeUsername}-${Date.now()}.png`
               );
-              const img = await sfWin.webContents.capturePage();
-              fs.writeFileSync(screenshotPath, img.toPNG());
-              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
+              const img = await Promise.race([
+                sfWin.webContents.capturePage(),
+                new Promise<null>(r => setTimeout(() => r(null), 5_000)),
+              ]);
+              if (img) {
+                fs.writeFileSync(screenshotPath, img.toPNG());
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
+              } else {
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot skipped — capturePage() timed out (context likely destroyed)`);
+              }
             } catch (ssErr: any) {
               _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot capture failed: ${ssErr?.message}`);
             }

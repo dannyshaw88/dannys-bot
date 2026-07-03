@@ -4,6 +4,29 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.310] — 2026-07-03
+
+### Fixed
+
+#### `watchdog_timeout` root cause: `capturePage()` with no timeout hanging after dead renderer (`ebManager.ts`)
+
+**This was the actual cause of every `watchdog_timeout — forced cleanup after 80s` follow failure.**
+
+Log evidence (profile 3914, @franc_fitness_journey):
+```
+20:09:27  START, loadURL ok in 822ms, landed on correct profile page
+20:09:28  polling for Follow button
+20:09:53  btnInfo outer 25 s timeout fires — "page context likely destroyed"
+           [54 seconds of silence]
+20:10:47  WATCHDOG fires, error: Object has been destroyed
+```
+
+After the btnInfo 25 s outer-race fired (meaning the renderer context was already destroyed), the code fell through to `sfWin.webContents.capturePage()` — a screenshot call with **zero timeout**. Calling `capturePage()` on a destroyed renderer context never resolves or rejects. It simply blocks forever. The 80 s watchdog was the only exit, and the 54 seconds between the outer-timeout warning and the watchdog is exactly the gap between "25 s elapsed" and "80 s total" — confirming capturePage() consumed that entire window.
+
+**Fix**: The `btnInfo` outer-timeout now resolves with `{ found: false, timedOut: true, contextDestroyed: true }`. When that flag is set, the code immediately destroys the window and returns the error — skipping both the `diagInfo` JS eval AND the `capturePage()` screenshot call entirely, since both would hang on a dead renderer. `capturePage()` also now has a 5 s `Promise.race` guard as a belt-and-suspenders fallback for any future code paths where the context state is uncertain.
+
+---
+
 ## [1.1.309] — 2026-07-03
 
 ### Fixed
