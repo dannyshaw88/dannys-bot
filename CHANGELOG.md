@@ -4,6 +4,89 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.296] — 2026-07-03
+
+### Fixed
+
+#### Browser-follow stat counting — `already_following` ghost-increment and silent DB abort (`automationEngine.ts`)
+
+**Symptom 1**: Daily and lifetime follow counts incremented even when a profile was already being followed. Session logs showed "Followed [x/y]" correctly, but the stats dashboard reported more follows than were actually performed.
+
+**Root cause**: Both the main follow loop (∼line 4370) and the rescrape loop (∼line 4559) called `storage.incrementStat(profile.id, "follow")` inside the generic `ok: true` success branch. `followViaBrowser` (and the API follow path) can return `{ ok: true, status: "already_following" }` — an already-followed account was reaching `incrementStat` and being counted as a fresh new follow.
+
+**Fix**: Added an `already_following` guard in both loops. `incrementStat` is now only called when `result.status !== "already_following"`.
+
+---
+
+**Symptom 2**: In the same loops, any SQLite lock or write failure thrown by `storage.incrementStat()` would propagate out of the loop body uncaught, aborting all remaining post-follow processing (activity-log writes, sleep delay, etc.) for the rest of the session.
+
+**Root cause**: `storage.incrementStat` was invoked with no surrounding try/catch in both loops. A transient DB lock (common with SQLite under concurrent reads) caused a hard throw that killed the iteration.
+
+**Fix**: Each `incrementStat` call is now wrapped in its own `try/catch` with an explicit `console.error` log. A DB write failure is surfaced in logs but no longer aborts the session.
+
+---
+
+#### "Follow button not found" — silent timeout with no diagnostics (`ebManager.ts`)
+
+**Symptom**: The embedded-browser silent-follow flow would poll for 20 seconds for the follow button, then silently time out. No information was available about why the button was not found — wrong page, DOM structure change, broken navigation, or rate-limit interstitial were all indistinguishable.
+
+**Fix**: Added a diagnostic block that fires on poll timeout:
+- Logs the current URL, page title, all visible button texts (`innerText`), and a 200-character body snippet to the console — enough to identify the wrong-page or wrong-DOM-structure root cause without a screenshot in most cases.
+- Captures a full-page screenshot via `capturePage()` and writes it to `<cookiesDir>/screenshot-errors/follow-fail-<profileId>-<username>-<timestamp>.png`. The directory is created automatically on first use. The username component is sanitised for filesystem safety (non-word characters stripped).
+
+### Changed
+
+#### Login toolbar button macro — full rewrite for new Instagram homepage layout (`ebManager.ts`, `case "login"`)
+
+**Motivation**: Instagram updated its homepage layout. The previous macro broke because:
+- Tab × 2 (username → "Save info?" checkbox → password) no longer navigated to the password field correctly in the new layout.
+- The character-by-character `typeTextCDP` approach (human-speed per-keystroke timing) could not compete with the faster paste-style expected by the new form.
+- The post-submit button-polling loop (20 × 250ms attempts) was unnecessary complexity that sometimes missed the button after layout re-renders.
+
+**Old sequence**:
+1. Tap + JS-focus username field
+2. Ctrl+A → Delete → `typeTextCDP` (character-by-character, human timing)
+3. Tab × 2 (skip "Save info?" intermediate element to reach password)
+4. Ctrl+A → Delete → `typeTextCDP` for password
+5. Tab → Tab → Enter to submit
+6. Poll 20 × 250ms for `button[type="submit"]` / Log-in text match → `cdpTapGesture`
+
+**New sequence**:
+1. Tap + JS-focus username field → Ctrl+A → Delete → `Input.insertText` (paste entire username instantly)
+2. **1 × Tab** (username → password directly in the new layout)
+3. Ctrl+A → Delete → `Input.insertText` (paste password)
+4. Tab → Tab → Enter (submit login form)
+5. Wait 10 seconds (Instagram navigates to 2FA page)
+6. Fetch profile → `generateTotp(twoFASecretKey)` — equivalent of "Generate Code" in Equinox account-settings 2FA section
+7. Retry up to 10 × 500ms to locate the OTP input via CSS selectors (same set used by the standalone 2FA button); tap to focus
+8. `Input.insertText` — paste the 6-digit code
+9. Tab × 4 → Enter (submit 2FA form)
+
+**Notes**:
+- Steps 6-9 are skipped entirely when the profile has no `twoFASecretKey`.
+- When the browser is not on the Instagram login page at the time the button is clicked, the page navigates to `instagram.com/accounts/login/` and fills credentials after `did-finish-load`. The 2FA step is not attempted in this fallback path (navigate-then-fill case).
+
+#### 2FA toolbar button macro — simplified for pre-focused input (`ebManager.ts`, `case "totp"`)
+
+**Motivation**: On the Instagram 2FA page the verification code input is already focused by default, making the previous field-search and manual tap sequence unnecessary overhead that sometimes misfired.
+
+**Old sequence**:
+1. Tab × 2 (attempt to move focus into the 2FA input region from wherever focus last was)
+2. Fetch profile → `generateTotp`
+3. Retry loop (10 × 500ms) to locate the OTP input via JS selectors
+4. `cdpTapGesture` to focus the OTP field
+5. `typeTextCDP` character-by-character (200–600ms per digit, uneven human-like timing)
+6. Tab × 2 → polling loop (16 × 200ms) to find a submit/confirm/verify button → `cdpTapGesture`
+
+**New sequence**:
+1. Fetch profile → `generateTotp(twoFASecretKey)` — "account settings → Generate Code"
+2. `Input.insertText` — paste the 6-digit code into the already-focused field
+3. Tab × 4 → Enter (submit 2FA form)
+
+Skipped entirely when the profile has no `twoFASecretKey`.
+
+---
+
 ## [1.1.277] — 2026-07-01
 
 ### Fixed
