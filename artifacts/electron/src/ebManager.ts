@@ -4789,24 +4789,31 @@ export function startEbIpcServer(
             || landedUrl.includes("/accounts/suspended/");
 
           // DOM probe: look for login-form inputs or the "Continue as" button text.
-          const isLoginDom: boolean = isLoginUrl ? false : await sfWin.webContents.executeJavaScript(`
-            (function() {
-              // Hard login form: password input visible
-              var pwdInput = document.querySelector('input[type="password"]');
-              if (pwdInput && pwdInput.offsetParent !== null) return true;
-              // "Continue as" / "Log in" modal button (Instagram renders this as
-              // a button whose text is exactly "Log in" or starts with "Continue as")
-              var btns = Array.from(document.querySelectorAll('button, [role="button"]'));
-              for (var i = 0; i < btns.length; i++) {
-                var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
-                if (t === 'log in' || t.startsWith('continue as')) return true;
-              }
-              // Challenge / suspicious-activity pages
-              if (document.title.toLowerCase().includes('log in') ||
-                  document.title.toLowerCase().includes('sign up')) return true;
-              return false;
-            })()
-          `, true).catch(() => false);
+          // Wrapped in a Promise.race timeout: if the page context is destroyed mid-eval
+          // (because the still-running loadURL finally completes and triggers a navigation),
+          // executeJavaScript will hang forever without rejecting.  The 5 s guard ensures
+          // we never block here longer than necessary.
+          const isLoginDom: boolean = isLoginUrl ? false : await Promise.race([
+            sfWin.webContents.executeJavaScript(`
+              (function() {
+                // Hard login form: password input visible
+                var pwdInput = document.querySelector('input[type="password"]');
+                if (pwdInput && pwdInput.offsetParent !== null) return true;
+                // "Continue as" / "Log in" modal button (Instagram renders this as
+                // a button whose text is exactly "Log in" or starts with "Continue as")
+                var btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+                for (var i = 0; i < btns.length; i++) {
+                  var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
+                  if (t === 'log in' || t.startsWith('continue as')) return true;
+                }
+                // Challenge / suspicious-activity pages
+                if (document.title.toLowerCase().includes('log in') ||
+                    document.title.toLowerCase().includes('sign up')) return true;
+                return false;
+              })()
+            `, true).catch(() => false),
+            new Promise<false>(r => setTimeout(() => r(false), 5_000)),
+          ]);
 
           const isLoginPage = isLoginUrl || isLoginDom;
 
@@ -4821,23 +4828,26 @@ export function startEbIpcServer(
           // continuing to act on a flagged account through a challenge is what
           // turns a checkpoint into a full suspension. Detect it explicitly so
           // the engine can stop hitting this account instead of retrying blind.
-          const isCheckpointPage: boolean = isLoginPage ? false : await sfWin.webContents.executeJavaScript(`
-            (function() {
-              var url = location.href.toLowerCase();
-              if (url.includes('/challenge/') || url.includes('/accounts/suspicious')) return true;
-              var bodyText = (document.body ? document.body.innerText : '').toLowerCase();
-              var markers = [
-                'we suspect automated behavior',
-                'we detected unusual activity',
-                'confirm it\\'s you',
-                'help us confirm',
-                'suspicious activity',
-                'action blocked',
-                'try again later',
-              ];
-              return markers.some(function(m) { return bodyText.indexOf(m) !== -1; });
-            })()
-          `, true).catch(() => false);
+          const isCheckpointPage: boolean = isLoginPage ? false : await Promise.race([
+            sfWin.webContents.executeJavaScript(`
+              (function() {
+                var url = location.href.toLowerCase();
+                if (url.includes('/challenge/') || url.includes('/accounts/suspicious')) return true;
+                var bodyText = (document.body ? document.body.innerText : '').toLowerCase();
+                var markers = [
+                  'we suspect automated behavior',
+                  'we detected unusual activity',
+                  'confirm it\\'s you',
+                  'help us confirm',
+                  'suspicious activity',
+                  'action blocked',
+                  'try again later',
+                ];
+                return markers.some(function(m) { return bodyText.indexOf(m) !== -1; });
+              })()
+            `, true).catch(() => false),
+            new Promise<false>(r => setTimeout(() => r(false), 5_000)),
+          ]);
 
           if (isCheckpointPage) {
             console.warn(`[eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}". Stopping immediately instead of polling for the Follow button; account needs manual review before further automated actions.`);
@@ -4868,35 +4878,51 @@ export function startEbIpcServer(
           // Returns the button's bounding rect so we can CDP-tap it at real coordinates,
           // or { alreadyFollowing } / { timedOut } — does NOT click the button itself.
           console.log(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
-          const btnInfo: any = await sfWin.webContents.executeJavaScript(`
-            new Promise(function(resolve) {
-              var tries = 0, MAX = 40; // 20 s
-              function norm(el) {
-                var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                var txt = (el.innerText || el.textContent || '');
-                // collapse all whitespace (SVG alt-text, newlines, etc.) then lowercase
-                return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-              }
-              function isFollow(el)   { var n = norm(el); return n === 'follow' || n === 'follow back'; }
-              function isAlready(el)  { var n = norm(el); return n === 'following' || n === 'requested'; }
-              function check() {
-                var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
-                var followBtn = cands.find(function(b) { return !b.disabled && isFollow(b); });
-                if (followBtn) {
-                  var r = followBtn.getBoundingClientRect();
-                  if (r.width > 0 && r.height > 0) {
-                    resolve({ found: true, x: r.left, y: r.top, w: r.width, h: r.height });
-                    return;
-                  }
+          // IMPORTANT: wrap with an outer Promise.race timeout.
+          // The JS Promise inside the eval polls the DOM for up to 20 s via setTimeout.
+          // If a page navigation fires DURING that 20 s window (because the background
+          // loadURL finally completes, or Instagram does a SPA navigation), Electron
+          // destroys the old renderer context and the Promise never resolves or rejects —
+          // executeJavaScript hangs silently until the 80 s watchdog fires.
+          // The 25 s race guard (5 s grace over the 20 s internal timeout) ensures we
+          // always get a result and never let this step consume the whole watchdog budget.
+          const btnInfo: any = await Promise.race([
+            sfWin.webContents.executeJavaScript(`
+              new Promise(function(resolve) {
+                var tries = 0, MAX = 40; // 20 s
+                function norm(el) {
+                  var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                  var txt = (el.innerText || el.textContent || '');
+                  // collapse all whitespace (SVG alt-text, newlines, etc.) then lowercase
+                  return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
                 }
-                var alreadyBtn = cands.find(function(b) { return isAlready(b); });
-                if (alreadyBtn) { resolve({ found: false, alreadyFollowing: true }); return; }
-                if (++tries >= MAX) { resolve({ found: false, timedOut: true }); return; }
-                setTimeout(check, 500);
-              }
-              check();
-            })
-          `, true).catch(() => ({ found: false, timedOut: true }));
+                function isFollow(el)   { var n = norm(el); return n === 'follow' || n === 'follow back'; }
+                function isAlready(el)  { var n = norm(el); return n === 'following' || n === 'requested'; }
+                function check() {
+                  var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
+                  var followBtn = cands.find(function(b) { return !b.disabled && isFollow(b); });
+                  if (followBtn) {
+                    var r = followBtn.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                      resolve({ found: true, x: r.left, y: r.top, w: r.width, h: r.height });
+                      return;
+                    }
+                  }
+                  var alreadyBtn = cands.find(function(b) { return isAlready(b); });
+                  if (alreadyBtn) { resolve({ found: false, alreadyFollowing: true }); return; }
+                  if (++tries >= MAX) { resolve({ found: false, timedOut: true }); return; }
+                  setTimeout(check, 500);
+                }
+                check();
+              })
+            `, true).catch(() => ({ found: false, timedOut: true })),
+            new Promise<{ found: false; timedOut: true }>(r =>
+              setTimeout(() => {
+                console.warn(`[eb:silent-follow:${pid}] btnInfo executeJavaScript hit 25 s outer timeout — page context likely destroyed by mid-flight navigation`);
+                r({ found: false, timedOut: true });
+              }, 25_000)
+            ),
+          ]);
 
           if (btnInfo?.found) {
             // ── Per-account tap personality ──────────────────────────────────────
@@ -4914,22 +4940,25 @@ export function startEbIpcServer(
 
             // Re-query bounding rect after dwell — React layout shifts, banners, and
             // scroll position can all move the button during the wait window.
-            const freshRect: any = await sfWin.webContents.executeJavaScript(`
-              (function() {
-                function norm(el) {
-                  var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                  var txt = (el.innerText || el.textContent || '');
-                  return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                }
-                var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
-                  var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
-                });
-                if (!btn) return null;
-                var r = btn.getBoundingClientRect();
-                if (r.width <= 0 || r.height <= 0) return null;
-                return { x: r.left, y: r.top, w: r.width, h: r.height };
-              })()
-            `, true).catch(() => null);
+            const freshRect: any = await Promise.race([
+              sfWin.webContents.executeJavaScript(`
+                (function() {
+                  function norm(el) {
+                    var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                    var txt = (el.innerText || el.textContent || '');
+                    return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                  }
+                  var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
+                    var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
+                  });
+                  if (!btn) return null;
+                  var r = btn.getBoundingClientRect();
+                  if (r.width <= 0 || r.height <= 0) return null;
+                  return { x: r.left, y: r.top, w: r.width, h: r.height };
+                })()
+              `, true).catch(() => null),
+              new Promise<null>(r => setTimeout(() => r(null), 5_000)),
+            ]);
 
             // Tap point: not dead centre — biased toward centre but account-specific.
             // X: 30–70% across button width.  Y: 35–65% of button height.
@@ -4953,19 +4982,22 @@ export function startEbIpcServer(
                 } catch { /* fall through to JS click */ }
               }
               if (!followed) {
-                await sfWin.webContents.executeJavaScript(`
-                  (function() {
-                    function norm(el) {
-                      var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                      var txt = (el.innerText || el.textContent || '');
-                      return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                    }
-                    var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
-                      var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
-                    });
-                    if (btn) btn.click();
-                  })()
-                `, true).catch(() => {});
+                await Promise.race([
+                  sfWin.webContents.executeJavaScript(`
+                    (function() {
+                      function norm(el) {
+                        var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                        var txt = (el.innerText || el.textContent || '');
+                        return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                      }
+                      var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
+                        var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
+                      });
+                      if (btn) btn.click();
+                    })()
+                  `, true).catch(() => {}),
+                  new Promise<void>(r => setTimeout(() => r(), 3_000)),
+                ]);
               }
 
               // Post-tap confirmation: poll for state change to Following/Requested.
@@ -4976,20 +5008,23 @@ export function startEbIpcServer(
               const confirmDeadline = Date.now() + confirmMs + 2000;
               while (Date.now() < confirmDeadline) {
                 await new Promise(r => setTimeout(r, 300));
-                const state: any = await sfWin.webContents.executeJavaScript(`
-                  (function() {
-                    function norm(el) {
-                      var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                      var txt = (el.innerText || el.textContent || '');
-                      return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                    }
-                    var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
-                    var norms = cands.map(norm);
-                    var done        = norms.some(function(n) { return n === 'following' || n === 'requested'; });
-                    var stillFollow = norms.some(function(n) { return n === 'follow' || n === 'follow back'; });
-                    return { done: done, stillFollow: stillFollow };
-                  })()
-                `, true).catch(() => null);
+                const state: any = await Promise.race([
+                  sfWin.webContents.executeJavaScript(`
+                    (function() {
+                      function norm(el) {
+                        var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
+                        var txt = (el.innerText || el.textContent || '');
+                        return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                      }
+                      var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
+                      var norms = cands.map(norm);
+                      var done        = norms.some(function(n) { return n === 'following' || n === 'requested'; });
+                      var stillFollow = norms.some(function(n) { return n === 'follow' || n === 'follow back'; });
+                      return { done: done, stillFollow: stillFollow };
+                    })()
+                  `, true).catch(() => null),
+                  new Promise<null>(r => setTimeout(() => r(null), 2_000)),
+                ]);
                 if (state?.done) { confirmed = true; break; }
                 // Button gone entirely (page navigated or modal) — treat as followed
                 if (!state?.stillFollow && !state?.done) { confirmed = true; break; }
@@ -5013,21 +5048,24 @@ export function startEbIpcServer(
             // ── Diagnostic: collect page state before destroying the window ──────────
             let diagInfo = "(diagnostic failed)";
             try {
-              diagInfo = await sfWin.webContents.executeJavaScript(`
-                (function() {
-                  var btns = Array.from(document.querySelectorAll('button, [role="button"]')).map(function(b) {
-                    var lbl = (b.getAttribute('aria-label') || '').trim();
-                    var txt = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').trim();
-                    return (lbl || txt).slice(0, 40);
-                  }).filter(function(t) { return t.length > 0; });
-                  return JSON.stringify({
-                    url:   location.href,
-                    title: document.title.slice(0, 80),
-                    buttons: btns.slice(0, 20),
-                    bodySnippet: (document.body ? document.body.innerText.slice(0, 200) : ''),
-                  });
-                })()
-              `, true).catch(() => "(js-eval failed)");
+              diagInfo = await Promise.race([
+                sfWin.webContents.executeJavaScript(`
+                  (function() {
+                    var btns = Array.from(document.querySelectorAll('button, [role="button"]')).map(function(b) {
+                      var lbl = (b.getAttribute('aria-label') || '').trim();
+                      var txt = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').trim();
+                      return (lbl || txt).slice(0, 40);
+                    }).filter(function(t) { return t.length > 0; });
+                    return JSON.stringify({
+                      url:   location.href,
+                      title: document.title.slice(0, 80),
+                      buttons: btns.slice(0, 20),
+                      bodySnippet: (document.body ? document.body.innerText.slice(0, 200) : ''),
+                    });
+                  })()
+                `, true).catch(() => "(js-eval failed)"),
+                new Promise<string>(r => setTimeout(() => r("(diag-timeout — context destroyed)"), 5_000)),
+              ]);
             } catch {}
             console.warn(
               `[eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20 s)\n` +
