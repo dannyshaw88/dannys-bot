@@ -4444,8 +4444,9 @@ export function startEbIpcServer(
           await sfWin.webContents.loadURL(profileUrl).catch(() => {});
 
           // Poll for the Follow button (Instagram renders async via React).
-          // Returns { clicked }, { alreadyFollowing }, or { timedOut }.
-          const clickResult: any = await sfWin.webContents.executeJavaScript(`
+          // Returns the button's bounding rect so we can CDP-tap it at real coordinates,
+          // or { alreadyFollowing } / { timedOut } — does NOT click the button itself.
+          const btnInfo: any = await sfWin.webContents.executeJavaScript(`
             new Promise(function(resolve) {
               var tries = 0, MAX = 40; // 20 s
               function check() {
@@ -4455,29 +4456,117 @@ export function startEbIpcServer(
                   return t === 'Follow' || t === 'Follow Back';
                 });
                 if (followBtn && !followBtn.disabled) {
-                  followBtn.click();
-                  resolve({ clicked: true });
+                  var r = followBtn.getBoundingClientRect();
+                  resolve({ found: true, x: r.left, y: r.top, w: r.width, h: r.height });
                   return;
                 }
                 var alreadyBtn = btns.find(function(b) {
                   var t = (b.textContent || '').trim();
                   return t === 'Following' || t === 'Requested';
                 });
-                if (alreadyBtn) { resolve({ clicked: false, alreadyFollowing: true }); return; }
-                if (++tries >= MAX) { resolve({ clicked: false, timedOut: true }); return; }
+                if (alreadyBtn) { resolve({ found: false, alreadyFollowing: true }); return; }
+                if (++tries >= MAX) { resolve({ found: false, timedOut: true }); return; }
                 setTimeout(check, 500);
               }
               check();
             })
-          `, true).catch(() => ({ clicked: false, timedOut: true }));
+          `, true).catch(() => ({ found: false, timedOut: true }));
 
-          if (clickResult?.clicked) {
-            // Give Instagram 2 s to register the follow request before destroying the window.
-            await new Promise(r => setTimeout(r, 2000));
-            console.log(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓`);
+          if (btnInfo?.found) {
+            // ── Per-account tap personality ──────────────────────────────────────
+            // Seed from profileId so each account has a stable style (not pure
+            // Math.random) — 1,000 accounts doing identical timing every run is
+            // itself a fingerprint.  The seed produces consistent behaviour for the
+            // same account while varying it across the fleet.
+            const acctSeed = ((pid * 2654435761) >>> 0) / 0x100000000;
+
+            // Pre-tap dwell: 600–3000ms base (seeded) + up to 300ms call-level jitter.
+            // Accounts with a low seed "tap fast", high seed "hesitate longer" — but
+            // neither is robotic because the jitter shifts every call.
+            const dwellMs = 600 + Math.round(acctSeed * 2400) + Math.round(Math.random() * 300);
+            await new Promise(r => setTimeout(r, dwellMs));
+
+            // Re-query bounding rect after dwell — React layout shifts, banners, and
+            // scroll position can all move the button during the wait window.
+            const freshRect: any = await sfWin.webContents.executeJavaScript(`
+              (function() {
+                var btn = Array.from(document.querySelectorAll('button')).find(function(b) {
+                  var t = (b.textContent || '').trim();
+                  return t === 'Follow' || t === 'Follow Back';
+                });
+                if (!btn || btn.disabled) return null;
+                var r = btn.getBoundingClientRect();
+                return { x: r.left, y: r.top, w: r.width, h: r.height };
+              })()
+            `, true).catch(() => null);
+
+            // Tap point: not dead centre — biased toward centre but account-specific.
+            // X: 30–70% across button width.  Y: 35–65% of button height.
+            // Different multiplier on Y avoids both axes correlating.
+            const rect = freshRect ?? btnInfo;
+            const tapX = Math.round(rect.x + (0.30 + acctSeed * 0.40) * rect.w);
+            const tapY = Math.round(rect.y + (0.35 + ((acctSeed * 7919) % 0.30)) * rect.h);
+
+            // Attach Electron debugger and fire a real CDP touch event.
+            // try/finally guarantees detach on all exit paths.
+            // Falls back to JS .click() if the debugger is unavailable.
+            let followed = false;
+            const sfDbg = sfWin.webContents.debugger;
+            let dbgAttached = false;
+            try {
+              try { sfDbg.attach("1.3"); dbgAttached = true; } catch { /* already attached or unavailable */ }
+              if (dbgAttached) {
+                try {
+                  await cdpTapGesture(sfDbg, tapX, tapY);
+                  followed = true;
+                } catch { /* fall through to JS click */ }
+              }
+              if (!followed) {
+                await sfWin.webContents.executeJavaScript(`
+                  (function() {
+                    var btn = Array.from(document.querySelectorAll('button')).find(function(b) {
+                      var t = (b.textContent || '').trim();
+                      return t === 'Follow' || t === 'Follow Back';
+                    });
+                    if (btn) btn.click();
+                  })()
+                `, true).catch(() => {});
+              }
+
+              // Post-tap confirmation: poll for state change to Following/Requested.
+              // Only return success once Instagram's UI confirms — avoids false-ok
+              // when a layout shift caused the tap to miss the button.
+              const confirmMs = 1800 + Math.round(acctSeed * 600) + Math.round(Math.random() * 300);
+              let confirmed = false;
+              const confirmDeadline = Date.now() + confirmMs + 2000;
+              while (Date.now() < confirmDeadline) {
+                await new Promise(r => setTimeout(r, 300));
+                const state: any = await sfWin.webContents.executeJavaScript(`
+                  (function() {
+                    var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
+                      return (b.textContent || '').trim();
+                    });
+                    var done = btns.some(function(t) { return t === 'Following' || t === 'Requested'; });
+                    var stillFollow = btns.some(function(t) { return t === 'Follow' || t === 'Follow Back'; });
+                    return { done: done, stillFollow: stillFollow };
+                  })()
+                `, true).catch(() => null);
+                if (state?.done) { confirmed = true; break; }
+                // Button gone entirely (page navigated or modal) — treat as followed
+                if (!state?.stillFollow && !state?.done) { confirmed = true; break; }
+              }
+
+              if (!confirmed) {
+                console.warn(`[eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername} — may have missed button`);
+              }
+            } finally {
+              if (dbgAttached) try { sfDbg.detach(); } catch {}
+            }
+
+            console.log(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
             sfWin.destroy();
             return send(res, 200, { ok: true });
-          } else if (clickResult?.alreadyFollowing) {
+          } else if (btnInfo?.alreadyFollowing) {
             console.log(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
             sfWin.destroy();
             return send(res, 200, { ok: true, status: "already_following", reason: "Already following" });
