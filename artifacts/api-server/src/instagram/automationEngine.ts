@@ -4347,6 +4347,15 @@ class AutomationEngine {
         continue;
       }
 
+      // Browser follow reports "already following" as ok:true + status:"already_following" —
+      // treat it the same as a skip so it doesn't count as a new follow in stats.
+      if (result.status === "already_following") {
+        console.log(`[engine] @${profile.username}: skip @${user.username} (already following via browser)`);
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following");
+        skipped++;
+        continue;
+      }
+
       if (!result.ok) {
         console.log(`[engine] @${profile.username}: skip @${user.username} (already following / private)`);
         this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following or private account");
@@ -4368,7 +4377,11 @@ class AutomationEngine {
         console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
       }
       this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
-      await storage.incrementStat(profile.id, "follow");
+      try {
+        await storage.incrementStat(profile.id, "follow");
+      } catch (statErr: any) {
+        console.error(`[engine] @${profile.username}: ⚠ incrementStat("follow") failed — stat NOT recorded for @${user.username}: ${statErr?.message}`);
+      }
       this.bump(state);
       followed++;
 
@@ -4552,12 +4565,22 @@ class AutomationEngine {
             if (followed + blocked >= processCount) break;
             await sleep(randInt(followMin, followMax)); continue;
           }
+          // Browser follow reports "already following" as ok:true + status:"already_following" —
+          // treat it the same as a skip so it doesn't count as a new follow in stats.
+          if (result.status === "already_following") {
+            skipped++;
+            continue;
+          }
           if (!result.ok) { skipped++; continue; }
           try {
             await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: rescrapeSource.value, sourceType: rescrapeSource.type, followedAt: new Date().toISOString() });
           } catch {}
           this.logAction(profile.id, tool.id, "follow", user.username, rescrapeSource.value, rescrapeSource.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
-          await storage.incrementStat(profile.id, "follow");
+          try {
+            await storage.incrementStat(profile.id, "follow");
+          } catch (statErr: any) {
+            console.error(`[engine] @${profile.username}: ⚠ incrementStat("follow") failed — stat NOT recorded for @${user.username} (rescrape): ${statErr?.message}`);
+          }
           this.bump(state);
           followed++;
           console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);

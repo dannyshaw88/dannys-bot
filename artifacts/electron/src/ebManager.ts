@@ -4528,7 +4528,44 @@ export function startEbIpcServer(
             sfWin.destroy();
             return send(res, 200, { ok: true, status: "already_following", reason: "Already following" });
           } else {
-            console.warn(`[eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out)`);
+            // ── Diagnostic: collect page state before destroying the window ──────────
+            let diagInfo = "(diagnostic failed)";
+            try {
+              diagInfo = await sfWin.webContents.executeJavaScript(`
+                (function() {
+                  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
+                    return (b.textContent || '').trim().slice(0, 40);
+                  }).filter(function(t) { return t.length > 0; });
+                  return JSON.stringify({
+                    url:   location.href,
+                    title: document.title.slice(0, 80),
+                    buttons: btns.slice(0, 20),
+                    bodySnippet: (document.body ? document.body.innerText.slice(0, 200) : ''),
+                  });
+                })()
+              `, true).catch(() => "(js-eval failed)");
+            } catch {}
+            console.warn(
+              `[eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20 s)\n` +
+              `  Page state: ${diagInfo}`
+            );
+
+            // ── Screenshot: save PNG to screenshot-errors/ for post-mortem ──────────
+            try {
+              const screenshotDir = path.join(_cookiesDir, "screenshot-errors");
+              fs.mkdirSync(screenshotDir, { recursive: true });
+              const safeUsername = targetUsername.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 50);
+              const screenshotPath = path.join(
+                screenshotDir,
+                `follow-fail-${pid}-${safeUsername}-${Date.now()}.png`
+              );
+              const img = await sfWin.webContents.capturePage();
+              fs.writeFileSync(screenshotPath, img.toPNG());
+              console.warn(`[eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
+            } catch (ssErr: any) {
+              console.warn(`[eb:silent-follow:${pid}] Screenshot capture failed: ${ssErr?.message}`);
+            }
+
             sfWin.destroy();
             return send(res, 200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
           }
