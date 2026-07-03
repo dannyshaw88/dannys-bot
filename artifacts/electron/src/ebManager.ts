@@ -4661,11 +4661,19 @@ export function startEbIpcServer(
             }
           }
 
+          // CRITICAL: Do NOT use show:false with no subsequent show() call.
+          // Chromium throttles JS timers in windows that were never shown —
+          // setTimeout fires seconds late, executeJavaScript calls hang, and
+          // the 80s watchdog fires before the Follow button is ever found.
+          // Solution (same as verify-mode): position the window completely
+          // off-screen and call showInactive() so Chromium treats it as a
+          // visible window and runs timers at full speed.
+          const { width: _sfSw } = eScreen.getPrimaryDisplay().workAreaSize;
           sfTempWin = new BrowserWindow({
             width:       1280,
             height:      820,
-            x:           999999,
-            y:           999999,
+            x:           _sfSw + 10, // off the right edge of every monitor
+            y:           0,
             show:        false,
             skipTaskbar: true,
             webPreferences: {
@@ -4674,8 +4682,13 @@ export function startEbIpcServer(
               partition:        sfPartition,
             },
           });
+          // Show off-screen without stealing focus — MUST NOT be skipped or
+          // Chromium will throttle all timers in this window.
+          sfTempWin.once("ready-to-show", () => {
+            if (sfTempWin && !sfTempWin.isDestroyed()) sfTempWin.showInactive();
+          });
           sfWin = sfTempWin;
-          _ipcLog(`[eb:silent-follow:${pid}] mode B — created hidden background window (partition=${sfPartition}) for @${targetUsername}`);
+          _ipcLog(`[eb:silent-follow:${pid}] mode B — created off-screen background window (partition=${sfPartition}) for @${targetUsername}`);
         }
 
         // Remember where the browser is now so we can restore it when done

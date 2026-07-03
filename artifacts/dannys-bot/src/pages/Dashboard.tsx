@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.310",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed background browser-follows timing out every time. The hidden follow window was being kept invisible, which caused Chrome to throttle all its JavaScript timers — making the follow button search crawl and triggering the 80s watchdog before any action could complete. The window is now shown off-screen (invisible to you, but Chrome treats it as active), so timers run at full speed and follows complete normally.",
+      },
+    ],
+  },
+  {
     version: "1.1.309",
     date: "3 Jul 2026",
     items: [
