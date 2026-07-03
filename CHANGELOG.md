@@ -4,6 +4,60 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.309] — 2026-07-03
+
+### Fixed
+
+#### Electron/EB logs now appear in the API server log file (`ebManager.ts`)
+
+**Problem**: The Electron main process runs in a separate OS process from the API server. Every `console.log` call in `ebManager.ts` — including session death alerts, silent-follow diagnostics, WATCHDOG fires, and login detection results — went to the Electron terminal only. The API server log file (`equinox-debug.log`) that is used for debugging showed nothing from the browser layer, making follow failures completely opaque from the log alone.
+
+**Fix**: Added a module-level `_ipcLog(msg)` function. It writes to `console.log` AND fire-and-forgets a POST to the existing `/api/ipc-log` endpoint on the API server, which then emits the line through pino into the normal log stream. All session-critical log lines now call `_ipcLog` instead of `console.log/warn/error`:
+
+- `[eb-session-dead:ID]` — session death detected by the 30 s DOM poll
+- `[eb:silent-follow:ID]` — every phase of every follow attempt: slot acquired/released, cookie seeding, START, loadURL result, landed URL + login/checkpoint flags, Follow button poll result, tap confirmation, page-state diagnostic, Screenshot saved path, WATCHDOG, error
+
+This means every follow failure and session death will now be **fully visible in the log** without needing Electron DevTools access.
+
+---
+
+#### `executeJavaScript` hang fixed — watchdog_timeout eliminated (`ebManager.ts`)
+
+**Problem**: The silent-follow handler loads a profile page, then calls `executeJavaScript` to poll for the Follow button (a JS Promise that runs for up to 20 s inside the renderer). If `loadURL` hits the 30 s race cap and we proceed with a partially loaded page, the real `loadURL` promise keeps running in the background. When it eventually completes or triggers a navigation, Electron destroys the old renderer context — but any pending `executeJavaScript` Promise **never resolves or rejects**. It hangs silently until the 80 s server-side watchdog fires and force-kills the window. This produced the `watchdog_timeout — forced cleanup after 80s, likely a stuck page` errors seen throughout the logs.
+
+**Fix**: Every `executeJavaScript` call inside the silent-follow handler is now wrapped with `Promise.race` against a hard timeout:
+
+| Call | Timeout |
+|---|---|
+| `isLoginDom` login-wall DOM probe | 5 s |
+| `isCheckpointPage` suspicious-activity probe | 5 s |
+| `btnInfo` Follow button poll (20 s internal loop) | 25 s outer cap |
+| `freshRect` post-dwell button rect re-query | 5 s |
+| Fallback JS `.click()` | 3 s |
+| Confirmation loop `state` check (per iteration) | 2 s |
+| `diagInfo` page-state diagnostic capture | 5 s |
+
+Worst-case timeline is now ≈78 s (well inside the 80 s watchdog), making the watchdog a last-resort emergency exit rather than the normal code path.
+
+---
+
+#### "Follow button not found" masking "session_expired" — login-wall re-check added (`ebManager.ts`)
+
+**Problem**: When `loadURL` hit the 30 s cap and we proceeded with a partially-loaded page, the initial `isLoginDom` check ran on an incomplete DOM. If the login wall hadn't finished rendering yet, `isLoginDom` returned `false` and the code fell through to the Follow button poll. By the time the 20 s poll timed out, the login page WAS fully rendered — but we'd already moved past the login-wall detection. The result was `follow_blocked` with reason `"Follow button not found on page"` instead of `"session_expired"`, which is exactly what was observed for `@rojin.abegum602` → `@tijax_tz`.
+
+**Fix**: After the Follow button poll times out, a second login-wall check runs before returning the error:
+1. Re-reads the current URL (catches hard redirects that completed during the poll)
+2. Re-runs the DOM probe (password input / "Log in" / "Continue as" button) with a 3 s timeout
+3. If a login wall is now detected, returns `session_expired — browser session logged out` so the engine and the user know the real cause
+
+---
+
+#### Session-death alert forwarded to API server log (`ebManager.ts`)
+
+The `_sessionAlivePoll` (30 s interval that detects "Continue as" overlays) previously only called `console.warn`, so its `[eb-session-dead:ID]` alert was invisible in the API server log. Now calls `_ipcLog` so session deaths appear immediately in the log.
+
+---
+
 ## [1.1.305] — 2026-07-03
 
 ### Added

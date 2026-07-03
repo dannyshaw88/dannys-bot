@@ -196,6 +196,28 @@ let _serverPort = 0;
 let _cookiesDir  = "";
 let _iconPath    = "";
 
+// ── Global IPC log forwarder ───────────────────────────────────────────────────
+// The Electron main process runs in a separate OS process from the API server.
+// Its console.log output goes to the Electron terminal, NOT to the server's log
+// file (equinox-debug.log) that the user reads for debugging.
+//
+// This function sends every important log line to /api/ipc-log on the API server
+// so it appears in the same pino log stream.  Fire-and-forget: failures are
+// silently swallowed so a dropped log never blocks the automation flow.
+//
+// Use this for all session-critical events (session death, follow start/result,
+// watchdog, error).  Routine poll/cookie lines stay console-only to keep the
+// API log clean.
+function _ipcLog(msg: string): void {
+  console.log(msg);
+  if (!_serverPort) return;
+  fetch(`http://127.0.0.1:${_serverPort}/api/ipc-log`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ message: msg }),
+  }).catch(() => {});
+}
+
 // ── Silent-follow concurrency gate ─────────────────────────────────────────
 // At most 2 hidden follow-windows open simultaneously.  If the limit is reached
 // the IPC call returns immediately so the caller isn't blocked waiting inside
@@ -3177,7 +3199,9 @@ export async function openEbWindow(opts: {
       const now = Date.now();
       if (now - _sessionAliveLastAlert < 60_000) return; // already logged this death
       _sessionAliveLastAlert = now;
-      console.warn(
+      // Use _ipcLog so this critical event appears in the API server log file,
+      // not just the Electron console (which the user cannot see during normal operation).
+      _ipcLog(
         `[eb-session-dead:${profileId}] ` +
         `@${username} SESSION DEAD DETECTED BY POLL ` +
         `— reason="${result.reason}" ` +
@@ -4599,11 +4623,11 @@ export function startEbIpcServer(
         // fast and does not burn into the 90 s timeout budget while waiting.
         // The engine will retry this follow on its next session cycle (125–250 s later).
         if (_sfActive >= _SF_MAX) {
-          console.log(`[eb:silent-follow:${pid}] concurrency limit (active=${_sfActive}/${_SF_MAX}) — returning retry-next-cycle`);
+          _ipcLog(`[eb:silent-follow:${pid}] concurrency limit (active=${_sfActive}/${_SF_MAX}) — returning retry-next-cycle`);
           return send(res, 200, { ok: false, status: "follow_blocked", reason: "concurrent-limit — will retry automatically next cycle" });
         }
         _sfActive++;
-        console.log(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX})`);
+        _ipcLog(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX})`);
 
         // ── Server-side watchdog ──────────────────────────────────────────────
         // The caller (automationEngine) aborts its fetch after 90 s via
@@ -4623,7 +4647,7 @@ export function startEbIpcServer(
         const sfWatchdog = setTimeout(() => {
           if (sfSettled) return;
           sfSettled = true;
-          console.error(`[eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, forcing window destroy + slot release to prevent a zombie session`);
+          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, forcing window destroy + slot release to prevent a zombie session`);
           try { sfWin.destroy(); } catch {}
           _sfRelease();
           try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — forced cleanup after 80s, likely a stuck page" }); } catch {}
@@ -4684,7 +4708,7 @@ export function startEbIpcServer(
               }).catch(() => {});
             }
             seededFromLive = true;
-            console.log(`[eb:silent-follow:${pid}] seeded ${liveCookies.length} cookies from live partition (sessionid present)`);
+            _ipcLog(`[eb:silent-follow:${pid}] seeded ${liveCookies.length} cookies from live partition (sessionid present)`);
           }
         } catch { /* fall through to file-based seed */ }
 
@@ -4705,7 +4729,7 @@ export function startEbIpcServer(
                   sameSite: "no_restriction",
                 }).catch(() => {});
               }
-              console.log(`[eb:silent-follow:${pid}] seeded cookies from file (live partition had no sessionid)`);
+              _ipcLog(`[eb:silent-follow:${pid}] seeded cookies from file (live partition had no sessionid)`);
             }
           } catch { /* no file either — will likely get logged-out redirect */ }
         }
@@ -4737,22 +4761,22 @@ export function startEbIpcServer(
           // Log every URL the hidden window visits so we can see exactly where
           // Instagram redirects (profile → login, profile → onetap, etc.).
           sfWin.webContents.on("did-navigate", (_e: any, navUrl: string, httpCode: number) => {
-            console.log(`[eb:silent-follow:${pid}] did-navigate → ${navUrl.slice(0, 200)} [HTTP ${httpCode}]`);
+            _ipcLog(`[eb:silent-follow:${pid}] did-navigate → ${navUrl.slice(0, 200)} [HTTP ${httpCode}]`);
           });
           sfWin.webContents.on("did-redirect-navigation", (_e: any, url: string, isInPlace: boolean, isMainFrame: boolean, frameId: number, requestId: number, initiatorPol?: any) => {
-            console.log(`[eb:silent-follow:${pid}] redirect → ${url.slice(0, 200)}`);
+            _ipcLog(`[eb:silent-follow:${pid}] redirect → ${url.slice(0, 200)}`);
           });
 
           // Navigate directly to the target's profile page.
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
-          console.log(`[eb:silent-follow:${pid}] START partition=${sfTempPartition} target=@${targetUsername} url=${profileUrl}`);
+          _ipcLog(`[eb:silent-follow:${pid}] START partition=${sfTempPartition} target=@${targetUsername} url=${profileUrl}`);
 
           // Capture navigation errors explicitly — swallowing them lets a failed
           // loadURL silently leave the URL as about:blank, which then passes the
           // login-wall check and times out as "Follow button not found" instead of
           // giving a clear network/proxy error.
           const _sfT0 = Date.now();
-          console.log(`[eb:silent-follow:${pid}] loadURL start at T+0ms`);
+          _ipcLog(`[eb:silent-follow:${pid}] loadURL start at T+0ms`);
           let sfNavError: Error | null = null;
           // Race loadURL against a 30 s hard cap.
           // loadURL waits for did-finish-load (ALL sub-resources including CDN JS/images).
@@ -4766,13 +4790,13 @@ export function startEbIpcServer(
             new Promise<"timeout">(r => setTimeout(() => r("timeout"), 30_000)),
           ]);
           if (_sfLoadResult === "timeout") {
-            console.warn(`[eb:silent-follow:${pid}] loadURL hit 30 s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL hit 30 s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
           } else {
-            console.log(`[eb:silent-follow:${pid}] loadURL ${_sfLoadResult} in ${Date.now() - _sfT0}ms`);
+            _ipcLog(`[eb:silent-follow:${pid}] loadURL ${_sfLoadResult} in ${Date.now() - _sfT0}ms`);
           }
           if (sfNavError) {
             const msg = (sfNavError as Error).message ?? String(sfNavError);
-            console.warn(`[eb:silent-follow:${pid}] loadURL failed — ${msg}`);
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL failed — ${msg}`);
             sfWin.destroy();
             return sfRespond(200, { ok: false, status: "follow_blocked", reason: `Browser navigation failed: ${msg}` });
           }
@@ -4850,13 +4874,13 @@ export function startEbIpcServer(
           ]);
 
           if (isCheckpointPage) {
-            console.warn(`[eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}". Stopping immediately instead of polling for the Follow button; account needs manual review before further automated actions.`);
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}". Stopping immediately instead of polling for the Follow button; account needs manual review before further automated actions.`);
             sfWin.destroy();
             return sfRespond(200, { ok: false, status: "checkpoint_detected", reason: "Instagram checkpoint/suspicious-activity page shown — halt further automation on this account until manually reviewed" });
           }
 
           // Always log the final landing URL + detection result.
-          console.log(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom} checkpoint=${isCheckpointPage}`);
+          _ipcLog(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom} checkpoint=${isCheckpointPage}`);
 
           // Also log the main EB's current URL to confirm isolation is working.
           try {
@@ -4864,12 +4888,12 @@ export function startEbIpcServer(
             const mainUrl = (mainEntry && !mainEntry.win.isDestroyed())
               ? mainEntry.win.webContents.getURL()
               : "(main EB not open)";
-            console.log(`[eb:silent-follow:${pid}] main-EB url="${mainUrl.slice(0, 200)}" — should NOT be login page if isolation is working`);
+            _ipcLog(`[eb:silent-follow:${pid}] main-EB url="${mainUrl.slice(0, 200)}" — should NOT be login page if isolation is working`);
           } catch { /* non-fatal */ }
 
           if (isLoginPage) {
             const reason = isLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
-            console.warn(`[eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Temp partition="${sfTempPartition}". Account needs re-verify.`);
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Temp partition="${sfTempPartition}". Account needs re-verify.`);
             sfWin.destroy();
             return sfRespond(200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
           }
@@ -4877,7 +4901,7 @@ export function startEbIpcServer(
           // Poll for the Follow button (Instagram renders async via React).
           // Returns the button's bounding rect so we can CDP-tap it at real coordinates,
           // or { alreadyFollowing } / { timedOut } — does NOT click the button itself.
-          console.log(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
+          _ipcLog(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
           // IMPORTANT: wrap with an outer Promise.race timeout.
           // The JS Promise inside the eval polls the DOM for up to 20 s via setTimeout.
           // If a page navigation fires DURING that 20 s window (because the background
@@ -4918,7 +4942,7 @@ export function startEbIpcServer(
             `, true).catch(() => ({ found: false, timedOut: true })),
             new Promise<{ found: false; timedOut: true }>(r =>
               setTimeout(() => {
-                console.warn(`[eb:silent-follow:${pid}] btnInfo executeJavaScript hit 25 s outer timeout — page context likely destroyed by mid-flight navigation`);
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] btnInfo executeJavaScript hit 25 s outer timeout — page context likely destroyed by mid-flight navigation`);
                 r({ found: false, timedOut: true });
               }, 25_000)
             ),
@@ -5031,17 +5055,17 @@ export function startEbIpcServer(
               }
 
               if (!confirmed) {
-                console.warn(`[eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername} — may have missed button`);
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername} — may have missed button`);
               }
             } finally {
               if (dbgAttached) try { sfDbg.detach(); } catch {}
             }
 
-            console.log(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
+            _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
             sfWin.destroy();
             return sfRespond(200, { ok: true });
           } else if (btnInfo?.alreadyFollowing) {
-            console.log(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
+            _ipcLog(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
             sfWin.destroy();
             return sfRespond(200, { ok: true, status: "already_following", reason: "Already following" });
           } else {
@@ -5067,8 +5091,43 @@ export function startEbIpcServer(
                 new Promise<string>(r => setTimeout(() => r("(diag-timeout — context destroyed)"), 5_000)),
               ]);
             } catch {}
-            console.warn(
-              `[eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20 s)\n` +
+
+            // ── Login-wall re-check ───────────────────────────────────────────────
+            // The initial isLoginDom check ran on a partially-loaded page (we
+            // proceeded after the 30 s loadURL cap).  By the time the 20 s button
+            // poll finishes, the page may now be fully rendered — and if it's a
+            // login wall, we get a correct "session_expired" reason instead of the
+            // generic "Follow button not found" that masked session deaths before.
+            const _reCheckLoginUrl: string = sfWin.isDestroyed() ? "" : sfWin.webContents.getURL();
+            const _reCheckIsLoginUrl = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_reCheckLoginUrl)
+              || _reCheckLoginUrl.includes("/accounts/onetap/")
+              || _reCheckLoginUrl.includes("/accounts/suspended/");
+            const _reCheckIsLoginDom: boolean = _reCheckIsLoginUrl || sfWin.isDestroyed() ? false
+              : await Promise.race([
+                sfWin.webContents.executeJavaScript(`
+                  (function() {
+                    var pwdInput = document.querySelector('input[type="password"]');
+                    if (pwdInput && pwdInput.offsetParent !== null) return true;
+                    var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
+                    for (var i = 0; i < btns.length; i++) {
+                      var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
+                      if (t === 'log in' || t.startsWith('continue as')) return true;
+                    }
+                    return false;
+                  })()
+                `, true).catch(() => false),
+                new Promise<false>(r => setTimeout(() => r(false), 3_000)),
+              ]);
+            const _reCheckIsLogin = _reCheckIsLoginUrl || _reCheckIsLoginDom;
+            if (_reCheckIsLogin) {
+              const _rcReason = _reCheckIsLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED (detected on re-check after button poll) — ${_rcReason} url="${_reCheckLoginUrl.slice(0, 200)}"`);
+              sfWin.destroy();
+              return sfRespond(200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
+            }
+
+            _ipcLog(
+              `[WARN] [eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20 s)\n` +
               `  Page state: ${diagInfo}`
             );
 
@@ -5083,9 +5142,9 @@ export function startEbIpcServer(
               );
               const img = await sfWin.webContents.capturePage();
               fs.writeFileSync(screenshotPath, img.toPNG());
-              console.warn(`[eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
             } catch (ssErr: any) {
-              console.warn(`[eb:silent-follow:${pid}] Screenshot capture failed: ${ssErr?.message}`);
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot capture failed: ${ssErr?.message}`);
             }
 
             sfWin.destroy();
@@ -5093,7 +5152,7 @@ export function startEbIpcServer(
           }
         } catch (sfErr: any) {
           try { sfWin.destroy(); } catch {}
-          console.error(`[eb:silent-follow:${pid}] error: ${sfErr?.message}`);
+          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] error: ${sfErr?.message}`);
           return sfRespond(200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
         } finally {
           // Always release the concurrency slot so the next queued follow can run,
@@ -5102,7 +5161,7 @@ export function startEbIpcServer(
           // it's safe if the watchdog already ran first.
           clearTimeout(sfWatchdog);
           _sfRelease();
-          console.log(`[eb:silent-follow:${pid}] slot released (active=${_sfActive}/${_SF_MAX})`);
+          _ipcLog(`[eb:silent-follow:${pid}] slot released (active=${_sfActive}/${_SF_MAX})`);
         }
       }
 
