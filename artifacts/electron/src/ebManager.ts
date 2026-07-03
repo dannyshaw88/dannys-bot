@@ -4518,11 +4518,68 @@ export function startEbIpcServer(
           }
         } catch { /* proceed without — might still work if session already has cookies */ }
 
-        // Use the account's persisted session partition so the window is already logged in.
-        const sfPartition = `persist:eb-${pid}`;
-        const sfSes = electronSession.fromPartition(sfPartition);
+        // ── Isolated temporary session ────────────────────────────────────────
+        // CRITICAL: do NOT reuse persist:eb-${pid} here.
+        // The main EB window is alive and logged in on that partition.  Writing
+        // stale cookies from the cookie file on top of the live session corrupts
+        // both the hidden follow window AND the visible EB window simultaneously,
+        // because all windows on the same persist: partition share one cookie jar.
+        // That is why the EB shows the "Continue as…" screen after every follow.
+        //
+        // Solution: create a throw-away in-memory partition (no "persist:" prefix),
+        // copy the LIVE cookies from the main partition directly into it, and apply
+        // the proxy only to this isolated session.  When the window is destroyed,
+        // the temp session vanishes — the main EB partition is never touched.
+        const sfTempPartition = `eb-follow-${pid}-${Date.now()}`;
+        const sfSes = electronSession.fromPartition(sfTempPartition, { cache: false });
 
-        // Apply proxy (double-set with cache clear — identical to silent-verify pattern).
+        // Copy live cookies from the main EB partition (freshest available).
+        // Fall back to the cookie file only if the main partition has no sessionid.
+        const mainSes = electronSession.fromPartition(`persist:eb-${pid}`);
+        let seededFromLive = false;
+        try {
+          const liveCookies = await mainSes.cookies.get({ url: "https://www.instagram.com" });
+          const hasSession = liveCookies.some(c => c.name === "sessionid" && c.value);
+          if (hasSession) {
+            for (const c of liveCookies) {
+              await sfSes.cookies.set({
+                url:      "https://www.instagram.com",
+                name:     c.name,
+                value:    c.value ?? "",
+                domain:   c.domain  ?? ".instagram.com",
+                path:     c.path    ?? "/",
+                secure:   c.secure  ?? true,
+                sameSite: (c.sameSite as any) ?? "no_restriction",
+              }).catch(() => {});
+            }
+            seededFromLive = true;
+            console.log(`[eb:silent-follow:${pid}] seeded ${liveCookies.length} cookies from live partition (sessionid present)`);
+          }
+        } catch { /* fall through to file-based seed */ }
+
+        if (!seededFromLive) {
+          // Live partition had no session — try the cookie file as fallback.
+          try {
+            const cfPath = cookieFilePath(pid);
+            if (fs.existsSync(cfPath)) {
+              const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
+              for (const c of rawCookies) {
+                await sfSes.cookies.set({
+                  url:      "https://www.instagram.com",
+                  name:     c.name,
+                  value:    c.value,
+                  domain:   c.domain  ?? ".instagram.com",
+                  path:     c.path    ?? "/",
+                  secure:   true,
+                  sameSite: "no_restriction",
+                }).catch(() => {});
+              }
+              console.log(`[eb:silent-follow:${pid}] seeded cookies from file (live partition had no sessionid)`);
+            }
+          } catch { /* no file either — will likely get logged-out redirect */ }
+        }
+
+        // Apply proxy ONLY to the temp session — never to the main partition.
         if (sfProxy && !sfUseHomeIp) {
           const sfCfg = buildProxyConfig(sfProxy);
           await sfSes.setProxy(sfCfg).catch(() => {});
@@ -4531,32 +4588,12 @@ export function startEbIpcServer(
           await sfSes.setProxy(sfCfg).catch(() => {});
         }
 
-        // Seed the session with cookies from the cookie file in case the user has
-        // not opened the EB for this account yet (partition may be empty).
-        try {
-          const cfPath = cookieFilePath(pid);
-          if (fs.existsSync(cfPath)) {
-            const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
-            for (const c of rawCookies) {
-              await sfSes.cookies.set({
-                url:      "https://www.instagram.com",
-                name:     c.name,
-                value:    c.value,
-                domain:   c.domain  ?? ".instagram.com",
-                path:     c.path    ?? "/",
-                secure:   true,
-                sameSite: "no_restriction",
-              }).catch(() => {});
-            }
-          }
-        } catch { /* no file — rely on partition's persisted cookies */ }
-
         const sfWin = new BrowserWindow({
           show:   false,
           width:  390,
           height: 844,
           webPreferences: {
-            partition:        sfPartition,
+            partition:        sfTempPartition,
             nodeIntegration:  false,
             contextIsolation: true,
           },
@@ -4569,6 +4606,22 @@ export function startEbIpcServer(
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
           console.log(`[eb:silent-follow:${pid}] navigating → ${profileUrl}`);
           await sfWin.webContents.loadURL(profileUrl).catch(() => {});
+
+          // ── Login-wall check — detect session expiry immediately ──────────────
+          // If the session is dead, Instagram redirects to /accounts/login/ or shows
+          // the "Continue as…" screen (same URL but with a login wall).  Check the
+          // final URL right now so we don't waste 20 s polling for a Follow button
+          // that will never appear, and so the engine gets the correct error type
+          // ("session_expired") instead of the misleading "Follow button not found".
+          const landedUrl: string = sfWin.webContents.getURL();
+          const isLoginPage = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(landedUrl)
+            || landedUrl.includes("/accounts/onetap/")
+            || landedUrl.includes("/accounts/suspended/");
+          if (isLoginPage) {
+            console.warn(`[eb:silent-follow:${pid}] session expired — browser redirected to login page (${landedUrl.slice(0, 120)}). Account needs re-verify.`);
+            sfWin.destroy();
+            return send(res, 200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
+          }
 
           // Poll for the Follow button (Instagram renders async via React).
           // Returns the button's bounding rect so we can CDP-tap it at real coordinates,

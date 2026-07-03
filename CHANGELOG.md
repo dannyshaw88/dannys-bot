@@ -4,6 +4,26 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.302] — 2026-07-03
+
+### Fixed
+
+#### Browser follow logs out the visible EB — isolated temp session for silent-follow (`ebManager.ts`)
+
+**Symptom**: After a browser-follow attempt (accounts with "Do Actions Via Browser → Follows" enabled), the account's visible embedded browser would show Instagram's "Continue as…" screen — the session was alive before the follow, dead after it. The follow itself always failed with "Follow button not found on page" even though the target profile exists.
+
+**Root cause**: `silent-follow` was using `persist:eb-${profileId}` — the exact same Electron session partition as the live EB window. Because all windows on a `persist:` partition share one cookie jar, the cookie-seeding step inside `silent-follow` (which reads from the on-disk cookie file) was overwriting the live, valid session cookies in the shared jar with potentially stale file cookies. Both the hidden follow window and the visible EB window read from the same jar, so the moment the follow window corrupted the cookies, the main EB was also logged out. Instagram then showed the "Continue as…" screen when the user looked at the main EB.
+
+**Fix**: `silent-follow` now creates a throw-away in-memory partition (`eb-follow-${pid}-${Date.now()}`, no `persist:` prefix) for each follow attempt. It seeds this temp partition by reading the **live** cookies directly from the main `persist:eb-${pid}` session via `mainSes.cookies.get()` (the freshest available cookies, not the stale file), falls back to the file only if the live partition has no sessionid, and applies the proxy only to the temp session. When the follow window is destroyed the temp session disappears entirely — the main EB partition is never read from, written to, or had its proxy config touched.
+
+#### Browser follow: instant login-wall detection instead of 20-second poll timeout (`ebManager.ts`)
+
+**Symptom**: When the browser session was already expired (for any reason), `silent-follow` would navigate to the target profile, get redirected to the Instagram login page, and then poll for 20 seconds looking for a Follow button that could never appear. The account was reported as `follow_blocked: Follow button not found on page` instead of `follow_blocked: session_expired`.
+
+**Fix**: After `loadURL` resolves, the final URL is immediately checked against the login-page pattern (`/accounts/login/`, `/accounts/onetap/`, `/accounts/suspended/`). On match the window is destroyed and `session_expired — browser session logged out` is returned immediately — the engine's existing `logged_out` path then marks the account correctly and stops the session, rather than waiting 20 seconds and reporting the wrong error.
+
+---
+
 ## [1.1.301] — 2026-07-03
 
 ### Fixed

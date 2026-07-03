@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.302",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Browser follows no longer log the account out of the embedded browser. The follow action was sharing the same session as the visible EB window and overwriting its cookies — now it uses a completely separate temporary session so the main browser is never touched.",
+      },
+      {
+        category: "Fix",
+        text: "When a browser session is already expired, the follow attempt now fails immediately with a clear \"session expired\" error instead of waiting 20 seconds and reporting the wrong \"Follow button not found\" message.",
+      },
+    ],
+  },
+  {
     version: "1.1.301",
     date: "3 Jul 2026",
     items: [
