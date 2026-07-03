@@ -4,6 +4,33 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.311] — 2026-07-03
+
+### Fixed (Critical)
+
+#### Browser-follow completely rewritten to use the existing EB window (`ebManager.ts`)
+
+**The entire two-browser approach was wrong.** The previous implementation created a second hidden `BrowserWindow` with a temp partition for every follow. This was never the intended design — one account, one browser. The existing EB window (`ebMap.get(pid).win`) is already logged in, already has the right proxy and cookies, and is the only browser that should ever act on that account.
+
+**What was broken:** A hidden second window was created, its temp partition was seeded by copying cookies from the live partition, and the proxy was re-configured from scratch. This produced two concurrent browser sessions for the same Instagram account on every follow attempt — an instant automation signal. The `watchdog_timeout` failures followed naturally because Instagram was terminating or rate-limiting the second session.
+
+**Fix:** The `/eb/silent-follow` handler now:
+1. Calls `ebMap.get(pid)` — gets the existing open EB window
+2. Returns `follow_blocked: "EB not open"` immediately if no window is open for that account (the engine must open the EB first)
+3. Remembers `prevUrl` (where the browser was before the follow)
+4. Navigates the existing window to `https://www.instagram.com/<targetUsername>/`
+5. Checks for login wall / checkpoint
+6. Polls for Follow button, clicks via CDP tap (falls back to JS click)
+7. Confirms the state changed to Following/Requested
+8. Calls `sfWin.webContents.loadURL(prevUrl)` to restore the browser to where it was
+9. Returns the result
+
+No new `BrowserWindow`, no temp partition, no cookie seeding, no proxy setup. All of that is already done by the EB open flow.
+
+The watchdog now restores the URL instead of destroying the window. The per-account mutex (`_sfInProgress`) prevents two simultaneous follows on the same window.
+
+---
+
 ## [1.1.310] — 2026-07-03
 
 ### Fixed

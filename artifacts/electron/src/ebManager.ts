@@ -218,17 +218,10 @@ function _ipcLog(msg: string): void {
   }).catch(() => {});
 }
 
-// ── Silent-follow concurrency gate ─────────────────────────────────────────
-// At most 2 hidden follow-windows open simultaneously.  If the limit is reached
-// the IPC call returns immediately so the caller isn't blocked waiting inside
-// the 90 s timeout budget.  The engine retries on its next session cycle
-// (125–250 s later).  Each window is destroyed immediately after use so slots
-// free fast.
-let _sfActive = 0;
-const _SF_MAX  = 2;
-function _sfRelease(): void {
-  _sfActive = Math.max(0, _sfActive - 1);
-}
+// Tracks which profileIds are currently running a browser-follow so we
+// don't start two simultaneous follows on the same EB window.
+// One account = one browser = one follow at a time.
+const _sfInProgress = new Set<number>();
 // Bumped every time a ghost-signup starts OR the ghost browser is closed/reset.
 // Each ghost-signup async block captures its own token at start and checks it
 // before every long-running step — ensures a stale run cannot bleed into the next.
@@ -4609,49 +4602,52 @@ export function startEbIpcServer(
         return send(res, 200, { ok: true });
       }
 
-      // ── POST /eb/silent-follow ─────────────────────────────────────────────────
-      // Opens a hidden BrowserWindow, navigates to the target's Instagram profile,
-      // clicks the Follow button, then immediately destroys the window.
-      // Used by the automation engine when "Do Actions Via Browser → Follows" is
-      // enabled on an account.  The browser is NEVER shown to the user.
+      // ── POST /eb/silent-follow ──────────────────────────────────────────────────
+      // Uses the EXISTING open EB window (already logged in to Instagram) to
+      // navigate to the target's profile, click Follow, then navigate back.
+      //
+      // One browser per account.  Do NOT create a second BrowserWindow — two
+      // sessions on the same account is an instant automation signal to Instagram.
       if (req.method === "POST" && u.pathname === "/eb/silent-follow") {
         const targetUsername: string = (body.targetUsername ?? "").trim();
         if (!pid || !targetUsername) return send(res, 400, { error: "profileId and targetUsername required" });
 
-        // Concurrency gate — non-blocking.
-        // If both slots are occupied, return immediately so this IPC call completes
-        // fast and does not burn into the 90 s timeout budget while waiting.
-        // The engine will retry this follow on its next session cycle (125–250 s later).
-        if (_sfActive >= _SF_MAX) {
-          _ipcLog(`[eb:silent-follow:${pid}] concurrency limit (active=${_sfActive}/${_SF_MAX}) — returning retry-next-cycle`);
+        // Get the existing open EB window for this account.
+        const ebEntry = ebMap.get(pid);
+        if (!ebEntry || ebEntry.win.isDestroyed()) {
+          _ipcLog(`[eb:silent-follow:${pid}] no open EB window — EB must be open before browser-follows can run`);
+          return send(res, 200, { ok: false, status: "follow_blocked", reason: "EB not open — open the embedded browser for this account first" });
+        }
+        const sfWin = ebEntry.win;
+
+        // Serialise follows per-account — the engine should not send two
+        // simultaneous follows for the same profile, but guard here too.
+        if (_sfInProgress.has(pid)) {
+          _ipcLog(`[eb:silent-follow:${pid}] follow already in progress for this window — returning retry-next-cycle`);
           return send(res, 200, { ok: false, status: "follow_blocked", reason: "concurrent-limit — will retry automatically next cycle" });
         }
-        _sfActive++;
-        _ipcLog(`[eb:silent-follow:${pid}] slot acquired (active=${_sfActive}/${_SF_MAX})`);
+        _sfInProgress.add(pid);
 
-        // ── Server-side watchdog ──────────────────────────────────────────────
-        // The caller (automationEngine) aborts its fetch after 90 s via
-        // AbortSignal.timeout(90_000), but an aborted client-side fetch does NOT
-        // cancel this handler — Node keeps running it to completion. If any step
-        // below hangs past 90 s (slow proxy, stuck executeJavaScript, a
-        // checkpoint page that never resolves), the hidden BrowserWindow and its
-        // isolated session partition stay alive indefinitely. The engine then
-        // moves on to the NEXT follow target while this zombie window keeps
-        // holding a live IG session open and can still fire real requests in the
-        // background — multiple overlapping windows hitting Instagram from the
-        // same account is a classic automation-detection trigger and was traced
-        // as a likely contributor to at least one account suspension.
-        // This watchdog forces cleanup at 80 s (before the caller's 90 s abort)
-        // so no window ever survives past the point the engine has given up on it.
+        // Remember where the browser is now so we can restore it when done.
+        const prevUrl = (() => {
+          try {
+            const u2 = sfWin.webContents.getURL();
+            return u2 && u2 !== "about:blank" ? u2 : "https://www.instagram.com/";
+          } catch { return "https://www.instagram.com/"; }
+        })();
+
+        // Watchdog — if the whole operation hangs, navigate back and respond.
+        // Does NOT destroy sfWin — it is the user's main EB window.
         let sfSettled = false;
         const sfWatchdog = setTimeout(() => {
           if (sfSettled) return;
           sfSettled = true;
-          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, forcing window destroy + slot release to prevent a zombie session`);
-          try { sfWin.destroy(); } catch {}
-          _sfRelease();
-          try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — forced cleanup after 80s, likely a stuck page" }); } catch {}
+          _sfInProgress.delete(pid);
+          _ipcLog(`[ERROR] [eb:silent-follow:${pid}] WATCHDOG — handler exceeded 80s for @${targetUsername}, restoring browser to ${prevUrl.slice(0, 100)}`);
+          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
+          try { send(res, 200, { ok: false, status: "follow_blocked", reason: "watchdog_timeout — follow took too long, browser restored to previous page" }); } catch {}
         }, 80_000);
+
         const sfRespond = (status: number, payload: any) => {
           if (sfSettled) return;
           sfSettled = true;
@@ -4659,130 +4655,19 @@ export function startEbIpcServer(
           send(res, status, payload);
         };
 
-        // Fetch proxy + UA from the API server (same endpoint used by the normal EB open).
-        let sfProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
-        let sfUA: string | undefined;
-        let sfUseHomeIp = false;
-        try {
-          const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
-          if (proxyRes.ok) {
-            const pd: any = await proxyRes.json();
-            sfProxy     = pd.proxy     || undefined;
-            sfUA        = pd.userAgent || undefined;
-            sfUseHomeIp = !!pd.useHomeIp;
-          }
-        } catch { /* proceed without — might still work if session already has cookies */ }
-
-        // ── Isolated temporary session ────────────────────────────────────────
-        // CRITICAL: do NOT reuse persist:eb-${pid} here.
-        // The main EB window is alive and logged in on that partition.  Writing
-        // stale cookies from the cookie file on top of the live session corrupts
-        // both the hidden follow window AND the visible EB window simultaneously,
-        // because all windows on the same persist: partition share one cookie jar.
-        // That is why the EB shows the "Continue as…" screen after every follow.
-        //
-        // Solution: create a throw-away in-memory partition (no "persist:" prefix),
-        // copy the LIVE cookies from the main partition directly into it, and apply
-        // the proxy only to this isolated session.  When the window is destroyed,
-        // the temp session vanishes — the main EB partition is never touched.
-        const sfTempPartition = `eb-follow-${pid}-${Date.now()}`;
-        const sfSes = electronSession.fromPartition(sfTempPartition, { cache: false });
-
-        // Copy live cookies from the main EB partition (freshest available).
-        // Fall back to the cookie file only if the main partition has no sessionid.
-        const mainSes = electronSession.fromPartition(`persist:eb-${pid}`);
-        let seededFromLive = false;
-        try {
-          const liveCookies = await mainSes.cookies.get({ url: "https://www.instagram.com" });
-          const hasSession = liveCookies.some(c => c.name === "sessionid" && c.value);
-          if (hasSession) {
-            for (const c of liveCookies) {
-              await sfSes.cookies.set({
-                url:      "https://www.instagram.com",
-                name:     c.name,
-                value:    c.value ?? "",
-                domain:   c.domain  ?? ".instagram.com",
-                path:     c.path    ?? "/",
-                secure:   c.secure  ?? true,
-                sameSite: (c.sameSite as any) ?? "no_restriction",
-              }).catch(() => {});
-            }
-            seededFromLive = true;
-            _ipcLog(`[eb:silent-follow:${pid}] seeded ${liveCookies.length} cookies from live partition (sessionid present)`);
-          }
-        } catch { /* fall through to file-based seed */ }
-
-        if (!seededFromLive) {
-          // Live partition had no session — try the cookie file as fallback.
-          try {
-            const cfPath = cookieFilePath(pid);
-            if (fs.existsSync(cfPath)) {
-              const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
-              for (const c of rawCookies) {
-                await sfSes.cookies.set({
-                  url:      "https://www.instagram.com",
-                  name:     c.name,
-                  value:    c.value,
-                  domain:   c.domain  ?? ".instagram.com",
-                  path:     c.path    ?? "/",
-                  secure:   true,
-                  sameSite: "no_restriction",
-                }).catch(() => {});
-              }
-              _ipcLog(`[eb:silent-follow:${pid}] seeded cookies from file (live partition had no sessionid)`);
-            }
-          } catch { /* no file either — will likely get logged-out redirect */ }
-        }
-
-        // Apply proxy ONLY to the temp session — never to the main partition.
-        if (sfProxy && !sfUseHomeIp) {
-          const sfCfg = buildProxyConfig(sfProxy);
-          await sfSes.setProxy(sfCfg).catch(() => {});
-          try { await sfSes.clearHostResolverCache(); } catch {}
-          await new Promise(r => setTimeout(r, 150));
-          await sfSes.setProxy(sfCfg).catch(() => {});
-        }
-
-        const sfWin = new BrowserWindow({
-          show:   false,
-          width:  390,
-          height: 844,
-          webPreferences: {
-            partition:        sfTempPartition,
-            nodeIntegration:  false,
-            contextIsolation: true,
-          },
-        });
+        // Helper: navigate back to prevUrl after follow (success or failure).
+        // Fire-and-forget — we've already sent the response.
+        const sfRestoreUrl = () => {
+          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
+        };
 
         try {
-          if (sfUA) sfWin.webContents.setUserAgent(sfUA);
-
-          // ── Navigation chain diagnostic ───────────────────────────────────────
-          // Log every URL the hidden window visits so we can see exactly where
-          // Instagram redirects (profile → login, profile → onetap, etc.).
-          sfWin.webContents.on("did-navigate", (_e: any, navUrl: string, httpCode: number) => {
-            _ipcLog(`[eb:silent-follow:${pid}] did-navigate → ${navUrl.slice(0, 200)} [HTTP ${httpCode}]`);
-          });
-          sfWin.webContents.on("did-redirect-navigation", (_e: any, url: string, isInPlace: boolean, isMainFrame: boolean, frameId: number, requestId: number, initiatorPol?: any) => {
-            _ipcLog(`[eb:silent-follow:${pid}] redirect → ${url.slice(0, 200)}`);
-          });
-
-          // Navigate directly to the target's profile page.
           const profileUrl = `https://www.instagram.com/${encodeURIComponent(targetUsername)}/`;
-          _ipcLog(`[eb:silent-follow:${pid}] START partition=${sfTempPartition} target=@${targetUsername} url=${profileUrl}`);
+          _ipcLog(`[eb:silent-follow:${pid}] START target=@${targetUsername} prevUrl="${prevUrl.slice(0, 100)}" → ${profileUrl}`);
 
-          // Capture navigation errors explicitly — swallowing them lets a failed
-          // loadURL silently leave the URL as about:blank, which then passes the
-          // login-wall check and times out as "Follow button not found" instead of
-          // giving a clear network/proxy error.
+          // Navigate the existing window to the target's profile.
           const _sfT0 = Date.now();
-          _ipcLog(`[eb:silent-follow:${pid}] loadURL start at T+0ms`);
           let sfNavError: Error | null = null;
-          // Race loadURL against a 30 s hard cap.
-          // loadURL waits for did-finish-load (ALL sub-resources including CDN JS/images).
-          // Through a slow proxy the CDN resources alone can take >60 s, but the Follow
-          // button is in the initial HTML DOM — not in lazy-loaded assets — so we proceed
-          // as soon as the cap fires and let the button-poll determine if the page is usable.
           const _sfLoadResult = await Promise.race([
             sfWin.webContents.loadURL(profileUrl)
               .then(() => "ok" as const)
@@ -4790,47 +4675,33 @@ export function startEbIpcServer(
             new Promise<"timeout">(r => setTimeout(() => r("timeout"), 30_000)),
           ]);
           if (_sfLoadResult === "timeout") {
-            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL hit 30 s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL hit 30s cap at T+${Date.now() - _sfT0}ms — proceeding with partially loaded page`);
           } else {
             _ipcLog(`[eb:silent-follow:${pid}] loadURL ${_sfLoadResult} in ${Date.now() - _sfT0}ms`);
           }
           if (sfNavError) {
             const msg = (sfNavError as Error).message ?? String(sfNavError);
             _ipcLog(`[WARN] [eb:silent-follow:${pid}] loadURL failed — ${msg}`);
-            sfWin.destroy();
+            sfRestoreUrl();
             return sfRespond(200, { ok: false, status: "follow_blocked", reason: `Browser navigation failed: ${msg}` });
           }
 
-          // ── Login-wall detection — URL + DOM ──────────────────────────────────
-          // Instagram can show a login wall two ways:
-          //   (a) Hard redirect → URL changes to /accounts/login/ or /accounts/onetap/
-          //   (b) Soft overlay  → URL stays on the profile page but React renders
-          //       a "Continue as…" / "Log in" modal on top (the "Continue as" screen)
-          // URL-only checks miss case (b), so we also probe the DOM.
-          const landedUrl: string = sfWin.webContents.getURL();
+          // ── Login-wall detection ──────────────────────────────────────────────
+          const landedUrl: string = (() => { try { return sfWin.webContents.getURL(); } catch { return ""; } })();
           const isLoginUrl = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(landedUrl)
             || landedUrl.includes("/accounts/onetap/")
             || landedUrl.includes("/accounts/suspended/");
 
-          // DOM probe: look for login-form inputs or the "Continue as" button text.
-          // Wrapped in a Promise.race timeout: if the page context is destroyed mid-eval
-          // (because the still-running loadURL finally completes and triggers a navigation),
-          // executeJavaScript will hang forever without rejecting.  The 5 s guard ensures
-          // we never block here longer than necessary.
           const isLoginDom: boolean = isLoginUrl ? false : await Promise.race([
             sfWin.webContents.executeJavaScript(`
               (function() {
-                // Hard login form: password input visible
                 var pwdInput = document.querySelector('input[type="password"]');
                 if (pwdInput && pwdInput.offsetParent !== null) return true;
-                // "Continue as" / "Log in" modal button (Instagram renders this as
-                // a button whose text is exactly "Log in" or starts with "Continue as")
                 var btns = Array.from(document.querySelectorAll('button, [role="button"]'));
                 for (var i = 0; i < btns.length; i++) {
                   var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
                   if (t === 'log in' || t.startsWith('continue as')) return true;
                 }
-                // Challenge / suspicious-activity pages
                 if (document.title.toLowerCase().includes('log in') ||
                     document.title.toLowerCase().includes('sign up')) return true;
                 return false;
@@ -4842,16 +4713,6 @@ export function startEbIpcServer(
           const isLoginPage = isLoginUrl || isLoginDom;
 
           // ── Checkpoint / suspicious-activity detection ────────────────────────
-          // Distinct from a login wall: Instagram can also show a "We suspect
-          // automated behaviour" / "Help us confirm it's you" checkpoint while
-          // the session cookie is still perfectly valid. Previously this fell
-          // through to the generic 20 s Follow-button poll, which always timed
-          // out and was logged identically to a normal "button not found" case.
-          // The engine had no way to tell the two apart, so it kept sending
-          // more follow attempts at an account Instagram had already flagged —
-          // continuing to act on a flagged account through a challenge is what
-          // turns a checkpoint into a full suspension. Detect it explicitly so
-          // the engine can stop hitting this account instead of retrying blind.
           const isCheckpointPage: boolean = isLoginPage ? false : await Promise.race([
             sfWin.webContents.executeJavaScript(`
               (function() {
@@ -4861,7 +4722,7 @@ export function startEbIpcServer(
                 var markers = [
                   'we suspect automated behavior',
                   'we detected unusual activity',
-                  'confirm it\\'s you',
+                  "confirm it\'s you",
                   'help us confirm',
                   'suspicious activity',
                   'action blocked',
@@ -4873,43 +4734,23 @@ export function startEbIpcServer(
             new Promise<false>(r => setTimeout(() => r(false), 5_000)),
           ]);
 
+          _ipcLog(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom} checkpoint=${isCheckpointPage}`);
+
           if (isCheckpointPage) {
-            _ipcLog(`[WARN] [eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}". Stopping immediately instead of polling for the Follow button; account needs manual review before further automated actions.`);
-            sfWin.destroy();
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] CHECKPOINT DETECTED on @${targetUsername}'s page — url="${landedUrl.slice(0, 200)}"`);
+            sfRestoreUrl();
             return sfRespond(200, { ok: false, status: "checkpoint_detected", reason: "Instagram checkpoint/suspicious-activity page shown — halt further automation on this account until manually reviewed" });
           }
 
-          // Always log the final landing URL + detection result.
-          _ipcLog(`[eb:silent-follow:${pid}] landed → "${landedUrl.slice(0, 200)}" loginUrl=${isLoginUrl} loginDom=${isLoginDom} checkpoint=${isCheckpointPage}`);
-
-          // Also log the main EB's current URL to confirm isolation is working.
-          try {
-            const mainEntry = ebMap.get(pid);
-            const mainUrl = (mainEntry && !mainEntry.win.isDestroyed())
-              ? mainEntry.win.webContents.getURL()
-              : "(main EB not open)";
-            _ipcLog(`[eb:silent-follow:${pid}] main-EB url="${mainUrl.slice(0, 200)}" — should NOT be login page if isolation is working`);
-          } catch { /* non-fatal */ }
-
           if (isLoginPage) {
             const reason = isLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
-            _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Temp partition="${sfTempPartition}". Account needs re-verify.`);
-            sfWin.destroy();
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED — ${reason}. Account needs re-verify.`);
+            sfRestoreUrl();
             return sfRespond(200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
           }
 
-          // Poll for the Follow button (Instagram renders async via React).
-          // Returns the button's bounding rect so we can CDP-tap it at real coordinates,
-          // or { alreadyFollowing } / { timedOut } — does NOT click the button itself.
+          // ── Poll for Follow button ────────────────────────────────────────────
           _ipcLog(`[eb:silent-follow:${pid}] polling for Follow button (T+${Date.now() - _sfT0}ms since loadURL start)`);
-          // IMPORTANT: wrap with an outer Promise.race timeout.
-          // The JS Promise inside the eval polls the DOM for up to 20 s via setTimeout.
-          // If a page navigation fires DURING that 20 s window (because the background
-          // loadURL finally completes, or Instagram does a SPA navigation), Electron
-          // destroys the old renderer context and the Promise never resolves or rejects —
-          // executeJavaScript hangs silently until the 80 s watchdog fires.
-          // The 25 s race guard (5 s grace over the 20 s internal timeout) ensures we
-          // always get a result and never let this step consume the whole watchdog budget.
           const btnInfo: any = await Promise.race([
             sfWin.webContents.executeJavaScript(`
               new Promise(function(resolve) {
@@ -4917,7 +4758,6 @@ export function startEbIpcServer(
                 function norm(el) {
                   var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
                   var txt = (el.innerText || el.textContent || '');
-                  // collapse all whitespace (SVG alt-text, newlines, etc.) then lowercase
                   return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
                 }
                 function isFollow(el)   { var n = norm(el); return n === 'follow' || n === 'follow back'; }
@@ -4942,28 +4782,18 @@ export function startEbIpcServer(
             `, true).catch(() => ({ found: false, timedOut: true })),
             new Promise<{ found: false; timedOut: true; contextDestroyed: true }>(r =>
               setTimeout(() => {
-                _ipcLog(`[WARN] [eb:silent-follow:${pid}] btnInfo executeJavaScript hit 25 s outer timeout — page context likely destroyed by mid-flight navigation`);
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] btnInfo poll hit 25s outer timeout`);
                 r({ found: false, timedOut: true, contextDestroyed: true });
               }, 25_000)
             ),
           ]);
 
           if (btnInfo?.found) {
-            // ── Per-account tap personality ──────────────────────────────────────
-            // Seed from profileId so each account has a stable style (not pure
-            // Math.random) — 1,000 accounts doing identical timing every run is
-            // itself a fingerprint.  The seed produces consistent behaviour for the
-            // same account while varying it across the fleet.
             const acctSeed = ((pid * 2654435761) >>> 0) / 0x100000000;
-
-            // Pre-tap dwell: 600–3000ms base (seeded) + up to 300ms call-level jitter.
-            // Accounts with a low seed "tap fast", high seed "hesitate longer" — but
-            // neither is robotic because the jitter shifts every call.
             const dwellMs = 600 + Math.round(acctSeed * 2400) + Math.round(Math.random() * 300);
             await new Promise(r => setTimeout(r, dwellMs));
 
-            // Re-query bounding rect after dwell — React layout shifts, banners, and
-            // scroll position can all move the button during the wait window.
+            // Re-query rect after dwell (React layout may shift).
             const freshRect: any = await Promise.race([
               sfWin.webContents.executeJavaScript(`
                 (function() {
@@ -4984,26 +4814,18 @@ export function startEbIpcServer(
               new Promise<null>(r => setTimeout(() => r(null), 5_000)),
             ]);
 
-            // Tap point: not dead centre — biased toward centre but account-specific.
-            // X: 30–70% across button width.  Y: 35–65% of button height.
-            // Different multiplier on Y avoids both axes correlating.
             const rect = freshRect ?? btnInfo;
             const tapX = Math.round(rect.x + (0.30 + acctSeed * 0.40) * rect.w);
             const tapY = Math.round(rect.y + (0.35 + ((acctSeed * 7919) % 0.30)) * rect.h);
 
-            // Attach Electron debugger and fire a real CDP touch event.
-            // try/finally guarantees detach on all exit paths.
-            // Falls back to JS .click() if the debugger is unavailable.
+            // Try CDP tap first, fall back to JS click.
             let followed = false;
             const sfDbg = sfWin.webContents.debugger;
             let dbgAttached = false;
             try {
-              try { sfDbg.attach("1.3"); dbgAttached = true; } catch { /* already attached or unavailable */ }
+              try { sfDbg.attach("1.3"); dbgAttached = true; } catch {}
               if (dbgAttached) {
-                try {
-                  await cdpTapGesture(sfDbg, tapX, tapY);
-                  followed = true;
-                } catch { /* fall through to JS click */ }
+                try { await cdpTapGesture(sfDbg, tapX, tapY); followed = true; } catch {}
               }
               if (!followed) {
                 await Promise.race([
@@ -5024,9 +4846,7 @@ export function startEbIpcServer(
                 ]);
               }
 
-              // Post-tap confirmation: poll for state change to Following/Requested.
-              // Only return success once Instagram's UI confirms — avoids false-ok
-              // when a layout shift caused the tap to miss the button.
+              // Confirm state change to Following/Requested.
               const confirmMs = 1800 + Math.round(acctSeed * 600) + Math.round(Math.random() * 300);
               let confirmed = false;
               const confirmDeadline = Date.now() + confirmMs + 2000;
@@ -5050,143 +4870,71 @@ export function startEbIpcServer(
                   new Promise<null>(r => setTimeout(() => r(null), 2_000)),
                 ]);
                 if (state?.done) { confirmed = true; break; }
-                // Button gone entirely (page navigated or modal) — treat as followed
                 if (!state?.stillFollow && !state?.done) { confirmed = true; break; }
               }
-
               if (!confirmed) {
-                _ipcLog(`[WARN] [eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername} — may have missed button`);
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername}`);
               }
             } finally {
               if (dbgAttached) try { sfDbg.detach(); } catch {}
             }
 
             _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
-            sfWin.destroy();
+            sfRestoreUrl();
             return sfRespond(200, { ok: true });
+
           } else if (btnInfo?.alreadyFollowing) {
             _ipcLog(`[eb:silent-follow:${pid}] already following @${targetUsername}`);
-            sfWin.destroy();
+            sfRestoreUrl();
             return sfRespond(200, { ok: true, status: "already_following", reason: "Already following" });
+
           } else {
-            // ── Context-dead fast-path ────────────────────────────────────────────
-            // If the *outer* 25 s race won (contextDestroyed flag), the renderer
-            // process is already gone — calling executeJavaScript or capturePage()
-            // on a destroyed context hangs indefinitely (this was the root cause of
-            // the watchdog_timeout bug: capturePage() with no timeout silently
-            // blocked for ~54 s after the btnInfo outer-race fired).
-            // Skip both the diagnostic eval and the screenshot entirely in this case.
+            // Button not found. If context was destroyed (outer timeout), bail fast.
             if ((btnInfo as any)?.contextDestroyed) {
-              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Follow button not found — outer 25 s timeout fired, renderer context likely destroyed. Skipping diag+screenshot. Destroying window.`);
-              sfWin.destroy();
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Follow button not found — renderer context destroyed (outer 25s timeout). Restoring URL.`);
+              sfRestoreUrl();
               return sfRespond(200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
             }
 
-            // ── Diagnostic: collect page state before destroying the window ──────────
-            // Only reached when the inner JS poll timed out (40 × 500 ms = 20 s) but
-            // the renderer context is still alive (outer race did NOT fire).
-            let diagInfo = "(diagnostic failed)";
-            try {
-              diagInfo = await Promise.race([
-                sfWin.webContents.executeJavaScript(`
-                  (function() {
-                    var btns = Array.from(document.querySelectorAll('button, [role="button"]')).map(function(b) {
-                      var lbl = (b.getAttribute('aria-label') || '').trim();
-                      var txt = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').trim();
-                      return (lbl || txt).slice(0, 40);
-                    }).filter(function(t) { return t.length > 0; });
-                    return JSON.stringify({
-                      url:   location.href,
-                      title: document.title.slice(0, 80),
-                      buttons: btns.slice(0, 20),
-                      bodySnippet: (document.body ? document.body.innerText.slice(0, 200) : ''),
-                    });
-                  })()
-                `, true).catch(() => "(js-eval failed)"),
-                new Promise<string>(r => setTimeout(() => r("(diag-timeout — context destroyed)"), 5_000)),
-              ]);
-            } catch {}
-
-            // ── Login-wall re-check ───────────────────────────────────────────────
-            // The initial isLoginDom check ran on a partially-loaded page (we
-            // proceeded after the 30 s loadURL cap).  By the time the 20 s button
-            // poll finishes, the page may now be fully rendered — and if it's a
-            // login wall, we get a correct "session_expired" reason instead of the
-            // generic "Follow button not found" that masked session deaths before.
-            const _reCheckLoginUrl: string = sfWin.isDestroyed() ? "" : sfWin.webContents.getURL();
-            const _reCheckIsLoginUrl = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_reCheckLoginUrl)
-              || _reCheckLoginUrl.includes("/accounts/onetap/")
-              || _reCheckLoginUrl.includes("/accounts/suspended/");
-            const _reCheckIsLoginDom: boolean = _reCheckIsLoginUrl || sfWin.isDestroyed() ? false
-              : await Promise.race([
-                sfWin.webContents.executeJavaScript(`
-                  (function() {
-                    var pwdInput = document.querySelector('input[type="password"]');
-                    if (pwdInput && pwdInput.offsetParent !== null) return true;
-                    var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
-                    for (var i = 0; i < btns.length; i++) {
-                      var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
-                      if (t === 'log in' || t.startsWith('continue as')) return true;
-                    }
-                    return false;
-                  })()
-                `, true).catch(() => false),
-                new Promise<false>(r => setTimeout(() => r(false), 3_000)),
-              ]);
-            const _reCheckIsLogin = _reCheckIsLoginUrl || _reCheckIsLoginDom;
-            if (_reCheckIsLogin) {
-              const _rcReason = _reCheckIsLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
-              _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED (detected on re-check after button poll) — ${_rcReason} url="${_reCheckLoginUrl.slice(0, 200)}"`);
-              sfWin.destroy();
+            // Context alive — do a login-wall re-check: initial check may have run
+            // on a partially-loaded page and returned false incorrectly.
+            const _rcUrl: string = (() => { try { return sfWin.webContents.getURL(); } catch { return ""; } })();
+            const _rcIsLoginUrl = /instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_rcUrl)
+              || _rcUrl.includes("/accounts/onetap/")
+              || _rcUrl.includes("/accounts/suspended/");
+            const _rcIsLoginDom: boolean = _rcIsLoginUrl ? false : await Promise.race([
+              sfWin.webContents.executeJavaScript(`
+                (function() {
+                  var pwdInput = document.querySelector('input[type="password"]');
+                  if (pwdInput && pwdInput.offsetParent !== null) return true;
+                  var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
+                  for (var i = 0; i < btns.length; i++) {
+                    var t = (btns[i].innerText || btns[i].textContent || '').trim().toLowerCase();
+                    if (t === 'log in' || t.startsWith('continue as')) return true;
+                  }
+                  return false;
+                })()
+              `, true).catch(() => false),
+              new Promise<false>(r => setTimeout(() => r(false), 3_000)),
+            ]);
+            if (_rcIsLoginUrl || _rcIsLoginDom) {
+              const _rcReason = _rcIsLoginDom ? "Continue-as overlay (DOM)" : "login redirect (URL)";
+              _ipcLog(`[WARN] [eb:silent-follow:${pid}] SESSION EXPIRED (re-check after poll) — ${_rcReason} url="${_rcUrl.slice(0, 200)}"`);
+              sfRestoreUrl();
               return sfRespond(200, { ok: false, status: "follow_blocked", reason: "session_expired — browser session logged out" });
             }
 
-            _ipcLog(
-              `[WARN] [eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20 s)\n` +
-              `  Page state: ${diagInfo}`
-            );
-
-            // ── Screenshot: save PNG to screenshot-errors/ for post-mortem ──────────
-            // capturePage() is only safe when the renderer context is alive.
-            // We already bailed above if contextDestroyed. Add a 5 s race here as
-            // a belt-and-suspenders guard against unexpected hangs.
-            try {
-              const screenshotDir = path.join(_cookiesDir, "screenshot-errors");
-              fs.mkdirSync(screenshotDir, { recursive: true });
-              const safeUsername = targetUsername.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 50);
-              const screenshotPath = path.join(
-                screenshotDir,
-                `follow-fail-${pid}-${safeUsername}-${Date.now()}.png`
-              );
-              const img = await Promise.race([
-                sfWin.webContents.capturePage(),
-                new Promise<null>(r => setTimeout(() => r(null), 5_000)),
-              ]);
-              if (img) {
-                fs.writeFileSync(screenshotPath, img.toPNG());
-                _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot saved → ${screenshotPath}`);
-              } else {
-                _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot skipped — capturePage() timed out (context likely destroyed)`);
-              }
-            } catch (ssErr: any) {
-              _ipcLog(`[WARN] [eb:silent-follow:${pid}] Screenshot capture failed: ${ssErr?.message}`);
-            }
-
-            sfWin.destroy();
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] Follow button not found on @${targetUsername}'s page (timed out after 20s) — url="${_rcUrl.slice(0, 200)}"`);
+            sfRestoreUrl();
             return sfRespond(200, { ok: false, status: "follow_blocked", reason: "Follow button not found on page" });
           }
         } catch (sfErr: any) {
-          try { sfWin.destroy(); } catch {}
           _ipcLog(`[ERROR] [eb:silent-follow:${pid}] error: ${sfErr?.message}`);
+          try { sfWin.webContents.loadURL(prevUrl).catch(() => {}); } catch {}
           return sfRespond(200, { ok: false, status: "follow_blocked", reason: sfErr?.message ?? "Unknown error" });
         } finally {
-          // Always release the concurrency slot so the next queued follow can run,
-          // and cancel the watchdog if it hasn't already fired. Both _sfRelease()
-          // and the watchdog's own release are idempotent (Math.max(0, ...)), so
-          // it's safe if the watchdog already ran first.
-          clearTimeout(sfWatchdog);
-          _sfRelease();
-          _ipcLog(`[eb:silent-follow:${pid}] slot released (active=${_sfActive}/${_SF_MAX})`);
+          _sfInProgress.delete(pid);
+          _ipcLog(`[eb:silent-follow:${pid}] done (in-progress cleared)`);
         }
       }
 
