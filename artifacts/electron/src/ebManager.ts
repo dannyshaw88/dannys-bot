@@ -3669,7 +3669,16 @@ function setupToolbarIpc(): void {
           const _lgPwd: string = p.password ?? "";
           try { wc.debugger.attach("1.3"); } catch {}
 
-          // Shared CDP fill helper — used for both the inline and post-navigate cases
+          // ── Login macro (new layout) ───────────────────────────────────────────
+          // Sequence:
+          //   paste username → Tab → paste password → Tab → Tab → Enter
+          //   wait 10 s
+          //   generate TOTP ("Generate Code" from account settings 2FA section)
+          //   paste code into browser → Tab × 4 → Enter
+          //
+          // "Paste" here means Input.insertText (CDP), which delivers text as a
+          // single insert event — identical to a real clipboard paste in the browser.
+
           const _cdpFillLogin = async (targetWc: typeof wc) => {
             const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
             const _d = targetWc.debugger;
@@ -3695,7 +3704,7 @@ function setupToolbarIpc(): void {
               await _ms(500);
             }
 
-            // Find field positions via JS
+            // Wait for username + password fields to appear
             const _flds = await targetWc.executeJavaScript(`
               (async () => {
                 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -3706,7 +3715,6 @@ function setupToolbarIpc(): void {
                   if (uInp && pInp) break;
                   await wait(300);
                 }
-                if (!uInp && !pInp) return 'navigate';
                 if (!uInp || !pInp) return 'navigate';
                 const ur = uInp.getBoundingClientRect();
                 const pr = pInp.getBoundingClientRect();
@@ -3719,99 +3727,55 @@ function setupToolbarIpc(): void {
 
             if (_flds === 'navigate') return 'navigate';
 
-            // Tap username field by coordinate (touch gesture, isTrusted=true).
-            // After the tap, explicitly focus the input via JS as belt-and-suspenders —
-            // synthesizeTapGesture fires touchstart/touchend but on some Chromium builds
-            // the resulting focus transfer is asynchronous and the subsequent Ctrl+A /
-            // Delete / typeText events can fire before focus has moved, sending them to
-            // whatever element previously held focus (e.g. the cookie-banner dismiss link).
-            // The JS .focus() call is synchronous and guarantees the username input owns
-            // keyboard focus before any key events are dispatched.
+            // ── Step 1: paste username ──────────────────────────────────────────
+            // Tap + JS-focus the username field (belt-and-suspenders: touch events
+            // are async on some Chromium builds; .focus() is synchronous).
             await cdpTapGesture(_d, _flds.u.x, _flds.u.y);
             await _ms(120);
             await targetWc.executeJavaScript(
               `(document.querySelector('input[name="username"]')||document.querySelector('input[autocomplete="username"]'))?.focus()`
             ).catch(() => {});
             await _ms(150);
+            // Clear any existing value, then paste
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
-            await _ms(100);
-            await typeTextCDP(_d, _lgUsr);
+            await _ms(80);
+            await _d.sendCommand("Input.insertText", { text: _lgUsr });
+            await _ms(300);
 
-            // Press Tab TWICE to move focus from username to password field.
-            // The first Tab moves from the username field to the "Save info?" checkbox
-            // that Instagram renders after username entry. The second Tab lands on the
-            // password field. Using coordinates is unreliable because Instagram
-            // re-renders the form (shows a × clear button, spinner, etc.) and shifts
-            // the password field position after username input.
-            await _ms(700);
+            // ── Step 2: Tab (username → password) ──────────────────────────────
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(200);
+
+            // ── Step 3: paste password ──────────────────────────────────────────
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
+            await _ms(80);
+            await _d.sendCommand("Input.insertText", { text: _lgPwd });
+            await _ms(300);
+
+            // ── Steps 4-6: Tab → Tab → Enter (submit login form) ───────────────
+            // Tab 1: blur/validate the password field (enables the Log in button).
+            // Tab 2: skip past any interstitial focusable (eye icon / "Save info?").
+            // Enter: submit.
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(200);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
-            await _ms(100);
-            await typeTextCDP(_d, _lgPwd);
-
-            // Tab out of the password field — triggers React's onBlur/onChange
-            // validation cycle which enables the "Log in" button. Without this,
-            // Instagram's React form keeps the button disabled because it hasn't
-            // seen a blur event, and the poll loop below always gets null.
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(50);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(200);
-            // Second Tab — moves focus past any interstitial element (e.g. password
-            // strength or "Save info?" nudge) so the next focusable is the Log In button.
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-            await _ms(50);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(300 + Math.floor(Math.random() * 200));
-            // Enter — submit the form directly via keyboard. Keeps the gesture-based
-            // poll below as a fallback in case the form is not yet in a submittable state.
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
             await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-            await _ms(400 + Math.floor(Math.random() * 300));
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
 
-            // Poll for submit button, tap via touch gesture.
-            // NOTE: the "form button:not([type='button'])" fallback is intentionally
-            // omitted — it matches the password eye/reveal icon (no type attr) before
-            // the Log In button becomes enabled and causes the eye to be tapped instead.
-            for (let _bi = 0; _bi < 20; _bi++) {
-              const _bp = await targetWc.executeJavaScript(`
-                (() => {
-                  const b = document.querySelector('button[type="submit"]')
-                    || Array.from(document.querySelectorAll('button')).find(b => {
-                        const t = (b.innerText||b.textContent||'').trim();
-                        const r = b.getBoundingClientRect();
-                        return /log[\\s-]*in|sign[\\s-]*in/i.test(t) && r.width > 80;
-                      });
-                  if (!b || b.disabled) return null;
-                  const r = b.getBoundingClientRect();
-                  if (r.width <= 0 || r.height <= 0) return null;
-                  return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-                })()
-              `).catch(() => null) as { x: number; y: number } | null;
-              if (_bp) {
-                await cdpTapGesture(_d, _bp.x, _bp.y);
-                return 'ok';
-              }
-              await _ms(250);
-            }
-            // Fallback: Enter via CDP
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-            await _ms(60);
-            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
             return 'ok';
           };
 
@@ -3835,6 +3799,85 @@ function setupToolbarIpc(): void {
             wc.loadURL('https://www.instagram.com/accounts/login/').catch(() => {
               wc.removeListener('did-finish-load', _fillAfterLoad);
             });
+            break; // navigate path: 2FA not run (inline fill didn't execute)
+          }
+
+          // ── Steps 7-13: 2FA (only runs when inline fill succeeded) ─────────
+          // Step 7: wait 10 s for Instagram to navigate to the 2FA page
+          await new Promise<void>(r => setTimeout(r, 10000));
+
+          // Step 8: "account settings → Generate Code" — generate the TOTP code
+          // from the profile's stored 2FA secret (equivalent of clicking the
+          // "Generate Code" button in the Equinox account settings 2FA section).
+          const _2faKey = (p.twoFASecretKey ?? "").trim();
+          if (_2faKey) {
+            try { wc.debugger.attach("1.3"); } catch {}
+            const _2faCode = generateTotp(_2faKey);
+            const _ms2 = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+            const _d2 = wc.debugger;
+
+            // Step 9: find the OTP input field (same selector set as the 2FA toolbar button)
+            const _OTP_SELS = [
+              'input[autocomplete="one-time-code"]',
+              'input[name="verificationCode"]',
+              'input[name="verification_code"]',
+              'input[name="security_code"]',
+              'input[name="totp_code"]',
+              'input[name="code"]',
+              'input[inputmode="numeric"]',
+              'input[inputmode="numeric"][maxlength="6"]',
+              'input[maxlength="6"]',
+              'input[aria-label*="security" i]',
+              'input[aria-label*="code" i]',
+              'input[aria-label*="verif" i]',
+              'input[aria-label*="authenticat" i]',
+              'input[type="tel"][maxlength="6"]',
+              'input[data-testid*="verification" i]',
+              'input[data-testid*="code" i]',
+            ].join(",");
+            let _otpPos: { x: number; y: number } | null = null;
+            for (let _ti = 0; _ti < 10 && !_otpPos; _ti++) {
+              _otpPos = await wc.executeJavaScript(`(function(){
+                var el=document.querySelector(${JSON.stringify(_OTP_SELS)})||null;
+                if(!el){
+                  var all=Array.from(document.querySelectorAll('input'));
+                  var visible=all.filter(function(i){
+                    if(i.type==='password'||i.type==='email'||i.name==='username'||i.name==='password')return false;
+                    var r=i.getBoundingClientRect();return r.width>0&&r.height>0;
+                  });
+                  if(visible.length===1){el=visible[0];}
+                  else{el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+' '+i.id+' '+i.placeholder);});}
+                  if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
+                }
+                if(!el||el.tagName!=='INPUT')return null;
+                var r=el.getBoundingClientRect();
+                if(r.width<=0||r.height<=0)return null;
+                return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+              })()`).catch(() => null) as { x: number; y: number } | null;
+              if (!_otpPos) await _ms2(500);
+            }
+
+            if (_otpPos) {
+              // Tap to focus the OTP field
+              await cdpTapGesture(_d2, _otpPos.x, _otpPos.y);
+              await _ms2(120);
+            }
+
+            // Step 10: paste the generated code into the browser
+            await _d2.sendCommand("Input.insertText", { text: _2faCode });
+            await _ms2(300);
+
+            // Steps 11-13: Tab × 4 → Enter (submit 2FA form)
+            for (let _ti = 0; _ti < 4; _ti++) {
+              await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms2(60);
+              await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms2(120);
+            }
+            await _ms2(200);
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await _ms2(60);
+            await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
           }
         } catch {}
         break;
