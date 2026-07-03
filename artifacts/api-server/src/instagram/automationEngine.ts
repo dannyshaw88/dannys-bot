@@ -241,6 +241,7 @@ class AutomationEngine {
     profileId: number,
     targetUsername: string,
     proxy?: { host?: string | null; port?: number | null; username?: string | null; password?: string | null; type?: string | null } | null,
+    igApiCookies?: string | null,
   ): Promise<{ ok: boolean; status?: string; reason?: string }> {
     const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
@@ -258,7 +259,7 @@ class AutomationEngine {
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ profileId, targetUsername, proxy: proxyPayload }),
+        body:    JSON.stringify({ profileId, targetUsername, proxy: proxyPayload, igApiCookies: igApiCookies ?? null }),
         signal:  AbortSignal.timeout(90_000),
       });
       if (!r.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r.status}` };
@@ -4294,7 +4295,7 @@ class AutomationEngine {
             host: (profile as any).proxyHost, port: (profile as any).proxyPort,
             username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
             type: (profile as any).proxyType,
-          });
+          }, (profile as any).igApiCookies ?? null);
         } else {
           result = await client.followUser(user.pk, user.username, sourceLabel);
         }
@@ -4570,7 +4571,7 @@ class AutomationEngine {
                 host: (profile as any).proxyHost, port: (profile as any).proxyPort,
                 username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
                 type: (profile as any).proxyType,
-              });
+              }, (profile as any).igApiCookies ?? null);
             } else {
               result = await client.followUser(user.pk, user.username, sourceLabel);
             }

@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.312",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed browser-follows always failing with 'Follow button not found'. The background browser window had no cookies, so Instagram saw a logged-out user and silently redirected every profile URL to the homepage instead of the actual profile. The account's session cookies are now injected into the window before it navigates anywhere.",
+      },
+      {
+        category: "Fix",
+        text: "Fixed Follow button not being recognised on profiles that use the newer Instagram layout. The button detector was doing an exact match against aria-label, but Instagram now uses 'Follow @username' instead of just 'Follow' — so the button was found on-screen but never matched. All four button-check stages (find, re-query, click, confirm) are now fixed.",
+      },
+    ],
+  },
+  {
     version: "1.1.311",
     date: "3 Jul 2026",
     items: [

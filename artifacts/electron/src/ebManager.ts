@@ -4649,6 +4649,42 @@ export function startEbIpcServer(
           const sfPartition = `persist:eb-${pid}`;
           const sfSes = electronSession.fromPartition(sfPartition);
 
+          // ── Inject account cookies into the session ─────────────────────────
+          // The persist:eb-{pid} partition is empty when the EB has never been
+          // opened in this Electron session.  Without cookies, Instagram sees a
+          // logged-out browser and redirects every profile URL to the homepage
+          // (not /accounts/login/ — so the login-wall check doesn't catch it).
+          // We inject the igApiCookies from the DB so the hidden window is
+          // authenticated before the first navigation.
+          const rawCookies: string = (body.igApiCookies as string | null | undefined) ?? "";
+          if (rawCookies) {
+            const cookiePairs = rawCookies.split(";").map(s => s.trim()).filter(Boolean);
+            for (const pair of cookiePairs) {
+              const eqIdx = pair.indexOf("=");
+              if (eqIdx < 1) continue;
+              const name  = pair.slice(0, eqIdx).trim();
+              const value = pair.slice(eqIdx + 1).trim();
+              if (!name || !value) continue;
+              try {
+                await sfSes.cookies.set({
+                  url:      "https://www.instagram.com",
+                  name,
+                  value,
+                  domain:   ".instagram.com",
+                  path:     "/",
+                  secure:   true,
+                  httpOnly: name === "sessionid" || name === "csrftoken",
+                  sameSite: "no_restriction" as any,
+                });
+              } catch (ckErr: any) {
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] cookie inject failed for "${name}": ${ckErr?.message}`);
+              }
+            }
+            _ipcLog(`[eb:silent-follow:${pid}] mode B — injected ${cookiePairs.length} cookies into session (${cookiePairs.map(p => p.split("=")[0]).join(",")})`);
+          } else {
+            _ipcLog(`[WARN] [eb:silent-follow:${pid}] mode B — no igApiCookies provided; session will be unauthenticated`);
+          }
+
           // Apply the account's proxy so the hidden window routes through the
           // same exit IP as the real EB would.
           const bodyProxy = body.proxy as { host?: string; port?: number; user?: string; pass?: string; type?: string } | null | undefined;
@@ -4829,13 +4865,20 @@ export function startEbIpcServer(
             sfWin.webContents.executeJavaScript(`
               new Promise(function(resolve) {
                 var tries = 0, MAX = 40; // 20 s
-                function norm(el) {
-                  var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                  var txt = (el.innerText || el.textContent || '');
-                  return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
+                function isFollow(el) {
+                  var l = ((el.getAttribute ? el.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                  var t = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                  // aria-label may be "Follow" OR "Follow @username" — starts-with handles both;
+                  // exclude "following" (already following) and "follow request sent".
+                  if (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) return true;
+                  return t === 'follow' || t === 'follow back';
                 }
-                function isFollow(el)   { var n = norm(el); return n === 'follow' || n === 'follow back'; }
-                function isAlready(el)  { var n = norm(el); return n === 'following' || n === 'requested'; }
+                function isAlready(el) {
+                  var l = ((el.getAttribute ? el.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                  var t = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                  if (l && (l.startsWith('following') || l.startsWith('requested') || l.startsWith('follow request'))) return true;
+                  return t === 'following' || t === 'requested';
+                }
                 function check() {
                   var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
                   var followBtn = cands.find(function(b) { return !b.disabled && isFollow(b); });
@@ -4872,13 +4915,12 @@ export function startEbIpcServer(
             const freshRect: any = await Promise.race([
               sfWin.webContents.executeJavaScript(`
                 (function() {
-                  function norm(el) {
-                    var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                    var txt = (el.innerText || el.textContent || '');
-                    return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                  }
                   var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
-                    var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
+                    if (b.disabled) return false;
+                    var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                    var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                    if (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) return true;
+                    return t === 'follow' || t === 'follow back';
                   });
                   if (!btn) return null;
                   var r = btn.getBoundingClientRect();
@@ -4906,13 +4948,12 @@ export function startEbIpcServer(
                 await Promise.race([
                   sfWin.webContents.executeJavaScript(`
                     (function() {
-                      function norm(el) {
-                        var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                        var txt = (el.innerText || el.textContent || '');
-                        return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                      }
                       var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
-                        var n = norm(b); return !b.disabled && (n === 'follow' || n === 'follow back');
+                        if (b.disabled) return false;
+                        var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                        var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                        if (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) return true;
+                        return t === 'follow' || t === 'follow back';
                       });
                       if (btn) btn.click();
                     })()
@@ -4930,15 +4971,17 @@ export function startEbIpcServer(
                 const state: any = await Promise.race([
                   sfWin.webContents.executeJavaScript(`
                     (function() {
-                      function norm(el) {
-                        var lbl = (el.getAttribute ? el.getAttribute('aria-label') : '') || '';
-                        var txt = (el.innerText || el.textContent || '');
-                        return (lbl.trim() || txt.replace(/\\s+/g, ' ').trim()).toLowerCase();
-                      }
                       var cands = Array.from(document.querySelectorAll('button, [role="button"]'));
-                      var norms = cands.map(norm);
-                      var done        = norms.some(function(n) { return n === 'following' || n === 'requested'; });
-                      var stillFollow = norms.some(function(n) { return n === 'follow' || n === 'follow back'; });
+                      var done = cands.some(function(b) {
+                        var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                        var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                        return (l && (l.startsWith('following') || l.startsWith('requested') || l.startsWith('follow request'))) || t === 'following' || t === 'requested';
+                      });
+                      var stillFollow = cands.some(function(b) {
+                        var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                        var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                        return (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) || t === 'follow' || t === 'follow back';
+                      });
                       return { done: done, stillFollow: stillFollow };
                     })()
                   `, true).catch(() => null),
