@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.301",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Browser follows (\"Do Actions Via Browser → Follows\") no longer fail with \"Follow button not found on page\". Instagram's mobile web profile page renders the Follow button differently than before — the app now detects it correctly regardless of how Instagram has built it, so browser-mode follows work again.",
+      },
+    ],
+  },
+  {
     version: "1.1.300",
     date: "3 Jul 2026",
     items: [

@@ -4,6 +4,32 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.301] — 2026-07-03
+
+### Fixed
+
+#### Browser follow: "Follow button not found on page" — `div[role="button"]` with `aria-label` now detected (`ebManager.ts`)
+
+**Symptom**: Accounts with "Do Actions Via Browser → Follows" enabled consistently failed every follow attempt with `follow_blocked: Follow button not found on page`. The automation engine reported 0/1 follows and re-queued the session. The failure was 100% reproducible regardless of target account or source hashtag.
+
+**Root cause**: The silent-follow hidden BrowserWindow navigates to the target's Instagram profile at a 390×844 viewport (mobile). Instagram's current mobile web profile page renders the Follow button as a `div[role="button"]` element with `aria-label="Follow"` — not a `<button>` element. The poll script queried only `document.querySelectorAll('button')` and compared `textContent` with an exact case-sensitive match against `'Follow'` or `'Follow Back'`. Because the element is a `div`, not a `button`, it was never found. The poll ran its 40 iterations (500ms each = 20 seconds) and returned `timedOut: true` every single time.
+
+**Fix — four sites updated in the `silent-follow` handler:**
+
+1. **Initial 20-second poll** (`btnInfo`): Selector changed to `button, [role="button"]`. A new `norm()` helper prefers `aria-label` (trimmed) when present; otherwise uses `innerText || textContent` with all internal whitespace collapsed via `/\s+/g` and lowercased. Matching is now case-insensitive (`'follow'`, `'follow back'`, `'following'`, `'requested'`). A zero-size rect guard (`r.width > 0 && r.height > 0`) was added so invisible/hidden elements that match are skipped.
+
+2. **Pre-tap freshRect re-query**: Same broadened selector and `norm()` logic. Size guard tightened to `r.width <= 0 || r.height <= 0` (either dimension non-positive rejects) to prevent miss-taps from partially offscreen buttons.
+
+3. **JS-click fallback** (used when CDP tap is unavailable): Same broadened selector and `norm()` logic.
+
+4. **Post-tap confirmation poll**: Same broadened selector and `norm()` logic for both the "done" (`following`/`requested`) and "stillFollow" checks.
+
+5. **Timeout diagnostic dump**: Also updated from `querySelectorAll('button')` to `querySelectorAll('button, [role="button"]')` and uses `aria-label || innerText` so the log accurately reflects what elements were visible on the page when the timeout fires — making future debugging possible.
+
+**What this handles going forward**: Any Instagram A/B test that toggles between `<button>` and `div[role="button"]` rendering, any Follow button with nested SVG/icon elements adding whitespace to `textContent`, and any capitalisation variation in button text.
+
+---
+
 ## [1.1.298] — 2026-07-03
 
 ### Fixed
