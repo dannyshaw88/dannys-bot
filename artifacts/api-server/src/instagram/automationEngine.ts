@@ -4067,7 +4067,18 @@ class AutomationEngine {
                   engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
                   this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
                 }
-              } catch { /* non-critical */ }
+              } catch (err: any) {
+                // viewReels throws "session_expired — ..." when clips/user returns
+                // login_required / logout_reason:3.  That is a server-side forced
+                // revocation that also invalidates the browser session — mark
+                // the account logged_out immediately so the EB gets re-logged-in.
+                const msg: string = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewReels — ${msg} — marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
+                // other errors (network blips, empty feed) are non-critical
+              }
             }
           },
         );

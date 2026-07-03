@@ -3231,6 +3231,21 @@ export class InstagramWebClient {
       // clips/user requires POST
       const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/user/`, body);
+
+      // Detect forced session revocation — logout_reason:3 means Instagram
+      // server-side invalidated both the mobile API session AND the browser
+      // session simultaneously. Throw so the automation engine can mark the
+      // account as logged_out and stop the current run.  Returning false here
+      // (as before) silently swallowed the expiry and left accounts stuck in
+      // an invalid state until the next scheduled re-verify.
+      if (j?.message === "login_required" || j?.require_login) {
+        const reason = [
+          j?.error_title ?? j?.message,
+          j?.logout_reason !== undefined ? `logout_reason:${j.logout_reason}` : null,
+        ].filter(Boolean).join(" | ");
+        throw new Error(`session_expired — ${reason}`);
+      }
+
       const items: any[] = j?.items ?? [];
       if (!items.length) return false;
 

@@ -4,6 +4,36 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.298] — 2026-07-03
+
+### Fixed
+
+#### Browser logout after `viewReels` — `logout_reason:3` forced revocation now detected and acted on (`instagramWebClient.ts`, `automationEngine.ts`)
+
+**Symptom**: Accounts running the Human Session runner would be found logged out of the embedded browser repeatedly, even with DM checks disabled. The EB would navigate to `instagram.com/accounts/login/` while the account's status was still shown as active.
+
+**Root cause**: When `/api/v1/clips/user/` (the reels endpoint) returns HTTP 403 with `{"message":"login_required","logout_reason":3}`, Instagram has server-side force-revoked the session — both the mobile API session AND the browser session are invalidated simultaneously. Previously, `viewReels` detected the empty `items` array in the error response and silently returned `false`. The automation engine's `catch { /* non-critical */ }` then swallowed the result. The account was never marked `logged_out`, so the EB kept running with an invalidated session and any subsequent navigation hit the login page.
+
+**Fix**:
+- `viewReels` now checks for `j.message === "login_required"` before reading `items`. If present, it throws `Error("session_expired — <error_title> | logout_reason:<N>")` instead of returning false.
+- The automation engine's `viewReels` catch block now inspects the error message. On a `session_expired` / `login_required` match it calls `applyAccountLevelError` to immediately mark the account as `logged_out` and stop the current run — the same path used by `viewTimelineFeed` and `likeTimelinePosts` when they detect session expiry.
+
+### Improved
+
+#### `X-IG-Nav-Chain` header on every mobile call (`instagramWebClient.ts`)
+
+The `X-IG-Nav-Chain` header was only sent during the login sequence. All other mobile API calls sent nothing, which is a detectable inconsistency — the real Android app sends a nav-chain on every authenticated request. Added `_navChainTs` / `_navChainScreen` fields and a `_buildNavChainHeader()` helper. The header is now injected in `_buildMobileHeaders()` on every mobile call, with the screen set to `"profile"` before follow/unfollow, `"reels"` before viewReels, `"explore"` before explore, and `"home"` otherwise.
+
+#### Per-account connection-type personality (`instagramWebClient.ts`)
+
+`"WIFI"` was hardcoded at all mobile call sites. Every account in the fleet reporting WIFI is a fleet-wide detection signal. Added `_getConnectionType()`, which derives `WIFI` (~81% of accounts) or `LTE-Advanced` (~19%) deterministically from the first hex digit of `igDid`. The type is permanent once set and applies to `_buildMobileHeaders()`, `mobilePostMultipart`, and the rupload path. Accounts with LTE-Advanced also report a matching lower connection speed.
+
+#### Pigeon analytics events (`instagramLogin.ts`)
+
+The `analytics/log` launcher step was sending `analytics_events: "[]"` — an empty array that is a known automation fingerprint. Added `buildPigeonAnalyticsEvents()` which generates four realistic back-dated events: `app_lifecycle_change_state`, `navigation`, `instagram_organic_viewed_impression_v2`, and `session_heartbeat`. These match the timing and structure of events the real Instagram Android app sends on startup.
+
+---
+
 ## [1.1.296] — 2026-07-03
 
 ### Fixed

@@ -153014,6 +153014,13 @@ var InstagramWebClient = class {
       this._navChainScreen = "reels";
       const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/user/`, body);
+      if (j?.message === "login_required" || j?.require_login) {
+        const reason = [
+          j?.error_title ?? j?.message,
+          j?.logout_reason !== void 0 ? `logout_reason:${j.logout_reason}` : null
+        ].filter(Boolean).join(" | ");
+        throw new Error(`session_expired \u2014 ${reason}`);
+      }
       const items = j?.items ?? [];
       if (!items.length) return false;
       const seenEntries = [];
@@ -167368,7 +167375,12 @@ ${err?.stack ?? ""}`);
                   engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
                   this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
                 }
-              } catch {
+              } catch (err) {
+                const msg = err?.message ?? "";
+                if (/session_expired|login_required/i.test(msg)) {
+                  console.warn(`[engine] @${profile.username}: [${label}] viewReels \u2014 ${msg} \u2014 marking logged_out`);
+                  await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                }
               }
             }
           }

@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.298",
+    date: "3 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Accounts no longer get stuck in a silent logged-out state after the Human Session runner visits a user's Reels. When Instagram force-revokes a session (logout_reason:3) via the Reels endpoint, the app now immediately marks the account as logged out and stops the current run — instead of silently continuing with an invalidated session until the embedded browser eventually shows the login page.",
+      },
+      {
+        category: "Improvement",
+        text: "Every mobile API call now sends a correct X-IG-Nav-Chain header matching where in the app the account 'is' at that moment (Home, Profile, Reels, or Explore). Previously this header was only sent during login — every other call omitted it, which is a fingerprint the real Instagram Android app never exhibits.",
+      },
+      {
+        category: "Improvement",
+        text: "Each account now has a permanent connection type personality — roughly 81% are WiFi and 19% are LTE-Advanced, derived from the account's device ID. Previously every account reported WiFi, which is a fleet-wide bot signal.",
+      },
+      {
+        category: "Improvement",
+        text: "Startup analytics events sent to Instagram's analytics endpoint now contain four realistic back-dated events (app lifecycle, navigation, reel impression, session heartbeat) instead of an empty array. An empty event list is a known automation fingerprint.",
+      },
+    ],
+  },
+  {
     version: "1.1.297",
     date: "3 Jul 2026",
     items: [
