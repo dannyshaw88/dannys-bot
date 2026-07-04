@@ -1524,7 +1524,7 @@ export function ProfilesPage() {
                         {profile.accountLabel || profile.username}
                         {profile.locked && <span title="Locked — excluded from copy targets"><Lock className="w-3 h-3 text-amber-500 shrink-0" /></span>}
                         {isDupUsername && <span title={`Duplicate username: @${profile.username}`} className="text-purple-500 font-bold text-[9px] shrink-0 border border-purple-300 rounded px-0.5 bg-purple-100">DUP</span>}
-                        {!!(profile as any).apiLimits && !!((typeof (profile as any).apiLimits === "string" ? JSON.parse((profile as any).apiLimits) : (profile as any).apiLimits) as any)?.disableApi && (
+                        {!!(profile as any).apiLimits && (() => { try { const l = (profile as any).apiLimits; return !!(typeof l === "string" ? JSON.parse(l) : l)?.disableApi; } catch { return false; } })() && (
                           <span title="Disable API mode — all actions run through the embedded browser" className="text-red-600 font-bold text-[9px] shrink-0 border border-red-300 rounded px-0.5 bg-red-50">NO API</span>
                         )}
                         {flaggedIds.includes(profile.id) && <span title="Flagged account"><Flag className="w-3 h-3 text-red-500 shrink-0" fill="currentColor" /></span>}

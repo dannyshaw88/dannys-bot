@@ -2353,7 +2353,7 @@ export async function openEbWindow(opts: {
   _ebCrashLog(profileId, "STEP-11: creating BrowserWindow");
   let _initX: number | undefined;
   let _initY: number | undefined;
-  if (isGhostBrowser || verifyMode) {
+  if (isGhostBrowser || verifyMode || silentMode) {
     const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
     const ww = 430;
     const wh = 700;
@@ -2361,8 +2361,8 @@ export async function openEbWindow(opts: {
       _initX = Math.max(0, sw - ww - 8);
       _initY = Math.max(0, Math.floor((sh - wh) / 2));
     } else {
-      // Verify-mode: position COMPLETELY OFF-SCREEN to the right so the user
-      // never sees the window or interacts with it accidentally.
+      // Verify-mode and silentMode: position COMPLETELY OFF-SCREEN to the right
+      // so the user never sees the window or interacts with it accidentally.
       // DO NOT minimize — Chromium throttles minimized windows (timers fire
       // seconds late, form-fill breaks, the whole verify sequence hangs).
       // An off-screen-but-shown window renders normally without throttling.
