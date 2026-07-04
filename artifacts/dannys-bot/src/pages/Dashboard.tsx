@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.335",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Inject Browsing no longer reloads the whole profile page between steps like watching reels. Browsing now feels like a real person tapping around the profile instead of the page flashing and refreshing.",
+      },
+      {
+        category: "Fixed",
+        text: "In the Inject Browsing settings, the View Reels row now shows its number fields on their own line under the title, instead of squeezing everything onto one row.",
+      },
+      {
+        category: "Fixed",
+        text: "The Human Jitter settings block is now aligned to the left instead of being pushed far over to the right side of the panel.",
+      },
+    ],
+  },
+  {
     version: "1.1.334",
     date: "4 Jul 2026",
     items: [

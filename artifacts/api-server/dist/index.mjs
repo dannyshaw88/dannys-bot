@@ -166998,26 +166998,40 @@ ${err?.stack ?? ""}`);
         const reelsPct = randInt2(injectBrowsingReelsPctMin, injectBrowsingReelsPctMax);
         if (Math.random() * 100 < reelsPct) {
           try {
-            await page2.goto(`https://www.instagram.com/${candidate.username}/reels/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
-            await sleep(randInt2(1500, 2500));
-            const opened = await page2.evaluate(() => {
-              const link = document.querySelector('main a[href*="/reel/"]');
+            const wentToReelsTab = await page2.evaluate(() => {
+              const link = document.querySelector('a[href$="/reels/"]');
               if (!link) return false;
               link.click();
               return true;
             }).catch(() => false);
-            if (opened) {
-              await sleep(randInt2(3e3, 6e3));
-              await page2.keyboard.press("Escape").catch(() => {
+            if (wentToReelsTab) {
+              await sleep(randInt2(1500, 2500));
+              const opened = await page2.evaluate(() => {
+                const link = document.querySelector('main a[href*="/reel/"]');
+                if (!link) return false;
+                link.click();
+                return true;
+              }).catch(() => false);
+              if (opened) {
+                await sleep(randInt2(3e3, 6e3));
+                await page2.keyboard.press("Escape").catch(() => {
+                });
+                this.logAction(profile.id, followTool.id, "view_reels", candidate.username, "", "reel", "ok", `Viewed reels from profile browse`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reels", `EB viewed reels of @${candidate.username}`);
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed reels of @${candidate.username}`);
+              } else {
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] no reels found on @${candidate.username}'s profile \u2014 skipping`);
+              }
+              await sleep(randInt2(400, 800));
+              await page2.evaluate((username) => {
+                const link = document.querySelector(`a[href="/${username}/"]`) ?? document.querySelector('header a[href^="/"][href$="/"]');
+                if (link) link.click();
+              }, candidate.username).catch(() => {
               });
-              this.logAction(profile.id, followTool.id, "view_reels", candidate.username, "", "reel", "ok", `Viewed reels from profile browse`);
-              this.logGhostBrowserCall(profile.id, profile.username, "view_reels", `EB viewed reels of @${candidate.username}`);
-              console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed reels of @${candidate.username}`);
+              await sleep(randInt2(800, 1500));
             } else {
-              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no reels found on @${candidate.username}'s profile \u2014 skipping`);
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no Reels tab found on @${candidate.username}'s profile \u2014 skipping`);
             }
-            await page2.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
-            await sleep(randInt2(1e3, 2e3));
           } catch (err) {
             console.warn(`[engine] @${profile.username}: [EB-only] [${label}] view reels failed: ${err?.message}`);
             this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "reel", "error", `viewReels failed: ${err?.message ?? err}`);
@@ -167079,8 +167093,6 @@ ${err?.stack ?? ""}`);
               }
             }
             if (!abandonedAfterBrowse) {
-              await page2.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25e3 });
-              await sleep(randInt2(800, 1500));
               await this.waitForSelector(page2, "header button", 6e3);
             }
           }

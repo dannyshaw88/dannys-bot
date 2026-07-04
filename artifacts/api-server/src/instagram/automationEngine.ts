@@ -3563,31 +3563,49 @@ class AutomationEngine {
         }
       }
 
-      // 5. View reels — navigate to the candidate's reels tab, dwell, navigate back.
+      // 5. View reels — click the profile's Reels tab (SPA route change inside
+      // Instagram's own app, NOT a fresh page.goto) so the browser never does a
+      // hard reload of the profile. Returns to the Posts tab the same way,
+      // via an in-app link click instead of re-navigating with page.goto.
       if (injectBrowsingReelsPctMax > 0) {
         const reelsPct = randInt(injectBrowsingReelsPctMin, injectBrowsingReelsPctMax);
         if (Math.random() * 100 < reelsPct) {
           try {
-            await page.goto(`https://www.instagram.com/${candidate.username}/reels/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
-            await sleep(randInt(1500, 2500));
-            const opened = await page.evaluate(() => {
-              const link = document.querySelector('main a[href*="/reel/"]') as HTMLElement | null;
+            const wentToReelsTab = await page.evaluate(() => {
+              const link = document.querySelector('a[href$="/reels/"]') as HTMLElement | null;
               if (!link) return false;
               link.click();
               return true;
             }).catch(() => false);
-            if (opened) {
-              await sleep(randInt(3000, 6000));
-              await page.keyboard.press("Escape").catch(() => {});
-              this.logAction(profile.id, followTool.id, "view_reels", candidate.username, "", "reel", "ok", `Viewed reels from profile browse`);
-              this.logGhostBrowserCall(profile.id, profile.username, "view_reels", `EB viewed reels of @${candidate.username}`);
-              console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed reels of @${candidate.username}`);
+            if (wentToReelsTab) {
+              await sleep(randInt(1500, 2500));
+              const opened = await page.evaluate(() => {
+                const link = document.querySelector('main a[href*="/reel/"]') as HTMLElement | null;
+                if (!link) return false;
+                link.click();
+                return true;
+              }).catch(() => false);
+              if (opened) {
+                await sleep(randInt(3000, 6000));
+                await page.keyboard.press("Escape").catch(() => {});
+                this.logAction(profile.id, followTool.id, "view_reels", candidate.username, "", "reel", "ok", `Viewed reels from profile browse`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reels", `EB viewed reels of @${candidate.username}`);
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed reels of @${candidate.username}`);
+              } else {
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] no reels found on @${candidate.username}'s profile — skipping`);
+              }
+              // Return to the Posts tab via an in-app link click (SPA route change) —
+              // never a page.goto, so no hard reload of the profile happens.
+              await sleep(randInt(400, 800));
+              await page.evaluate((username: string) => {
+                const link = (document.querySelector(`a[href="/${username}/"]`)
+                  ?? document.querySelector('header a[href^="/"][href$="/"]')) as HTMLElement | null;
+                if (link) link.click();
+              }, candidate.username).catch(() => {});
+              await sleep(randInt(800, 1500));
             } else {
-              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no reels found on @${candidate.username}'s profile — skipping`);
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no Reels tab found on @${candidate.username}'s profile — skipping`);
             }
-            // Navigate back to the profile so the follow-button check / next steps work as expected.
-            await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
-            await sleep(randInt(1000, 2000));
           } catch (err: any) {
             console.warn(`[engine] @${profile.username}: [EB-only] [${label}] view reels failed: ${err?.message}`);
             this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "reel", "error", `viewReels failed: ${err?.message ?? err}`);
@@ -3658,10 +3676,11 @@ class AutomationEngine {
                 abandonedAfterBrowse = true;
               }
             }
-            // Re-navigate to the profile since browsing (reels/stories/highlights) may have moved us away.
+            // No re-navigation needed here — every browsing sub-step (feed scroll,
+            // like, stories, highlights, reels) now stays on the profile page via
+            // in-app SPA clicks and dialog Escapes, never a full page.goto. Just
+            // make sure the header has re-hydrated before we look for Follow.
             if (!abandonedAfterBrowse) {
-              await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
-              await sleep(randInt(800, 1500));
               await this.waitForSelector(page, "header button", 6000);
             }
           }

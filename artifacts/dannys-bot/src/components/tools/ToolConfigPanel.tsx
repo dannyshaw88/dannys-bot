@@ -1247,20 +1247,23 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                               <span className="text-[10px] text-muted-foreground shrink-0">–</span>
                               <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewHighlightsPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewHighlightsPctOrderMax: v, injectProfileBrowsingViewHighlightsPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingViewHighlightsPctOrderMin ?? 0) } as any)} />
                             </div>
-                            {/* View Reels — Chance % + Scroll count + Order % */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0 w-[140px]">View Reels</span>
-                              <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMin: v, injectProfileBrowsingViewReelsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsPctMax ?? 0) } as any)} />
-                              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMax: v, injectProfileBrowsingViewReelsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctMin ?? 0) } as any)} />
-                              <div className="w-px h-5 bg-border/50 shrink-0" />
-                              <NumField min={0} max={30} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsScrollMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsScrollMin: v, injectProfileBrowsingViewReelsScrollMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsScrollMax ?? 0) } as any)} />
-                              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <NumField min={0} max={30} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsScrollMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsScrollMax: v, injectProfileBrowsingViewReelsScrollMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsScrollMin ?? 0) } as any)} />
-                              <div className="w-px h-5 bg-border/50 shrink-0" />
-                              <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctOrderMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctOrderMin: v, injectProfileBrowsingViewReelsPctOrderMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsPctOrderMax ?? 0) } as any)} />
-                              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                              <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctOrderMax: v, injectProfileBrowsingViewReelsPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctOrderMin ?? 0) } as any)} />
+                            {/* View Reels — Chance % + Scroll count + Order % (fields wrap to the row below the title) */}
+                            <div className="flex flex-col gap-1 shrink-0">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">View Reels</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="invisible w-[140px] shrink-0" />
+                                <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMin: v, injectProfileBrowsingViewReelsPctMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsPctMax ?? 0) } as any)} />
+                                <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                                <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctMax: v, injectProfileBrowsingViewReelsPctMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctMin ?? 0) } as any)} />
+                                <div className="w-px h-5 bg-border/50 shrink-0" />
+                                <NumField min={0} max={30} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsScrollMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsScrollMin: v, injectProfileBrowsingViewReelsScrollMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsScrollMax ?? 0) } as any)} />
+                                <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                                <NumField min={0} max={30} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsScrollMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsScrollMax: v, injectProfileBrowsingViewReelsScrollMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsScrollMin ?? 0) } as any)} />
+                                <div className="w-px h-5 bg-border/50 shrink-0" />
+                                <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctOrderMin ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctOrderMin: v, injectProfileBrowsingViewReelsPctOrderMax: Math.max(v, (settings as any).injectProfileBrowsingViewReelsPctOrderMax ?? 0) } as any)} />
+                                <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                                <NumField min={0} max={100} className="w-[52px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingViewReelsPctOrderMax ?? 0} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingViewReelsPctOrderMax: v, injectProfileBrowsingViewReelsPctOrderMin: Math.min(v, (settings as any).injectProfileBrowsingViewReelsPctOrderMin ?? 0) } as any)} />
+                              </div>
                             </div>
                             {/* Comment — checkbox enables the row + reveals text input */}
                             <div className="flex flex-col gap-1">

@@ -727,7 +727,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       {/* ── Master enable/disable ─────────────────────────────── */}
       <div className="border border-border rounded-xl p-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="font-bold text-[19px] shrink-0">Human Jitter Tool</h4>
+          <h4 className="font-bold text-[19px] shrink-0">Human Session Tool</h4>
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) => {
@@ -1096,8 +1096,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── Human Jitter ── */}
             <div className="px-4 py-3 space-y-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-3 shrink-0">
                 <input type="checkbox" id="humanSessionEnabled"
                   checked={!!settings.humanSessionEnabled}
                   onChange={(e) => setSettings({ ...settings, humanSessionEnabled: e.target.checked })}
@@ -1110,7 +1110,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Order %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMin ?? 0}
                       onChange={(v) => setSettings({ ...settings, humanSessionOrderMin: v })}
@@ -1122,7 +1122,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionNotUsedMin ?? 0}
                       onChange={(v) => setSettings({ ...settings, humanSessionNotUsedMin: v })}
