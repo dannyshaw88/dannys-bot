@@ -164078,17 +164078,25 @@ var AutomationEngine = class {
    *  and clicking the Follow button.  Used when the account has "Do Actions Via Browser
    *  → Follows" enabled.  Calls the EB IPC server (Electron main process) which manages
    *  the BrowserWindow lifecycle.  Resolves with the same shape as client.followUser(). */
-  async followUserViaBrowser(profileId, targetUsername) {
+  async followUserViaBrowser(profileId, targetUsername, proxy, igApiCookies) {
     const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
       return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
     }
     try {
+      console.log(`[engine] followViaBrowser: sending IPC for profile ${profileId} \u2192 @${targetUsername}`);
+      const proxyPayload = proxy?.host && proxy?.port ? {
+        host: proxy.host,
+        port: proxy.port,
+        user: proxy.username ?? void 0,
+        pass: proxy.password ?? void 0,
+        type: proxy.type ?? "http"
+      } : null;
       const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profileId, targetUsername }),
-        signal: AbortSignal.timeout(35e3)
+        body: JSON.stringify({ profileId, targetUsername, proxy: proxyPayload, igApiCookies: igApiCookies ?? null }),
+        signal: AbortSignal.timeout(9e4)
       });
       if (!r2.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r2.status}` };
       return await r2.json();
@@ -164246,36 +164254,31 @@ var AutomationEngine = class {
       for (const [id, state] of this.states) {
         if (!activeFollow.has(id)) {
           state.stop.stopped = true;
-          this.states.delete(id);
-          console.log(`[engine] Stopped follow runner for profile ${id}`);
+          console.log(`[engine] Stopping follow runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.unfollowStates) {
         if (!activeUnfollow.has(id)) {
           state.stop.stopped = true;
-          this.unfollowStates.delete(id);
-          console.log(`[engine] Stopped unfollow runner for profile ${id}`);
+          console.log(`[engine] Stopping unfollow runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.dmStates) {
         if (!activeDM.has(id)) {
           state.stop.stopped = true;
-          this.dmStates.delete(id);
-          console.log(`[engine] Stopped DM runner for profile ${id}`);
+          console.log(`[engine] Stopping DM runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.contactStates) {
         if (!activeContact.has(id)) {
           state.stop.stopped = true;
-          this.contactStates.delete(id);
-          console.log(`[engine] Stopped contact runner for profile ${id}`);
+          console.log(`[engine] Stopping contact runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.humanSessionStates) {
         if (!activeHumanSession.has(id)) {
           state.stop.stopped = true;
-          this.humanSessionStates.delete(id);
-          console.log(`[engine] Stopped human session runner for profile ${id}`);
+          console.log(`[engine] Stopping human session runner for profile ${id}`);
         }
       }
       const allProfilesForBaker = await storage.getProfiles();
@@ -167584,7 +167587,13 @@ ${err?.stack ?? ""}`);
       try {
         const sourceLabel = source.value ? source.type === "hashtag" ? `#${source.value}` : source.value : void 0;
         if (profile.followViaBrowser) {
-          result = await this.followUserViaBrowser(profile.id, user.username);
+          result = await this.followUserViaBrowser(profile.id, user.username, {
+            host: profile.proxyHost,
+            port: profile.proxyPort,
+            username: profile.proxyUsername,
+            password: profile.proxyPassword,
+            type: profile.proxyType
+          }, profile.igApiCookies ?? null);
         } else {
           result = await client.followUser(user.pk, user.username, sourceLabel);
         }
@@ -167605,6 +167614,13 @@ ${err?.stack ?? ""}`);
         console.warn(`[engine] @${profile.username}: checkpoint_required \u2014 setting status to captcha. Complete the challenge in the embedded browser.${cpUrl ? ` URL: ${cpUrl}` : ""}`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Captcha / security challenge required  complete in embedded browser`);
         await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / security challenge required \u2014 complete in embedded browser" });
+        hitHardLimit = true;
+        break;
+      }
+      if (result.status === "checkpoint_detected") {
+        console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow on @${user.username} \u2014 halting session, setting status to captcha`);
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", "Instagram checkpoint/suspicious-activity page detected \u2014 complete review in embedded browser");
+        await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow \u2014 complete review in embedded browser" });
         hitHardLimit = true;
         break;
       }
@@ -167683,6 +167699,18 @@ ${err?.stack ?? ""}`);
         console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
       }
       this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
+      if (profile.followViaBrowser) {
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          username: profile.username,
+          operationName: "FollowedUser",
+          date: (/* @__PURE__ */ new Date()).toISOString(),
+          source: "browser",
+          transport: "browser",
+          isError: false
+        }).catch(() => {
+        });
+      }
       try {
         await storage.incrementStat(profile.id, "follow");
       } catch (statErr) {
@@ -167810,7 +167838,13 @@ ${err?.stack ?? ""}`);
           try {
             const sourceLabel = rescrapeSource.value ? rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value : void 0;
             if (profile.followViaBrowser) {
-              result = await this.followUserViaBrowser(profile.id, user.username);
+              result = await this.followUserViaBrowser(profile.id, user.username, {
+                host: profile.proxyHost,
+                port: profile.proxyPort,
+                username: profile.proxyUsername,
+                password: profile.proxyPassword,
+                type: profile.proxyType
+              }, profile.igApiCookies ?? null);
             } else {
               result = await client.followUser(user.pk, user.username, sourceLabel);
             }
@@ -167824,6 +167858,13 @@ ${err?.stack ?? ""}`);
           }
           if (result.status === "checkpoint_required") {
             await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / security challenge required \u2014 complete in embedded browser" });
+            hitHardLimit = true;
+            break;
+          }
+          if (result.status === "checkpoint_detected") {
+            console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow (rescrape) on @${user.username} \u2014 halting session, setting status to captcha`);
+            this.logAction(profile.id, tool.id, "follow_blocked", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", "Instagram checkpoint/suspicious-activity page detected \u2014 complete review in embedded browser");
+            await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow \u2014 complete review in embedded browser" });
             hitHardLimit = true;
             break;
           }
@@ -168014,6 +168055,18 @@ ${err?.stack ?? ""}`);
       });
       console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} \u2192 ${postedShortcode}`);
       this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+      if (profile.postViaBrowser) {
+        storage.createInstagramApiCall({
+          profileId,
+          username: profile.username,
+          operationName: "PostMedia",
+          date: (/* @__PURE__ */ new Date()).toISOString(),
+          source: "browser",
+          transport: "browser",
+          isError: false
+        }).catch(() => {
+        });
+      }
       await storage.incrementStat(profileId, "repost");
       return { ok: true, message: `Reposted \u2192 instagram.com/p/${postedShortcode}` };
     } catch (e) {
