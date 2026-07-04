@@ -3710,7 +3710,6 @@ class AutomationEngine {
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
-        client.setApiCallSource("Human Session Emulation");
         // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.
         const willRun = (minKey: string, maxKey: string) => {
           const lo = Number((s as any)[minKey] ?? 100);
@@ -3718,53 +3717,116 @@ class AutomationEngine {
           const threshold = randInt(Math.min(lo, hi), Math.max(lo, hi));
           return Math.random() * 100 < threshold;
         };
+
+        // Opens the ≡ More hamburger menu and clicks a named item.
+        // Uses the EB page directly — page is in scope via closure.
+        const clickHamburgerItem = async (itemText: string): Promise<boolean> => {
+          await nav("https://www.instagram.com/", "home (jitter-menu)");
+          await sleep(randInt(1500, 2500));
+          const moreClicked = await page.evaluate(() => {
+            const btn =
+              document.querySelector<HTMLElement>('svg[aria-label="More"]')
+                ?.closest<HTMLElement>('[role="link"],a,[role="button"],div[tabindex]')
+              ?? Array.from(document.querySelectorAll<HTMLElement>('span,div'))
+                   .find(el => el.textContent?.trim() === 'More')
+                   ?.closest<HTMLElement>('[role="link"],a,[role="button"],div[tabindex]');
+            if (!btn) return false;
+            btn.scrollIntoView({ block: 'center', behavior: 'instant' });
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            btn.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true }));
+            btn.click();
+            return true;
+          }).catch(() => false);
+          if (!moreClicked) return false;
+          await sleep(randInt(700, 1200));
+          const itemClicked = await page.evaluate((text: string) => {
+            // Find the menu item by exact visible text — Instagram menu items are <span> or <div> inside [role="menuitem"]
+            const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"] span,[role="menuitem"],span,li'))
+              .find(el => el.textContent?.trim() === text && (el as any).offsetParent !== null);
+            if (!item) return false;
+            const target = item.closest<HTMLElement>('[role="menuitem"]') ?? item;
+            target.click();
+            return true;
+          }, itemText).catch(() => false);
+          await sleep(randInt(1000, 2000));
+          return itemClicked;
+        };
+
+        // ── Notifications — click the heart/bell icon in the left sidebar ─────
         if (willRun("notificationsRunChanceMin", "notificationsRunChanceMax")) {
           try {
-            await client.visitNotifications();
-            console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
-            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
+            await nav("https://www.instagram.com/", "home (notifications)");
+            await sleep(randInt(1200, 2000));
+            const clicked = await page.evaluate(() => {
+              const btn =
+                document.querySelector<HTMLElement>('svg[aria-label="Notifications"]')
+                  ?.closest<HTMLElement>('[role="link"],a,[role="button"]')
+                ?? document.querySelector<HTMLElement>('a[href*="/accounts/activity"]')
+                ?? Array.from(document.querySelectorAll<HTMLElement>('[role="link"],a'))
+                     .find(el => el.textContent?.trim() === 'Notifications');
+              if (!btn) return false;
+              btn.scrollIntoView({ block: 'center', behavior: 'instant' });
+              btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+              btn.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true }));
+              btn.click();
+              return true;
+            }).catch(() => false);
+            await sleep(actionDelay());
+            console.log(`[engine] @${profile.username}: 🔔 EB tapped notifications icon (${clicked ? 'ok' : 'btn not found'})`);
+            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "EB — tapped notifications icon");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_notifications", "EB — tapped notifications icon");
           } catch (e: any) {
-            if (await checkSessionErr(e, "visit_notifications")) return;
-            console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+            console.warn(`[engine] @${profile.username}: notifications EB error: ${e?.message}`);
           }
-        } else {
-          console.log(`[engine] @${profile.username}: 🔔 notifications skipped by chance`);
         }
+
+        // ── Own Profile — navigate to own profile page ─────────────────────────
         if (willRun("ownProfileRunChanceMin", "ownProfileRunChanceMax")) {
           try {
-            await client.visitOwnProfile();
-            console.log(`[engine] @${profile.username}: 👤 visited own profile`);
-            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
+            await nav(`https://www.instagram.com/${profile.username}/`, "own profile (jitter)");
+            await sleep(actionDelay());
+            console.log(`[engine] @${profile.username}: 👤 EB visited own profile`);
+            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "EB — visited own profile page");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_own_profile", "EB — visited own profile page");
           } catch (e: any) {
-            if (await checkSessionErr(e, "visit_own_profile")) return;
-            console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+            console.warn(`[engine] @${profile.username}: own profile EB error: ${e?.message}`);
           }
-        } else {
-          console.log(`[engine] @${profile.username}: 👤 own profile skipped by chance`);
         }
-        if (willRun("refreshProfileRunChanceMin", "refreshProfileRunChanceMax")) {
-          try {
-            await client.refreshOwnProfile();
-            console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
-            this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
-          } catch (e: any) {
-            if (await checkSessionErr(e, "refresh_own_profile")) return;
-            console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
-          }
-        } else {
-          console.log(`[engine] @${profile.username}: 🔄 refresh profile skipped by chance`);
-        }
+
+        // ── Settings — hamburger → Settings ───────────────────────────────────
         if (willRun("settingsActivityRunChanceMin", "settingsActivityRunChanceMax")) {
           try {
-            await client.visitSettingsAndActivity();
-            console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
-            this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
+            const ok = await clickHamburgerItem("Settings");
+            console.log(`[engine] @${profile.username}: ⚙️ EB opened Settings via menu (${ok ? 'ok' : 'btn not found'})`);
+            this.logAction(profile.id, tool.id, "visit_settings", "", "", "", ok ? "ok" : "skipped", "EB — opened Settings via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_settings", "EB — opened Settings via hamburger menu");
           } catch (e: any) {
-            if (await checkSessionErr(e, "visit_settings_activity")) return;
-            console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+            console.warn(`[engine] @${profile.username}: settings EB error: ${e?.message}`);
           }
-        } else {
-          console.log(`[engine] @${profile.username}: ⚙️ settings/activity skipped by chance`);
+        }
+
+        // ── View Activity — hamburger → Your activity ──────────────────────────
+        if (willRun("viewActivityRunChanceMin", "viewActivityRunChanceMax")) {
+          try {
+            const ok = await clickHamburgerItem("Your activity");
+            console.log(`[engine] @${profile.username}: 📊 EB opened Your Activity via menu (${ok ? 'ok' : 'btn not found'})`);
+            this.logAction(profile.id, tool.id, "view_activity", "", "", "", ok ? "ok" : "skipped", "EB — opened Your Activity via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "view_activity", "EB — opened Your Activity via hamburger menu");
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: activity EB error: ${e?.message}`);
+          }
+        }
+
+        // ── View Saved — hamburger → Saved ─────────────────────────────────────
+        if (willRun("viewSavedRunChanceMin", "viewSavedRunChanceMax")) {
+          try {
+            const ok = await clickHamburgerItem("Saved");
+            console.log(`[engine] @${profile.username}: 🔖 EB opened Saved via menu (${ok ? 'ok' : 'btn not found'})`);
+            this.logAction(profile.id, tool.id, "view_saved", "", "", "", ok ? "ok" : "skipped", "EB — opened Saved via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "view_saved", "EB — opened Saved via hamburger menu");
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: saved EB error: ${e?.message}`);
+          }
         }
       },
     );

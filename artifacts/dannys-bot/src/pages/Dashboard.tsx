@@ -78,6 +78,40 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.330",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Renamed",
+        text: "\"Human Session\" has been renamed to \"Human Jitter\" throughout the app.",
+      },
+      {
+        category: "Fixed",
+        text: "Notifications now actually taps the heart/bell icon in Instagram's left sidebar using the embedded browser, instead of making a background API call that did nothing visible.",
+      },
+      {
+        category: "Fixed",
+        text: "Settings now clicks the ≡ hamburger (More) icon in the left sidebar and then clicks Settings in the menu — exactly what a real user would do.",
+      },
+      {
+        category: "Removed",
+        text: "Removed the Refresh setting — it was a background API call with no real value.",
+      },
+      {
+        category: "New Feature",
+        text: "New \"Activity\" jitter action — clicks the ≡ menu and opens \"Your activity\", giving the account a realistic page-visit pattern.",
+      },
+      {
+        category: "New Feature",
+        text: "New \"Saved\" jitter action — clicks the ≡ menu and opens \"Saved\", adding another genuine browse action to the session.",
+      },
+      {
+        category: "Improvement",
+        text: "All 5 Human Jitter actions (Notifs, Profile, Settings, Activity, Saved) are now shown in a clean sub-row below the title, each with their own Min/Max % chance.",
+      },
+    ],
+  },
+  {
     version: "1.1.329",
     date: "4 Jul 2026",
     items: [
