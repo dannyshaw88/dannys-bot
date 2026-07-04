@@ -2381,7 +2381,7 @@ export async function openEbWindow(opts: {
     show:            false,
     // Verify-mode windows are positioned off-screen so they never appear in the
     // taskbar or alt-tab switcher — the user should not see or interact with them.
-    skipTaskbar:     verifyMode ? true : false,
+    skipTaskbar:     (verifyMode || silentMode) ? true : false,
     webPreferences: {
       nodeIntegration:  false,
       contextIsolation: true,
@@ -2392,9 +2392,14 @@ export async function openEbWindow(opts: {
   win.once("ready-to-show", () => {
     if (win.isDestroyed()) return;
     if (silentMode) {
-      // Never show — the window stays fully hidden for the lifetime of this
-      // session. All CDP/navigate/evaluate calls still work on a hidden
-      // BrowserWindow; only show()/showInactive()/maximize() are skipped.
+      // Show off-screen (positioned at sw+10 by _initX) so Chromium renders
+      // normally without background throttling.  Keeping the window fully
+      // hidden causes Chromium to throttle JS execution and defer all
+      // rendering — Follow buttons never appear in the DOM, making every
+      // background follow/unfollow/contact action fail silently.
+      // showInactive() marks the window as "shown" to the OS without
+      // stealing focus or appearing on screen (it is off-screen at sw+10).
+      win.showInactive();
       return;
     }
     if (isGhostBrowser || verifyMode) {

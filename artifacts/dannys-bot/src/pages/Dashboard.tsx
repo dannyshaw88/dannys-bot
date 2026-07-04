@@ -78,6 +78,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.337",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Follow (and all other browser actions) now work correctly when the embedded browser window is not visible — minimized, hidden, or running fully in the background. Previously, Chromium throttled JavaScript execution and rendering for background windows, so the Follow button was never found in the page and every action was silently skipped. The fix makes silent/background windows render normally by marking them as 'shown' off-screen (invisible to the user) rather than keeping them fully hidden.",
+        technical: [
+          "Root cause: silentMode BrowserWindows were kept fully hidden (show:false, never calling show()/showInactive()). Chromium throttles hidden windows at the OS level — JS timers fire late, layout never runs, DOM buttons don't appear.",
+          "Fix: in openEbWindow() ready-to-show handler, silentMode now calls win.showInactive() instead of returning early. The window is positioned at x = screenWidth + 10 (off the right edge of every monitor) so it is invisible to the user but fully rendered by Chromium.",
+          "Also added skipTaskbar: true for silentMode windows to keep them out of the Windows taskbar and alt-tab switcher.",
+        ],
+      },
+      {
+        category: "Improved",
+        text: "Accounts list now shows a 'NO API' badge next to any account that has Disable API mode enabled, so you can see at a glance which accounts are running browser-only without opening their settings.",
+      },
+    ],
+  },
+  {
     version: "1.1.336",
     date: "4 Jul 2026",
     items: [
