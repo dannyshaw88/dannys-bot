@@ -2283,6 +2283,17 @@ export async function registerInstagramRoutes(
         // the mobile API call temporarily fails (network hiccup, proxy lag, etc.)
         await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
 
+        // Disable API mode: skip mobile API entirely — EB login + cookie harvest is
+        // sufficient to mark the account valid.  No cold-start sequence is run.
+        if ((effectiveProfile.apiLimits as any)?.disableApi === true) {
+          console.log(`[verify:${profileId}] @${profile.username} — Disable API mode: skipping mobile API, marking valid from EB cookies`);
+          const disableApiMsg = `@${profile.username} — EB login confirmed (Disable API mode — browser-only)`;
+          sendLoginDone(profileId, true, disableApiMsg);
+          await storage.updateProfile(profile.id, { accountStatus: "valid", statusMessage: disableApiMsg, credentialsDirty: false });
+          verifyInFlight.delete(profileId);
+          return;
+        }
+
         // Fire-and-forget: run the full leak test (WebRTC, Bot, Canvas, etc.) in a
         // hidden background context while verifyInstagramCredentials runs in parallel.
         // The partition already has the correct proxy set from the verify flow above,
@@ -4430,9 +4441,15 @@ export async function registerInstagramRoutes(
             if (mid)       cookieParts.push(`mid=${mid}`);
             const freshCookies = cookieParts.join("; ");
             await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
-            const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies } as typeof effectiveP;
-            const apiResult = await verifyInstagramCredentials(profileWithCookies);
-            result = { ...apiResult, igApiCookies: freshCookies };
+            // Disable API mode: skip mobile API — mark valid from EB cookies alone.
+            if ((effectiveP.apiLimits as any)?.disableApi === true) {
+              console.log(`[verify-all] @${profile.username} — Disable API mode: skipping mobile API, marking valid from EB cookies`);
+              result = { ok: true, accountStatus: "valid", message: `@${profile.username} — EB login confirmed (Disable API mode — browser-only)`, igApiCookies: freshCookies };
+            } else {
+              const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies } as typeof effectiveP;
+              const apiResult = await verifyInstagramCredentials(profileWithCookies);
+              result = { ...apiResult, igApiCookies: freshCookies };
+            }
           }
         } else {
           const msg = bulkLoginResult.message ?? "";

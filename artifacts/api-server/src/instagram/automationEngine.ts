@@ -1918,6 +1918,12 @@ class AutomationEngine {
 
   // ── Ensure logged-in client ───────────────────────────────────────────────
   private async ensureClient(profile: Profile, state: ProfileState): Promise<InstagramWebClient | null> {
+    // Disable API mode: block every mobile API call for this account.
+    if ((profile.apiLimits as any)?.disableApi === true) {
+      console.log(`[engine] @${profile.username}: Disable API mode — all mobile API calls blocked`);
+      return null;
+    }
+
     const proxyUrl = await this.buildProxyUrl(profile);
     if (!proxyUrl) {
       console.error(`[engine] @${profile.username}: no proxy assigned — refusing to connect without proxy`);
@@ -2506,12 +2512,378 @@ class AutomationEngine {
     return Math.random() * 100 < skipChance;
   }
 
+  // Browser-only human session used when Disable API is on.
+  // Navigates the EB to Instagram pages to simulate human presence without any mobile API call.
+  private async runBrowserOnlyHumanSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
+    const browser = getExistingBrowser(profile.id);
+    if (!browser) {
+      console.log(`[engine] @${profile.username}: [EB-only] EB not open — skipping browser human session`);
+      this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API — EB not open, no browser human session run");
+      return;
+    }
+    const s = tool.settings as any;
+    const limits = (profile.apiLimits ?? {}) as any;
+
+    // Timing derived from apiLimits — same formula as the API throttle:
+    //   delay per action = window / requests
+    // Values <1000 are treated as seconds; >=1000 as ms (matches UI toMs convention).
+    const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+    const winMin = toMs(Number(limits.everySecondsMin ?? 8));
+    const winMax = toMs(Number(limits.everySecondsMax ?? 20));
+    const rMin   = Math.max(1, Number(limits.requestsMin ?? 1));
+    const rMax   = Math.max(rMin, Number(limits.requestsMax ?? 1));
+    const actionDelay = () => randInt(
+      Math.max(1000, Math.round(winMin / rMax)),
+      Math.max(2000, Math.round(winMax / rMin)),
+    );
+
+    try {
+      const pages: any[] = await browser.pages();
+      const page = pages[0];
+      if (!page) {
+        console.log(`[engine] @${profile.username}: [EB-only] no EB page found`);
+        return;
+      }
+
+      const nav = async (url: string, label: string) => {
+        console.log(`[engine] @${profile.username}: 🌐 [EB-only] → ${label}`);
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      };
+
+      // ── humanSession audit — own profile + notifications ──────────────────
+      if (s.humanSessionEnabled === true && !state.stop.stopped) {
+        try {
+          await nav("https://www.instagram.com/", "home (audit)");
+          await sleep(actionDelay());
+          await nav(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
+          await sleep(actionDelay());
+          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB — audit: home + own profile");
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+        }
+      }
+
+      // ── viewTimelineFeed — navigate to home, scroll through posts ─────────
+      if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
+        try {
+          const feedCount = randInt(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
+          if (page.url() !== "https://www.instagram.com/" && !page.url().startsWith("https://www.instagram.com/?")) {
+            await nav("https://www.instagram.com/", "home feed");
+            await sleep(actionDelay());
+          }
+          for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
+            await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
+            await sleep(actionDelay());
+          }
+          this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
+          console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}×`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
+        }
+      }
+
+      // ── checkTimelineStories — click story circles then navigate through ──
+      if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
+        try {
+          const storyCount = randInt(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
+          if (!page.url().startsWith("https://www.instagram.com/")) {
+            await nav("https://www.instagram.com/", "home (stories)");
+            await sleep(actionDelay());
+          }
+          // Story circles live in the tray at the top of the home feed
+          const storyBtns: any[] = await page.$$('div[role="button"]').catch(() => []);
+          const toView = storyBtns.slice(0, storyCount);
+          let storiesViewed = 0;
+          for (const btn of toView) {
+            if (state.stop.stopped) break;
+            try {
+              await btn.click();
+              await sleep(actionDelay());
+              // Advance through a few slides then close
+              const slides = randInt(2, 5);
+              for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
+                await page.keyboard.press("ArrowRight").catch(() => {});
+                await sleep(randInt(1500, 3500));
+              }
+              await page.keyboard.press("Escape").catch(() => {});
+              await sleep(actionDelay());
+              storiesViewed++;
+            } catch {}
+          }
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `EB viewed ${storiesViewed} story tray item(s)`);
+          console.log(`[engine] @${profile.username}: [EB-only] 📖 viewed ${storiesViewed} stories`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] checkTimelineStories error: ${e?.message}`);
+        }
+      }
+
+      // ── checkDm — open inbox, click threads ───────────────────────────────
+      if (s.checkDmEnabled === true && !state.stop.stopped) {
+        try {
+          const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
+          await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
+          await sleep(actionDelay());
+          const threads: any[] = await page.$$('div[role="listitem"]').catch(() => []);
+          let opened = 0;
+          for (let i = 0; i < Math.min(dmCount, threads.length) && !state.stop.stopped; i++) {
+            try {
+              await threads[i].click();
+              await sleep(actionDelay());
+              opened++;
+            } catch {}
+          }
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          console.log(`[engine] @${profile.username}: [EB-only] 💬 opened ${opened} DM threads`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] checkDm error: ${e?.message}`);
+        }
+      }
+
+      // ── likeTimelinePosts — scroll feed, click Like (heart) buttons ───────
+      if (s.likeTimelinePostsEnabled === true && !state.stop.stopped) {
+        const likeCount = randInt(Number(s.likeTimelinePostsMin ?? 0), Number(s.likeTimelinePostsMax ?? 0));
+        if (likeCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (likes)");
+              await sleep(actionDelay());
+            }
+            let liked = 0;
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 4 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
+              await sleep(500);
+              const hearts: any[] = await page.$$('svg[aria-label="Like"]').catch(() => []);
+              for (const h of hearts) {
+                if (liked >= likeCount || state.stop.stopped) break;
+                try { await h.click(); liked++; await sleep(actionDelay()); } catch {}
+              }
+            }
+            for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts`);
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] likeTimelinePosts error: ${e?.message}`);
+          }
+        }
+      }
+
+      // ── followTool / unfollowTool / contactTool — delegate to browser sub-sessions ──
+      if (!state.stop.stopped) {
+        const hsTools = await storage.getToolsByProfile(profile.id);
+
+        const followTool = hsTools.find(t => t.type === "follow");
+        if (followTool?.enabled === true && !state.stop.stopped) {
+          const execFollowTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "follow");
+          if (execFollowTool?.enabled) {
+            await this.runBrowserFollowSession(profile, execFollowTool, page, actionDelay, state).catch((e: any) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] follow session error: ${e?.message}`);
+            });
+          }
+        }
+
+        const unfollowTool = hsTools.find(t => t.type === "unfollow");
+        if (unfollowTool?.enabled === true && !state.stop.stopped) {
+          const execUnfollowTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "unfollow");
+          if (execUnfollowTool?.enabled) {
+            await this.runBrowserUnfollowSession(profile, execUnfollowTool, page, actionDelay, state).catch((e: any) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
+            });
+          }
+        }
+      }
+
+      console.log(`[engine] @${profile.username}: ✅ [EB-only] browser human session complete`);
+    } catch (e: any) {
+      console.warn(`[engine] @${profile.username}: [EB-only] browser human session error: ${e?.message}`);
+    }
+  }
+
+  // ── Browser-only follow session (Disable API mode) ─────────────────────────
+  private async runBrowserFollowSession(
+    profile: Profile,
+    followTool: Tool,
+    page: any,
+    actionDelay: () => number,
+    state: ProfileState,
+  ): Promise<void> {
+    const fs = followTool.settings as any;
+    const globalSettings = await storage.getGlobalSettings();
+    const hikerEnabled = globalSettings.hikerApiEnabled === "true";
+    const hikerToken   = globalSettings.hikerApiToken ?? "";
+    if (!hikerEnabled || !hikerToken) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow — HikerAPI disabled/no token, cannot get candidates`);
+      this.logAction(profile.id, followTool.id, "follow", "", "", "", "skip", "Browser-only follow: HikerAPI required for candidate scraping");
+      return;
+    }
+    const { HikerApiClient } = await import("./hikerApiClient");
+    const hikerClient = new HikerApiClient(hikerToken);
+
+    const sources = await storage.getSourcesByTool(followTool.id);
+    const enabledSources = sources.filter((s: any) => s.enabled !== false);
+    if (!enabledSources.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow — no enabled sources`);
+      return;
+    }
+    const source = this.pickSource(sources);
+    const processCount = randInt(Number(fs.processMin ?? 3), Number(fs.processMax ?? 8));
+    const maxPerDay    = randInt(Number(fs.maxPerDayMin ?? 0), Number(fs.maxPerDayMax ?? 0));
+    const maxPerHour   = randInt(Number(fs.maxPerHourMin ?? 0), Number(fs.maxPerHourMax ?? 0));
+
+    if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow — daily limit hit`);
+      return;
+    }
+    if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow — hourly limit hit`);
+      return;
+    }
+
+    let candidates: { pk: string; username: string }[] = [];
+    try {
+      if (source.type === "hashtag") {
+        const cursor = await storage.getHashtagCursor(source.value);
+        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, cursor);
+        candidates = result.users;
+        if (result.nextCursor) await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+      } else if (source.type === "account") {
+        const result = await hikerClient.getFollowers(source.value, processCount * 3);
+        candidates = result.users;
+      } else {
+        console.log(`[engine] @${profile.username}: [EB-only] follow — unsupported source type: ${source.type}`);
+        return;
+      }
+    } catch (e: any) {
+      console.warn(`[engine] @${profile.username}: [EB-only] follow scrape error: ${e?.message}`);
+      return;
+    }
+
+    // Dedup against already-followed users
+    const alreadyFollowed = await storage.getFollowedUsersByProfile(profile.id, 100_000);
+    const followedSet = new Set(alreadyFollowed.map((u: any) => u.instagramUsername.toLowerCase()));
+    candidates = candidates.filter((c: any) => !followedSet.has(c.username.toLowerCase())).slice(0, processCount);
+    console.log(`[engine] @${profile.username}: [EB-only] follow — ${candidates.length} candidates from ${source.type}:${source.value}`);
+
+    let followed = 0;
+    for (const candidate of candidates) {
+      if (state.stop.stopped || (maxPerDay > 0 && this.daily(state) >= maxPerDay)) break;
+      if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) break;
+      try {
+        await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+        await sleep(randInt(1500, 3000));
+
+        const clicked = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll("button"));
+          const btn = btns.find((b: any) => b.textContent?.trim() === "Follow");
+          if (btn) { (btn as HTMLElement).click(); return true; }
+          return false;
+        }).catch(() => false);
+
+        if (clicked) {
+          followed++;
+          this.bump(state);
+          await storage.createFollowedUser({
+            profileId: profile.id,
+            instagramUsername: candidate.username,
+            instagramUserId: String((candidate as any).pk ?? ""),
+            sourceValue: source.value,
+            sourceType: source.type,
+            followedAt: new Date().toISOString(),
+          }).catch(() => {});
+          await storage.incrementStat(profile.id, "follow").catch(() => {});
+          this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "ok", `EB followed @${candidate.username} [${followed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: [EB-only] ➕ followed @${candidate.username}`);
+        } else {
+          console.log(`[engine] @${profile.username}: [EB-only] follow — no Follow button on @${candidate.username} (already following or private)`);
+          this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button — already following or private");
+        }
+
+        await sleep(actionDelay());
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: [EB-only] follow @${candidate.username} error: ${e?.message}`);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] follow session done — ${followed}/${candidates.length} followed`);
+  }
+
+  // ── Browser-only unfollow session (Disable API mode) ───────────────────────
+  private async runBrowserUnfollowSession(
+    profile: Profile,
+    unfollowTool: Tool,
+    page: any,
+    actionDelay: () => number,
+    state: ProfileState,
+  ): Promise<void> {
+    const us = unfollowTool.settings as any;
+    const processCount = randInt(Number(us.processMin ?? 3), Number(us.processMax ?? 8));
+    const maxPerDay    = randInt(Number(us.maxPerDayMin ?? 0), Number(us.maxPerDayMax ?? 0));
+    const minAgeDays   = Number(us.minFollowAgeDays ?? 3);
+
+    if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
+      console.log(`[engine] @${profile.username}: [EB-only] unfollow — daily limit hit`);
+      return;
+    }
+
+    const all = await storage.getFollowedUsersByProfile(profile.id, 100_000);
+    const cutoff = Date.now() - minAgeDays * 86_400_000;
+    const candidates = all
+      .filter((u: any) => !u.unfollowedAt && new Date(u.followedAt).getTime() < cutoff)
+      .slice(0, processCount);
+
+    if (!candidates.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] unfollow — no candidates older than ${minAgeDays}d`);
+      return;
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] unfollow — ${candidates.length} candidates`);
+
+    let unfollowed = 0;
+    for (const fu of candidates) {
+      if (state.stop.stopped || (maxPerDay > 0 && this.daily(state) >= maxPerDay)) break;
+      try {
+        await page.goto(`https://www.instagram.com/${fu.instagramUsername}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+        await sleep(randInt(1500, 3000));
+
+        const clicked = await page.evaluate(async () => {
+          const btns = Array.from(document.querySelectorAll("button"));
+          const followingBtn = btns.find((b: any) => b.textContent?.trim() === "Following");
+          if (!followingBtn) return false;
+          (followingBtn as HTMLElement).click();
+          await new Promise(r => setTimeout(r, 1200));
+          const allBtns = Array.from(document.querySelectorAll("button"));
+          const unfollowBtn = allBtns.find((b: any) => b.textContent?.trim() === "Unfollow");
+          if (!unfollowBtn) return false;
+          (unfollowBtn as HTMLElement).click();
+          return true;
+        }).catch(() => false);
+
+        if (clicked) {
+          unfollowed++;
+          this.bump(state);
+          await storage.incrementStat(profile.id, "unfollow").catch(() => {});
+          this.logAction(profile.id, unfollowTool.id, "unfollow", fu.instagramUsername, "", "", "ok", `EB unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: [EB-only] ➖ unfollowed @${fu.instagramUsername}`);
+        } else {
+          console.log(`[engine] @${profile.username}: [EB-only] unfollow — no Following button on @${fu.instagramUsername}`);
+        }
+
+        await sleep(actionDelay());
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: [EB-only] unfollow @${fu.instagramUsername} error: ${e?.message}`);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] unfollow session done — ${unfollowed}/${candidates.length} unfollowed`);
+  }
+
   private async runHumanSessionTools(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
     const s = tool.settings as any;
+    const disableApi = (profile.apiLimits as any)?.disableApi === true;
     const client = await this.ensureClient(profile, state);
     if (!client) {
-      this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn",
-        "Human Session skipped — no Instagram session found. Run Verify Credentials to establish one.");
+      if (disableApi) {
+        await this.runBrowserOnlyHumanSession(profile, tool, state);
+      } else {
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn",
+          "Human Session skipped — no Instagram session found. Run Verify Credentials to establish one.");
+      }
       return;
     }
 

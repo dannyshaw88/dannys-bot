@@ -78,6 +78,36 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.322",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "New Feature",
+        text: "Added Disable API mode per account. When enabled, the account never makes any Instagram mobile API call — every action is performed exclusively through the embedded browser (the same Chrome window used for login). Enable it from Account Settings → API Controls → Disable API.",
+      },
+      {
+        category: "New Feature",
+        text: "Verify Credentials in Disable API mode now completes after the embedded browser logs in and cookies are harvested — the mobile API cold-start sequence is skipped entirely. The account is marked valid as soon as the browser session is confirmed.",
+      },
+      {
+        category: "New Feature",
+        text: "Human Session in Disable API mode now performs every enabled action through the browser: scrolls the home timeline feed, clicks and advances through story tray items, opens DM inbox threads, clicks Like on feed posts, follows candidates via their profile pages, and unfollows tracked users by clicking the Unfollow confirmation on their profiles.",
+      },
+      {
+        category: "New Feature",
+        text: "Follow and Unfollow in browser-only mode use HikerAPI to scrape candidates (same sources as the normal Follow Tool) and navigate to each profile to click the button — no Instagram API calls made.",
+      },
+      {
+        category: "Improvement",
+        text: "All browser-only action timings are now controlled by your API Limits settings (Every X Seconds Min/Max and Requests Min/Max). No hardcoded dwell times — the delay between each browser action is calculated from your configured limits exactly as the API throttle uses them.",
+      },
+      {
+        category: "Improvement",
+        text: "All browser-only actions (feed scroll, stories, DMs, likes, follows, unfollows) work correctly when the embedded browser window is hidden or minimised — the browser is controlled via the DevTools protocol which operates independently of window visibility.",
+      },
+    ],
+  },
+  {
     version: "1.1.321",
     date: "4 Jul 2026",
     items: [
