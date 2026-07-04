@@ -412,6 +412,7 @@ export function ProfileDetailsPage() {
     {
       label: "Browser Actions",
       options: [
+        { key: "disableApi", label: "Disable API", description: "Force all actions through the embedded browser (Ghost Browser) instead of the mobile API" },
         { key: "followViaBrowser", label: "Do Actions Via Browser — Follows", description: "Use the embedded browser in the background for follow actions instead of the mobile API" },
         { key: "postViaBrowser", label: "Do Actions Via Browser — Make a Post", description: "Use the embedded browser in the background to post instead of the mobile API" },
       ],
@@ -475,11 +476,13 @@ export function ProfileDetailsPage() {
       patch.postViaBrowser = formData.postViaBrowser ?? false;
     }
 
-    // loginRandomEndpoints is stored inside apiLimits JSON.
-    // Copy only the three loginRandom* fields, merging into each target's existing
-    // apiLimits so their rate limit settings are never overwritten.
+    // disableApi and the loginRandom*/variation/momentum/attentionDrift/fatigue
+    // fields all live inside the apiLimits JSON blob. When apiLimits itself isn't
+    // selected wholesale, merge just the selected sub-fields into each target's
+    // existing apiLimits (in a single pass) so the rest of their rate limit
+    // settings are never overwritten and concurrent merges can't clobber each other.
     const needsLimitsMerge =
-      (expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift") || expandedKeys.includes("fatigueSettings"))
+      (expandedKeys.includes("disableApi") || expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift") || expandedKeys.includes("fatigueSettings"))
       && !expandedKeys.includes("apiLimits");
 
     if (needsLimitsMerge) {
@@ -488,6 +491,9 @@ export function ProfileDetailsPage() {
         const target = allProfiles?.find(p => p.id === id);
         const existing = (target?.apiLimits as any) ?? {};
         const merged: Record<string, any> = { ...existing };
+        if (expandedKeys.includes("disableApi")) {
+          merged.disableApi = srcLimits.disableApi ?? false;
+        }
         if (expandedKeys.includes("loginRandomEndpoints")) {
           merged.loginRandomEndpointsEnabled = srcLimits.loginRandomEndpointsEnabled ?? false;
           merged.loginRandomEndpointsMin     = srcLimits.loginRandomEndpointsMin ?? 1;

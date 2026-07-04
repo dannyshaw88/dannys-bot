@@ -2168,6 +2168,42 @@ class AutomationEngine {
     }).catch(() => {});
   }
 
+  // Waits for at least one element matching `selector` to appear on the page.
+  // SPA content loads asynchronously; without this, browser actions that fire
+  // immediately after navigation frequently find nothing and silently no-op.
+  private async waitForSelector(page: any, selector: string, timeoutMs = 8000): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const found: boolean = await page.evaluate((sel: string) => !!document.querySelector(sel), selector).catch(() => false);
+      if (found) return true;
+      await sleep(400);
+    }
+    return false;
+  }
+
+  // ── Ghost Browser (EB) API-call-log mirror ──────────────────────────────────
+  // When Disable API is active, actions are performed via the embedded browser
+  // (Ghost Browser) instead of the mobile API, so no real InstagramWebClient
+  // call fires and nothing would otherwise land in the API Calls log / CSV
+  // export. This mirrors every browser-driven action into the same
+  // instagram_api_calls table used by real API calls, stamped with
+  // transport="Ghost Browser" so it shows up in the Transport column of the
+  // Accounts Manager → Actions / Export API Calls views exactly like a real
+  // API call row, just with a different transport label.
+  private logGhostBrowserCall(profileId: number, username: string, operationName: string, message: string, isError = false) {
+    storage.createInstagramApiCall({
+      profileId,
+      username,
+      operationName,
+      date: new Date().toISOString(),
+      message: message ?? "",
+      source: "Ghost Browser",
+      durationMs: 0,
+      isError,
+      transport: "Ghost Browser",
+    }).catch(() => {});
+  }
+
   // ── Action block / suspension helpers ────────────────────────────────────
 
   // Returns true if the given action is currently suspended due to a block.
@@ -2677,8 +2713,10 @@ class AutomationEngine {
           await nav(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
           await sleep(actionDelay());
           this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB — audit: home + own profile");
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB — audit: home + own profile");
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
         }
       }
 
@@ -2695,11 +2733,27 @@ class AutomationEngine {
             await sleep(actionDelay());
           }
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
           console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}×`);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
         }
       }
+
+      // Small helper — waits for at least one element matching `selector` to
+      // appear (SPA content loads async; without this, actions that fire
+      // immediately after navigation frequently find nothing and silently
+      // no-op, which is why only the pure-scroll action ever "worked").
+      const waitFor = async (selector: string, timeoutMs = 8000): Promise<boolean> => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const found: boolean = await page.evaluate((sel: string) => !!document.querySelector(sel), selector).catch(() => false);
+          if (found) return true;
+          await sleep(400);
+        }
+        return false;
+      };
 
       // ── checkTimelineStories — click story circles then navigate through ──
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
@@ -2709,37 +2763,47 @@ class AutomationEngine {
             await nav("https://www.instagram.com/", "home (stories)");
             await sleep(actionDelay());
           }
-          // Story circles live in the tray at the top of the home feed.
-          // Click-by-index happens INSIDE evaluate() so no element handle needs
-          // to cross the IPC boundary — works identically for the real EB and
-          // the Puppeteer fallback.
+          // Story circles live in the tray at the top of the home feed, always
+          // rendered as <li> items inside a tray with a canvas ring — this is
+          // far more stable than indexing every role="button" on the page
+          // (which also matches nav icons, and was why story clicks silently
+          // missed their target before).
+          const storySelector = 'ul li div[role="button"] canvas, section div[role="button"] canvas';
+          const hasTray = await waitFor(storySelector, 6000);
           let storiesViewed = 0;
-          for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
-            try {
-              const clicked: boolean = await page.evaluate((idx: number) => {
-                const btns = Array.from(document.querySelectorAll('div[role="button"]'));
-                const btn = btns[idx] as HTMLElement | undefined;
-                if (!btn) return false;
-                btn.click();
-                return true;
-              }, i).catch(() => false);
-              if (!clicked) break;
-              await sleep(actionDelay());
-              // Advance through a few slides then close
-              const slides = randInt(2, 5);
-              for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
-                await page.keyboard.press("ArrowRight");
-                await sleep(randInt(1500, 3500));
-              }
-              await page.keyboard.press("Escape");
-              await sleep(actionDelay());
-              storiesViewed++;
-            } catch {}
+          if (!hasTray) {
+            console.log(`[engine] @${profile.username}: [EB-only] no story tray found on page`);
+          } else {
+            for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
+              try {
+                const clicked: boolean = await page.evaluate((idx: number, sel: string) => {
+                  const canvases = Array.from(document.querySelectorAll(sel));
+                  const canvas = canvases[idx] as HTMLElement | undefined;
+                  const btn = canvas?.closest('div[role="button"]') as HTMLElement | null;
+                  if (!btn) return false;
+                  btn.click();
+                  return true;
+                }, i, storySelector).catch(() => false);
+                if (!clicked) break;
+                await sleep(actionDelay());
+                // Advance through a few slides then close
+                const slides = randInt(2, 5);
+                for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
+                  await page.keyboard.press("ArrowRight");
+                  await sleep(randInt(1500, 3500));
+                }
+                await page.keyboard.press("Escape");
+                await sleep(actionDelay());
+                storiesViewed++;
+              } catch {}
+            }
           }
-          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `EB viewed ${storiesViewed} story tray item(s)`);
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", storiesViewed > 0 ? "ok" : "skipped", `EB viewed ${storiesViewed} story tray item(s)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", `EB viewed ${storiesViewed} story tray item(s)`, storiesViewed === 0 && hasTray);
           console.log(`[engine] @${profile.username}: [EB-only] 📖 viewed ${storiesViewed} stories`);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] checkTimelineStories error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", e?.message ?? "error", true);
         }
       }
 
@@ -2749,6 +2813,10 @@ class AutomationEngine {
           const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
           await sleep(actionDelay());
+          // The inbox thread list uses role="listitem" nested inside role="list" —
+          // wait for it before indexing, otherwise the first click always misses
+          // because the inbox virtualized list hasn't hydrated yet.
+          await waitFor('div[role="listitem"]', 8000);
           let opened = 0;
           for (let i = 0; i < dmCount && !state.stop.stopped; i++) {
             try {
@@ -2762,12 +2830,17 @@ class AutomationEngine {
               if (!clicked) break;
               await sleep(actionDelay());
               opened++;
+              // Return to the inbox list before opening the next thread.
+              await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
+              await sleep(actionDelay());
             } catch {}
           }
-          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", opened > 0 ? "ok" : "skipped", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_dm", `EB opened ${opened}/${dmCount} DM thread(s)`);
           console.log(`[engine] @${profile.username}: [EB-only] 💬 opened ${opened} DM threads`);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] checkDm error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_dm", e?.message ?? "error", true);
         }
       }
 
@@ -2780,10 +2853,11 @@ class AutomationEngine {
               await nav("https://www.instagram.com/", "home (likes)");
               await sleep(actionDelay());
             }
+            await waitFor('svg[aria-label="Like"]', 8000);
             let liked = 0;
-            for (let attempt = 0; liked < likeCount && attempt < likeCount * 4 && !state.stop.stopped; attempt++) {
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
-              await sleep(500);
+              await sleep(700);
               // Click one not-yet-liked heart per round-trip (inside evaluate — no
               // handles cross the IPC boundary), so `liked` count stays accurate.
               const clickedOne: boolean = await page.evaluate(() => {
@@ -2796,11 +2870,122 @@ class AutomationEngine {
               if (clickedOne) { liked++; await sleep(actionDelay()); }
             }
             for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
-            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via browser`);
             console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts`);
           } catch (e: any) {
             console.warn(`[engine] @${profile.username}: [EB-only] likeTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", e?.message ?? "error", true);
           }
+        }
+      }
+
+      // ── saveTimelinePosts — scroll feed, click the bookmark/Save icon ─────
+      // Mirrors the mobile-API path: saveMediaEnabled + saveMediaPercent chance
+      // per liked/viewed post (NOT a fixed min/max count).
+      if (!!s.saveMediaEnabled && !state.stop.stopped) {
+        const savePct = Number(s.saveMediaPercent ?? 0);
+        const saveCount = savePct > 0 && Math.random() * 100 < savePct ? randInt(1, 3) : 0;
+        if (saveCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (save)");
+              await sleep(actionDelay());
+            }
+            await waitFor('svg[aria-label="Save"]', 8000);
+            let saved = 0;
+            for (let attempt = 0; saved < saveCount && attempt < saveCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
+              await sleep(700);
+              const clickedOne: boolean = await page.evaluate(() => {
+                const icons = Array.from(document.querySelectorAll('svg[aria-label="Save"]'));
+                const h = icons[0] as SVGElement | undefined;
+                if (!h) return false;
+                (h.closest("button") as HTMLElement | null)?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) { saved++; await sleep(actionDelay()); }
+            }
+            this.logAction(profile.id, tool.id, "save_timeline_post", "", "", "", saved > 0 ? "ok" : "skipped", `EB saved ${saved} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "save_timeline_post", `EB saved ${saved} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] 🔖 saved ${saved} posts`);
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] saveTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "save_timeline_post", e?.message ?? "error", true);
+          }
+        }
+      }
+
+      // ── shareTimelinePosts — click Share, then Escape (no recipient picked) ─
+      // Mirrors the mobile-API path: sharePostPercentMin/Max chance per post,
+      // not a fixed min/max count.
+      if (!state.stop.stopped) {
+        const sharePctMin = Number(s.sharePostPercentMin ?? 0);
+        const sharePctMax = Number(s.sharePostPercentMax ?? 0);
+        const sharePct = sharePctMin + Math.random() * Math.max(0, sharePctMax - sharePctMin);
+        const shareCount = sharePct > 0 && Math.random() * 100 < sharePct ? randInt(1, 2) : 0;
+        if (shareCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (share)");
+              await sleep(actionDelay());
+            }
+            await waitFor('svg[aria-label="Share Post"]', 8000);
+            let shared = 0;
+            for (let attempt = 0; shared < shareCount && attempt < shareCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
+              await sleep(700);
+              const opened: boolean = await page.evaluate(() => {
+                const icons = Array.from(document.querySelectorAll('svg[aria-label="Share Post"]'));
+                const h = icons[0] as SVGElement | undefined;
+                if (!h) return false;
+                (h.closest("button") as HTMLElement | null)?.click();
+                return true;
+              }).catch(() => false);
+              if (opened) {
+                await sleep(randInt(800, 1600));
+                await page.keyboard.press("Escape").catch(() => {});
+                shared++;
+                await sleep(actionDelay());
+              }
+            }
+            this.logAction(profile.id, tool.id, "share_timeline_post", "", "", "", shared > 0 ? "ok" : "skipped", `EB opened share dialog for ${shared} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "share_timeline_post", `EB opened share dialog for ${shared} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] 📤 shared ${shared} posts`);
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] shareTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "share_timeline_post", e?.message ?? "error", true);
+          }
+        }
+      }
+
+      // ── explorePage — visit Explore, scroll & click into a few posts ─────
+      if (s.followSuggestedUsersIfEmptyEnabled === true && !state.stop.stopped) {
+        try {
+          await nav("https://www.instagram.com/explore/", "explore page");
+          await sleep(actionDelay());
+          const scrolls = randInt(2, 6);
+          for (let i = 0; i < scrolls && !state.stop.stopped; i++) {
+            await page.evaluate(() => window.scrollBy(0, 400 + Math.random() * 300)).catch(() => {});
+            await sleep(actionDelay());
+          }
+          const clicked: boolean = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]'));
+            const a = links[Math.floor(Math.random() * Math.min(links.length, 9))] as HTMLElement | undefined;
+            if (!a) return false;
+            a.click();
+            return true;
+          }).catch(() => false);
+          if (clicked) {
+            await sleep(randInt(1500, 3500));
+            await page.keyboard.press("Escape").catch(() => {});
+          }
+          this.logAction(profile.id, tool.id, "explore_page", "", "", "", "ok", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
+          console.log(`[engine] @${profile.username}: [EB-only] 🧭 browsed Explore page`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] explorePage error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", e?.message ?? "error", true);
         }
       }
 
@@ -2824,6 +3009,16 @@ class AutomationEngine {
           if (execUnfollowTool?.enabled) {
             await this.runBrowserUnfollowSession(profile, execUnfollowTool, page, actionDelay, state).catch((e: any) => {
               console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
+            });
+          }
+        }
+
+        const contactTool = hsTools.find(t => t.type === "contact");
+        if (contactTool?.enabled === true && !state.stop.stopped) {
+          const execContactTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "contact");
+          if (execContactTool?.enabled) {
+            await this.runBrowserContactSession(profile, execContactTool, page, actionDelay, state).catch((e: any) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] contact session error: ${e?.message}`);
             });
           }
         }
@@ -2907,6 +3102,10 @@ class AutomationEngine {
       try {
         await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
         await sleep(randInt(1500, 3000));
+        // Wait for the profile header buttons to hydrate before looking for
+        // "Follow" — clicking immediately after navigation often finds
+        // nothing because the SPA hasn't rendered the header yet.
+        await this.waitForSelector(page, "header button", 6000);
 
         const clicked = await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll("button"));
@@ -2928,15 +3127,18 @@ class AutomationEngine {
           }).catch(() => {});
           await storage.incrementStat(profile.id, "follow").catch(() => {});
           this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "ok", `EB followed @${candidate.username} [${followed}/${processCount}]`);
+          this.logGhostBrowserCall(profile.id, profile.username, "follow", `EB followed @${candidate.username} [${followed}/${processCount}]`);
           console.log(`[engine] @${profile.username}: [EB-only] ➕ followed @${candidate.username}`);
         } else {
           console.log(`[engine] @${profile.username}: [EB-only] follow — no Follow button on @${candidate.username} (already following or private)`);
           this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button — already following or private");
+          this.logGhostBrowserCall(profile.id, profile.username, "follow_skipped", `No Follow button on @${candidate.username} — already following or private`);
         }
 
         await sleep(actionDelay());
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: [EB-only] follow @${candidate.username} error: ${e?.message}`);
+        this.logGhostBrowserCall(profile.id, profile.username, "follow", e?.message ?? "error", true);
       }
     }
     console.log(`[engine] @${profile.username}: [EB-only] follow session done — ${followed}/${candidates.length} followed`);
@@ -3008,6 +3210,118 @@ class AutomationEngine {
       }
     }
     console.log(`[engine] @${profile.username}: [EB-only] unfollow session done — ${unfollowed}/${candidates.length} unfollowed`);
+  }
+
+  // ── Browser-only contact/DM session (Disable API mode) ──────────────────────
+  // Mirrors runContactUsersSession but drives the embedded browser instead of
+  // the mobile API — navigates to the recipient's DM thread, types the queued
+  // message text, and sends via the on-screen Send button/Enter key.
+  private async runBrowserContactSession(
+    profile: Profile,
+    contactTool: Tool,
+    page: any,
+    actionDelay: () => number,
+    state: ProfileState,
+  ): Promise<void> {
+    const cs = contactTool.settings as any;
+    const pending = await storage.getContactPendingMessages(profile.id, "pending");
+    if (!pending.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] contact — no pending messages to send`);
+      return;
+    }
+
+    const sendCount = randInt(Number(cs.contactUsersSendCountMin ?? 1), Number(cs.contactUsersSendCountMax ?? 5));
+    const delayMin  = Number(cs.contactUsersDelayBetweenMin ?? 5) * 1000;
+    const delayMax  = Number(cs.contactUsersDelayBetweenMax ?? 15) * 1000;
+    const pickRandom = !!cs.contactUsersPickRandom;
+
+    let queue = pickRandom ? [...pending].sort(() => Math.random() - 0.5) : pending;
+    queue = queue.slice(0, sendCount);
+
+    let sent = 0;
+    for (const msg of queue) {
+      if (state.stop.stopped) break;
+      try {
+        await page.goto(`https://www.instagram.com/direct/t/${msg.instagramUserId || msg.instagramUsername}/`, { waitUntil: "domcontentloaded", timeout: 25_000 }).catch(() => {});
+        await sleep(randInt(1500, 3000));
+        // Fall back to opening a new thread by username if navigating straight
+        // to a thread ID failed (e.g. no existing thread with this user yet).
+        const hasComposer = await this.waitForSelector(page, 'div[role="textbox"], textarea[placeholder="Message..."]', 6000);
+        if (!hasComposer) {
+          await page.goto("https://www.instagram.com/direct/new/", { waitUntil: "domcontentloaded", timeout: 25_000 }).catch(() => {});
+          await sleep(randInt(1200, 2200));
+          const typedRecipient: boolean = await page.evaluate((username: string) => {
+            const input = document.querySelector('input[name="queryBox"], input[placeholder="Search..."]') as HTMLInputElement | null;
+            if (!input) return false;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            setter?.call(input, username);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+          }, msg.instagramUsername).catch(() => false);
+          if (!typedRecipient) throw new Error("could not find recipient search box");
+          await sleep(1800);
+          const pickedRecipient: boolean = await page.evaluate((username: string) => {
+            const rows = Array.from(document.querySelectorAll('div[role="button"]'));
+            const row = rows.find((r: any) => r.textContent?.toLowerCase().includes(username.toLowerCase()));
+            if (!row) return false;
+            (row as HTMLElement).click();
+            return true;
+          }, msg.instagramUsername).catch(() => false);
+          if (!pickedRecipient) throw new Error(`recipient @${msg.instagramUsername} not found in search results`);
+          await sleep(800);
+          await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll("button"));
+            const next = btns.find((b: any) => b.textContent?.trim() === "Next" || b.textContent?.trim() === "Chat");
+            (next as HTMLElement | undefined)?.click();
+          }).catch(() => {});
+          await sleep(1200);
+        }
+
+        await this.waitForSelector(page, 'div[role="textbox"], textarea[placeholder="Message..."]', 8000);
+        const typed: boolean = await page.evaluate((text: string) => {
+          const box = document.querySelector('div[role="textbox"]') as HTMLElement | null;
+          if (box) {
+            box.focus();
+            document.execCommand("insertText", false, text);
+            return true;
+          }
+          const textarea = document.querySelector('textarea[placeholder="Message..."]') as HTMLTextAreaElement | null;
+          if (textarea) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(textarea, text);
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+          }
+          return false;
+        }, msg.messageText).catch(() => false);
+
+        if (!typed) throw new Error("could not find message composer box");
+        await sleep(randInt(600, 1200));
+        await page.keyboard.press("Enter").catch(() => {});
+        await sleep(randInt(1000, 2000));
+
+        sent++;
+        const sentAt = new Date().toISOString();
+        await storage.updateContactPendingMessage(msg.id, { status: "sent", sentAt });
+        await storage.createContactDmSent({
+          profileId: profile.id,
+          instagramUsername: msg.instagramUsername,
+          instagramUserId: msg.instagramUserId,
+          sentAt,
+          messagePreview: msg.messageText.slice(0, 100),
+        }).catch(() => {});
+        await storage.incrementStat(profile.id, "dm").catch(() => {});
+        this.logAction(profile.id, contactTool.id, "contact_dm", msg.instagramUsername, "", "", "ok", `EB contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
+        this.logGhostBrowserCall(profile.id, profile.username, "contact_dm", `EB contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
+        console.log(`[engine] @${profile.username}: [EB-only] 📩 contact DM sent to @${msg.instagramUsername}`);
+        if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: [EB-only] contact DM to @${msg.instagramUsername} error: ${e?.message}`);
+        this.logAction(profile.id, contactTool.id, "contact_dm", msg.instagramUsername, "", "", "error", `EB DM send failed: ${e?.message ?? "unknown"} (will retry)`);
+        this.logGhostBrowserCall(profile.id, profile.username, "contact_dm", e?.message ?? "error", true);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] contact session done — ${sent}/${queue.length} sent`);
   }
 
   private async runHumanSessionTools(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {

@@ -78,6 +78,32 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.324",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "New Feature",
+        text: "Copy Settings now includes a Disable API toggle, so you can copy that setting across accounts along with your other browser action settings in one go.",
+      },
+      {
+        category: "New Feature",
+        text: "Human Session in Disable API mode now also handles saving posts, sharing posts, and visiting the Explore page through the browser, matching the same chance settings used by the normal API mode.",
+      },
+      {
+        category: "Fixed",
+        text: "Story checking, DM checking, and post liking through the browser are now more reliable — the app waits for the page to fully load before clicking, instead of clicking too early and silently doing nothing.",
+      },
+      {
+        category: "Improvement",
+        text: "Every browser-driven action (scrolling, stories, DMs, likes, saves, shares, follows, unfollows, and contact messages) now shows up in your Actions log and CSV export with \"Ghost Browser\" listed in the Transport column, so you can see exactly what ran through the browser versus the API.",
+      },
+      {
+        category: "New Feature",
+        text: "The Contact tool can now send messages entirely through the browser when Disable API is on, instead of skipping accounts that have API calls disabled.",
+      },
+    ],
+  },
+  {
     version: "1.1.323",
     date: "4 Jul 2026",
     items: [

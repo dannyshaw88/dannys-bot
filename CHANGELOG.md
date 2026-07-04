@@ -4,6 +4,23 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.324] — 2026-07-04
+
+### Added
+
+- Copy Settings (Accounts Manager) now includes a "Disable API" toggle in the Browser Actions group, merged into the same single-PATCH `apiLimits` copy block used by the other browser-action settings (avoids the race/stale-overwrite bug and the "Nothing to copy" false toast).
+- `logGhostBrowserCall()` helper in `automationEngine.ts` mirrors every browser-driven action into `storage.createInstagramApiCall` with `source: "Ghost Browser"` / `transport: "Ghost Browser"` so these actions appear in the Actions log and CSV export exactly like real API calls.
+- `resolveOperationName()` in the `/api/logs/export` CSV route now maps `source === "Ghost Browser"` rows to the correct tool label (Follow Tool / Contact Tool / Human Session Tool) instead of falling back to the raw internal operation name.
+- New Human Session browser sub-features: save post (`saveMediaEnabled` + `saveMediaPercent` chance), share post (`sharePostPercentMin`/`sharePostPercentMax` chance), and Explore page visit (`followSuggestedUsersIfEmptyEnabled`) — all wired through the embedded browser and logged via `logGhostBrowserCall`.
+- New `runBrowserContactSession()` method wired into the Contact tool's browser-mode delegation path — drives DMs via the embedded browser (navigate to thread or open new DM search, type message, send) instead of skipping accounts with Disable API on.
+
+### Fixed
+
+- Save/Share browser actions previously referenced non-existent setting keys (`vtf_save_media`, `vtf_share_post` and their `_min`/`_max` variants) and used a fixed-count model. Corrected to use the real percent-chance settings (`saveMediaEnabled`/`saveMediaPercent`, `sharePostPercentMin`/`sharePostPercentMax`) matching the mobile-API code path's semantics.
+- Story checking, DM checking, and post liking in browser mode previously clicked before the SPA content had hydrated, silently doing nothing. Added `waitForSelector()`-style waits before each interaction.
+
+---
+
 ## [1.1.321] — 2026-07-04
 
 ### Reverted

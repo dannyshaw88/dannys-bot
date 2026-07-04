@@ -3005,6 +3005,11 @@ export async function registerInstagramRoutes(
         if (source === "Follow Tool")   return "Follow Tool";
         if (source === "Unfollow Tool") return "Unfollow Tool";
         if (source === "Contact Tool")  return "Contact Tool";
+        if (source === "Ghost Browser") {
+          if (operationName === "follow" || operationName === "follow_skipped") return "Follow Tool";
+          if (operationName === "contact_dm") return "Contact Tool";
+          return "Human Session Tool";
+        }
         // Legacy / untagged calls — fall back to the operation name itself
         return operationName;
       };
