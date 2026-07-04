@@ -1217,7 +1217,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
               {/* Sub-row — settings below title */}
-              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-1.5">
                   {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
                   <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
