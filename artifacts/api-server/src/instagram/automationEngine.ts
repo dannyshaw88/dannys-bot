@@ -4439,6 +4439,19 @@ class AutomationEngine {
         console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
       }
       this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
+      // Browser-follows bypass the private API client so they never land in instagram_api_calls.
+      // Write a synthetic entry so the stats pie chart counts them correctly.
+      if ((profile as any).followViaBrowser) {
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          username: profile.username,
+          operationName: "FollowedUser",
+          date: new Date().toISOString(),
+          source: "browser",
+          transport: "browser",
+          isError: false,
+        }).catch(() => {});
+      }
       try {
         await storage.incrementStat(profile.id, "follow");
       } catch (statErr: any) {
@@ -4806,6 +4819,19 @@ class AutomationEngine {
 
       console.log(`[engine] @${profile.username}: 🔁 [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} → ${postedShortcode}`);
       this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+      // Browser-posts bypass the private API client so they never land in instagram_api_calls.
+      // Write a synthetic entry so the stats pie chart counts them correctly.
+      if ((profile as any).postViaBrowser) {
+        storage.createInstagramApiCall({
+          profileId,
+          username: profile.username,
+          operationName: "PostMedia",
+          date: new Date().toISOString(),
+          source: "browser",
+          transport: "browser",
+          isError: false,
+        }).catch(() => {});
+      }
       await storage.incrementStat(profileId, "repost");
 
       return { ok: true, message: `Reposted → instagram.com/p/${postedShortcode}` };
