@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.334",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Inject Browsing (visit profile, scroll feed, like posts, watch stories, view highlights, view reels) now actually runs when an account has Disable API Mode turned on. Previously the Follow tool only clicked Follow and skipped every browsing step in this mode.",
+      },
+      {
+        category: "Fixed",
+        text: "Disable API Mode's browsing now happens purely through the account's embedded browser, exactly like normal browsing, so it works even when that browser window is not shown on screen.",
+      },
+      {
+        category: "Fixed",
+        text: "Liking posts while scrolling the home feed no longer jumps back to the top of the feed and scrolls down a second time. Likes (and caption expansion) now happen on posts as they're being scrolled past, the same way a real person browses.",
+      },
+    ],
+  },
+  {
     version: "1.1.333",
     date: "4 Jul 2026",
     items: [

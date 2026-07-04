@@ -2795,10 +2795,104 @@ class AutomationEngine {
           // Using the poll result directly avoids the race where articles appear
           // just after a one-shot querySelector check.
           feedHadPosts = await waitFor('article', 12000);
+
+          // ── Expand Caption% + Like% — resolved ONCE here, then applied INLINE
+          // during the single forward scroll pass below. Previously each
+          // sub-setting ran as its OWN separate loop that reset scrollTo(0, 0)
+          // and re-walked the whole feed from the top — this looked like the
+          // homepage "refreshing" mid-session, which is not how a real user
+          // scrolls. A real user likes/expands captions on posts as they pass
+          // by, never jumping back to the top. Posts are marked with
+          // data-eb-caption-done / data-eb-liked attributes so the same post
+          // is never double-processed as we scroll forward.
+          const ecPctRaw0 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMin ?? 0)));
+          const ecPctRaw1 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMax ?? 0)));
+          const ecPctMin = Math.min(ecPctRaw0, ecPctRaw1);
+          const ecPctMax = Math.max(ecPctRaw0, ecPctRaw1);
+          const ecPct = ecPctMax > 0 ? ecPctMin + Math.random() * (ecPctMax - ecPctMin) : 0;
+
+          const likePctRaw0 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMin ?? 0)));
+          const likePctRaw1 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMax ?? 0)));
+          const likePctMin = Math.min(likePctRaw0, likePctRaw1);
+          const likePctMax = Math.max(likePctRaw0, likePctRaw1);
+          const likePct = likePctMax > 0 ? likePctMin + Math.random() * (likePctMax - likePctMin) : 0;
+          // Allow genuine zero — small feed + low pct should produce 0 likes.
+          const likeCount = likePctMax > 0 ? Math.round(feedCount * likePct / 100) : 0;
+          const likeDelayMinMs = Math.max(0, Number(s.likeTimelinePostsDelayMin ?? 3)) * 1000;
+          const likeDelayMaxMs = Math.max(likeDelayMinMs, Number(s.likeTimelinePostsDelayMax ?? 8) * 1000);
+
+          let expanded = 0;
+          let liked = 0;
+
           for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
-            await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
+            await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250)).catch(() => {});
             await sleep(actionDelay());
+
+            // Inline caption expand — acts on the post currently in/near view,
+            // never resets scroll. Marks the post so it's not expanded twice.
+            if (ecPctMax > 0 && Math.random() * 100 < ecPct) {
+              const clicked: boolean = await page.evaluate(() => {
+                const articles = Array.from(document.querySelectorAll('article:not([data-eb-caption-done])'));
+                const target = (articles.find(a => {
+                  const rect = a.getBoundingClientRect();
+                  return rect.bottom > 0 && rect.top < window.innerHeight;
+                }) ?? articles[0]) as HTMLElement | undefined;
+                if (!target) return false;
+                target.setAttribute('data-eb-caption-done', '1');
+                // The "more" expand button contains the word "more" — Instagram
+                // uses plain ASCII ellipsis "..." or Unicode "…" depending on
+                // locale/version, so check for "more" anywhere in the trimmed text.
+                const moreBtn = Array.from(target.querySelectorAll(
+                  'div[role="button"], span[role="button"], button'
+                )).find(el => {
+                  const text = (el.textContent ?? '').trim().toLowerCase();
+                  return text.endsWith('more') && text.length < 20;
+                }) as HTMLElement | null;
+                if (!moreBtn) return false;
+                moreBtn.click();
+                return true;
+              }).catch(() => false);
+              if (clicked) { expanded++; await sleep(randInt(600, 1200)); }
+            }
+
+            // Inline like — likes the post currently being scrolled past, on the
+            // fly, in the SAME forward pass. No scrollTo(0,0), no second walk
+            // through the feed. Marks the post so it's not liked twice.
+            if (likeCount > 0 && liked < likeCount && Math.random() * 100 < likePct) {
+              const likedOne: boolean = await page.evaluate(() => {
+                const articles = Array.from(document.querySelectorAll('article'));
+                // Find the next un-liked article — NO viewport check here. When the
+                // EB window is hidden, getBoundingClientRect() returns zeros so a
+                // viewport check would always fail and nothing would get liked.
+                // scrollIntoView() works correctly regardless of window visibility,
+                // and since already-liked posts are marked, this always resolves
+                // to the next post further down the feed — it never jumps back up.
+                const target = articles.find(a => !a.hasAttribute('data-eb-liked') && !!a.querySelector('svg[aria-label="Like"]')) as HTMLElement | undefined;
+                if (!target) return false;
+                target.setAttribute('data-eb-liked', '1');
+                target.scrollIntoView({ behavior: 'instant', block: 'center' });
+                const heartSvg = target.querySelector('svg[aria-label="Like"]') as SVGElement | null;
+                if (!heartSvg) return false;
+                // Find the button ancestor — Instagram uses both <button> and
+                // [role="button"] wrappers depending on the page variant.
+                const btn = heartSvg.closest<HTMLElement>('[role="button"], button');
+                if (!btn) return false;
+                // Dispatch a full pointer sequence so React's synthetic event
+                // system picks it up — plain .click() can be swallowed on
+                // elements that listen to pointerdown/up rather than click.
+                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                btn.click();
+                return true;
+              }).catch(() => false);
+              if (likedOne) {
+                liked++;
+                await storage.incrementStat(profile.id, "like").catch(() => {});
+                await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
+              }
+            }
           }
+
           // Defensive re-check: some accounts' feeds load posts slowly (slow
           // network, heavy media) and the initial waitFor(8000) can time out
           // just before content arrives, wrongly marking the feed "empty" and
@@ -2817,114 +2911,16 @@ class AutomationEngine {
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
           console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}× — feed had posts: ${feedHadPosts}`);
 
-          // ── Expand Caption% sub-setting — click "more" on post captions ────────
-          // expandCaptionPercentMin/Max is the % chance per visible post that the
-          // "... more" button is clicked to expand its caption, simulating a reader
-          // who's interested enough to read the full text.
-          const ecPctRaw0 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMin ?? 0)));
-          const ecPctRaw1 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMax ?? 0)));
-          const ecPctMin = Math.min(ecPctRaw0, ecPctRaw1);
-          const ecPctMax = Math.max(ecPctRaw0, ecPctRaw1);
-          if (ecPctMax > 0 && !state.stop.stopped) {
-            const ecPct = ecPctMin + Math.random() * (ecPctMax - ecPctMin);
-            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
-            await sleep(600);
-            let expanded = 0;
-            for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
-              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
-              await sleep(500);
-              if (Math.random() * 100 < ecPct) {
-                const clicked: boolean = await page.evaluate(() => {
-                  const articles = Array.from(document.querySelectorAll('article'));
-                  const target = articles.find(a => {
-                    const rect = a.getBoundingClientRect();
-                    return rect.bottom > 0 && rect.top < window.innerHeight;
-                  });
-                  if (!target) return false;
-                  // The "more" expand button contains the word "more" — Instagram
-                  // uses plain ASCII ellipsis "..." or Unicode "…" depending on
-                  // locale/version, so check for "more" anywhere in the trimmed text.
-                  const moreBtn = Array.from(target.querySelectorAll(
-                    'div[role="button"], span[role="button"], button'
-                  )).find(el => {
-                    const text = (el.textContent ?? '').trim().toLowerCase();
-                    return text.endsWith('more') && text.length < 20;
-                  }) as HTMLElement | null;
-                  if (!moreBtn) return false;
-                  moreBtn.click();
-                  return true;
-                }).catch(() => false);
-                if (clicked) { expanded++; await sleep(randInt(600, 1200)); }
-              }
-            }
-            if (expanded > 0) {
-              this.logAction(profile.id, tool.id, "expand_caption", "", "", "", "ok", `EB expanded caption on ${expanded} post(s)`);
-              this.logGhostBrowserCall(profile.id, profile.username, "expand_caption", `EB expanded caption on ${expanded} post(s)`);
-              console.log(`[engine] @${profile.username}: [EB-only] 📖 expanded ${expanded} caption(s)`);
-            }
+          if (expanded > 0) {
+            this.logAction(profile.id, tool.id, "expand_caption", "", "", "", "ok", `EB expanded caption on ${expanded} post(s) inline while scrolling`);
+            this.logGhostBrowserCall(profile.id, profile.username, "expand_caption", `EB expanded caption on ${expanded} post(s) inline while scrolling`);
+            console.log(`[engine] @${profile.username}: [EB-only] 📖 expanded ${expanded} caption(s) inline`);
           }
 
-          // ── Like% sub-setting — like a % of scrolled posts ─────────────────
-          // Uses likeTimelinePostsPercentMin/Max (the same keys shown in the UI
-          // as a sub-setting of viewTimelineFeed). This mirrors how the API path
-          // computes a like count from the percentage of viewed posts.
-          const likePctRaw0 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMin ?? 0)));
-          const likePctRaw1 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMax ?? 0)));
-          const likePctMin = Math.min(likePctRaw0, likePctRaw1);
-          const likePctMax = Math.max(likePctRaw0, likePctRaw1);
-          if (likePctMax > 0 && !state.stop.stopped) {
-            const likePct = likePctMin + Math.random() * (likePctMax - likePctMin);
-            // Allow genuine zero — small feed + low pct should produce 0 likes.
-            const likeCount = Math.round(feedCount * likePct / 100);
-            const likeDelayMinMs = Math.max(0, Number(s.likeTimelinePostsDelayMin ?? 3)) * 1000;
-            const likeDelayMaxMs = Math.max(likeDelayMinMs, Number(s.likeTimelinePostsDelayMax ?? 8) * 1000);
-            // Scroll back to the top so we can walk down and double-click posts.
-            // Uses dblclick on the post image (Instagram's native double-tap-to-like
-            // gesture) rather than clicking the SVG heart directly — the heart is
-            // inside a span[role="button"], not a real <button>, so .closest("button")
-            // returns null and the click is silently swallowed.
-            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
-            await sleep(800);
-            await waitFor('article', 6000);
-            let liked = 0;
-            for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
-              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
-              await sleep(700);
-              const likedOne: boolean = await page.evaluate(() => {
-                const articles = Array.from(document.querySelectorAll('article'));
-                // Find an un-liked article — NO viewport check here. When the EB
-                // window is hidden, getBoundingClientRect() returns zeros so the
-                // rect.top < window.innerHeight check always fails and nothing
-                // gets liked. scrollIntoView() works correctly regardless of
-                // whether the window is visible to the user.
-                const target = articles.find(a => !!a.querySelector('svg[aria-label="Like"]'));
-                if (!target) return false;
-                target.scrollIntoView({ behavior: 'instant', block: 'center' });
-                const heartSvg = target.querySelector('svg[aria-label="Like"]') as SVGElement | null;
-                if (!heartSvg) return false;
-                // Find the button ancestor — Instagram uses both <button> and
-                // [role="button"] wrappers depending on the page variant.
-                const btn = heartSvg.closest<HTMLElement>('[role="button"], button');
-                if (!btn) return false;
-                // Dispatch a full pointer sequence so React's synthetic event
-                // system picks it up — plain .click() can be swallowed on
-                // elements that listen to pointerdown/up rather than click.
-                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                btn.click();
-                return true;
-              }).catch(() => false);
-              if (likedOne) {
-                liked++;
-                await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
-              }
-            }
-            if (liked > 0) {
-              for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
-            }
-            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via feed sub-setting`);
-            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via feed sub-setting`);
-            console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts (feed sub-setting)`);
+          if (likeCount > 0) {
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) inline while scrolling`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) inline while scrolling`);
+            console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts inline while scrolling`);
           }
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
@@ -3392,6 +3388,216 @@ class AutomationEngine {
     const maxPerDay    = randInt(Number(fs.maxPerDayMin ?? 0), Number(fs.maxPerDayMax ?? 0));
     const maxPerHour   = randInt(Number(fs.maxPerHourMin ?? 0), Number(fs.maxPerHourMax ?? 0));
 
+    // ── Inject Browsing settings (Disable API mode) ─────────────────────────
+    // Disable API mode previously ignored these entirely — runBrowserFollowSession
+    // only navigated to the candidate's profile and clicked Follow. Everything
+    // below re-implements the same "browse the target's profile" behaviour that
+    // the API-based session has (browseTargetProfile in runSession), but driven
+    // purely through the EB page (page.goto / page.evaluate) since no mobile API
+    // calls are allowed for this account.
+    const injectBrowsingEnabled       = !!(fs.injectProfileBrowsingEnabled);
+    const injectBrowsingBeforeFollow  = !!(fs.injectProfileBrowsingBeforeFollow);
+    const injectBrowsingBeforePctMin  = Math.max(0, Math.min(100, fs.injectProfileBrowsingBeforeFollowPctMin ?? 0));
+    const injectBrowsingBeforePctMax  = Math.max(injectBrowsingBeforePctMin, Math.min(100, fs.injectProfileBrowsingBeforeFollowPctMax ?? 0));
+    const injectBrowsingPostMin       = Math.max(0, Math.min(100, fs.injectProfileBrowsingMin ?? 0));
+    const injectBrowsingPostMax       = Math.max(injectBrowsingPostMin, Math.min(100, fs.injectProfileBrowsingMax ?? 0));
+    const injectBrowsingFeedChanceMin = Math.max(0, Math.min(100, fs.injectProfileBrowsingFeedChanceMin ?? 100));
+    const injectBrowsingFeedChanceMax = Math.max(injectBrowsingFeedChanceMin, Math.min(100, fs.injectProfileBrowsingFeedChanceMax ?? 100));
+    const injectBrowsingFeedMin       = Math.max(1, fs.injectProfileBrowsingFeedMin ?? 3);
+    const injectBrowsingFeedMax       = Math.max(injectBrowsingFeedMin, fs.injectProfileBrowsingFeedMax ?? 6);
+    const injectBrowsingLikePctMin    = Math.max(0, Math.min(100, fs.injectProfileBrowsingLikePctMin ?? 0));
+    const injectBrowsingLikePctMax    = Math.max(injectBrowsingLikePctMin, Math.min(100, fs.injectProfileBrowsingLikePctMax ?? 0));
+    const injectBrowsingStoriesPctMin = Math.max(0, Math.min(100, fs.injectProfileBrowsingWatchStoriesPctMin ?? 0));
+    const injectBrowsingStoriesPctMax = Math.max(injectBrowsingStoriesPctMin, Math.min(100, fs.injectProfileBrowsingWatchStoriesPctMax ?? 0));
+    const injectBrowsingHighlightsPctMin = Math.max(0, Math.min(100, fs.injectProfileBrowsingViewHighlightsPctMin ?? 0));
+    const injectBrowsingHighlightsPctMax = Math.max(injectBrowsingHighlightsPctMin, Math.min(100, fs.injectProfileBrowsingViewHighlightsPctMax ?? 0));
+    const injectBrowsingReelsPctMin   = Math.max(0, Math.min(100, fs.injectProfileBrowsingViewReelsPctMin ?? 0));
+    const injectBrowsingReelsPctMax   = Math.max(injectBrowsingReelsPctMin, Math.min(100, fs.injectProfileBrowsingViewReelsPctMax ?? 0));
+    const injectBrowsingAbandon       = !!(fs.injectProfileBrowsingAbandonFollow);
+    const injectBrowsingAbandonPctMin = Math.max(0, Math.min(100, fs.injectProfileBrowsingAbandonFollowPctMin ?? 10));
+    const injectBrowsingAbandonPctMax = Math.max(injectBrowsingAbandonPctMin, Math.min(100, fs.injectProfileBrowsingAbandonFollowPctMax ?? 20));
+
+    if (injectBrowsingEnabled) {
+      console.log(`[engine] @${profile.username}: [EB-only] inject browsing ENABLED — beforeFollow=${injectBrowsingBeforeFollow} (${injectBrowsingBeforePctMin}-${injectBrowsingBeforePctMax}%), postFollow=${injectBrowsingPostMin}-${injectBrowsingPostMax}%`);
+    } else {
+      console.log(`[engine] @${profile.username}: [EB-only] inject browsing DISABLED (outer Inject Browsing checkbox is unchecked)`);
+    }
+
+    // Browses a target's profile page using ONLY the EB page — no mobile API calls,
+    // so this is safe to run under Disable API mode. Assumes `page` is already on
+    // (or about to be navigated to) the candidate's profile URL.
+    const browseTargetProfileViaBrowser = async (label: string, candidate: { pk: string; username: string }) => {
+      this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "profile", "ok", `[${label}] Profile browsing started`);
+      this.logGhostBrowserCall(profile.id, profile.username, "browse_profile", `[${label}] Profile browsing started for @${candidate.username}`);
+      console.log(`[engine] @${profile.username}: [EB-only] [${label}] browsing profile of @${candidate.username}`);
+
+      // Make sure we're actually on the candidate's profile before doing anything.
+      try {
+        if (!page.url().includes(`/${candidate.username}/`)) {
+          await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+          await sleep(randInt(1200, 2200));
+        }
+        await this.waitForSelector(page, "header", 6000);
+      } catch (err: any) {
+        console.warn(`[engine] @${profile.username}: [EB-only] [${label}] failed to load profile: ${err?.message}`);
+        this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "profile", "error", `Failed to load profile: ${err?.message ?? err}`);
+        return;
+      }
+
+      // 1. Scroll feed — gated by chance %.
+      const feedChance = randInt(injectBrowsingFeedChanceMin, injectBrowsingFeedChanceMax);
+      let sawFeed = false;
+      if (Math.random() * 100 < feedChance) {
+        try {
+          const feedCount = randInt(injectBrowsingFeedMin, injectBrowsingFeedMax);
+          sawFeed = await this.waitForSelector(page, "article a, main a[href*='/p/'], main a[href*='/reel/']", 6000);
+          for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
+            await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250)).catch(() => {});
+            await sleep(randInt(800, 1600));
+          }
+          this.logAction(profile.id, followTool.id, "view_user_feed", candidate.username, "", "profile", "ok", `Scrolled ${feedCount} posts`);
+          this.logGhostBrowserCall(profile.id, profile.username, "view_user_feed", `EB scrolled ${feedCount} post(s) on @${candidate.username}'s profile`);
+          console.log(`[engine] @${profile.username}: [EB-only] [${label}] scrolled ${feedCount} posts on @${candidate.username}'s profile (had posts: ${sawFeed})`);
+        } catch (err: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] [${label}] scroll feed failed: ${err?.message}`);
+          this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "profile", "error", `viewFeed failed: ${err?.message ?? err}`);
+        }
+      }
+
+      // 2. Like a post from the grid — gated by chance %.
+      if (sawFeed && injectBrowsingLikePctMax > 0) {
+        const likePct = randInt(injectBrowsingLikePctMin, injectBrowsingLikePctMax);
+        if (Math.random() * 100 < likePct) {
+          try {
+            const opened = await page.evaluate(() => {
+              const link = document.querySelector('main a[href*="/p/"], main a[href*="/reel/"]') as HTMLElement | null;
+              if (!link) return false;
+              link.click();
+              return true;
+            }).catch(() => false);
+            if (opened) {
+              await sleep(randInt(1200, 2200));
+              const liked = await page.evaluate(() => {
+                const heart = document.querySelector('svg[aria-label="Like"]');
+                const btn = heart?.closest<HTMLElement>('[role="button"], button');
+                if (!btn) return false;
+                btn.click();
+                return true;
+              }).catch(() => false);
+              await page.keyboard.press("Escape").catch(() => {});
+              if (liked) {
+                await storage.incrementStat(profile.id, "like").catch(() => {});
+                this.logAction(profile.id, followTool.id, "like", candidate.username, "", "post", "ok", `Liked post from profile browse`);
+                this.logGhostBrowserCall(profile.id, profile.username, "like", `EB liked a post from @${candidate.username}'s profile`);
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] liked a post from @${candidate.username}`);
+              }
+            }
+          } catch (err: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] [${label}] like post failed: ${err?.message}`);
+          }
+        }
+      }
+
+      // 3. Watch stories — click the profile picture's story ring if present.
+      if (injectBrowsingStoriesPctMax > 0) {
+        const storiesPct = randInt(injectBrowsingStoriesPctMin, injectBrowsingStoriesPctMax);
+        if (Math.random() * 100 < storiesPct) {
+          try {
+            const clicked = await page.evaluate(() => {
+              const canvas = document.querySelector('header canvas');
+              const btn = canvas?.closest<HTMLElement>('div[role="button"], button, a');
+              const target = btn ?? (document.querySelector('header img[alt*="profile picture"]')?.closest<HTMLElement>('div[role="button"], a') ?? null);
+              if (!target) return false;
+              (target as HTMLElement).click();
+              return true;
+            }).catch(() => false);
+            if (clicked) {
+              await sleep(randInt(2000, 4000));
+              const inStoryViewer = await this.waitForSelector(page, 'section[role="dialog"], div[role="dialog"]', 3000);
+              if (inStoryViewer) {
+                this.logAction(profile.id, followTool.id, "view_stories", candidate.username, "", "story", "ok", `Watched stories from profile browse`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_stories", `EB watched stories of @${candidate.username}`);
+                await storage.incrementStat(profile.id, "story").catch(() => {});
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] watched stories of @${candidate.username}`);
+              }
+              await page.keyboard.press("Escape").catch(() => {});
+              await sleep(randInt(500, 1000));
+            } else {
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no story ring on @${candidate.username}'s profile — skipping`);
+            }
+          } catch (err: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] [${label}] watch stories failed: ${err?.message}`);
+            this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "story", "error", `watchStories failed: ${err?.message ?? err}`);
+          }
+        }
+      }
+
+      // 4. View highlights — click a highlight bubble (anchor to /stories/highlights/).
+      if (injectBrowsingHighlightsPctMax > 0) {
+        const highlightsPct = randInt(injectBrowsingHighlightsPctMin, injectBrowsingHighlightsPctMax);
+        if (Math.random() * 100 < highlightsPct) {
+          try {
+            const clicked = await page.evaluate(() => {
+              const link = document.querySelector('a[href*="/stories/highlights/"]') as HTMLElement | null;
+              if (!link) return false;
+              link.click();
+              return true;
+            }).catch(() => false);
+            if (clicked) {
+              await sleep(randInt(2000, 4000));
+              const inViewer = await this.waitForSelector(page, 'section[role="dialog"], div[role="dialog"]', 3000);
+              if (inViewer) {
+                this.logAction(profile.id, followTool.id, "view_highlights", candidate.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_highlights", `EB viewed highlights of @${candidate.username}`);
+                console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed highlights of @${candidate.username}`);
+              }
+              await page.keyboard.press("Escape").catch(() => {});
+              await sleep(randInt(500, 1000));
+            } else {
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no highlights on @${candidate.username}'s profile — skipping`);
+            }
+          } catch (err: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] [${label}] view highlights failed: ${err?.message}`);
+            this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "highlight", "error", `viewHighlights failed: ${err?.message ?? err}`);
+          }
+        }
+      }
+
+      // 5. View reels — navigate to the candidate's reels tab, dwell, navigate back.
+      if (injectBrowsingReelsPctMax > 0) {
+        const reelsPct = randInt(injectBrowsingReelsPctMin, injectBrowsingReelsPctMax);
+        if (Math.random() * 100 < reelsPct) {
+          try {
+            await page.goto(`https://www.instagram.com/${candidate.username}/reels/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+            await sleep(randInt(1500, 2500));
+            const opened = await page.evaluate(() => {
+              const link = document.querySelector('main a[href*="/reel/"]') as HTMLElement | null;
+              if (!link) return false;
+              link.click();
+              return true;
+            }).catch(() => false);
+            if (opened) {
+              await sleep(randInt(3000, 6000));
+              await page.keyboard.press("Escape").catch(() => {});
+              this.logAction(profile.id, followTool.id, "view_reels", candidate.username, "", "reel", "ok", `Viewed reels from profile browse`);
+              this.logGhostBrowserCall(profile.id, profile.username, "view_reels", `EB viewed reels of @${candidate.username}`);
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] viewed reels of @${candidate.username}`);
+            } else {
+              console.log(`[engine] @${profile.username}: [EB-only] [${label}] no reels found on @${candidate.username}'s profile — skipping`);
+            }
+            // Navigate back to the profile so the follow-button check / next steps work as expected.
+            await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+            await sleep(randInt(1000, 2000));
+          } catch (err: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] [${label}] view reels failed: ${err?.message}`);
+            this.logAction(profile.id, followTool.id, "browse_profile", candidate.username, "", "reel", "error", `viewReels failed: ${err?.message ?? err}`);
+          }
+        }
+      }
+
+      console.log(`[engine] @${profile.username}: [EB-only] [${label}] finished browsing @${candidate.username}`);
+    };
+
     if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
       console.log(`[engine] @${profile.username}: [EB-only] follow — daily limit hit`);
       return;
@@ -3438,7 +3644,30 @@ class AutomationEngine {
         // nothing because the SPA hasn't rendered the header yet.
         await this.waitForSelector(page, "header button", 6000);
 
-        const clicked = await page.evaluate(() => {
+        // Browse before follow — gated on the outer enable + beforeFollow toggle + its own %.
+        let abandonedAfterBrowse = false;
+        if (injectBrowsingEnabled && injectBrowsingBeforeFollow) {
+          const beforePct = randInt(injectBrowsingBeforePctMin, injectBrowsingBeforePctMax);
+          if (Math.random() * 100 < beforePct) {
+            await browseTargetProfileViaBrowser("pre-follow browse", candidate);
+            if (injectBrowsingAbandon) {
+              const abandonPct = randInt(injectBrowsingAbandonPctMin, injectBrowsingAbandonPctMax);
+              if (Math.random() * 100 < abandonPct) {
+                console.log(`[engine] @${profile.username}: [EB-only] abandoned follow @${candidate.username} after profile browse (abandon chance fired)`);
+                this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "Abandoned follow after profile browse (abandon chance)");
+                abandonedAfterBrowse = true;
+              }
+            }
+            // Re-navigate to the profile since browsing (reels/stories/highlights) may have moved us away.
+            if (!abandonedAfterBrowse) {
+              await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+              await sleep(randInt(800, 1500));
+              await this.waitForSelector(page, "header button", 6000);
+            }
+          }
+        }
+
+        const clicked = abandonedAfterBrowse ? false : await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll("button"));
           const btn = btns.find((b: any) => b.textContent?.trim() === "Follow");
           if (btn) { (btn as HTMLElement).click(); return true; }
@@ -3460,7 +3689,15 @@ class AutomationEngine {
           this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "ok", `EB followed @${candidate.username} [${followed}/${processCount}]`);
           this.logGhostBrowserCall(profile.id, profile.username, "follow", `EB followed @${candidate.username} [${followed}/${processCount}]`);
           console.log(`[engine] @${profile.username}: [EB-only] ➕ followed @${candidate.username}`);
-        } else {
+
+          // Post-follow profile browsing — browse the target's profile after successfully following them.
+          if (injectBrowsingEnabled) {
+            const postPct = randInt(injectBrowsingPostMin, injectBrowsingPostMax);
+            if (Math.random() * 100 < postPct) {
+              await browseTargetProfileViaBrowser("post-follow browse", candidate);
+            }
+          }
+        } else if (!abandonedAfterBrowse) {
           console.log(`[engine] @${profile.username}: [EB-only] follow — no Follow button on @${candidate.username} (already following or private)`);
           this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button — already following or private");
           this.logGhostBrowserCall(profile.id, profile.username, "follow_skipped", `No Follow button on @${candidate.username} — already following or private`);
