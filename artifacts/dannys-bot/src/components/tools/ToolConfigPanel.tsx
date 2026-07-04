@@ -986,7 +986,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                             <Label htmlFor="delayAfterFollowMax" className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
                             <Input id="delayAfterFollowMax" type="number" min="0" className="w-16 h-8 text-xs"
                               value={settings.delayAfterFollowMax}
-                              onChange={(e) => setSettings({...settings, delayAfterFollowMax: Math.max(Number(e.target.value), settings.delayAfterFollowMin ?? 0)})}
+                              onChange={(e) => setSettings({...settings, delayAfterFollowMax: Math.max(Number(e.target.value), 0)})}
                             />
                           </div>
                         </div>

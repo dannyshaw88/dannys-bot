@@ -5475,6 +5475,221 @@ export function startEbIpcServer(
         }
       }
 
+      // ── POST /eb/silent-search ─────────────────────────────────────────────────
+      // Performs a browser-based Instagram username search using the left-nav Search UI.
+      // Types the username character-by-character into the search bar, waits for the
+      // dropdown, and clicks the exact username match — exactly as a human would.
+      //
+      // Mode A: EB window already open → reuse it (navigate back when done).
+      // Mode B: EB not open → create a temporary hidden BrowserWindow with the
+      //   account's persist: partition (already holds Instagram cookies) and destroy
+      //   it when done.
+      if (req.method === "POST" && u.pathname === "/eb/silent-search") {
+        const ssUsername: string = (body.username ?? "").trim();
+        if (!pid || !ssUsername) return send(res, 400, { error: "profileId and username required" });
+
+        const ssEbEntry = ebMap.get(pid);
+        const ssEbIsOpen = !!(ssEbEntry && !ssEbEntry.win.isDestroyed());
+
+        let ssWin: BrowserWindow;
+        let ssTempWin: BrowserWindow | null = null;
+
+        if (ssEbIsOpen) {
+          ssWin = ssEbEntry!.win;
+          _ipcLog(`[eb:silent-search:${pid}] mode A — reusing open EB window`);
+        } else {
+          const ssPartition = `persist:eb-${pid}`;
+          const ssSes = electronSession.fromPartition(ssPartition);
+          const rawCookies: string = (body.igApiCookies as string | null | undefined) ?? "";
+          if (rawCookies) {
+            const cookiePairs = rawCookies.split(";").map((s: string) => s.trim()).filter(Boolean);
+            for (const pair of cookiePairs) {
+              const eqIdx = pair.indexOf("=");
+              if (eqIdx < 1) continue;
+              const name  = pair.slice(0, eqIdx).trim();
+              const value = pair.slice(eqIdx + 1).trim();
+              if (!name || !value) continue;
+              try {
+                await ssSes.cookies.set({
+                  url: "https://www.instagram.com", name, value,
+                  domain: ".instagram.com", path: "/", secure: true,
+                  httpOnly: name === "sessionid" || name === "csrftoken",
+                  sameSite: "no_restriction" as any,
+                });
+              } catch {}
+            }
+          }
+          const bodyProxy = body.proxy as { host?: string; port?: number; user?: string; pass?: string; type?: string } | null | undefined;
+          if (bodyProxy?.host && bodyProxy?.port) {
+            try {
+              await ssSes.clearHostResolverCache();
+              await ssSes.setProxy(buildProxyConfig(bodyProxy as any));
+            } catch {}
+          }
+          const { width: _ssSw } = eScreen.getPrimaryDisplay().workAreaSize;
+          ssTempWin = new BrowserWindow({
+            width: 1280, height: 820,
+            x: _ssSw + 10, y: 0,
+            show: false, skipTaskbar: true,
+            webPreferences: { nodeIntegration: false, contextIsolation: true, partition: ssPartition },
+          });
+          ssTempWin.showInactive();
+          ssWin = ssTempWin;
+          _ipcLog(`[eb:silent-search:${pid}] mode B — created off-screen window for "${ssUsername}"`);
+        }
+
+        const ssPrevUrl = ssEbIsOpen ? (() => {
+          try { const u2 = ssWin.webContents.getURL(); return (u2 && u2 !== "about:blank") ? u2 : "https://www.instagram.com/"; } catch { return "https://www.instagram.com/"; }
+        })() : "https://www.instagram.com/";
+
+        const ssCleanup = () => {
+          if (ssTempWin) { try { if (!ssTempWin.isDestroyed()) ssTempWin.destroy(); } catch {} ssTempWin = null; }
+          else { try { ssWin.webContents.loadURL(ssPrevUrl).catch(() => {}); } catch {} }
+        };
+
+        let ssSettled = false;
+        const ssWatchdog = setTimeout(() => {
+          if (ssSettled) return; ssSettled = true;
+          _ipcLog(`[ERROR] [eb:silent-search:${pid}] WATCHDOG — exceeded 60s for "${ssUsername}"`);
+          ssCleanup();
+          try { send(res, 200, { ok: false }); } catch {}
+        }, 60_000);
+
+        const ssRespond = (status: number, payload: any) => {
+          if (ssSettled) return; ssSettled = true;
+          clearTimeout(ssWatchdog); send(res, status, payload);
+        };
+
+        try {
+          // Ensure we're on instagram.com so the left-nav search button is present.
+          const currentUrl: string = (() => { try { return ssWin.webContents.getURL(); } catch { return ""; } })();
+          const isOnInstagram = /instagram\.com/.test(currentUrl);
+          if (!isOnInstagram) {
+            _ipcLog(`[eb:silent-search:${pid}] navigating to instagram.com home`);
+            await Promise.race([
+              ssWin.webContents.loadURL("https://www.instagram.com/").catch(() => {}),
+              new Promise(r => setTimeout(r, 20_000)),
+            ]);
+          }
+
+          // Step 1: click the left-nav Search button.
+          _ipcLog(`[eb:silent-search:${pid}] clicking Search nav button`);
+          await Promise.race([
+            ssWin.webContents.executeJavaScript(`
+              (function() {
+                var candidates = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button, span'));
+                var btn = candidates.find(function(el) {
+                  var label = (el.getAttribute('aria-label') || '').toLowerCase().trim();
+                  var href  = (el.href || el.getAttribute('href') || '').toLowerCase();
+                  var text  = (el.innerText || el.textContent || '').replace(/\\s+/g,' ').toLowerCase().trim();
+                  return label === 'search' || href.includes('/search') || text === 'search';
+                });
+                if (btn) { btn.click(); return true; }
+                return false;
+              })()
+            `, true).catch(() => false),
+            new Promise(r => setTimeout(r, 3_000)),
+          ]);
+
+          // Wait up to 3s for the search input to appear.
+          let ssInput: boolean = false;
+          const ssInputDeadline = Date.now() + 3_000;
+          while (Date.now() < ssInputDeadline && !ssInput) {
+            await new Promise(r => setTimeout(r, 200));
+            ssInput = await Promise.race([
+              ssWin.webContents.executeJavaScript(`!!(document.querySelector('input[aria-label="Search input"], input[placeholder="Search"], [data-testid="search-input"], input[type="text"]'))`, true).catch(() => false),
+              new Promise<boolean>(r => setTimeout(() => r(false), 500)),
+            ]);
+          }
+
+          if (!ssInput) {
+            _ipcLog(`[WARN] [eb:silent-search:${pid}] search input not found after clicking nav — aborting`);
+            ssCleanup();
+            return ssRespond(200, { ok: false });
+          }
+
+          // Step 2: focus the search input.
+          await ssWin.webContents.executeJavaScript(`
+            (function() {
+              var inp = document.querySelector('input[aria-label="Search input"], input[placeholder="Search"], [data-testid="search-input"], input[type="text"]');
+              if (inp) { inp.focus(); inp.click(); return true; }
+              return false;
+            })()
+          `, true).catch(() => false);
+
+          // Step 3: type the username character-by-character with random delays (50–150ms).
+          _ipcLog(`[eb:silent-search:${pid}] typing "${ssUsername}" char by char`);
+          for (const ch of ssUsername) {
+            await ssWin.webContents.executeJavaScript(`
+              (function() {
+                var inp = document.querySelector('input[aria-label="Search input"], input[placeholder="Search"], [data-testid="search-input"], input[type="text"]');
+                if (!inp) return;
+                var nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeSet.call(inp, inp.value + ${JSON.stringify(ch)});
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+              })()
+            `, true).catch(() => {});
+            await new Promise(r => setTimeout(r, 50 + Math.floor(Math.random() * 100)));
+          }
+
+          // Step 4: wait up to 5s for dropdown results to appear.
+          _ipcLog(`[eb:silent-search:${pid}] waiting for search results dropdown`);
+          let ssResultsReady = false;
+          const ssResultsDeadline = Date.now() + 5_000;
+          while (Date.now() < ssResultsDeadline && !ssResultsReady) {
+            await new Promise(r => setTimeout(r, 300));
+            ssResultsReady = await Promise.race([
+              ssWin.webContents.executeJavaScript(`
+                (function() {
+                  var items = document.querySelectorAll('[role="listbox"] [role="option"], [role="listbox"] a, [role="none"] a, .x9f619 a');
+                  return items.length > 0;
+                })()
+              `, true).catch(() => false),
+              new Promise<boolean>(r => setTimeout(() => r(false), 500)),
+            ]);
+          }
+
+          if (!ssResultsReady) {
+            _ipcLog(`[WARN] [eb:silent-search:${pid}] no results appeared for "${ssUsername}" — still returning ok (search typed)`);
+            ssCleanup();
+            return ssRespond(200, { ok: true }); // typing was done even if no dropdown appeared
+          }
+
+          // Step 5: click the exact username match in the dropdown.
+          _ipcLog(`[eb:silent-search:${pid}] clicking exact match for "${ssUsername}" in results`);
+          const ssClicked: boolean = await Promise.race([
+            ssWin.webContents.executeJavaScript(`
+              (function() {
+                var target = ${JSON.stringify(ssUsername.toLowerCase())};
+                var candidates = Array.from(document.querySelectorAll('[role="listbox"] [role="option"], [role="listbox"] a, [role="none"] a, .x9f619 a, [tabindex="0"] span'));
+                for (var i = 0; i < candidates.length; i++) {
+                  var el = candidates[i];
+                  var text = (el.innerText || el.textContent || '').replace(/\\s+/g,' ').toLowerCase().trim();
+                  if (text === target || text.startsWith(target + '\\n') || text.startsWith(target + ' ')) {
+                    el.click();
+                    return true;
+                  }
+                }
+                // Fallback: click first result
+                if (candidates.length > 0) { candidates[0].click(); return true; }
+                return false;
+              })()
+            `, true).catch(() => false),
+            new Promise<boolean>(r => setTimeout(() => r(false), 3_000)),
+          ]);
+
+          _ipcLog(`[eb:silent-search:${pid}] search complete — clicked=${ssClicked}, restoring URL`);
+          ssCleanup();
+          return ssRespond(200, { ok: true });
+
+        } catch (ssErr: any) {
+          _ipcLog(`[ERROR] [eb:silent-search:${pid}] error: ${ssErr?.message}`);
+          ssCleanup();
+          return ssRespond(200, { ok: false });
+        }
+      }
+
       // ── POST /eb/auto-login ────────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/auto-login") {
         // Ensure window is open

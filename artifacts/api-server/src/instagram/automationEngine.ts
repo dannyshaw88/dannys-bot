@@ -322,6 +322,36 @@ class AutomationEngine {
     }
   }
 
+  private async searchUserViaBrowser(
+    profileId: number,
+    username: string,
+    proxy?: { host?: string | null; port?: number | null; username?: string | null; password?: string | null; type?: string | null } | null,
+    igApiCookies?: string | null,
+  ): Promise<boolean> {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) return false;
+    try {
+      const proxyPayload = (proxy?.host && proxy?.port) ? {
+        host: proxy.host,
+        port: proxy.port,
+        user: proxy.username ?? undefined,
+        pass: proxy.password ?? undefined,
+        type: proxy.type ?? "http",
+      } : null;
+      const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-search`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ profileId, username, proxy: proxyPayload, igApiCookies: igApiCookies ?? null }),
+        signal:  AbortSignal.timeout(60_000),
+      });
+      if (!r.ok) return false;
+      const j = await r.json() as { ok: boolean };
+      return j.ok;
+    } catch {
+      return false;
+    }
+  }
+
   private async postPhotoViaBrowser(
     profileId: number,
     imageBuffer: Buffer,
@@ -5140,18 +5170,26 @@ class AutomationEngine {
       engineLog("INFO", `@${profile.username}: searchByUsername mid-session scheduled for ${injectSearchMidSlots.size}/${processCount} follow slots (${searchMidPct}%)`);
     if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow)
       engineLog("INFO", `@${profile.username}: inject profile browsing (pre-follow) scheduled for ${injectBrowseSlots.size}/${processCount} follow slots (${beforeFollowBrowsePct}%)`);
+    else if (injectProfileBrowsingEnabled && !injectProfileBrowsingBeforeFollow)
+      engineLog("INFO", `@${profile.username}: inject profile browsing enabled (post-follow only, ${injectProfileBrowsingMin}–${injectProfileBrowsingMax}% per follow) — Browse Before Follow is OFF`);
+    else if (!injectProfileBrowsingEnabled)
+      engineLog("INFO", `@${profile.username}: inject profile browsing DISABLED (outer Inject Browsing checkbox is unchecked)`);
 
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
     // Simulates the user searching in the search bar before following — adds natural API signal.
+    // Tries browser-based search first (EB IPC) so the search appears in the embedded browser;
+    // falls back to the mobile API search endpoint if running outside Electron.
     if (injectSearchEnabled && candidates.length > 0) {
       const searchQuery = source.type === "target_followers"
         ? source.value.replace(/^@/, "")
         : (candidates[0]?.username ?? source.value);
       if (searchQuery) {
         try {
-          await client.searchUserByUsername(searchQuery);
-          engineLog("INFO", `@${profile.username}: injected user search for "${searchQuery}" before first follow`);
+          const profileProxy = { host: (profile as any).proxyHost, port: (profile as any).proxyPort, username: (profile as any).proxyUsername, password: (profile as any).proxyPassword, type: (profile as any).proxyType };
+          const browserOk = await this.searchUserViaBrowser(profile.id, searchQuery, profileProxy, (profile as any).igApiCookies ?? null);
+          if (!browserOk) await client.searchUserByUsername(searchQuery);
+          engineLog("INFO", `@${profile.username}: injected user search for "${searchQuery}" before first follow${browserOk ? " [browser]" : " [mobile API]"}`);
         } catch { /* non-critical */ }
       }
     }
@@ -5480,8 +5518,10 @@ class AutomationEngine {
         // Only inject search if getSuggestedUsers did NOT fire this slot
         if (!suggestedFired && injectSearchEnabled && injectSearchMidSlots.has(followed)) {
           try {
-            await client.searchUserByUsername(user.username);
-            engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
+            const profileProxy = { host: (profile as any).proxyHost, port: (profile as any).proxyPort, username: (profile as any).proxyUsername, password: (profile as any).proxyPassword, type: (profile as any).proxyType };
+            const browserOk = await this.searchUserViaBrowser(profile.id, user.username, profileProxy, (profile as any).igApiCookies ?? null);
+            if (!browserOk) await client.searchUserByUsername(user.username);
+            engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}${browserOk ? " [browser]" : " [mobile API]"}`);
           } catch { /* non-critical */ }
         }
       }

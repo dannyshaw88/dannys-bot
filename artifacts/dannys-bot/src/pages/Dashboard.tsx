@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.332",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Delay After Follow Max field no longer refuses to go below the Min value — you can now type any number freely into the Max box without it snapping back to the Min.",
+      },
+      {
+        category: "Fixed",
+        text: "Inject Profile Browsing state is now always logged at the start of every follow session — you will see exactly whether it is disabled, running post-follow only, or running pre-follow on how many slots, so you can tell at a glance if the checkbox is on or off.",
+      },
+      {
+        category: "New Feature",
+        text: "Inject Search now performs the search inside the embedded browser — it clicks the Search button on the left nav, focuses the search bar, types the username one character at a time with realistic random keystroke timing, waits for the dropdown, and clicks the exact match. Falls back to the mobile API search if the browser is not available.",
+      },
+      {
+        category: "Improvement",
+        text: "Browser-based Inject Search works whether the embedded browser window is visible or hidden — uses JavaScript clicks throughout, never CDP tap gestures, so it is reliable in fully off-screen mode.",
+      },
+    ],
+  },
+  {
     version: "1.1.331",
     date: "4 Jul 2026",
     items: [
