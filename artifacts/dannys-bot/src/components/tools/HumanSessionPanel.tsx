@@ -1140,7 +1140,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
               {/* Sub-row — all 5 jitter action chances on one row */}
-              <div className={`flex items-center gap-2 flex-wrap pl-7 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-2 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {([
                   { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",    Icon: Bell,      color: "text-orange-500" },
                   { minKey: "ownProfileRunChanceMin",       maxKey: "ownProfileRunChanceMax",       label: "Profile",   Icon: User,      color: "text-indigo-500" },
