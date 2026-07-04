@@ -1096,21 +1096,21 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── Human Jitter ── */}
             <div className="px-4 py-3 space-y-2">
-              <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 shrink-0">
-                <input type="checkbox" id="humanSessionEnabled"
-                  checked={!!settings.humanSessionEnabled}
-                  onChange={(e) => setSettings({ ...settings, humanSessionEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="humanSessionEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
-                  <User className="w-4 h-4 text-violet-500" />
-                  Human Jitter
-                </label>
+                  <input type="checkbox" id="humanSessionEnabled"
+                    checked={!!settings.humanSessionEnabled}
+                    onChange={(e) => setSettings({ ...settings, humanSessionEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="humanSessionEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <User className="w-4 h-4 text-violet-500" />
+                    Human Jitter
+                  </label>
                 </div>
-                <div className="flex flex-col gap-1.5 shrink-0">
+                <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Order %</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionOrderMin ?? 0}
                       onChange={(v) => setSettings({ ...settings, humanSessionOrderMin: v })}
@@ -1122,7 +1122,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionNotUsedMin ?? 0}
                       onChange={(v) => setSettings({ ...settings, humanSessionNotUsedMin: v })}
@@ -1173,18 +1173,17 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             {/* ── View Reels ── */}
             <div className="px-4 py-3">
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <input type="checkbox" id="viewReelsEnabled"
                     checked={!!(settings as any).viewReelsEnabled}
                     onChange={(e) => setSettings({ ...settings, viewReelsEnabled: e.target.checked } as any)}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                    style={{ opacity: 1, pointerEvents: 'auto' }}
                   />
-                  <label htmlFor="viewReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0"
-                    style={{ opacity: 1, pointerEvents: 'auto' }}>
+                  <label htmlFor="viewReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
                     <Film className="w-4 h-4 text-violet-500 shrink-0" />
                     View Reels
                   </label>
+                  <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="h-4 w-px bg-border/60 shrink-0" />
                   <div className="flex items-center gap-1.5">
                     {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
@@ -1211,7 +1210,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
                   </div>
-                </div>
+                  </div>{/* end faded sub-options */}
+                </div>{/* end left side */}
                 <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
@@ -1337,9 +1337,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── Check Direct Messages ── */}
-            <div className="px-4 py-3">
+            <div className="px-4 py-3 space-y-2">
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
                   <input type="checkbox" id="checkDmEnabled"
                     checked={!!settings.checkDmEnabled}
                     onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
@@ -1349,21 +1349,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
                     Check Direct Messages
                   </label>
-                  <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
-                      value={settings.checkDmMin ?? 5}
-                      onChange={(v) => setSettings({ ...settings, checkDmMin: v })}
-                    />
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
-                      value={settings.checkDmMax ?? 15}
-                      onChange={(v) => setSettings({ ...settings, checkDmMax: v })}
-                    />
-                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5 shrink-0">
+                <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
@@ -1389,6 +1376,20 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     />
                   </div>
                 </div>
+              </div>
+              {/* Sub-row — Check X/Y settings */}
+              <div className={`flex items-center gap-1.5 pl-7 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
+                <Label className="text-xs text-muted-foreground">Min</Label>
+                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  value={settings.checkDmMin ?? 5}
+                  onChange={(v) => setSettings({ ...settings, checkDmMin: v })}
+                />
+                <Label className="text-xs text-muted-foreground">Max</Label>
+                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  value={settings.checkDmMax ?? 15}
+                  onChange={(v) => setSettings({ ...settings, checkDmMax: v })}
+                />
               </div>
             </div>
 
