@@ -4,6 +4,42 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.320] — 2026-07-04
+
+### Fixed
+
+#### DM inbox 4415001 "Prompt has contribution" — abort session instead of continuing to viewTimelineFeed (`instagramWebClient.ts`, `automationEngine.ts`)
+
+**The real root cause — confirmed from logs:**
+
+The previous fix (adding a `news/inbox` NotificationsBadge warm-up before `direct_v2/inbox`) was based on a wrong hypothesis. Logs show:
+
+```
+13:36:13  _buildWarmedIgClient: Phase 2 — news/inbox OK  ← warm-up fires and SUCCEEDS
+13:38:34  direct_v2/inbox → HTTP 400 (prompt_required_4415001)  ← STILL fails despite warm-up
+13:38:34  @nicks_jackqueline: 💬 checked DMs — opened 0/4 threads (read failed)  ← session CONTINUES
+13:41:07  viewTimelineFeed fires
+13:41:10  POST /api/v1/feed/timeline/ → HTTP 403 logout_reason:3  ← account force-killed
+```
+
+The warm-up (`news/inbox`) does not lift the 4415001 gate. **4415001 "Prompt has contribution" is an account-level state** set by Instagram when there is an in-app prompt (feature intro, birthday info, notification permission request, etc.) waiting for real user interaction. No API call sequence fixes this — the prompt must be dismissed by a human in the actual Instagram app.
+
+**The exact kill sequence:**
+
+Instagram's rule: when a session receives 4415001 from any endpoint, it marks that session as having an unacknowledged prompt. If the app then fires **any further API call** in that session without responding to the prompt, Instagram escalates to `logout_reason:3` (forced server-side session revocation) on the very next request — every time, with no exceptions.
+
+The code was catching 4415001, treating it as a non-fatal soft gate, logging "DM check failed", and then continuing the session queue. The next tool in the queue (`viewTimelineFeed`) fired immediately and received `logout_reason:3`.
+
+**Fix:** When `direct_v2/inbox` returns 4415001, `getDirectMessagesInternal` now returns `sessionGated: true`. The engine checks this flag immediately after the DM check and sets `sessionError` to abort all remaining session tools — `viewTimelineFeed`, stories, reels, and any other queued tools are cancelled. The account is **not** marked as `logged_out` because the session cookies are still valid; only the session run is stopped early.
+
+**How to resolve for the affected account:**
+
+Open the embedded browser for the account, navigate to Instagram, and dismiss whatever prompt Instagram is showing. After that, `direct_v2/inbox` will succeed normally and DM checks will work again.
+
+**Note:** The `news/inbox` warm-up added in v1.1.319 is kept because it matches what the real Instagram app does (check notification badge before opening DMs). It does not cause the 4415001 — that's a separate account-level condition — but it is correct behaviour to include.
+
+---
+
 ## [1.1.319] — 2026-07-04
 
 ### Fixed

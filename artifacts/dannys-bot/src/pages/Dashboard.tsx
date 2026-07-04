@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.320",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed accounts getting logged out after DM checks again. The previous fix was based on wrong analysis — the notification warm-up doesn't stop Instagram's 4415001 error, which is a completely different thing: an in-app prompt (e.g. a feature intro or notification permission) waiting for the user to tap OK. When that happens, Instagram force-kills the session if the app makes any further API call. The app now stops the session immediately when 4415001 occurs, so the timeline feed call that was triggering the logout never fires.",
+      },
+      {
+        category: "Fix",
+        text: "When a DM check is blocked by an Instagram in-app prompt, the account is no longer marked as logged out. The session pauses cleanly and the account stays valid. To clear the block: open the embedded browser for that account and dismiss whatever prompt Instagram is showing — DM checks will work again immediately after.",
+      },
+    ],
+  },
+  {
     version: "1.1.319",
     date: "4 Jul 2026",
     items: [
