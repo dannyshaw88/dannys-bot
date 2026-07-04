@@ -1121,6 +1121,21 @@ export function ProfileDetailsPage() {
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Account Name
               </Label>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
+                      <input type="checkbox" checked={!!(formData.apiLimits as any).disableApi} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, disableApi: e.target.checked } })} className="h-3.5 w-3.5 accent-red-500 cursor-pointer" />
+                      <span className={(formData.apiLimits as any).disableApi ? "text-red-500" : ""}>Disable API</span>
+                    </label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                    <p className="font-semibold mb-1">Disable API</p>
+                    <p>Blocks all mobile API calls for this account. Every action runs via the embedded browser instead. Verify only harvests EB cookies and marks the account valid — no mobile API confirmation step.</p>
+                    <p className="mt-1.5 opacity-80 italic">Use when Instagram is flagging API fingerprints for this account. HikerAPI is unaffected.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {profile?.creatorMode && (
                 <Button
                   variant="outline"
@@ -1551,24 +1566,6 @@ export function ProfileDetailsPage() {
                                     <p className="font-semibold mb-1">Variation %</p>
                                     <p>Occasionally spikes calls above or below your normal delay range to break up rhythm.</p>
                                     <p className="mt-1.5 opacity-80 italic">e.g. 10% chance, +30–60 s above max — roughly 1 in 10 calls adds an extra 30–60 second pause on top of the normal window.</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                            {/* Disable API */}
-                            <div className="flex items-center ml-1">
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                                      <input type="checkbox" checked={!!(formData.apiLimits as any).disableApi} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, disableApi: e.target.checked } })} className="h-3.5 w-3.5 accent-red-500 cursor-pointer" />
-                                      <span className={(formData.apiLimits as any).disableApi ? "text-red-500" : ""}>Disable API</span>
-                                    </label>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
-                                    <p className="font-semibold mb-1">Disable API</p>
-                                    <p>Blocks all mobile API calls for this account. Every action runs via the embedded browser instead. Verify only harvests EB cookies and marks the account valid — no mobile API confirmation step.</p>
-                                    <p className="mt-1.5 opacity-80 italic">Use when Instagram is flagging API fingerprints for this account. HikerAPI is unaffected.</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
