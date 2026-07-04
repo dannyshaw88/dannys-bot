@@ -1121,21 +1121,6 @@ export function ProfileDetailsPage() {
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Account Name
               </Label>
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
-                      <input type="checkbox" checked={!!(formData.apiLimits as any).disableApi} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, disableApi: e.target.checked } })} className="h-3.5 w-3.5 accent-red-500 cursor-pointer" />
-                      <span className={(formData.apiLimits as any).disableApi ? "text-red-500" : ""}>Disable API</span>
-                    </label>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
-                    <p className="font-semibold mb-1">Disable API</p>
-                    <p>Blocks all mobile API calls for this account. Every action runs via the embedded browser instead. Verify only harvests EB cookies and marks the account valid — no mobile API confirmation step.</p>
-                    <p className="mt-1.5 opacity-80 italic">Use when Instagram is flagging API fingerprints for this account. HikerAPI is unaffected.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
               {profile?.creatorMode && (
                 <Button
                   variant="outline"
@@ -1171,12 +1156,29 @@ export function ProfileDetailsPage() {
                 </span>
               </div>
             </div>
-            <div className="max-w-[34%]">
-              <Input
-                placeholder="e.g. @Account1"
-                value={formData.accountLabel}
-                onChange={e => updateField({ accountLabel: e.target.value })}
-              />
+            <div className="flex items-center gap-3">
+              <div className="max-w-[34%]">
+                <Input
+                  placeholder="e.g. @Account1"
+                  value={formData.accountLabel}
+                  onChange={e => updateField({ accountLabel: e.target.value })}
+                />
+              </div>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold shrink-0">
+                      <input type="checkbox" checked={!!(formData.apiLimits as any).disableApi} onChange={e => updateField({ apiLimits: { ...formData.apiLimits, disableApi: e.target.checked } })} className="h-3.5 w-3.5 accent-red-500 cursor-pointer" />
+                      <span className={(formData.apiLimits as any).disableApi ? "text-red-500" : ""}>Disable API</span>
+                    </label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[300px] whitespace-normal leading-snug">
+                    <p className="font-semibold mb-1">Disable API</p>
+                    <p>Blocks all mobile API calls for this account. Every action runs via the embedded browser instead. Verify only harvests EB cookies and marks the account valid — no mobile API confirmation step.</p>
+                    <p className="mt-1.5 opacity-80 italic">Use when Instagram is flagging API fingerprints for this account. HikerAPI is unaffected.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
 
