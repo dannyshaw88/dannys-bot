@@ -5020,7 +5020,7 @@ export function startEbIpcServer(
               if (dbgAttached) try { sfDbg.detach(); } catch {}
             }
 
-            _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms confirmed)`);
+            _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} confirmed)`);
             sfRestoreUrl();
             return sfRespond(200, { ok: true });
 

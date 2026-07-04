@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.315",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed crash that blocked every browser-follow with 'dwellMs is not defined'. A leftover reference to a removed variable was crashing the follow at the moment of confirmation.",
+      },
+    ],
+  },
+  {
     version: "1.1.314",
     date: "4 Jul 2026",
     items: [
