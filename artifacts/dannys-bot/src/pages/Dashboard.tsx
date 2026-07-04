@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.331",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Human Jitter hamburger menu clicks (Settings, Activity, Saved) now work correctly when the browser window is running hidden in the background — removed an element-visibility check that returns nothing in a hidden window.",
+      },
+    ],
+  },
+  {
     version: "1.1.330",
     date: "4 Jul 2026",
     items: [

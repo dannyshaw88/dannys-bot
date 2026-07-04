@@ -3740,11 +3740,20 @@ class AutomationEngine {
           if (!moreClicked) return false;
           await sleep(randInt(700, 1200));
           const itemClicked = await page.evaluate((text: string) => {
-            // Find the menu item by exact visible text — Instagram menu items are <span> or <div> inside [role="menuitem"]
-            const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"] span,[role="menuitem"],span,li'))
-              .find(el => el.textContent?.trim() === text && (el as any).offsetParent !== null);
-            if (!item) return false;
-            const target = item.closest<HTMLElement>('[role="menuitem"]') ?? item;
+            // Find the menu item by exact text content.
+            // Do NOT use offsetParent/getBoundingClientRect checks — these return
+            // null/zero in a hidden Electron BrowserWindow even when the element is
+            // fully rendered, which would cause every menu click to silently no-op.
+            // Priority order: prefer [role="menuitem"] containers (the wrapping
+            // div/li), then fall back to any visible span matching the text.
+            const byRole = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+              .find(el => el.textContent?.trim() === text);
+            const bySpan = Array.from(document.querySelectorAll<HTMLElement>('span,li'))
+              .find(el => el.textContent?.trim() === text);
+            const target = byRole ?? bySpan;
+            if (!target) return false;
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            target.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true }));
             target.click();
             return true;
           }, itemText).catch(() => false);
