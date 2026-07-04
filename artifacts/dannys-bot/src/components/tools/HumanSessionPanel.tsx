@@ -1175,9 +1175,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── View Reels ── */}
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="px-4 py-3 space-y-2">
+              {/* Title row */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
                   <input type="checkbox" id="viewReelsEnabled"
                     checked={!!(settings as any).viewReelsEnabled}
                     onChange={(e) => setSettings({ ...settings, viewReelsEnabled: e.target.checked } as any)}
@@ -1187,35 +1188,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <Film className="w-4 h-4 text-violet-500 shrink-0" />
                     View Reels
                   </label>
-                  <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <div className="h-4 w-px bg-border/60 shrink-0" />
-                  <div className="flex items-center gap-1.5">
-                    {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
-                    <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Chance%</span>
-                  </div>
-                  <div className="h-4 w-px bg-border/60 shrink-0" />
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={0} max={50} className="w-16 h-7 text-xs"
-                      value={settings.reelWatchCountMin ?? 1}
-                      onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
-                    />
-                    <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={0} max={50} className="w-16 h-7 text-xs"
-                      value={settings.reelWatchCountMax ?? 3}
-                      onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
-                    />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
-                  </div>
-                  <div className="h-4 w-px bg-border/60 shrink-0" />
-                  <div className="flex items-center gap-1.5">
-                    {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
-                    <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
-                  </div>
-                  </div>{/* end faded sub-options */}
-                </div>{/* end left side */}
+                </div>
                 <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
@@ -1241,6 +1214,34 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       onChange={(v) => setSettings({ ...settings, viewReelsNotUsedMax: v } as any)}
                     />
                   </div>
+                </div>
+              </div>
+              {/* Sub-row — settings below title */}
+              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
+                  <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Chance%</span>
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                    value={settings.reelWatchCountMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
+                  />
+                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                    value={settings.reelWatchCountMax ?? 3}
+                    onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
+                  />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
+                  <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
                 </div>
               </div>
             </div>

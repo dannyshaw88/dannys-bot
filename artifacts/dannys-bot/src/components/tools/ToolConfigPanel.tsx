@@ -656,11 +656,11 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
                 {hashtags.length > 0 && (
                   <Button type="button" variant="outline" size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 w-full h-8"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 h-8 max-w-[75px]"
                     disabled={clearSourcesByTypeMutation.isPending}
                     onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'hashtag' })}>
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                    {clearSourcesByTypeMutation.isPending ? 'Clearing…' : `Clear Hashtags (${hashtags.length})`}
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    {clearSourcesByTypeMutation.isPending ? '…' : 'Clear'}
                   </Button>
                 )}
               </>
@@ -729,11 +729,11 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
                 {followers.length > 0 && (
                   <Button type="button" variant="outline" size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 w-full h-8"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 h-8 max-w-[75px]"
                     disabled={clearSourcesByTypeMutation.isPending}
                     onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'target_followers' })}>
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                    {clearSourcesByTypeMutation.isPending ? 'Clearing…' : `Clear Followers (${followers.length})`}
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    {clearSourcesByTypeMutation.isPending ? '…' : 'Clear'}
                   </Button>
                 )}
               </>
