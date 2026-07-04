@@ -1383,7 +1383,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
               {/* Sub-row — Check X/Y settings */}
-              <div className={`flex items-center gap-1.5 pl-7 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
                 <Label className="text-xs text-muted-foreground">Min</Label>
                 <NumField min={1} max={100} className="w-14 h-7 text-xs"
