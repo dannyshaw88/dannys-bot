@@ -2705,6 +2705,19 @@ class AutomationEngine {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
       };
 
+      // Waits for at least one element matching `selector` to appear.
+      // SPA content loads async; without this, actions that fire immediately
+      // after navigation frequently find nothing and silently no-op.
+      const waitFor = async (selector: string, timeoutMs = 8000): Promise<boolean> => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const found: boolean = await page.evaluate((sel: string) => !!document.querySelector(sel), selector).catch(() => false);
+          if (found) return true;
+          await sleep(400);
+        }
+        return false;
+      };
+
       // ── humanSession audit — own profile + notifications ──────────────────
       if (s.humanSessionEnabled === true && !state.stop.stopped) {
         try {
@@ -2735,25 +2748,108 @@ class AutomationEngine {
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
           console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}×`);
+
+          // ── Like% sub-setting — like a % of scrolled posts ─────────────────
+          // Uses likeTimelinePostsPercentMin/Max (the same keys shown in the UI
+          // as a sub-setting of viewTimelineFeed). This mirrors how the API path
+          // computes a like count from the percentage of viewed posts.
+          const likePctRaw0 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMin ?? 0)));
+          const likePctRaw1 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMax ?? 0)));
+          const likePctMin = Math.min(likePctRaw0, likePctRaw1);
+          const likePctMax = Math.max(likePctRaw0, likePctRaw1);
+          if (likePctMax > 0 && !state.stop.stopped) {
+            const likePct = likePctMin + Math.random() * (likePctMax - likePctMin);
+            // Allow genuine zero — small feed + low pct should produce 0 likes.
+            const likeCount = Math.round(feedCount * likePct / 100);
+            const likeDelayMinMs = Math.max(0, Number(s.likeTimelinePostsDelayMin ?? 3)) * 1000;
+            const likeDelayMaxMs = Math.max(likeDelayMinMs, Number(s.likeTimelinePostsDelayMax ?? 8) * 1000);
+            // Scroll back to the top so we can walk down and find un-liked hearts.
+            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+            await sleep(800);
+            await waitFor('svg[aria-label="Like"]', 6000);
+            let liked = 0;
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
+              await sleep(700);
+              const clickedOne: boolean = await page.evaluate(() => {
+                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
+                const h = hearts[0] as SVGElement | undefined;
+                if (!h) return false;
+                (h.closest("button") as HTMLElement | null)?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) {
+                liked++;
+                await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
+              }
+            }
+            if (liked > 0) {
+              for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
+            }
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via feed sub-setting`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via feed sub-setting`);
+            console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts (feed sub-setting)`);
+          }
+
+          // ── Reels sub-setting — navigate to /reels/ and watch N reels ──────
+          // Uses reelWatchChanceMin/Max, reelWatchCountMin/Max, reelWatchPercentMin/Max
+          // (the same keys shown in the UI as sub-settings of viewTimelineFeed).
+          // There is no mobile-API reel call available in browser-only mode, so we
+          // navigate to instagram.com/reels/, wait for the video to load, dwell for
+          // reelViewPct% of an estimated reel duration, then press ArrowDown to advance.
+          // Normalize reel chance bounds to [0,100], swap if inverted.
+          const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
+          const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
+          const reelChanceMin2 = Math.min(reelChanceRaw0, reelChanceRaw1);
+          const reelChanceMax2 = Math.max(reelChanceRaw0, reelChanceRaw1);
+          if (reelChanceMax2 > 0 && !state.stop.stopped) {
+            const reelChance = reelChanceMin2 + Math.random() * (reelChanceMax2 - reelChanceMin2);
+            const reelChanceRoll = Math.random() * 100;
+            const reelsEnabled = reelChanceRoll < reelChance;
+            if (reelsEnabled) {
+              // Normalize count and view-% bounds, swap if inverted.
+              const rcMin = Math.max(0, Number(s.reelWatchCountMin ?? 1));
+              const rcMax = Math.max(rcMin, Number(s.reelWatchCountMax ?? 3));
+              const reelCount = randInt(rcMin, rcMax);
+              const rvMin = Math.min(100, Math.max(0, Number(s.reelWatchPercentMin ?? 50)));
+              const rvMax = Math.min(100, Math.max(0, Number(s.reelWatchPercentMax ?? 100)));
+              const reelViewPctMin = Math.min(rvMin, rvMax);
+              const reelViewPctMax = Math.max(rvMin, rvMax);
+              console.log(`[engine] @${profile.username}: 🎲 [EB] Reel chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% — reels ON (${reelCount} reels)`);
+              try {
+                await nav("https://www.instagram.com/reels/", "reels feed");
+                await sleep(actionDelay());
+                const videoFound = await waitFor("video", 8000);
+                let watched = 0;
+                if (videoFound) {
+                  for (let i = 0; i < reelCount && !state.stop.stopped; i++) {
+                    // Dwell for reelViewPct% of an estimated 8–20s reel duration.
+                    const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
+                    const watchMs = Math.max(2000, Math.round((reelViewPct / 100) * randInt(8000, 20000)));
+                    await sleep(watchMs);
+                    await page.keyboard.press("ArrowDown").catch(() => {});
+                    await sleep(randInt(600, 1400));
+                    watched++;
+                  }
+                } else {
+                  console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
+                }
+                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", `EB watched ${watched} reel(s) via feed sub-setting`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", `EB watched ${watched} reel(s) via feed sub-setting`);
+                console.log(`[engine] @${profile.username}: [EB-only] 🎬 watched ${watched} reels (feed sub-setting)`);
+              } catch (e: any) {
+                console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
+              }
+            } else {
+              console.log(`[engine] @${profile.username}: 🎲 [EB] Reel chance ${reelChanceRoll.toFixed(1)}% ≥ ${reelChance.toFixed(1)}% — skipping reels`);
+            }
+          }
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
         }
       }
-
-      // Small helper — waits for at least one element matching `selector` to
-      // appear (SPA content loads async; without this, actions that fire
-      // immediately after navigation frequently find nothing and silently
-      // no-op, which is why only the pure-scroll action ever "worked").
-      const waitFor = async (selector: string, timeoutMs = 8000): Promise<boolean> => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          const found: boolean = await page.evaluate((sel: string) => !!document.querySelector(sel), selector).catch(() => false);
-          if (found) return true;
-          await sleep(400);
-        }
-        return false;
-      };
 
       // ── checkTimelineStories — click story circles then navigate through ──
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {

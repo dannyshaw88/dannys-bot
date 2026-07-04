@@ -165742,6 +165742,41 @@ ${err?.stack ?? ""}`);
     }).catch(() => {
     });
   }
+  // Waits for at least one element matching `selector` to appear on the page.
+  // SPA content loads asynchronously; without this, browser actions that fire
+  // immediately after navigation frequently find nothing and silently no-op.
+  async waitForSelector(page, selector, timeoutMs = 8e3) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const found = await page.evaluate((sel) => !!document.querySelector(sel), selector).catch(() => false);
+      if (found) return true;
+      await sleep(400);
+    }
+    return false;
+  }
+  // ── Ghost Browser (EB) API-call-log mirror ──────────────────────────────────
+  // When Disable API is active, actions are performed via the embedded browser
+  // (Ghost Browser) instead of the mobile API, so no real InstagramWebClient
+  // call fires and nothing would otherwise land in the API Calls log / CSV
+  // export. This mirrors every browser-driven action into the same
+  // instagram_api_calls table used by real API calls, stamped with
+  // transport="Ghost Browser" so it shows up in the Transport column of the
+  // Accounts Manager → Actions / Export API Calls views exactly like a real
+  // API call row, just with a different transport label.
+  logGhostBrowserCall(profileId, username, operationName, message, isError2 = false) {
+    storage.createInstagramApiCall({
+      profileId,
+      username,
+      operationName,
+      date: (/* @__PURE__ */ new Date()).toISOString(),
+      message: message ?? "",
+      source: "Ghost Browser",
+      durationMs: 0,
+      isError: isError2,
+      transport: "Ghost Browser"
+    }).catch(() => {
+    });
+  }
   // ── Action block / suspension helpers ────────────────────────────────────
   // Returns true if the given action is currently suspended due to a block.
   isActionSuspended(state, key) {
@@ -166167,6 +166202,15 @@ ${err?.stack ?? ""}`);
         console.log(`[engine] @${profile.username}: \u{1F310} [EB-only] \u2192 ${label}`);
         await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 3e4 });
       };
+      const waitFor = async (selector, timeoutMs = 8e3) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const found = await page.evaluate((sel) => !!document.querySelector(sel), selector).catch(() => false);
+          if (found) return true;
+          await sleep(400);
+        }
+        return false;
+      };
       if (s.humanSessionEnabled === true && !state.stop.stopped) {
         try {
           await nav("https://www.instagram.com/", "home (audit)");
@@ -166174,8 +166218,10 @@ ${err?.stack ?? ""}`);
           await nav(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
           await sleep(actionDelay());
           this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB \u2014 audit: home + own profile");
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB \u2014 audit: home + own profile");
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
         }
       }
       if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
@@ -166190,9 +166236,95 @@ ${err?.stack ?? ""}`);
             await sleep(actionDelay());
           }
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
           console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} scrolled feed ${feedCount}\xD7`);
+          const likePctRaw0 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMin ?? 0)));
+          const likePctRaw1 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMax ?? 0)));
+          const likePctMin = Math.min(likePctRaw0, likePctRaw1);
+          const likePctMax = Math.max(likePctRaw0, likePctRaw1);
+          if (likePctMax > 0 && !state.stop.stopped) {
+            const likePct = likePctMin + Math.random() * (likePctMax - likePctMin);
+            const likeCount = Math.round(feedCount * likePct / 100);
+            const likeDelayMinMs = Math.max(0, Number(s.likeTimelinePostsDelayMin ?? 3)) * 1e3;
+            const likeDelayMaxMs = Math.max(likeDelayMinMs, Number(s.likeTimelinePostsDelayMax ?? 8) * 1e3);
+            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {
+            });
+            await sleep(800);
+            await waitFor('svg[aria-label="Like"]', 6e3);
+            let liked = 0;
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
+              });
+              await sleep(700);
+              const clickedOne = await page.evaluate(() => {
+                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
+                const h4 = hearts[0];
+                if (!h4) return false;
+                h4.closest("button")?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) {
+                liked++;
+                await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
+              }
+            }
+            if (liked > 0) {
+              for (let i2 = 0; i2 < liked; i2++) await storage.incrementStat(profile.id, "like").catch(() => {
+              });
+            }
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via feed sub-setting`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via feed sub-setting`);
+            console.log(`[engine] @${profile.username}: [EB-only] \u2764\uFE0F liked ${liked} posts (feed sub-setting)`);
+          }
+          const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
+          const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
+          const reelChanceMin2 = Math.min(reelChanceRaw0, reelChanceRaw1);
+          const reelChanceMax2 = Math.max(reelChanceRaw0, reelChanceRaw1);
+          if (reelChanceMax2 > 0 && !state.stop.stopped) {
+            const reelChance = reelChanceMin2 + Math.random() * (reelChanceMax2 - reelChanceMin2);
+            const reelChanceRoll = Math.random() * 100;
+            const reelsEnabled = reelChanceRoll < reelChance;
+            if (reelsEnabled) {
+              const rcMin = Math.max(0, Number(s.reelWatchCountMin ?? 1));
+              const rcMax = Math.max(rcMin, Number(s.reelWatchCountMax ?? 3));
+              const reelCount = randInt2(rcMin, rcMax);
+              const rvMin = Math.min(100, Math.max(0, Number(s.reelWatchPercentMin ?? 50)));
+              const rvMax = Math.min(100, Math.max(0, Number(s.reelWatchPercentMax ?? 100)));
+              const reelViewPctMin = Math.min(rvMin, rvMax);
+              const reelViewPctMax = Math.max(rvMin, rvMax);
+              console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] Reel chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% \u2014 reels ON (${reelCount} reels)`);
+              try {
+                await nav("https://www.instagram.com/reels/", "reels feed");
+                await sleep(actionDelay());
+                const videoFound = await waitFor("video", 8e3);
+                let watched = 0;
+                if (videoFound) {
+                  for (let i2 = 0; i2 < reelCount && !state.stop.stopped; i2++) {
+                    const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
+                    const watchMs = Math.max(2e3, Math.round(reelViewPct / 100 * randInt2(8e3, 2e4)));
+                    await sleep(watchMs);
+                    await page.keyboard.press("ArrowDown").catch(() => {
+                    });
+                    await sleep(randInt2(600, 1400));
+                    watched++;
+                  }
+                } else {
+                  console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
+                }
+                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", `EB watched ${watched} reel(s) via feed sub-setting`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", `EB watched ${watched} reel(s) via feed sub-setting`);
+                console.log(`[engine] @${profile.username}: [EB-only] \u{1F3AC} watched ${watched} reels (feed sub-setting)`);
+              } catch (e) {
+                console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
+              }
+            } else {
+              console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] Reel chance ${reelChanceRoll.toFixed(1)}% \u2265 ${reelChance.toFixed(1)}% \u2014 skipping reels`);
+            }
+          }
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
         }
       }
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
@@ -166202,33 +166334,42 @@ ${err?.stack ?? ""}`);
             await nav("https://www.instagram.com/", "home (stories)");
             await sleep(actionDelay());
           }
+          const storySelector = 'ul li div[role="button"] canvas, section div[role="button"] canvas';
+          const hasTray = await waitFor(storySelector, 6e3);
           let storiesViewed = 0;
-          for (let i2 = 0; i2 < storyCount && !state.stop.stopped; i2++) {
-            try {
-              const clicked = await page.evaluate((idx) => {
-                const btns = Array.from(document.querySelectorAll('div[role="button"]'));
-                const btn = btns[idx];
-                if (!btn) return false;
-                btn.click();
-                return true;
-              }, i2).catch(() => false);
-              if (!clicked) break;
-              await sleep(actionDelay());
-              const slides = randInt2(2, 5);
-              for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
-                await page.keyboard.press("ArrowRight");
-                await sleep(randInt2(1500, 3500));
+          if (!hasTray) {
+            console.log(`[engine] @${profile.username}: [EB-only] no story tray found on page`);
+          } else {
+            for (let i2 = 0; i2 < storyCount && !state.stop.stopped; i2++) {
+              try {
+                const clicked = await page.evaluate((idx, sel) => {
+                  const canvases = Array.from(document.querySelectorAll(sel));
+                  const canvas = canvases[idx];
+                  const btn = canvas?.closest('div[role="button"]');
+                  if (!btn) return false;
+                  btn.click();
+                  return true;
+                }, i2, storySelector).catch(() => false);
+                if (!clicked) break;
+                await sleep(actionDelay());
+                const slides = randInt2(2, 5);
+                for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
+                  await page.keyboard.press("ArrowRight");
+                  await sleep(randInt2(1500, 3500));
+                }
+                await page.keyboard.press("Escape");
+                await sleep(actionDelay());
+                storiesViewed++;
+              } catch {
               }
-              await page.keyboard.press("Escape");
-              await sleep(actionDelay());
-              storiesViewed++;
-            } catch {
             }
           }
-          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `EB viewed ${storiesViewed} story tray item(s)`);
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", storiesViewed > 0 ? "ok" : "skipped", `EB viewed ${storiesViewed} story tray item(s)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", `EB viewed ${storiesViewed} story tray item(s)`, storiesViewed === 0 && hasTray);
           console.log(`[engine] @${profile.username}: [EB-only] \u{1F4D6} viewed ${storiesViewed} stories`);
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] checkTimelineStories error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", e?.message ?? "error", true);
         }
       }
       if (s.checkDmEnabled === true && !state.stop.stopped) {
@@ -166236,6 +166377,7 @@ ${err?.stack ?? ""}`);
           const dmCount = randInt2(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
           await sleep(actionDelay());
+          await waitFor('div[role="listitem"]', 8e3);
           let opened = 0;
           for (let i2 = 0; i2 < dmCount && !state.stop.stopped; i2++) {
             try {
@@ -166249,13 +166391,17 @@ ${err?.stack ?? ""}`);
               if (!clicked) break;
               await sleep(actionDelay());
               opened++;
+              await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
+              await sleep(actionDelay());
             } catch {
             }
           }
-          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", opened > 0 ? "ok" : "skipped", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_dm", `EB opened ${opened}/${dmCount} DM thread(s)`);
           console.log(`[engine] @${profile.username}: [EB-only] \u{1F4AC} opened ${opened} DM threads`);
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] checkDm error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "check_dm", e?.message ?? "error", true);
         }
       }
       if (s.likeTimelinePostsEnabled === true && !state.stop.stopped) {
@@ -166266,11 +166412,12 @@ ${err?.stack ?? ""}`);
               await nav("https://www.instagram.com/", "home (likes)");
               await sleep(actionDelay());
             }
+            await waitFor('svg[aria-label="Like"]', 8e3);
             let liked = 0;
-            for (let attempt = 0; liked < likeCount && attempt < likeCount * 4 && !state.stop.stopped; attempt++) {
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
               });
-              await sleep(500);
+              await sleep(700);
               const clickedOne = await page.evaluate(() => {
                 const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
                 const h4 = hearts[0];
@@ -166285,11 +166432,120 @@ ${err?.stack ?? ""}`);
             }
             for (let i2 = 0; i2 < liked; i2++) await storage.incrementStat(profile.id, "like").catch(() => {
             });
-            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via browser`);
             console.log(`[engine] @${profile.username}: [EB-only] \u2764\uFE0F liked ${liked} posts`);
           } catch (e) {
             console.warn(`[engine] @${profile.username}: [EB-only] likeTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", e?.message ?? "error", true);
           }
+        }
+      }
+      if (!!s.saveMediaEnabled && !state.stop.stopped) {
+        const savePct = Number(s.saveMediaPercent ?? 0);
+        const saveCount = savePct > 0 && Math.random() * 100 < savePct ? randInt2(1, 3) : 0;
+        if (saveCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (save)");
+              await sleep(actionDelay());
+            }
+            await waitFor('svg[aria-label="Save"]', 8e3);
+            let saved = 0;
+            for (let attempt = 0; saved < saveCount && attempt < saveCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
+              });
+              await sleep(700);
+              const clickedOne = await page.evaluate(() => {
+                const icons = Array.from(document.querySelectorAll('svg[aria-label="Save"]'));
+                const h4 = icons[0];
+                if (!h4) return false;
+                h4.closest("button")?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) {
+                saved++;
+                await sleep(actionDelay());
+              }
+            }
+            this.logAction(profile.id, tool.id, "save_timeline_post", "", "", "", saved > 0 ? "ok" : "skipped", `EB saved ${saved} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "save_timeline_post", `EB saved ${saved} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] \u{1F516} saved ${saved} posts`);
+          } catch (e) {
+            console.warn(`[engine] @${profile.username}: [EB-only] saveTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "save_timeline_post", e?.message ?? "error", true);
+          }
+        }
+      }
+      if (!state.stop.stopped) {
+        const sharePctMin = Number(s.sharePostPercentMin ?? 0);
+        const sharePctMax = Number(s.sharePostPercentMax ?? 0);
+        const sharePct = sharePctMin + Math.random() * Math.max(0, sharePctMax - sharePctMin);
+        const shareCount = sharePct > 0 && Math.random() * 100 < sharePct ? randInt2(1, 2) : 0;
+        if (shareCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (share)");
+              await sleep(actionDelay());
+            }
+            await waitFor('svg[aria-label="Share Post"]', 8e3);
+            let shared = 0;
+            for (let attempt = 0; shared < shareCount && attempt < shareCount * 6 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
+              });
+              await sleep(700);
+              const opened = await page.evaluate(() => {
+                const icons = Array.from(document.querySelectorAll('svg[aria-label="Share Post"]'));
+                const h4 = icons[0];
+                if (!h4) return false;
+                h4.closest("button")?.click();
+                return true;
+              }).catch(() => false);
+              if (opened) {
+                await sleep(randInt2(800, 1600));
+                await page.keyboard.press("Escape").catch(() => {
+                });
+                shared++;
+                await sleep(actionDelay());
+              }
+            }
+            this.logAction(profile.id, tool.id, "share_timeline_post", "", "", "", shared > 0 ? "ok" : "skipped", `EB opened share dialog for ${shared} post(s) via browser`);
+            this.logGhostBrowserCall(profile.id, profile.username, "share_timeline_post", `EB opened share dialog for ${shared} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] \u{1F4E4} shared ${shared} posts`);
+          } catch (e) {
+            console.warn(`[engine] @${profile.username}: [EB-only] shareTimelinePosts error: ${e?.message}`);
+            this.logGhostBrowserCall(profile.id, profile.username, "share_timeline_post", e?.message ?? "error", true);
+          }
+        }
+      }
+      if (s.followSuggestedUsersIfEmptyEnabled === true && !state.stop.stopped) {
+        try {
+          await nav("https://www.instagram.com/explore/", "explore page");
+          await sleep(actionDelay());
+          const scrolls = randInt2(2, 6);
+          for (let i2 = 0; i2 < scrolls && !state.stop.stopped; i2++) {
+            await page.evaluate(() => window.scrollBy(0, 400 + Math.random() * 300)).catch(() => {
+            });
+            await sleep(actionDelay());
+          }
+          const clicked = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]'));
+            const a2 = links[Math.floor(Math.random() * Math.min(links.length, 9))];
+            if (!a2) return false;
+            a2.click();
+            return true;
+          }).catch(() => false);
+          if (clicked) {
+            await sleep(randInt2(1500, 3500));
+            await page.keyboard.press("Escape").catch(() => {
+            });
+          }
+          this.logAction(profile.id, tool.id, "explore_page", "", "", "", "ok", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u{1F9ED} browsed Explore page`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: [EB-only] explorePage error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", e?.message ?? "error", true);
         }
       }
       if (!state.stop.stopped) {
@@ -166309,6 +166565,15 @@ ${err?.stack ?? ""}`);
           if (execUnfollowTool?.enabled) {
             await this.runBrowserUnfollowSession(profile, execUnfollowTool, page, actionDelay, state).catch((e) => {
               console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
+            });
+          }
+        }
+        const contactTool = hsTools.find((t2) => t2.type === "contact");
+        if (contactTool?.enabled === true && !state.stop.stopped) {
+          const execContactTool = (await storage.getToolsByProfile(profile.id)).find((t2) => t2.type === "contact");
+          if (execContactTool?.enabled) {
+            await this.runBrowserContactSession(profile, execContactTool, page, actionDelay, state).catch((e) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] contact session error: ${e?.message}`);
             });
           }
         }
@@ -166379,6 +166644,7 @@ ${err?.stack ?? ""}`);
       try {
         await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25e3 });
         await sleep(randInt2(1500, 3e3));
+        await this.waitForSelector(page, "header button", 6e3);
         const clicked = await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll("button"));
           const btn = btns.find((b3) => b3.textContent?.trim() === "Follow");
@@ -166403,14 +166669,17 @@ ${err?.stack ?? ""}`);
           await storage.incrementStat(profile.id, "follow").catch(() => {
           });
           this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "ok", `EB followed @${candidate.username} [${followed}/${processCount}]`);
+          this.logGhostBrowserCall(profile.id, profile.username, "follow", `EB followed @${candidate.username} [${followed}/${processCount}]`);
           console.log(`[engine] @${profile.username}: [EB-only] \u2795 followed @${candidate.username}`);
         } else {
           console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 no Follow button on @${candidate.username} (already following or private)`);
           this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button \u2014 already following or private");
+          this.logGhostBrowserCall(profile.id, profile.username, "follow_skipped", `No Follow button on @${candidate.username} \u2014 already following or private`);
         }
         await sleep(actionDelay());
       } catch (e) {
         console.warn(`[engine] @${profile.username}: [EB-only] follow @${candidate.username} error: ${e?.message}`);
+        this.logGhostBrowserCall(profile.id, profile.username, "follow", e?.message ?? "error", true);
       }
     }
     console.log(`[engine] @${profile.username}: [EB-only] follow session done \u2014 ${followed}/${candidates.length} followed`);
@@ -166467,6 +166736,109 @@ ${err?.stack ?? ""}`);
       }
     }
     console.log(`[engine] @${profile.username}: [EB-only] unfollow session done \u2014 ${unfollowed}/${candidates.length} unfollowed`);
+  }
+  // ── Browser-only contact/DM session (Disable API mode) ──────────────────────
+  // Mirrors runContactUsersSession but drives the embedded browser instead of
+  // the mobile API — navigates to the recipient's DM thread, types the queued
+  // message text, and sends via the on-screen Send button/Enter key.
+  async runBrowserContactSession(profile, contactTool, page, actionDelay, state) {
+    const cs = contactTool.settings;
+    const pending = await storage.getContactPendingMessages(profile.id, "pending");
+    if (!pending.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] contact \u2014 no pending messages to send`);
+      return;
+    }
+    const sendCount = randInt2(Number(cs.contactUsersSendCountMin ?? 1), Number(cs.contactUsersSendCountMax ?? 5));
+    const delayMin = Number(cs.contactUsersDelayBetweenMin ?? 5) * 1e3;
+    const delayMax = Number(cs.contactUsersDelayBetweenMax ?? 15) * 1e3;
+    const pickRandom = !!cs.contactUsersPickRandom;
+    let queue = pickRandom ? [...pending].sort(() => Math.random() - 0.5) : pending;
+    queue = queue.slice(0, sendCount);
+    let sent = 0;
+    for (const msg of queue) {
+      if (state.stop.stopped) break;
+      try {
+        await page.goto(`https://www.instagram.com/direct/t/${msg.instagramUserId || msg.instagramUsername}/`, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
+        });
+        await sleep(randInt2(1500, 3e3));
+        const hasComposer = await this.waitForSelector(page, 'div[role="textbox"], textarea[placeholder="Message..."]', 6e3);
+        if (!hasComposer) {
+          await page.goto("https://www.instagram.com/direct/new/", { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
+          });
+          await sleep(randInt2(1200, 2200));
+          const typedRecipient = await page.evaluate((username) => {
+            const input = document.querySelector('input[name="queryBox"], input[placeholder="Search..."]');
+            if (!input) return false;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            setter?.call(input, username);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+          }, msg.instagramUsername).catch(() => false);
+          if (!typedRecipient) throw new Error("could not find recipient search box");
+          await sleep(1800);
+          const pickedRecipient = await page.evaluate((username) => {
+            const rows = Array.from(document.querySelectorAll('div[role="button"]'));
+            const row = rows.find((r2) => r2.textContent?.toLowerCase().includes(username.toLowerCase()));
+            if (!row) return false;
+            row.click();
+            return true;
+          }, msg.instagramUsername).catch(() => false);
+          if (!pickedRecipient) throw new Error(`recipient @${msg.instagramUsername} not found in search results`);
+          await sleep(800);
+          await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll("button"));
+            const next = btns.find((b3) => b3.textContent?.trim() === "Next" || b3.textContent?.trim() === "Chat");
+            next?.click();
+          }).catch(() => {
+          });
+          await sleep(1200);
+        }
+        await this.waitForSelector(page, 'div[role="textbox"], textarea[placeholder="Message..."]', 8e3);
+        const typed = await page.evaluate((text2) => {
+          const box = document.querySelector('div[role="textbox"]');
+          if (box) {
+            box.focus();
+            document.execCommand("insertText", false, text2);
+            return true;
+          }
+          const textarea = document.querySelector('textarea[placeholder="Message..."]');
+          if (textarea) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(textarea, text2);
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+          }
+          return false;
+        }, msg.messageText).catch(() => false);
+        if (!typed) throw new Error("could not find message composer box");
+        await sleep(randInt2(600, 1200));
+        await page.keyboard.press("Enter").catch(() => {
+        });
+        await sleep(randInt2(1e3, 2e3));
+        sent++;
+        const sentAt = (/* @__PURE__ */ new Date()).toISOString();
+        await storage.updateContactPendingMessage(msg.id, { status: "sent", sentAt });
+        await storage.createContactDmSent({
+          profileId: profile.id,
+          instagramUsername: msg.instagramUsername,
+          instagramUserId: msg.instagramUserId,
+          sentAt,
+          messagePreview: msg.messageText.slice(0, 100)
+        }).catch(() => {
+        });
+        await storage.incrementStat(profile.id, "dm").catch(() => {
+        });
+        this.logAction(profile.id, contactTool.id, "contact_dm", msg.instagramUsername, "", "", "ok", `EB contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
+        this.logGhostBrowserCall(profile.id, profile.username, "contact_dm", `EB contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
+        console.log(`[engine] @${profile.username}: [EB-only] \u{1F4E9} contact DM sent to @${msg.instagramUsername}`);
+        if (sent < queue.length) await sleep(randInt2(delayMin, delayMax));
+      } catch (e) {
+        console.warn(`[engine] @${profile.username}: [EB-only] contact DM to @${msg.instagramUsername} error: ${e?.message}`);
+        this.logAction(profile.id, contactTool.id, "contact_dm", msg.instagramUsername, "", "", "error", `EB DM send failed: ${e?.message ?? "unknown"} (will retry)`);
+        this.logGhostBrowserCall(profile.id, profile.username, "contact_dm", e?.message ?? "error", true);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] contact session done \u2014 ${sent}/${queue.length} sent`);
   }
   async runHumanSessionTools(profile, tool, state) {
     const s = tool.settings;
@@ -171518,6 +171890,11 @@ ${stamp}` : stamp;
         if (source === "Follow Tool") return "Follow Tool";
         if (source === "Unfollow Tool") return "Unfollow Tool";
         if (source === "Contact Tool") return "Contact Tool";
+        if (source === "Ghost Browser") {
+          if (operationName === "follow" || operationName === "follow_skipped") return "Follow Tool";
+          if (operationName === "contact_dm") return "Contact Tool";
+          return "Human Session Tool";
+        }
         return operationName;
       };
       const resolveSource = (source) => source === "HikerAPI" ? "HikerAPI" : "Equinox";
