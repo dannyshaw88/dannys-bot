@@ -464,6 +464,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       checkTimelineStoriesEnabled: true,
       checkTimelineStoriesMin: 3,
       checkTimelineStoriesMax: 8,
+      checkTimelineStoriesSlideMin: 2,
+      checkTimelineStoriesSlideMax: 5,
+      checkTimelineStoriesWatchPctMin: 0,
+      checkTimelineStoriesWatchPctMax: 0,
       checkTimelineStoriesOrderMin: 0,
       checkTimelineStoriesOrderMax: 0,
       checkTimelineStoriesNotUsedMin: 0,
@@ -594,6 +598,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       refreshProfileRunChanceMin: 100, refreshProfileRunChanceMax: 100,
       settingsActivityRunChanceMin: 100, settingsActivityRunChanceMax: 100,
       checkTimelineStoriesEnabled: true, checkTimelineStoriesMin: 3, checkTimelineStoriesMax: 8,
+      checkTimelineStoriesSlideMin: 2, checkTimelineStoriesSlideMax: 5,
+      checkTimelineStoriesWatchPctMin: 0, checkTimelineStoriesWatchPctMax: 0,
       checkTimelineStoriesOrderMin: 0, checkTimelineStoriesOrderMax: 0,
       checkTimelineStoriesNotUsedMin: 0, checkTimelineStoriesNotUsedMax: 0,
       storyLikePctMin: 0, storyLikePctMax: 0, storySharePctMin: 0, storySharePctMax: 0,
@@ -1161,31 +1167,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             {/* ── View Reels ── */}
             <div className="px-4 py-3">
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <input type="checkbox" id="viewReelsEnabled"
                     checked={!!(settings as any).viewReelsEnabled}
                     onChange={(e) => setSettings({ ...settings, viewReelsEnabled: e.target.checked } as any)}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                    style={{ opacity: 1, pointerEvents: 'auto' }}
                   />
-                  <label htmlFor="viewReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+                  <label htmlFor="viewReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0"
+                    style={{ opacity: 1, pointerEvents: 'auto' }}>
                     <Film className="w-4 h-4 text-violet-500 shrink-0" />
                     View Reels
                   </label>
-                </div>
-                <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={(settings as any).viewReelsOrderMin ?? 0}
-                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMin: v } as any)}
-                    />
-                    <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={(settings as any).viewReelsOrderMax ?? 0}
-                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMax: v } as any)}
-                    />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order%</span>
-                  </div>
                   <div className="h-4 w-px bg-border/60 shrink-0" />
                   <div className="flex items-center gap-1.5">
                     {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
@@ -1212,9 +1205,22 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
                   </div>
-                  <div className="h-4 w-px bg-border/60 shrink-0" />
+                </div>
+                <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsOrderMin ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMin: v } as any)}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsOrderMax ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMax: v } as any)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={(settings as any).viewReelsNotUsedMin ?? 0}
                       onChange={(v) => setSettings({ ...settings, viewReelsNotUsedMin: v } as any)}
@@ -1230,9 +1236,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── Check Stories from Timeline ── */}
-            <div className="px-4 py-3">
+            <div className="px-4 py-3 space-y-2">
+              {/* Title row — checkbox + label + ORDER/SKIP on right */}
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
                   <input type="checkbox" id="checkTimelineStoriesEnabled"
                     checked={!!settings.checkTimelineStoriesEnabled}
                     onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
@@ -1242,41 +1249,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
                     Check Stories from Timeline
                   </label>
-                  <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
-                      value={settings.checkTimelineStoriesMin ?? 3}
-                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMin: v })}
-                    />
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
-                      value={settings.checkTimelineStoriesMax ?? 8}
-                      onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMax: v })}
-                    />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap ml-2">Like %</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={settings.storyLikePctMin ?? 0}
-                      onChange={(v) => setSettings({ ...settings, storyLikePctMin: v })}
-                    />
-                    <span className="text-[10px] text-muted-foreground">–</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={settings.storyLikePctMax ?? 0}
-                      onChange={(v) => setSettings({ ...settings, storyLikePctMax: v })}
-                    />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap ml-2">Share %</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={settings.storySharePctMin ?? 0}
-                      onChange={(v) => setSettings({ ...settings, storySharePctMin: v })}
-                    />
-                    <span className="text-[10px] text-muted-foreground">–</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={settings.storySharePctMax ?? 0}
-                      onChange={(v) => setSettings({ ...settings, storySharePctMax: v })}
-                    />
-                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5 shrink-0">
+                <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
@@ -1302,6 +1276,57 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     />
                   </div>
                 </div>
+              </div>
+              {/* Sub-row 1 — Users to Watch | Slides per User | Watch % */}
+              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                  value={settings.checkTimelineStoriesMin ?? 3}
+                  onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMin: v })}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                  value={settings.checkTimelineStoriesMax ?? 8}
+                  onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMax: v })}
+                />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Users to Watch</span>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).checkTimelineStoriesSlideMin ?? 2}
+                  onChange={(v) => setSettings({ ...settings, checkTimelineStoriesSlideMin: v } as any)}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).checkTimelineStoriesSlideMax ?? 5}
+                  onChange={(v) => setSettings({ ...settings, checkTimelineStoriesSlideMax: v } as any)}
+                />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Slides per User</span>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                {pctInputs("checkTimelineStoriesWatchPctMin", "checkTimelineStoriesWatchPctMax")}
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch %</span>
+              </div>
+              {/* Sub-row 2 — Like % | Share % */}
+              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={settings.storyLikePctMin ?? 0}
+                  onChange={(v) => setSettings({ ...settings, storyLikePctMin: v })}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={settings.storyLikePctMax ?? 0}
+                  onChange={(v) => setSettings({ ...settings, storyLikePctMax: v })}
+                />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like %</span>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={settings.storySharePctMin ?? 0}
+                  onChange={(v) => setSettings({ ...settings, storySharePctMin: v })}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={settings.storySharePctMax ?? 0}
+                  onChange={(v) => setSettings({ ...settings, storySharePctMax: v })}
+                />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Share %</span>
               </div>
             </div>
 

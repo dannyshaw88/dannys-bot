@@ -78,6 +78,32 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.328",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Improvement",
+        text: "Check Stories from Timeline now has a cleaner layout — the title row is clean, and all settings sit in organised rows beneath it.",
+      },
+      {
+        category: "New Feature",
+        text: "New \"Users to Watch\" setting replaces the old Watch Min/Max — set how many individual users' stories are visited each session.",
+      },
+      {
+        category: "New Feature",
+        text: "New \"Slides per User\" setting — if a user has posted many stories, you can set a min and max number of slides to actually view from that user, chosen randomly each time.",
+      },
+      {
+        category: "New Feature",
+        text: "New \"Watch %\" setting for stories — works just like the Reels watch-time setting. Set a percentage of each story slide's duration to watch before advancing (based on a 15-second slide average).",
+      },
+      {
+        category: "Improvement",
+        text: "Like % and Share % settings are now on their own row below, with labels after the fields for a cleaner left-aligned layout.",
+      },
+    ],
+  },
+  {
     version: "1.1.327",
     date: "4 Jul 2026",
     items: [

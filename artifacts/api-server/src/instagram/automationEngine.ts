@@ -2750,11 +2750,21 @@ class AutomationEngine {
             await nav("https://www.instagram.com/", "home feed");
             await sleep(actionDelay());
           }
+          // Force visibilityState=visible so Instagram's SPA loads feed content
+          // even when the EB window is hidden/not shown to the user. Without this,
+          // Chrome reports visibilityState="hidden" → Instagram suppresses lazy-loading
+          // → waitFor('article') times out → feedHadPosts=false → Explore page fires
+          // even though the feed has posts.
+          await page.evaluate(() => {
+            try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+            try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+            document.dispatchEvent(new Event('visibilitychange'));
+          }).catch(() => {});
           // Wait for SPA content and detect whether the feed has any posts.
           // waitFor polls every 400ms — if it returns true, articles exist.
           // Using the poll result directly avoids the race where articles appear
           // just after a one-shot querySelector check.
-          feedHadPosts = await waitFor('article', 8000);
+          feedHadPosts = await waitFor('article', 12000);
           for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
             await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
             await sleep(actionDelay());
@@ -2852,13 +2862,14 @@ class AutomationEngine {
               await sleep(700);
               const likedOne: boolean = await page.evaluate(() => {
                 const articles = Array.from(document.querySelectorAll('article'));
-                // Find an article in the viewport that still has an un-liked heart.
-                const target = articles.find(a => {
-                  if (!a.querySelector('svg[aria-label="Like"]')) return false;
-                  const rect = a.getBoundingClientRect();
-                  return rect.bottom > 0 && rect.top < window.innerHeight;
-                });
+                // Find an un-liked article — NO viewport check here. When the EB
+                // window is hidden, getBoundingClientRect() returns zeros so the
+                // rect.top < window.innerHeight check always fails and nothing
+                // gets liked. scrollIntoView() works correctly regardless of
+                // whether the window is visible to the user.
+                const target = articles.find(a => !!a.querySelector('svg[aria-label="Like"]'));
                 if (!target) return false;
+                target.scrollIntoView({ behavior: 'instant', block: 'center' });
                 const heartSvg = target.querySelector('svg[aria-label="Like"]') as SVGElement | null;
                 if (!heartSvg) return false;
                 // Find the button ancestor — Instagram uses both <button> and
@@ -2961,44 +2972,92 @@ class AutomationEngine {
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
         try {
           const storyCount = randInt(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
-          if (!page.url().startsWith("https://www.instagram.com/")) {
-            await nav("https://www.instagram.com/", "home (stories)");
-            await sleep(actionDelay());
-          }
           // Story circles live in the tray at the top of the home feed, always
           // rendered as <li> items inside a tray with a canvas ring — this is
           // far more stable than indexing every role="button" on the page
           // (which also matches nav icons, and was why story clicks silently
           // missed their target before).
           const storySelector = 'ul li div[role="button"] canvas, section div[role="button"] canvas';
-          const hasTray = await waitFor(storySelector, 6000);
           let storiesViewed = 0;
-          if (!hasTray) {
-            console.log(`[engine] @${profile.username}: [EB-only] no story tray found on page`);
-          } else {
-            for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
-              try {
-                const clicked: boolean = await page.evaluate((idx: number, sel: string) => {
-                  const canvases = Array.from(document.querySelectorAll(sel));
-                  const canvas = canvases[idx] as HTMLElement | undefined;
-                  const btn = canvas?.closest('div[role="button"]') as HTMLElement | null;
-                  if (!btn) return false;
-                  btn.click();
-                  return true;
-                }, i, storySelector).catch(() => false);
-                if (!clicked) break;
-                await sleep(actionDelay());
-                // Advance through a few slides then close
-                const slides = randInt(2, 5);
-                for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
-                  await page.keyboard.press("ArrowRight");
-                  await sleep(randInt(1500, 3500));
-                }
-                await page.keyboard.press("Escape");
-                await sleep(actionDelay());
-                storiesViewed++;
-              } catch {}
-            }
+          // ── Per-story loop ────────────────────────────────────────────────────
+          // Each iteration: navigate to home feed, click the FIRST tray item
+          // (index 0 — which is always the next unwatched user after the previous
+          // one disappears from the front of the tray), dwell, close, repeat.
+          //
+          // Why NOT use a fixed index i=0,1,2…:
+          //   ArrowRight can bleed beyond the current user's slides and auto-advance
+          //   into the next user's story. When Escape closes the viewer, the tray
+          //   still shows that next user at their partial-watch position. The next
+          //   loop iteration then clicks that same user's tray item a second time,
+          //   which is exactly the "same user twice" bug.
+          //
+          // Navigating back to the home feed after each story and always clicking
+          // index 0 avoids this entirely — the tray advances its own "first unseen"
+          // pointer after each fully-dismissed story.
+          let hasTray = false;
+          for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
+            try {
+              // Always return to the home feed so the tray is in a clean state.
+              await nav("https://www.instagram.com/", `home (stories ${i + 1}/${storyCount})`);
+              await sleep(actionDelay());
+              const trayPresent = await waitFor(storySelector, 6000);
+              if (!trayPresent) {
+                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i}`);
+                break;
+              }
+              hasTray = true;
+              // Always click index 0 — the first item in the current tray state.
+              // After the previous story was dismissed this will be the next user.
+              const clicked: boolean = await page.evaluate((sel: string) => {
+                const canvases = Array.from(document.querySelectorAll(sel));
+                const canvas = canvases[0] as HTMLElement | undefined;
+                const btn = canvas?.closest('div[role="button"]') as HTMLElement | null;
+                if (!btn) return false;
+                btn.click();
+                return true;
+              }, storySelector).catch(() => false);
+              if (!clicked) break;
+              await sleep(randInt(1200, 2500));
+              // How many slides to advance within this user's story.
+              // Uses checkTimelineStoriesSlideMin/Max from settings (defaults 2-5).
+              // Capped to avoid bleeding into the next user — each click targets
+              // the right half of the story overlay (same gesture as a real user)
+              // rather than ArrowRight which auto-advances to the next user.
+              const slides = randInt(
+                Math.max(1, Number(s.checkTimelineStoriesSlideMin ?? 2)),
+                Math.max(1, Number(s.checkTimelineStoriesSlideMax ?? 5)),
+              );
+              // Watch % — how much of each slide to watch before advancing.
+              // 0 = use the default dwell time. >0 = stories average ~15s each;
+              // watch% controls how long we dwell before clicking to the next slide.
+              const watchPctMin = Math.min(100, Math.max(0, Number(s.checkTimelineStoriesWatchPctMin ?? 0)));
+              const watchPctMax = Math.max(watchPctMin, Math.min(100, Number(s.checkTimelineStoriesWatchPctMax ?? 0)));
+              const watchPct = watchPctMin + Math.random() * (watchPctMax - watchPctMin);
+              // Instagram stories are typically 15s each. Dwell for watchPct% of that,
+              // minimum 1.5s, before advancing to the next slide.
+              const slideDwellMs = watchPct > 0
+                ? Math.max(1500, Math.round((watchPct / 100) * 15000))
+                : randInt(1500, 3500);
+              for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
+                // Click the right half of the story area to advance one slide
+                // (same gesture a real user makes). This does NOT auto-advance
+                // to the next user the way ArrowRight can when on the last slide.
+                await page.evaluate(() => {
+                  const overlay = document.querySelector<HTMLElement>(
+                    'section[role="dialog"], div[role="dialog"], div[aria-label="Story"]'
+                  ) ?? document.body;
+                  const rect = overlay.getBoundingClientRect();
+                  const x = rect.left + rect.width * 0.7;
+                  const y = rect.top + rect.height * 0.5;
+                  overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+                  overlay.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, clientX: x, clientY: y }));
+                }).catch(() => {});
+                await sleep(slideDwellMs);
+              }
+              await page.keyboard.press("Escape");
+              await sleep(randInt(800, 1600));
+              storiesViewed++;
+            } catch {}
           }
           this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", storiesViewed > 0 ? "ok" : "skipped", `EB viewed ${storiesViewed} story tray item(s)`);
           this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", `EB viewed ${storiesViewed} story tray item(s)`, storiesViewed === 0 && hasTray);
@@ -3055,18 +3114,34 @@ class AutomationEngine {
               await nav("https://www.instagram.com/", "home (likes)");
               await sleep(actionDelay());
             }
-            await waitFor('svg[aria-label="Like"]', 8000);
+            // Force visibilityState=visible so Instagram loads feed content
+            // even when the EB window is not shown to the user.
+            await page.evaluate(() => {
+              try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+              try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+              document.dispatchEvent(new Event('visibilitychange'));
+            }).catch(() => {});
+            await waitFor('svg[aria-label="Like"]', 12000);
             let liked = 0;
             for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
               await sleep(700);
-              // Click one not-yet-liked heart per round-trip (inside evaluate — no
-              // handles cross the IPC boundary), so `liked` count stays accurate.
+              // scrollIntoView + full pointer event sequence — works when the EB
+              // window is hidden. Plain .click() on a hidden window is silently
+              // swallowed; getBoundingClientRect returns zeros so viewport checks
+              // always fail. scrollIntoView is DOM-only and works regardless.
               const clickedOne: boolean = await page.evaluate(() => {
-                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
-                const h = hearts[0] as SVGElement | undefined;
-                if (!h) return false;
-                (h.closest("button") as HTMLElement | null)?.click();
+                const articles = Array.from(document.querySelectorAll('article'));
+                const target = articles.find(a => !!a.querySelector('svg[aria-label="Like"]'));
+                if (!target) return false;
+                target.scrollIntoView({ behavior: 'instant', block: 'center' });
+                const heartSvg = target.querySelector('svg[aria-label="Like"]') as SVGElement | null;
+                if (!heartSvg) return false;
+                const btn = heartSvg.closest<HTMLElement>('[role="button"], button');
+                if (!btn) return false;
+                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                btn.click();
                 return true;
               }).catch(() => false);
               if (clickedOne) { liked++; await sleep(actionDelay()); }
