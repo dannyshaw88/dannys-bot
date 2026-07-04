@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.319",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed accounts getting logged out after the Check DMs tool ran. Instagram was force-killing sessions because the app was hitting the DM inbox without first checking the notification badge — which is what the real Instagram app always does before opening DMs. The notification check is now performed first, exactly as a real device would do it, and DM checks no longer trigger logouts.",
+      },
+      {
+        category: "Fix",
+        text: "Fixed DM inbox returning an error every single time instead of reading your messages. The inbox endpoint requires a notification badge warm-up call immediately before it — without it, Instagram blocks the request with a soft gate error. The warm-up is now always run before reading the inbox, so DM checks work reliably.",
+      },
+      {
+        category: "Improvement",
+        text: "The notification badge warm-up before DM checks is cached within each session — if the session already checked notifications earlier (e.g. during a send DM action), no extra API call is made. The cost is only paid once per session at most.",
+      },
+    ],
+  },
+  {
     version: "1.1.318",
     date: "4 Jul 2026",
     items: [

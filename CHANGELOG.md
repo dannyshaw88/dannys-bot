@@ -4,6 +4,36 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.319] — 2026-07-04
+
+### Fixed
+
+#### DM inbox check — sessions no longer logged out after checking DMs (`instagramWebClient.ts`, `automationEngine.ts`)
+
+**Root cause: missing NotificationsBadge warm-up before the inbox fetch**
+
+When a human session runs and the Check DMs tool fires, the code calls `POST /api/v1/feed/timeline/` (ViewTimelineFeed) immediately after reading the inbox. Instagram was returning `HTTP 403 login_required` with `logout_reason: 3` (server-side forced session revocation) on that timeline call, logging accounts out.
+
+The chain of events:
+
+1. `getDirectMessagesInternal()` calls `mobileSessionGet("/api/v1/direct_v2/inbox/")` — Instagram returns `HTTP 400 error_code 4415001` ("Prompt has contribution" gate).
+2. The 4415001 is a soft gate Instagram places on sessions that contact the inbox endpoint without first sending a `news/inbox` (NotificationsBadge) warm-up call. The app was swallowing the 4415001 as non-fatal and continuing to the next tool.
+3. `viewTimelineFeed()` fires — Instagram sees an unacknowledged prompt followed by another API call and escalates: `logout_reason: 3`, session force-killed.
+
+The primary `getDirectMessagesInternal()` had an explicit comment — *"no NotificationsBadge warm-up"* — confirming the warm-up was knowingly omitted. The warm-up is the same `news/inbox` call that the real Instagram app makes immediately before opening the DM inbox, which is why skipping it triggers the 4415001 gate.
+
+**What the warm-up does:**  
+`_buildWarmedIgClient()` fires `GET /api/v1/news/inbox/` via `mobileSessionGet`. This tells Instagram's backend that the device has checked its notification badge — identical to what the real app does before any inbox access. With the warm-up in place, `direct_v2/inbox` succeeds and 4415001 is never returned.
+
+**Fix:** `getDirectMessagesInternal()` now calls `await this._buildWarmedIgClient()` as Step 1 before the inbox fetch (Step 2). The warm-up result is cached per-session — if `sendDM` or any other call already bootstrapped the client this session, the cache is returned immediately at zero cost with no extra API call.
+
+**Throttle and logging:**  
+The warm-up calls `mobileSessionGet`, which always runs `apiThrottle()` first — it counts as a real API call and respects the account's configured throttle (125–250 s). It is logged in the API calls export as `NotificationsBadge / Cold-start warm-up`. This matches how the real Instagram app behaves: it always checks notifications before entering the DM inbox.
+
+**Also reverted:** A previous interim band-aid (`sessionGated` flag on the `getDirectMessagesInternal` return type, plus a `sessionError` abort block in the engine's `checkDm` handler) had been added to prevent further tools running after 4415001. Since the root cause is now fixed and 4415001 will no longer occur, those changes have been fully removed from both `instagramWebClient.ts` and `automationEngine.ts` (primary `src/instagram/` and legacy mirror `src/src/instagram/`).
+
+---
+
 ## [1.1.318] — 2026-07-04
 
 ### Fixed
