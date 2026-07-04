@@ -1157,7 +1157,7 @@ export function ProfileDetailsPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="max-w-[34%]">
+              <div className="max-w-[260px] flex-1">
                 <Input
                   placeholder="e.g. @Account1"
                   value={formData.accountLabel}
