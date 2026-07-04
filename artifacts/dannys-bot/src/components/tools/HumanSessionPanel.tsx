@@ -74,17 +74,22 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_order",      label: "Execution order",                   settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
         { key: "vtf_chance",     label: "Skip chance %",       settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
         { key: "vtf_like_pct",    label: "% posts to like",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
-        { key: "vtf_reel_chance", label: "Reel Chance % (% chance reels run at all)", settingKeys: ["reelWatchChanceMin","reelWatchChanceMax"] },
-        { key: "vtf_reel_count",  label: "Reels/Op (how many reels to watch)", settingKeys: ["reelWatchCountMin","reelWatchCountMax"] },
-        { key: "vtf_reel_view",   label: "% of each reel to watch",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
         { key: "vtf_like_delay",  label: "Delay between likes in sec",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
         { key: "vtf_save_media",  label: "Save liked media",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
         { key: "vtf_share_post",  label: "Share % (chance to share viewed posts to feed)", settingKeys: ["sharePostPercentMin","sharePostPercentMax"] },
-        { key: "vtf_click_post",       label: "Click post %",                settingKeys: ["clickPostPercentMin","clickPostPercentMax"] },
+        { key: "vtf_expand_caption", label: "Expand Caption %",             settingKeys: ["expandCaptionPercentMin","expandCaptionPercentMax"] },
         { key: "vtf_view_profile",     label: "Visit profile %",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
         { key: "vtf_profile_feed",     label: "View profile feed % + count", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
         { key: "vtf_profile_posts",    label: "Open profile posts count + %",settingKeys: ["viewProfilePostsCountMin","viewProfilePostsCountMax","viewProfilePostsPercentMin","viewProfilePostsPercentMax"] },
         { key: "vtf_follow_suggested", label: "If 0 Posts → Visit Explore Page", settingKeys: ["followSuggestedUsersIfEmptyEnabled","exploreScrollMin","exploreScrollMax","exploreClickMin","exploreClickMax","exploreLikePctMin","exploreLikePctMax","exploreVisitProfilePctMin","exploreVisitProfilePctMax","exploreProfileScrollMin","exploreProfileScrollMax","exploreProfileClickMin","exploreProfileClickMax"] },
+      ]},
+      { key: "viewReels", label: "View Reels", description: "Independent reels-watching session, not tied to the timeline feed", subOptions: [
+        { key: "vr_enabled",  label: "Enabled",           settingKeys: ["viewReelsEnabled"] },
+        { key: "vr_order",    label: "Execution order",   settingKeys: ["viewReelsOrderMin","viewReelsOrderMax"] },
+        { key: "vr_chance",   label: "Chance % (% chance reels run at all)", settingKeys: ["reelWatchChanceMin","reelWatchChanceMax"] },
+        { key: "vr_count",    label: "Reels/Op (how many reels to watch)", settingKeys: ["reelWatchCountMin","reelWatchCountMax"] },
+        { key: "vr_view_pct", label: "% of each reel to watch", settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
+        { key: "vr_skip",     label: "Skip chance %",     settingKeys: ["viewReelsNotUsedMin","viewReelsNotUsedMax"] },
       ]},
       { key: "humanSession", label: "Human Session", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled",      label: "Enabled",                                      settingKeys: ["humanSessionEnabled"] },
@@ -491,8 +496,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       likeTimelinePostsPercentMax: 0,
       expandCaptionPercentMin: 0,
       expandCaptionPercentMax: 0,
-      clickPostPercentMin: 0,
-      clickPostPercentMax: 0,
+      viewReelsEnabled: false,
+      viewReelsOrderMin: 0,
+      viewReelsOrderMax: 0,
+      viewReelsNotUsedMin: 0,
+      viewReelsNotUsedMax: 0,
       viewPostProfilePercentMin: 0,
       viewPostProfilePercentMax: 0,
       viewProfileFeedPercentMin: 0,
@@ -599,7 +607,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       sharePostPercentMin: 0, sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
       expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
-      clickPostPercentMin: 0, clickPostPercentMax: 0,
+      viewReelsEnabled: false, viewReelsOrderMin: 0, viewReelsOrderMax: 0,
+      viewReelsNotUsedMin: 0, viewReelsNotUsedMax: 0,
       viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
       viewProfileFeedPercentMin: 0, viewProfileFeedPercentMax: 0,
       viewProfileFeedCountMin: 3, viewProfileFeedCountMax: 8,
@@ -862,38 +871,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Expand Caption%</span>
                 </div>
               </div>
-              {/* Reel Chance% | Reels/Op | Reel View% — all on one row */}
-              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {/* Reel Chance% */}
-                <div className="flex items-center gap-1.5">
-                  {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
-                  <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel Chance%</span>
-                </div>
-                <div className="h-4 w-px bg-border/60 shrink-0" />
-                {/* Reels/Op */}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
-                    value={settings.reelWatchCountMin ?? 1}
-                    onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
-                  />
-                  <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
-                    value={settings.reelWatchCountMax ?? 3}
-                    onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
-                  />
-                  <Film className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
-                </div>
-                <div className="h-4 w-px bg-border/60 shrink-0" />
-                {/* Reel View% */}
-                <div className="flex items-center gap-1.5">
-                  {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
-                  <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
-                </div>
-              </div>
               {/* ROW 2: Like Delay | Save Liked | Like% — left-aligned */}
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-1.5">
@@ -946,26 +923,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to share viewed posts to feed</span>
                 </div>
               </div>
-              {/* ROW 3: Click on Post% */}
-              <div className={`flex items-center gap-1.5 pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post% chance to open a post from the feed</span>
-              </div>
-        {/* ── Click Post → Visit Profile → View Feed → View Posts cascade ── */}
+        {/* ── Visit Profile → View Feed → View Posts cascade ── */}
         {!!settings.viewTimelineFeedEnabled && (
           <div className="space-y-2 pt-1">
 
-            {/* Visit Profile % — shown when click% is set */}
-            {(settings.clickPostPercentMax ?? 0) > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                {pctInputs("viewPostProfilePercentMin", "viewPostProfilePercentMax")}
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE%</span>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO VISIT THE POST AUTHOR'S PROFILE</span>
-              </div>
-            )}
+            {/* Visit Profile % — chance to visit the post author's profile directly from the feed */}
+            <div className="flex items-center gap-2 flex-wrap pt-1.5 border-t border-border/40">
+              {pctInputs("viewPostProfilePercentMin", "viewPostProfilePercentMax")}
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE%</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO VISIT THE POST AUTHOR'S PROFILE</span>
+            </div>
 
             {/* View Profile's Feed % + View Timeline Posts — on same row */}
-            {(settings.clickPostPercentMax ?? 0) > 0 && (settings.viewPostProfilePercentMax ?? 0) > 0 && (
+            {(settings.viewPostProfilePercentMax ?? 0) > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 {pctInputs("viewProfileFeedPercentMin", "viewProfileFeedPercentMax")}
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE'S FEED%</span>
@@ -1182,6 +1152,77 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     <NumField min={0} max={100} className="w-14 h-7 text-xs"
                       value={settings.humanSessionNotUsedMax ?? 0}
                       onChange={(v) => setSettings({ ...settings, humanSessionNotUsedMax: v })}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── View Reels ── */}
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input type="checkbox" id="viewReelsEnabled"
+                    checked={!!(settings as any).viewReelsEnabled}
+                    onChange={(e) => setSettings({ ...settings, viewReelsEnabled: e.target.checked } as any)}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="viewReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <Film className="w-4 h-4 text-violet-500 shrink-0" />
+                    View Reels
+                  </label>
+                </div>
+                <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!(settings as any).viewReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsOrderMin ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMin: v } as any)}
+                    />
+                    <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsOrderMax ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsOrderMax: v } as any)}
+                    />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order%</span>
+                  </div>
+                  <div className="h-4 w-px bg-border/60 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    {pctInputs("reelWatchChanceMin", "reelWatchChanceMax")}
+                    <Percent className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Chance%</span>
+                  </div>
+                  <div className="h-4 w-px bg-border/60 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                    <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                      value={settings.reelWatchCountMin ?? 1}
+                      onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
+                    />
+                    <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                    <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                      value={settings.reelWatchCountMax ?? 3}
+                      onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
+                    />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels/Op</span>
+                  </div>
+                  <div className="h-4 w-px bg-border/60 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
+                    <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+                  </div>
+                  <div className="h-4 w-px bg-border/60 shrink-0" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsNotUsedMin ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsNotUsedMin: v } as any)}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).viewReelsNotUsedMax ?? 0}
+                      onChange={(v) => setSettings({ ...settings, viewReelsNotUsedMax: v } as any)}
                     />
                   </div>
                 </div>

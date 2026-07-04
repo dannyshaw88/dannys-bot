@@ -3609,6 +3609,103 @@ export class InstagramWebClient {
     return { viewed, items: viewedItems, reelWatches };
   }
 
+  // ── View Reels (independent tool) — fetch timeline pages and watch ONLY
+  // the reels found, ignoring regular feed posts. Uses the same
+  // /api/v1/feed/timeline/ endpoint as viewTimelineFeed (Instagram interleaves
+  // reels into the home timeline; there is no separate "reels tab" fetch used
+  // by the mobile app for this behaviour), but this is a fully independent
+  // pass — it does not like/save/open any of the regular posts it skips over,
+  // it only marks watched reels as seen. This lets "View Reels" run as its
+  // own tool with its own enabled/order/chance settings, decoupled from
+  // View Timeline Feed.
+  async viewReelsFromFeed(reelCount: number, reelWatchPercentMin: number = 50, reelWatchPercentMax: number = 100): Promise<{ watched: number; reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }>; sessionExpired?: boolean; reason?: string }> {
+    const j = await this.mobileSessionPost(
+      `/api/v1/feed/timeline/`,
+      new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString(),
+    );
+    if (!j) {
+      console.warn(`[webClient] viewReelsFromFeed: mobileSessionPost returned null — no igApiCookies session`);
+      return { watched: 0, reelWatches: [] };
+    }
+    if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
+      const reason = [
+        j?.message ? `message: ${j.message}` : null,
+        j?.logout_reason ? `logout_reason: ${j.logout_reason}` : null,
+        j?.error_title ? `error_title: ${j.error_title}` : null,
+      ].filter(Boolean).join(" | ") || "login_required";
+      console.warn(`[webClient] viewReelsFromFeed: session expired — ${reason}`);
+      this.mobileSessionReady = false;
+      return { watched: 0, reelWatches: [], sessionExpired: true, reason };
+    }
+    if (j?.status === "fail") {
+      console.warn(`[webClient] viewReelsFromFeed: timeline fetch failed — ${j?.message ?? "unknown"}`);
+      return { watched: 0, reelWatches: [] };
+    }
+
+    const reelWatches: Array<{ mediaId: string; shortcode: string; username: string; pct: number; durationSec: number }> = [];
+    let watched = 0;
+
+    const processPage = async (rawPage: any[]): Promise<void> => {
+      const pageMedia = rawPage.map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m: any) => m?.id || m?.pk);
+      const seenEntries: string[] = [];
+      for (const media of pageMedia) {
+        if (watched >= reelCount) break;
+        const isReel = media?.media_type === 2 || media?.product_type === "clips";
+        if (!isReel) continue;
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+        const reelDuration = Number(media.video_duration ?? 30);
+        const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+        const watchPct = Math.round(pct);
+        const watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
+        const username = String(media?.user?.username ?? "");
+        reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
+        watched++;
+      }
+      if (!seenEntries.length) return;
+      for (let i = 0; i < seenEntries.length; i += 4) {
+        const batch = seenEntries.slice(i, i + 4);
+        const _seenT0 = Date.now();
+        this._inTimedCall = true;
+        try {
+          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: batch.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString());
+        } catch (_) { /* best-effort seen signal — never propagate */ }
+        finally { this._inTimedCall = false; }
+        const _seenN = batch.length;
+        this.logCallFn?.("ViewReelsSeen", Date.now() - _seenT0, `Marked ${_seenN} reel${_seenN === 1 ? "" : "s"} as seen`, false);
+      }
+    };
+
+    const page1Raw: any[] = j?.feed_items ?? j?.items ?? [];
+    if (!page1Raw.length) return { watched: 0, reelWatches: [] };
+    await processPage(page1Raw);
+
+    let nextMaxId: string | null = j?.next_max_id ?? null;
+    const MAX_PAGES = 12;
+    let page = 1;
+    while (watched < reelCount && nextMaxId && page < MAX_PAGES) {
+      const pageJ = await this.mobileSessionPost(
+        `/api/v1/feed/timeline/`,
+        new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString(),
+      );
+      if (!pageJ) break;
+      const pageRaw: any[] = pageJ?.feed_items ?? pageJ?.items ?? [];
+      if (!pageRaw.length) break;
+      await processPage(pageRaw);
+      nextMaxId = pageJ?.next_max_id ?? null;
+      page++;
+    }
+
+    console.log(`[webClient] viewReelsFromFeed: ${page} page(s) — ${watched} reel(s) watched`);
+    return { watched, reelWatches };
+  }
+
   // ── Open / view a single feed post (simulates tapping into it) ───────────
   // Fetches /media/{mediaId}/info/ — the call Instagram makes when you tap a post.
   // Produces a "ViewPost" entry in the API-call log so per-post views from

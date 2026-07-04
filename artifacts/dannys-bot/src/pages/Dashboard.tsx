@@ -78,6 +78,32 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.327",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "New Feature",
+        text: "View Reels is now its own tool, separate from View Timeline Feed, with its own on/off switch, order, chance, and skip-chance settings — you can run it, tune it, or turn it off independently of the timeline feed.",
+      },
+      {
+        category: "Fixed",
+        text: "Save Liked Posts % now saves closer to the actual percentage you set, instead of sometimes saving nothing or saving several posts at once regardless of the number entered.",
+      },
+      {
+        category: "Fixed",
+        text: "Removed the \"Click on Post%\" setting — the app now visits a post author's profile directly from the feed instead of opening the post first, which was an unnecessary extra step.",
+      },
+      {
+        category: "Fixed",
+        text: "If your feed is slow to load, the app now double-checks for posts before assuming the feed is empty, so it won't jump to the Explore page by mistake.",
+      },
+      {
+        category: "Improvement",
+        text: "Added \"Expand Caption%\" to the Copy Settings list so it can be copied across accounts along with your other Human Session settings.",
+      },
+    ],
+  },
+  {
     version: "1.1.324",
     date: "4 Jul 2026",
     items: [

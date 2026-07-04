@@ -153297,6 +153297,99 @@ var InstagramWebClient = class {
     console.log(`[webClient] viewTimelineFeed: ${page} page(s) \u2014 ${viewed} posts seen`);
     return { viewed, items: viewedItems, reelWatches };
   }
+  // ── View Reels (independent tool) — fetch timeline pages and watch ONLY
+  // the reels found, ignoring regular feed posts. Uses the same
+  // /api/v1/feed/timeline/ endpoint as viewTimelineFeed (Instagram interleaves
+  // reels into the home timeline; there is no separate "reels tab" fetch used
+  // by the mobile app for this behaviour), but this is a fully independent
+  // pass — it does not like/save/open any of the regular posts it skips over,
+  // it only marks watched reels as seen. This lets "View Reels" run as its
+  // own tool with its own enabled/order/chance settings, decoupled from
+  // View Timeline Feed.
+  async viewReelsFromFeed(reelCount, reelWatchPercentMin = 50, reelWatchPercentMax = 100) {
+    const j = await this.mobileSessionPost(
+      `/api/v1/feed/timeline/`,
+      new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString()
+    );
+    if (!j) {
+      console.warn(`[webClient] viewReelsFromFeed: mobileSessionPost returned null \u2014 no igApiCookies session`);
+      return { watched: 0, reelWatches: [] };
+    }
+    if (j?.message === "login_required" || j?.require_login || j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? "")) {
+      const reason = [
+        j?.message ? `message: ${j.message}` : null,
+        j?.logout_reason ? `logout_reason: ${j.logout_reason}` : null,
+        j?.error_title ? `error_title: ${j.error_title}` : null
+      ].filter(Boolean).join(" | ") || "login_required";
+      console.warn(`[webClient] viewReelsFromFeed: session expired \u2014 ${reason}`);
+      this.mobileSessionReady = false;
+      return { watched: 0, reelWatches: [], sessionExpired: true, reason };
+    }
+    if (j?.status === "fail") {
+      console.warn(`[webClient] viewReelsFromFeed: timeline fetch failed \u2014 ${j?.message ?? "unknown"}`);
+      return { watched: 0, reelWatches: [] };
+    }
+    const reelWatches = [];
+    let watched = 0;
+    const processPage = async (rawPage) => {
+      const pageMedia = rawPage.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m2) => m2?.id || m2?.pk);
+      const seenEntries = [];
+      for (const media of pageMedia) {
+        if (watched >= reelCount) break;
+        const isReel = media?.media_type === 2 || media?.product_type === "clips";
+        if (!isReel) continue;
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+        const reelDuration = Number(media.video_duration ?? 30);
+        const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+        const watchPct = Math.round(pct);
+        const watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + watchDuration}`);
+        const username = String(media?.user?.username ?? "");
+        reelWatches.push({ mediaId, shortcode: this.mediaIdToShortcode(mediaId), username, pct: watchPct, durationSec: watchDuration });
+        watched++;
+      }
+      if (!seenEntries.length) return;
+      for (let i2 = 0; i2 < seenEntries.length; i2 += 4) {
+        const batch = seenEntries.slice(i2, i2 + 4);
+        const _seenT0 = Date.now();
+        this._inTimedCall = true;
+        try {
+          await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: batch.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: ""
+          }).toString());
+        } catch (_2) {
+        } finally {
+          this._inTimedCall = false;
+        }
+        const _seenN = batch.length;
+        this.logCallFn?.("ViewReelsSeen", Date.now() - _seenT0, `Marked ${_seenN} reel${_seenN === 1 ? "" : "s"} as seen`, false);
+      }
+    };
+    const page1Raw = j?.feed_items ?? j?.items ?? [];
+    if (!page1Raw.length) return { watched: 0, reelWatches: [] };
+    await processPage(page1Raw);
+    let nextMaxId = j?.next_max_id ?? null;
+    const MAX_PAGES = 12;
+    let page = 1;
+    while (watched < reelCount && nextMaxId && page < MAX_PAGES) {
+      const pageJ = await this.mobileSessionPost(
+        `/api/v1/feed/timeline/`,
+        new URLSearchParams({ reason: "pagination", max_id: nextMaxId, is_pull_to_refresh: "0" }).toString()
+      );
+      if (!pageJ) break;
+      const pageRaw = pageJ?.feed_items ?? pageJ?.items ?? [];
+      if (!pageRaw.length) break;
+      await processPage(pageRaw);
+      nextMaxId = pageJ?.next_max_id ?? null;
+      page++;
+    }
+    console.log(`[webClient] viewReelsFromFeed: ${page} page(s) \u2014 ${watched} reel(s) watched`);
+    return { watched, reelWatches };
+  }
   // ── Open / view a single feed post (simulates tapping into it) ───────────
   // Fetches /media/{mediaId}/info/ — the call Instagram makes when you tap a post.
   // Produces a "ViewPost" entry in the API-call log so per-post views from
@@ -166225,9 +166318,10 @@ ${err?.stack ?? ""}`);
         }
       }
       let feedHadPosts = true;
+      let feedCount = 0;
       if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
         try {
-          const feedCount = randInt2(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
+          feedCount = randInt2(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
           if (page.url() !== "https://www.instagram.com/" && !page.url().startsWith("https://www.instagram.com/?")) {
             await nav("https://www.instagram.com/", "home feed");
             await sleep(actionDelay());
@@ -166236,6 +166330,13 @@ ${err?.stack ?? ""}`);
           for (let i2 = 0; i2 < feedCount && !state.stop.stopped; i2++) {
             await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
             await sleep(actionDelay());
+          }
+          if (!feedHadPosts) {
+            const recheck = await page.evaluate(() => !!document.querySelector("article")).catch(() => false);
+            if (recheck) {
+              console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} feed re-check found posts after all \u2014 not empty`);
+              feedHadPosts = true;
+            }
           }
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
@@ -166332,63 +166433,65 @@ ${err?.stack ?? ""}`);
             this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via feed sub-setting`);
             console.log(`[engine] @${profile.username}: [EB-only] \u2764\uFE0F liked ${liked} posts (feed sub-setting)`);
           }
-          const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
-          const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
-          const reelChanceMin2 = Math.min(reelChanceRaw0, reelChanceRaw1);
-          const reelChanceMax2 = Math.max(reelChanceRaw0, reelChanceRaw1);
-          if (reelChanceMax2 > 0 && !state.stop.stopped) {
-            const reelChance = reelChanceMin2 + Math.random() * (reelChanceMax2 - reelChanceMin2);
-            const reelChanceRoll = Math.random() * 100;
-            const reelsEnabled = reelChanceRoll < reelChance;
-            if (reelsEnabled) {
-              const rcMin = Math.max(0, Number(s.reelWatchCountMin ?? 1));
-              const rcMax = Math.max(rcMin, Number(s.reelWatchCountMax ?? 3));
-              const reelCount = randInt2(rcMin, rcMax);
-              const rvMin = Math.min(100, Math.max(0, Number(s.reelWatchPercentMin ?? 50)));
-              const rvMax = Math.min(100, Math.max(0, Number(s.reelWatchPercentMax ?? 100)));
-              const reelViewPctMin = Math.min(rvMin, rvMax);
-              const reelViewPctMax = Math.max(rvMin, rvMax);
-              console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] Reel chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% \u2014 reels ON (${reelCount} reels)`);
-              try {
-                await nav("https://www.instagram.com/reels/", "reels feed");
-                await sleep(actionDelay());
-                const videoFound = await waitFor("video", 8e3);
-                let watched = 0;
-                let totalWatchMs = 0;
-                let totalViewPct = 0;
-                if (videoFound) {
-                  for (let i2 = 0; i2 < reelCount && !state.stop.stopped; i2++) {
-                    const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
-                    const reelDurMs = randInt2(8e3, 2e4);
-                    const watchMs = Math.max(2e3, Math.round(reelViewPct / 100 * reelDurMs));
-                    await sleep(watchMs);
-                    await page.keyboard.press("ArrowDown").catch(() => {
-                    });
-                    await sleep(randInt2(600, 1400));
-                    watched++;
-                    totalWatchMs += watchMs;
-                    totalViewPct += reelViewPct;
-                  }
-                } else {
-                  console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
-                }
-                const avgPct = watched > 0 ? Math.round(totalViewPct / watched) : 0;
-                const totalSec = Math.round(totalWatchMs / 1e3);
-                const reelDetail = `EB watched ${watched} reel(s) \xB7 avg ${avgPct}% view \xB7 ${totalSec}s total`;
-                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", reelDetail);
-                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", reelDetail);
-                console.log(`[engine] @${profile.username}: [EB-only] \u{1F3AC} watched ${watched} reels (feed sub-setting)`);
-              } catch (e) {
-                console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
-                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
-              }
-            } else {
-              console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] Reel chance ${reelChanceRoll.toFixed(1)}% \u2265 ${reelChance.toFixed(1)}% \u2014 skipping reels`);
-            }
-          }
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
+        }
+      }
+      if (s.viewReelsEnabled === true && !state.stop.stopped) {
+        const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
+        const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
+        const reelChanceMin2 = Math.min(reelChanceRaw0, reelChanceRaw1);
+        const reelChanceMax2 = Math.max(reelChanceRaw0, reelChanceRaw1);
+        if (reelChanceMax2 > 0) {
+          const reelChance = reelChanceMin2 + Math.random() * (reelChanceMax2 - reelChanceMin2);
+          const reelChanceRoll = Math.random() * 100;
+          const reelsEnabled = reelChanceRoll < reelChance;
+          if (reelsEnabled) {
+            const rcMin = Math.max(0, Number(s.reelWatchCountMin ?? 1));
+            const rcMax = Math.max(rcMin, Number(s.reelWatchCountMax ?? 3));
+            const reelCount = randInt2(rcMin, rcMax);
+            const rvMin = Math.min(100, Math.max(0, Number(s.reelWatchPercentMin ?? 50)));
+            const rvMax = Math.min(100, Math.max(0, Number(s.reelWatchPercentMax ?? 100)));
+            const reelViewPctMin = Math.min(rvMin, rvMax);
+            const reelViewPctMax = Math.max(rvMin, rvMax);
+            console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] View Reels chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% \u2014 reels ON (${reelCount} reels)`);
+            try {
+              await nav("https://www.instagram.com/reels/", "reels feed");
+              await sleep(actionDelay());
+              const videoFound = await waitFor("video", 8e3);
+              let watched = 0;
+              let totalWatchMs = 0;
+              let totalViewPct = 0;
+              if (videoFound) {
+                for (let i2 = 0; i2 < reelCount && !state.stop.stopped; i2++) {
+                  const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
+                  const reelDurMs = randInt2(8e3, 2e4);
+                  const watchMs = Math.max(2e3, Math.round(reelViewPct / 100 * reelDurMs));
+                  await sleep(watchMs);
+                  await page.keyboard.press("ArrowDown").catch(() => {
+                  });
+                  await sleep(randInt2(600, 1400));
+                  watched++;
+                  totalWatchMs += watchMs;
+                  totalViewPct += reelViewPct;
+                }
+              } else {
+                console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
+              }
+              const avgPct = watched > 0 ? Math.round(totalViewPct / watched) : 0;
+              const totalSec = Math.round(totalWatchMs / 1e3);
+              const reelDetail = `EB watched ${watched} reel(s) \xB7 avg ${avgPct}% view \xB7 ${totalSec}s total`;
+              this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", reelDetail);
+              this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", reelDetail);
+              console.log(`[engine] @${profile.username}: [EB-only] \u{1F3AC} watched ${watched} reels`);
+            } catch (e) {
+              console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
+              this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
+            }
+          } else {
+            console.log(`[engine] @${profile.username}: \u{1F3B2} [EB] View Reels chance ${reelChanceRoll.toFixed(1)}% \u2265 ${reelChance.toFixed(1)}% \u2014 skipping`);
+          }
         }
       }
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
@@ -166507,7 +166610,7 @@ ${err?.stack ?? ""}`);
       }
       if (!!s.saveMediaEnabled && !state.stop.stopped) {
         const savePct = Number(s.saveMediaPercent ?? 0);
-        const saveCount = savePct > 0 && Math.random() * 100 < savePct ? randInt2(1, 3) : 0;
+        const saveCount = savePct > 0 ? Math.round(feedCount * savePct / 100) : 0;
         if (saveCount > 0) {
           try {
             if (!page.url().startsWith("https://www.instagram.com/")) {
@@ -167043,30 +167146,15 @@ ${err?.stack ?? ""}`);
       async () => {
         client.setApiCallSource("Human Session Emulation");
         const feedCount = randInt2(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
-        const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
-        const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
-        const reelChanceMin = Number(s.reelWatchChanceMin ?? 100);
-        const reelChanceMax = Number(s.reelWatchChanceMax ?? 100);
-        const reelChance = randInt2(reelChanceMin, reelChanceMax);
-        const reelChanceRoll = Math.random() * 100;
-        const reelsEnabled = reelChanceMax > 0 && reelChanceRoll < reelChance;
-        const reelWatchCountMin = reelsEnabled ? Number(s.reelWatchCountMin ?? 0) : 0;
-        const reelWatchCountMax = reelsEnabled ? Number(s.reelWatchCountMax ?? 0) : 0;
-        const effectiveReelPctMax = reelsEnabled ? reelWatchPctMax : 0;
-        if (!reelsEnabled && reelWatchPctMax > 0) {
-          console.log(`[engine] @${profile.username}: \u{1F3B2} Reel chance rolled ${reelChanceRoll.toFixed(1)}% vs threshold ${reelChance}% \u2014 skipping reels this op`);
-        } else if (reelsEnabled) {
-          console.log(`[engine] @${profile.username}: \u{1F3B2} Reel chance rolled ${reelChanceRoll.toFixed(1)}% vs threshold ${reelChance}% \u2014 reels ON (count ${reelWatchCountMin}\u2013${reelWatchCountMax})`);
-        }
         let viewed = 0;
         let vtfResult = null;
         try {
           vtfResult = await client.viewTimelineFeed(
             feedCount,
-            reelWatchPctMin,
-            effectiveReelPctMax,
-            reelWatchCountMin,
-            reelWatchCountMax,
+            0,
+            0,
+            0,
+            0,
             false,
             (type, count) => {
               if (type === "feed_load") {
@@ -167258,35 +167346,16 @@ ${err?.stack ?? ""}`);
             }
           }
         }
-        const clickPctMin = Number(s.clickPostPercentMin ?? 0);
-        const clickPctMax = Number(s.clickPostPercentMax ?? 0);
-        if (viewed > 0 && clickPctMax > 0 && vtfResult?.items && vtfResult.items.length > 0) {
-          const clickPct = randInt2(clickPctMin, clickPctMax);
-          const exactClick = vtfResult.items.length * clickPct / 100;
-          const clickCount = Math.floor(exactClick) + (Math.random() < exactClick % 1 ? 1 : 0);
-          if (clickCount > 0) {
-            const toClick = [...vtfResult.items].sort(() => 0.5 - Math.random()).slice(0, clickCount);
-            for (const item of toClick) {
-              try {
-                if (item.isReel) {
-                  await client.viewFeedReel(item.mediaId);
-                  console.log(`[engine] @${profile.username}: \u{1F3AC} opened reel ${item.shortcode} by @${item.username} from feed`);
-                  this.logAction(profile.id, tool.id, "view_reel", item.username, item.shortcode, "post", "ok", "Opened reel from feed");
-                } else {
-                  await client.viewFeedPost(item.mediaId);
-                  console.log(`[engine] @${profile.username}: \u{1F50D} opened post ${item.shortcode} by @${item.username} from feed`);
-                  this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from feed");
-                }
-              } catch (e) {
-                if (await checkSessionErr(e, "view_post")) return;
-                console.warn(`[engine] @${profile.username}: view post/reel error: ${e?.message}`);
-                continue;
-              }
-              const vpPctMin = Number(s.viewPostProfilePercentMin ?? 0);
-              const vpPctMax = Number(s.viewPostProfilePercentMax ?? 0);
-              if (vpPctMax > 0 && item.userId) {
-                const vpPct = randInt2(vpPctMin, vpPctMax);
-                if (Math.random() * 100 >= vpPct) continue;
+        const vpPctMin0 = Number(s.viewPostProfilePercentMin ?? 0);
+        const vpPctMax0 = Number(s.viewPostProfilePercentMax ?? 0);
+        if (viewed > 0 && vpPctMax0 > 0 && vtfResult?.items && vtfResult.items.length > 0) {
+          const vpPct = randInt2(vpPctMin0, vpPctMax0);
+          const exactVisit = vtfResult.items.length * vpPct / 100;
+          const visitCount = Math.floor(exactVisit) + (Math.random() < exactVisit % 1 ? 1 : 0);
+          if (visitCount > 0) {
+            const toVisit = [...vtfResult.items].filter((it) => it.userId).sort(() => 0.5 - Math.random()).slice(0, visitCount);
+            for (const item of toVisit) {
+              {
                 try {
                   await client.visitUserProfile(item.userId, "feed_timeline");
                   console.log(`[engine] @${profile.username}: \u{1F464} visited profile of @${item.username}`);
@@ -167339,6 +167408,56 @@ ${err?.stack ?? ""}`);
               }
             }
           }
+        }
+      }
+    );
+    enqueue(
+      "viewReels",
+      s.viewReelsEnabled === true,
+      "viewReelsNotUsedMin",
+      "viewReelsNotUsedMax",
+      "viewReelsOrderMin",
+      "viewReelsOrderMax",
+      async () => {
+        client.setApiCallSource("Human Session Emulation");
+        const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
+        const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
+        const reelChanceMin = Math.min(reelChanceRaw0, reelChanceRaw1);
+        const reelChanceMax = Math.max(reelChanceRaw0, reelChanceRaw1);
+        const reelChance = reelChanceMin + Math.random() * (reelChanceMax - reelChanceMin);
+        if (Math.random() * 100 >= reelChance) {
+          console.log(`[engine] @${profile.username}: \u{1F3AC} View Reels \u2014 Chance% roll missed, skipping`);
+          return;
+        }
+        const reelCount = randInt2(Number(s.reelWatchCountMin ?? 1), Number(s.reelWatchCountMax ?? 3));
+        if (reelCount <= 0) {
+          console.log(`[engine] @${profile.username}: \u{1F3AC} View Reels \u2014 reel count rolled 0, skipping`);
+          return;
+        }
+        const reelViewPctMin = Number(s.reelWatchPercentMin ?? 50);
+        const reelViewPctMax = Number(s.reelWatchPercentMax ?? 100);
+        try {
+          const result = await client.viewReelsFromFeed(reelCount, reelViewPctMin, reelViewPctMax);
+          if (result.sessionExpired) {
+            const expReason = result.reason ?? "session expired (login_required) \u2014 viewReels";
+            console.warn(`[engine] @${profile.username}: viewReels \u2014 session expired, marking logged_out`);
+            await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: expReason });
+            this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", expReason);
+            state.client = null;
+            return;
+          }
+          console.log(`[engine] @${profile.username}: \u{1F3AC} watched ${result.watched} reel(s)`);
+          if (result.watched > 0) {
+            this.logAction(profile.id, tool.id, "view_reels", "", "", "", "ok", `Watched ${result.watched} reel(s)`);
+          } else {
+            this.logAction(profile.id, tool.id, "view_reels", "", "", "", "skipped", "No reels found in timeline this pass");
+          }
+          for (const reel of result.reelWatches) {
+            this.logAction(profile.id, tool.id, "view_reel_from_feed", reel.username, reel.shortcode, "post", "ok", `Watched reel at ${reel.pct}% \xB7 ${reel.durationSec}s`);
+          }
+        } catch (e) {
+          if (await checkSessionErr(e, "view_reels")) return;
+          console.warn(`[engine] @${profile.username}: view reels error: ${e?.message}`);
         }
       }
     );
