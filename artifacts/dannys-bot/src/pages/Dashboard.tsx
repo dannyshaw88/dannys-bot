@@ -78,6 +78,44 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.336",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "In Account Settings, the Human Jitter chance settings (ORDER % and SKIP CHANCE %) are now left-aligned instead of being pushed to the right.",
+      },
+      {
+        category: "Fixed",
+        text: "In Account Settings, the View Reels sub-settings (Chance %, Reels per Op, Reel View %) are now left-aligned, matching the layout of every other settings block.",
+      },
+      {
+        category: "Fixed",
+        text: "In Account Settings, the Check Stories from Timeline settings (Like %, Share %) are now left-aligned instead of indented to the right.",
+      },
+      {
+        category: "Fixed",
+        text: "In Account Settings, the Check Direct Messages Min/Max inputs are now left-aligned, matching all other sub-settings across the panel.",
+      },
+      {
+        category: "Improved",
+        text: "The Disable API toggle has been moved to sit directly next to the Account Label input field in Account Settings, so you can find and toggle it without scrolling down to the API Controls section.",
+      },
+      {
+        category: "Improved",
+        text: "The Account Label input field is now the same width as the Instagram Username field, keeping the two fields visually consistent.",
+      },
+      {
+        category: "Fixed",
+        text: "The Active/Stopped toggle in Account Settings no longer flashes on page load — it previously briefly showed as ON before snapping to OFF while account data was still loading.",
+      },
+      {
+        category: "Improved",
+        text: "Removed the redundant 'Group' label next to the Group selector in Account Settings — the combobox itself makes the field purpose clear.",
+      },
+    ],
+  },
+  {
     version: "1.1.335",
     date: "4 Jul 2026",
     items: [
