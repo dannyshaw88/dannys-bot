@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.314",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Removed the unnecessary pre-click waiting delay on browser-follows — the background window is invisible so there is no reason to simulate human hesitation. Also increased the post-click confirmation window from 5 seconds to 30 seconds so a slow proxy connection no longer causes a successful follow to be wrongly counted as blocked.",
+      },
+    ],
+  },
+  {
     version: "1.1.313",
     date: "4 Jul 2026",
     items: [

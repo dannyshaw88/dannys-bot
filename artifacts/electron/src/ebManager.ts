@@ -4908,10 +4908,11 @@ export function startEbIpcServer(
 
           if (btnInfo?.found) {
             const acctSeed = ((pid * 2654435761) >>> 0) / 0x100000000;
-            const dwellMs = 600 + Math.round(acctSeed * 2400) + Math.round(Math.random() * 300);
-            await new Promise(r => setTimeout(r, dwellMs));
+            // No pre-click dwell — this is an invisible background window.
+            // Human-sim delays serve no purpose here and only add latency.
 
-            // Re-query rect after dwell (React layout may shift).
+            // Re-query rect to get the freshest button position (React may still
+            // be settling after page load).
             const freshRect: any = await Promise.race([
               sfWin.webContents.executeJavaScript(`
                 (function() {
@@ -4978,9 +4979,10 @@ export function startEbIpcServer(
               _ipcLog(`[eb:silent-follow:${pid}] click dispatched (cdp=${cdpOk}, js=always, tap=${tapX},${tapY})`);
 
               // Confirm state change to Following/Requested.
-              const confirmMs = 1800 + Math.round(acctSeed * 600) + Math.round(Math.random() * 300);
+              // Wait up to 30 seconds — Instagram's UI can be slow on proxied
+              // connections and there is no benefit to timing out early.
               let confirmed = false;
-              const confirmDeadline = Date.now() + confirmMs + 3000;
+              const confirmDeadline = Date.now() + 30_000;
               while (Date.now() < confirmDeadline) {
                 await new Promise(r => setTimeout(r, 300));
                 const state: any = await Promise.race([
