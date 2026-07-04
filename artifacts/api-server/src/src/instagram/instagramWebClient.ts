@@ -1843,7 +1843,6 @@ export class InstagramWebClient {
     count: number;
     ok: boolean;
     threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
-    sessionGated?: boolean;
   }> {
     // ── Step 1: build warmed client (Phase 0-2 probe sequence) ──────────────
     const built = await this._buildWarmedIgClient();
@@ -1893,11 +1892,6 @@ export class InstagramWebClient {
     } catch (e: any) {
       const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
       console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${e?.message}`);
-      // 4415001 — return sessionGated:true so the engine aborts remaining session
-      // tools and prevents logout_reason:3 on the next API call.
-      if (code === 4415001 || String(e?.message ?? "").includes("4415001")) {
-        return { count: 0, ok: false, threads: [], sessionGated: true };
-      }
       return { count: 0, ok: false, threads: [] };
     }
 

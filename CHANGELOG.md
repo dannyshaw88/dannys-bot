@@ -4,6 +4,14 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.321] — 2026-07-04
+
+### Reverted
+
+- Reverted v1.1.320 sessionGated session-abort on 4415001. The warm-up (NotificationsBadge) from v1.1.319 is retained.
+
+---
+
 ## [1.1.320] — 2026-07-04
 
 ### Fixed

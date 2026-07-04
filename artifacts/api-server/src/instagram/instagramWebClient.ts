@@ -3966,7 +3966,6 @@ export class InstagramWebClient {
     count: number;
     ok: boolean;
     threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
-    sessionGated?: boolean;
   }> {
     // Check a mobile session is available before making any calls.
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!this._deviceAuthorization;
@@ -4036,19 +4035,6 @@ export class InstagramWebClient {
       // Re-throw only hard account-level errors so the engine can mark the account.
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
         throw e;
-      }
-      // 4415001 "Prompt has contribution" — Instagram has a pending in-app prompt
-      // (feature intro, birthday info, notification permission, etc.) that requires
-      // real user interaction to dismiss.  The session cookies are still valid, but
-      // ANY further API call after this error causes Instagram to escalate to
-      // logout_reason:3 (forced server-side session kill) on the very next request.
-      // Return sessionGated:true so the engine aborts all remaining session tools
-      // without marking the account as logged_out.
-      // Resolution: open the embedded browser for this account, navigate to Instagram,
-      // and dismiss whatever prompt Instagram is showing — DM checks will work again
-      // after that.
-      if (msg.includes("prompt_required_4415001")) {
-        return { count: 0, ok: false, threads: [], sessionGated: true };
       }
       return { count: 0, ok: false, threads: [] };
     }

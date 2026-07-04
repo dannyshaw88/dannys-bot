@@ -3105,19 +3105,6 @@ class AutomationEngine {
           dmCount = result.count;
           dmOk = result.ok;
           console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : " (read failed)"}`);
-          // 4415001 "Prompt has contribution" — Instagram has a pending in-app
-          // prompt that must be dismissed by the user before any DM API calls work.
-          // The session is still valid, but continuing to fire API calls after 4415001
-          // causes Instagram to escalate to logout_reason:3 on the very next request.
-          // Abort remaining session tools WITHOUT marking the account as logged_out.
-          // Fix for the account: open its embedded browser, navigate to Instagram, and
-          // dismiss whatever prompt is showing — DM checks will work again after that.
-          if (result.sessionGated) {
-            console.warn(`[engine] @${profile.username}: DM inbox returned 4415001 (Instagram prompt gate) — aborting remaining session tools to prevent logout_reason:3`);
-            this.logAction(profile.id, tool.id, "check_dm", "", "", "", "error", "DM inbox blocked — Instagram in-app prompt must be dismissed (open EB and log in to clear it)");
-            sessionError = "prompt_required_4415001";
-            return;
-          }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_dm")) return;
           console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
