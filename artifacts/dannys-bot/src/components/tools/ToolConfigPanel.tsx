@@ -341,7 +341,11 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     const copyEnabled       = expandedKeys.includes("startStop");
     const copySources       = expandedKeys.includes("ft_sources");
     const clearSourcesFirst = expandedKeys.includes("ft_clearSources");
-    const keysToSend        = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources" && k !== "ft_clearSources");
+    const keysToSend        = [
+      ...expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources" && k !== "ft_clearSources"),
+      // Always copy ranking percentages alongside the source lists
+      ...(copySources ? ["hashtagSourceRanking", "followerSourceRanking"] : []),
+    ];
 
     // When "Randomise timing" is selected and accounts are being enabled,
     // give each account a random start time within [delayMin, delayMax] so
@@ -679,7 +683,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 <Users className="w-3.5 h-3.5 text-primary" /> Followers of Account
                 <span className="text-xs text-muted-foreground font-normal">({followers.length})</span>
               </label>
-              <div className="flex items-center gap-1 ml-auto" title="Probability of selecting Followers of Account as the source type for each session (1–100)">
+              <div className="flex items-center gap-1" title="Probability of selecting Followers of Account as the source type for each session (1–100)">
                 <span className="text-[10px] text-muted-foreground whitespace-nowrap">Ranking</span>
                 <input
                   type="number"

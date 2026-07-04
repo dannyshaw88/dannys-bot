@@ -370,7 +370,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     }
 
     // ── Copy follow tool settings (prefixed keys "follow:...") ───────────────
-    const followKeys = expandedKeys.filter(k => k.startsWith("follow:")).map(k => k.slice(7));
+    const followKeys = [
+      ...expandedKeys.filter(k => k.startsWith("follow:")).map(k => k.slice(7)),
+      // Always copy ranking percentages alongside the source lists
+      ...(copyFollowSources ? ["hashtagSourceRanking", "followerSourceRanking"] : []),
+    ];
     if (followKeys.length > 0 && followTool) {
       try {
         await copyToolSettingsToProfiles(
