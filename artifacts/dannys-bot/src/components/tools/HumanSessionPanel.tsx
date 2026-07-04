@@ -1289,7 +1289,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
               {/* Sub-row 1 — Users to Watch | Slides per User | Watch % */}
-              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <NumField min={1} max={50} className="w-14 h-7 text-xs"
                   value={settings.checkTimelineStoriesMin ?? 3}
                   onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMin: v })}
@@ -1316,7 +1316,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch %</span>
               </div>
               {/* Sub-row 2 — Like % | Share % */}
-              <div className={`flex items-center gap-2.5 flex-wrap pl-7 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <NumField min={0} max={100} className="w-14 h-7 text-xs"
                   value={settings.storyLikePctMin ?? 0}
                   onChange={(v) => setSettings({ ...settings, storyLikePctMin: v })}
