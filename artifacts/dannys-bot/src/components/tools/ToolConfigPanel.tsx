@@ -209,6 +209,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
       autoStopFollowAtFollowingsMax: 7400,
       autoStartUnfollowAfterMin: 60,
       autoStartUnfollowAfterMax: 135,
+      hashtagSourceRanking: 50,
+      followerSourceRanking: 50,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -596,6 +598,21 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 <Hash className="w-3.5 h-3.5 text-primary" /> Hashtags
                 <span className="text-xs text-muted-foreground font-normal">({hashtags.length})</span>
               </label>
+              <div className="flex items-center gap-1" title="Probability of selecting Hashtags as the source type for each session (1–100)">
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Ranking</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={(settings as any).hashtagSourceRanking ?? 50}
+                  onChange={e => {
+                    const v = Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 1));
+                    setSettings(s => ({ ...s, hashtagSourceRanking: v }));
+                  }}
+                  className="w-12 h-5 text-[10px] text-center border border-border rounded px-1 bg-background"
+                />
+                <span className="text-[10px] text-muted-foreground">%</span>
+              </div>
               <div className="ml-auto flex gap-2">
                 <Button type="button" variant="outline" size="sm" disabled={importSourcesMutation.isPending} onClick={() => importFileRef.current?.click()}>
                   <Upload className="w-3.5 h-3.5 mr-1.5" />{importSourcesMutation.isPending ? 'Importing…' : 'Import'}
@@ -662,6 +679,21 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 <Users className="w-3.5 h-3.5 text-primary" /> Followers of Account
                 <span className="text-xs text-muted-foreground font-normal">({followers.length})</span>
               </label>
+              <div className="flex items-center gap-1 ml-auto" title="Probability of selecting Followers of Account as the source type for each session (1–100)">
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Ranking</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={(settings as any).followerSourceRanking ?? 50}
+                  onChange={e => {
+                    const v = Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 1));
+                    setSettings(s => ({ ...s, followerSourceRanking: v }));
+                  }}
+                  className="w-12 h-5 text-[10px] text-center border border-border rounded px-1 bg-background"
+                />
+                <span className="text-[10px] text-muted-foreground">%</span>
+              </div>
             </div>
 
             {followerSectionOpen && (
