@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.317",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed 'Make a Post' via browser doing nothing. When 'Do actions via browser → Make a Post' was enabled in a human session, the app was always uploading the image through the private API anyway and completely ignoring the browser setting. The post flow is now correctly routed through the embedded browser when that option is on.",
+      },
+      {
+        category: "Fix",
+        text: "Rewrote the browser posting flow to match Instagram's current desktop layout. The old approach was looking for a create button using selectors that no longer exist in Instagram's UI, so nothing happened. The new flow navigates to the Instagram homepage, hovers the '+' Create button in the left sidebar so it expands, clicks 'Create' from the expanded menu, then clicks 'Post' from the submenu that appears — exactly how a user would do it manually.",
+      },
+      {
+        category: "Improvement",
+        text: "Browser posts now reuse the open embedded browser window instead of opening a separate hidden window. You will see the browser navigate through the post steps (Create → Post → image loads → Next → Next → Share) and then return to where it was when done. If the embedded browser is not already open, a properly-sized background desktop window is used instead of the old tiny mobile-sized hidden window that showed the wrong Instagram layout.",
+      },
+      {
+        category: "Fix",
+        text: "Browser-based posts now appear in the Stats pie chart. The chart counts actions by reading the activity log, but browser posts were not being written to that log. They are now recorded correctly so the chart reflects the true number of posts made via the browser.",
+      },
+    ],
+  },
+  {
     version: "1.1.316",
     date: "4 Jul 2026",
     items: [
