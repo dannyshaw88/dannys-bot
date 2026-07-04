@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -489,6 +489,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0,
       likeTimelinePostsPercentMax: 0,
+      expandCaptionPercentMin: 0,
+      expandCaptionPercentMax: 0,
       clickPostPercentMin: 0,
       clickPostPercentMax: 0,
       viewPostProfilePercentMin: 0,
@@ -596,6 +598,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       saveMediaEnabled: false, saveMediaPercent: 20,
       sharePostPercentMin: 0, sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
+      expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
       clickPostPercentMin: 0, clickPostPercentMax: 0,
       viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
       viewProfileFeedPercentMin: 0, viewProfileFeedPercentMax: 0,
@@ -849,6 +852,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       onChange={(v) => setSettings({ ...settings, viewTimelineFeedNotUsedMax: v })}
                     />
                   </div>
+                </div>
+              </div>
+              {/* Expand Caption% — click "more" on a % of viewed posts */}
+              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("expandCaptionPercentMin", "expandCaptionPercentMax")}
+                  <AlignLeft className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Expand Caption%</span>
                 </div>
               </div>
               {/* Reel Chance% | Reels/Op | Reel View% — all on one row */}

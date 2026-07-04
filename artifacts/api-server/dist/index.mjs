@@ -166224,6 +166224,7 @@ ${err?.stack ?? ""}`);
           this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
         }
       }
+      let feedHadPosts = true;
       if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
         try {
           const feedCount = randInt2(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
@@ -166231,13 +166232,58 @@ ${err?.stack ?? ""}`);
             await nav("https://www.instagram.com/", "home feed");
             await sleep(actionDelay());
           }
+          feedHadPosts = await waitFor("article", 8e3);
           for (let i2 = 0; i2 < feedCount && !state.stop.stopped; i2++) {
             await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
             await sleep(actionDelay());
           }
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
-          console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} scrolled feed ${feedCount}\xD7`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} scrolled feed ${feedCount}\xD7 \u2014 feed had posts: ${feedHadPosts}`);
+          const ecPctRaw0 = Math.min(100, Math.max(0, Number(s.expandCaptionPercentMin ?? 0)));
+          const ecPctRaw1 = Math.min(100, Math.max(0, Number(s.expandCaptionPercentMax ?? 0)));
+          const ecPctMin = Math.min(ecPctRaw0, ecPctRaw1);
+          const ecPctMax = Math.max(ecPctRaw0, ecPctRaw1);
+          if (ecPctMax > 0 && !state.stop.stopped) {
+            const ecPct = ecPctMin + Math.random() * (ecPctMax - ecPctMin);
+            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {
+            });
+            await sleep(600);
+            let expanded = 0;
+            for (let i2 = 0; i2 < feedCount && !state.stop.stopped; i2++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
+              });
+              await sleep(500);
+              if (Math.random() * 100 < ecPct) {
+                const clicked = await page.evaluate(() => {
+                  const articles = Array.from(document.querySelectorAll("article"));
+                  const target = articles.find((a2) => {
+                    const rect = a2.getBoundingClientRect();
+                    return rect.bottom > 0 && rect.top < window.innerHeight;
+                  });
+                  if (!target) return false;
+                  const moreBtn = Array.from(target.querySelectorAll(
+                    'div[role="button"], span[role="button"], button'
+                  )).find((el) => {
+                    const text2 = (el.textContent ?? "").trim().toLowerCase();
+                    return text2.endsWith("more") && text2.length < 20;
+                  });
+                  if (!moreBtn) return false;
+                  moreBtn.click();
+                  return true;
+                }).catch(() => false);
+                if (clicked) {
+                  expanded++;
+                  await sleep(randInt2(600, 1200));
+                }
+              }
+            }
+            if (expanded > 0) {
+              this.logAction(profile.id, tool.id, "expand_caption", "", "", "", "ok", `EB expanded caption on ${expanded} post(s)`);
+              this.logGhostBrowserCall(profile.id, profile.username, "expand_caption", `EB expanded caption on ${expanded} post(s)`);
+              console.log(`[engine] @${profile.username}: [EB-only] \u{1F4D6} expanded ${expanded} caption(s)`);
+            }
+          }
           const likePctRaw0 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMin ?? 0)));
           const likePctRaw1 = Math.min(100, Math.max(0, Number(s.likeTimelinePostsPercentMax ?? 0)));
           const likePctMin = Math.min(likePctRaw0, likePctRaw1);
@@ -166250,20 +166296,30 @@ ${err?.stack ?? ""}`);
             await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {
             });
             await sleep(800);
-            await waitFor('svg[aria-label="Like"]', 6e3);
+            await waitFor("article", 6e3);
             let liked = 0;
             for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
               });
               await sleep(700);
-              const clickedOne = await page.evaluate(() => {
-                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
-                const h4 = hearts[0];
-                if (!h4) return false;
-                h4.closest("button")?.click();
+              const likedOne = await page.evaluate(() => {
+                const articles = Array.from(document.querySelectorAll("article"));
+                const target = articles.find((a2) => {
+                  if (!a2.querySelector('svg[aria-label="Like"]')) return false;
+                  const rect = a2.getBoundingClientRect();
+                  return rect.bottom > 0 && rect.top < window.innerHeight;
+                });
+                if (!target) return false;
+                const heartSvg = target.querySelector('svg[aria-label="Like"]');
+                if (!heartSvg) return false;
+                const btn = heartSvg.closest('[role="button"], button');
+                if (!btn) return false;
+                btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+                btn.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true }));
+                btn.click();
                 return true;
               }).catch(() => false);
-              if (clickedOne) {
+              if (likedOne) {
                 liked++;
                 await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
               }
@@ -166298,21 +166354,29 @@ ${err?.stack ?? ""}`);
                 await sleep(actionDelay());
                 const videoFound = await waitFor("video", 8e3);
                 let watched = 0;
+                let totalWatchMs = 0;
+                let totalViewPct = 0;
                 if (videoFound) {
                   for (let i2 = 0; i2 < reelCount && !state.stop.stopped; i2++) {
                     const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
-                    const watchMs = Math.max(2e3, Math.round(reelViewPct / 100 * randInt2(8e3, 2e4)));
+                    const reelDurMs = randInt2(8e3, 2e4);
+                    const watchMs = Math.max(2e3, Math.round(reelViewPct / 100 * reelDurMs));
                     await sleep(watchMs);
                     await page.keyboard.press("ArrowDown").catch(() => {
                     });
                     await sleep(randInt2(600, 1400));
                     watched++;
+                    totalWatchMs += watchMs;
+                    totalViewPct += reelViewPct;
                   }
                 } else {
                   console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
                 }
-                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", `EB watched ${watched} reel(s) via feed sub-setting`);
-                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", `EB watched ${watched} reel(s) via feed sub-setting`);
+                const avgPct = watched > 0 ? Math.round(totalViewPct / watched) : 0;
+                const totalSec = Math.round(totalWatchMs / 1e3);
+                const reelDetail = `EB watched ${watched} reel(s) \xB7 avg ${avgPct}% view \xB7 ${totalSec}s total`;
+                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", reelDetail);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", reelDetail);
                 console.log(`[engine] @${profile.username}: [EB-only] \u{1F3AC} watched ${watched} reels (feed sub-setting)`);
               } catch (e) {
                 console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
@@ -166518,7 +166582,7 @@ ${err?.stack ?? ""}`);
           }
         }
       }
-      if (s.followSuggestedUsersIfEmptyEnabled === true && !state.stop.stopped) {
+      if (s.followSuggestedUsersIfEmptyEnabled === true && !feedHadPosts && !state.stop.stopped) {
         try {
           await nav("https://www.instagram.com/explore/", "explore page");
           await sleep(actionDelay());

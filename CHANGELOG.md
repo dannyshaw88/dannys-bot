@@ -4,6 +4,30 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.326] — 2026-07-04
+
+### Fixed
+
+#### "If 0 Posts → Visit Explore Page" fired on every session regardless of feed content (browser mode)
+
+The browser-only explore block was gated only on `followSuggestedUsersIfEmptyEnabled === true` with no check on whether the feed actually had posts. Now the `viewTimelineFeed` block uses `waitFor('article', 8000)` (polling, not a one-shot query) to detect whether post cards rendered. The result is stored in `feedHadPosts` and the explore block is gated on `!feedHadPosts`. If `viewTimelineFeed` is disabled, `feedHadPosts` defaults to `true` so the explore visit is suppressed.
+
+#### Timeline post likes were logged but nothing was actually clicked (browser mode)
+
+`h.closest("button")?.click()` silently did nothing because Instagram wraps the heart SVG in a `span[role="button"]`, not a real `<button>`. The function still returned `true`, so `liked` was incremented for every attempt even with zero actual clicks. Fixed to use `closest('[role="button"], button')` and only return `true` when that button is actually found. Also dispatches a full `pointerdown → pointerup → click` sequence so React's synthetic event system picks it up.
+
+#### Reel log entry showed no view percentage or duration
+
+"EB watched 1 reel(s) via feed sub-setting" now includes the average view percentage and total watch time, e.g. "EB watched 3 reel(s) · avg 74% view · 31s total", matching the detail level of API-path reel log entries.
+
+### Added
+
+#### "Expand Caption%" sub-setting for View Timeline Feed (browser mode)
+
+New `expandCaptionPercentMin/Max` sub-setting row above the Reel Chance row. When configured, the engine scrolls back through the feed after the main scroll pass and clicks the "… more" button on posts with probability `expandCaptionPercent`%, simulating a user who reads the full caption of posts they find interesting. The button search matches any `[role="button"]` or `<button>` element whose trimmed text ends with "more" (handles ASCII "...", Unicode "…", and locale variants). Logged with Ghost Browser transport.
+
+---
+
 ## [1.1.325] — 2026-07-04
 
 ### Fixed

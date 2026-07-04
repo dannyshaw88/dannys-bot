@@ -2733,6 +2733,11 @@ class AutomationEngine {
         }
       }
 
+      // Tracks whether the home feed actually served posts this session.
+      // Defaults to true so the Explore page is NOT visited when viewTimelineFeed
+      // is disabled (i.e. we never checked the feed, so we can't say it was empty).
+      let feedHadPosts = true;
+
       // ── viewTimelineFeed — navigate to home, scroll through posts ─────────
       if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
         try {
@@ -2741,13 +2746,65 @@ class AutomationEngine {
             await nav("https://www.instagram.com/", "home feed");
             await sleep(actionDelay());
           }
+          // Wait for SPA content and detect whether the feed has any posts.
+          // waitFor polls every 400ms — if it returns true, articles exist.
+          // Using the poll result directly avoids the race where articles appear
+          // just after a one-shot querySelector check.
+          feedHadPosts = await waitFor('article', 8000);
           for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
             await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
             await sleep(actionDelay());
           }
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", `EB scrolled feed (${feedCount} scrolls)`);
-          console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}×`);
+          console.log(`[engine] @${profile.username}: [EB-only] 📰 scrolled feed ${feedCount}× — feed had posts: ${feedHadPosts}`);
+
+          // ── Expand Caption% sub-setting — click "more" on post captions ────────
+          // expandCaptionPercentMin/Max is the % chance per visible post that the
+          // "... more" button is clicked to expand its caption, simulating a reader
+          // who's interested enough to read the full text.
+          const ecPctRaw0 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMin ?? 0)));
+          const ecPctRaw1 = Math.min(100, Math.max(0, Number((s as any).expandCaptionPercentMax ?? 0)));
+          const ecPctMin = Math.min(ecPctRaw0, ecPctRaw1);
+          const ecPctMax = Math.max(ecPctRaw0, ecPctRaw1);
+          if (ecPctMax > 0 && !state.stop.stopped) {
+            const ecPct = ecPctMin + Math.random() * (ecPctMax - ecPctMin);
+            await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+            await sleep(600);
+            let expanded = 0;
+            for (let i = 0; i < feedCount && !state.stop.stopped; i++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
+              await sleep(500);
+              if (Math.random() * 100 < ecPct) {
+                const clicked: boolean = await page.evaluate(() => {
+                  const articles = Array.from(document.querySelectorAll('article'));
+                  const target = articles.find(a => {
+                    const rect = a.getBoundingClientRect();
+                    return rect.bottom > 0 && rect.top < window.innerHeight;
+                  });
+                  if (!target) return false;
+                  // The "more" expand button contains the word "more" — Instagram
+                  // uses plain ASCII ellipsis "..." or Unicode "…" depending on
+                  // locale/version, so check for "more" anywhere in the trimmed text.
+                  const moreBtn = Array.from(target.querySelectorAll(
+                    'div[role="button"], span[role="button"], button'
+                  )).find(el => {
+                    const text = (el.textContent ?? '').trim().toLowerCase();
+                    return text.endsWith('more') && text.length < 20;
+                  }) as HTMLElement | null;
+                  if (!moreBtn) return false;
+                  moreBtn.click();
+                  return true;
+                }).catch(() => false);
+                if (clicked) { expanded++; await sleep(randInt(600, 1200)); }
+              }
+            }
+            if (expanded > 0) {
+              this.logAction(profile.id, tool.id, "expand_caption", "", "", "", "ok", `EB expanded caption on ${expanded} post(s)`);
+              this.logGhostBrowserCall(profile.id, profile.username, "expand_caption", `EB expanded caption on ${expanded} post(s)`);
+              console.log(`[engine] @${profile.username}: [EB-only] 📖 expanded ${expanded} caption(s)`);
+            }
+          }
 
           // ── Like% sub-setting — like a % of scrolled posts ─────────────────
           // Uses likeTimelinePostsPercentMin/Max (the same keys shown in the UI
@@ -2763,22 +2820,42 @@ class AutomationEngine {
             const likeCount = Math.round(feedCount * likePct / 100);
             const likeDelayMinMs = Math.max(0, Number(s.likeTimelinePostsDelayMin ?? 3)) * 1000;
             const likeDelayMaxMs = Math.max(likeDelayMinMs, Number(s.likeTimelinePostsDelayMax ?? 8) * 1000);
-            // Scroll back to the top so we can walk down and find un-liked hearts.
+            // Scroll back to the top so we can walk down and double-click posts.
+            // Uses dblclick on the post image (Instagram's native double-tap-to-like
+            // gesture) rather than clicking the SVG heart directly — the heart is
+            // inside a span[role="button"], not a real <button>, so .closest("button")
+            // returns null and the click is silently swallowed.
             await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
             await sleep(800);
-            await waitFor('svg[aria-label="Like"]', 6000);
+            await waitFor('article', 6000);
             let liked = 0;
             for (let attempt = 0; liked < likeCount && attempt < likeCount * 6 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
               await sleep(700);
-              const clickedOne: boolean = await page.evaluate(() => {
-                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
-                const h = hearts[0] as SVGElement | undefined;
-                if (!h) return false;
-                (h.closest("button") as HTMLElement | null)?.click();
+              const likedOne: boolean = await page.evaluate(() => {
+                const articles = Array.from(document.querySelectorAll('article'));
+                // Find an article in the viewport that still has an un-liked heart.
+                const target = articles.find(a => {
+                  if (!a.querySelector('svg[aria-label="Like"]')) return false;
+                  const rect = a.getBoundingClientRect();
+                  return rect.bottom > 0 && rect.top < window.innerHeight;
+                });
+                if (!target) return false;
+                const heartSvg = target.querySelector('svg[aria-label="Like"]') as SVGElement | null;
+                if (!heartSvg) return false;
+                // Find the button ancestor — Instagram uses both <button> and
+                // [role="button"] wrappers depending on the page variant.
+                const btn = heartSvg.closest<HTMLElement>('[role="button"], button');
+                if (!btn) return false;
+                // Dispatch a full pointer sequence so React's synthetic event
+                // system picks it up — plain .click() can be swallowed on
+                // elements that listen to pointerdown/up rather than click.
+                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                btn.click();
                 return true;
               }).catch(() => false);
-              if (clickedOne) {
+              if (likedOne) {
                 liked++;
                 await sleep(likeDelayMinMs + Math.random() * Math.max(0, likeDelayMaxMs - likeDelayMinMs));
               }
@@ -2821,21 +2898,29 @@ class AutomationEngine {
                 await sleep(actionDelay());
                 const videoFound = await waitFor("video", 8000);
                 let watched = 0;
+                let totalWatchMs = 0;
+                let totalViewPct = 0;
                 if (videoFound) {
                   for (let i = 0; i < reelCount && !state.stop.stopped; i++) {
                     // Dwell for reelViewPct% of an estimated 8–20s reel duration.
                     const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
-                    const watchMs = Math.max(2000, Math.round((reelViewPct / 100) * randInt(8000, 20000)));
+                    const reelDurMs = randInt(8000, 20000);
+                    const watchMs = Math.max(2000, Math.round((reelViewPct / 100) * reelDurMs));
                     await sleep(watchMs);
                     await page.keyboard.press("ArrowDown").catch(() => {});
                     await sleep(randInt(600, 1400));
                     watched++;
+                    totalWatchMs += watchMs;
+                    totalViewPct += reelViewPct;
                   }
                 } else {
                   console.log(`[engine] @${profile.username}: [EB-only] no video found on /reels/, skipping`);
                 }
-                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", `EB watched ${watched} reel(s) via feed sub-setting`);
-                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", `EB watched ${watched} reel(s) via feed sub-setting`);
+                const avgPct = watched > 0 ? Math.round(totalViewPct / watched) : 0;
+                const totalSec = Math.round(totalWatchMs / 1000);
+                const reelDetail = `EB watched ${watched} reel(s) · avg ${avgPct}% view · ${totalSec}s total`;
+                this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", reelDetail);
+                this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", reelDetail);
                 console.log(`[engine] @${profile.username}: [EB-only] 🎬 watched ${watched} reels (feed sub-setting)`);
               } catch (e: any) {
                 console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
@@ -3055,8 +3140,10 @@ class AutomationEngine {
         }
       }
 
-      // ── explorePage — visit Explore, scroll & click into a few posts ─────
-      if (s.followSuggestedUsersIfEmptyEnabled === true && !state.stop.stopped) {
+      // ── explorePage — visit Explore only when the feed was genuinely empty ──
+      // feedHadPosts is set by the viewTimelineFeed block above. If that block
+      // was skipped (disabled), feedHadPosts stays true so we never visit Explore.
+      if (s.followSuggestedUsersIfEmptyEnabled === true && !feedHadPosts && !state.stop.stopped) {
         try {
           await nav("https://www.instagram.com/explore/", "explore page");
           await sleep(actionDelay());
