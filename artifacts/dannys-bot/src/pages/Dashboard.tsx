@@ -90,10 +90,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
           "Also added skipTaskbar: true for silentMode windows to keep them out of the Windows taskbar and alt-tab switcher.",
         ],
       },
-      {
-        category: "Improved",
-        text: "Accounts list now shows a 'NO API' badge next to any account that has Disable API mode enabled, so you can see at a glance which accounts are running browser-only without opening their settings.",
-      },
     ],
   },
   {
