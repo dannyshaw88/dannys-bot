@@ -153573,7 +153573,8 @@ var InstagramWebClient = class {
   // Simulates a user opening the DM inbox, then tapping into `count` threads.
   // Produces N+1 API call log entries: 1 × GetDirectMessages (inbox overview)
   // + N × GetDirectMessageThread (one per thread opened).
-  // Calls GetDirectMessages directly — no NotificationsBadge warm-up.
+  // Runs _buildWarmedIgClient() first (NotificationsBadge warm-up) to lift
+  // the 4415001 "Prompt has contribution" gate on direct_v2/inbox/.
   // Returns the full mapped inbox thread list so auto-reply can reuse it
   // without a second inbox fetch.
   async getDirectMessagesInternal(count = 5) {
@@ -153582,6 +153583,7 @@ var InstagramWebClient = class {
       console.warn("[webClient] getDirectMessagesInternal: no mobile session \u2014 skipping DM check");
       return { count: 0, ok: false, threads: [] };
     }
+    await this._buildWarmedIgClient();
     const dsMatch = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/);
     const myUserId = dsMatch ? dsMatch[1].trim() : "";
     const mapThread = (thread) => {
@@ -163959,6 +163961,51 @@ var proxySlotManager = new ProxySlotManager();
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import * as fs3 from "fs";
+var EbIpcPage = class {
+  constructor(profileId, ebIpcPort) {
+    this.profileId = profileId;
+    this.ebIpcPort = ebIpcPort;
+  }
+  _url = "";
+  url() {
+    return this._url;
+  }
+  async goto(url2) {
+    await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/navigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: this.profileId, url: url2 }),
+      signal: AbortSignal.timeout(3e4)
+    });
+    this._url = url2;
+    await sleep(2500);
+  }
+  async evaluate(fn, ...args) {
+    const argsLiteral = args.map((a2) => JSON.stringify(a2)).join(", ");
+    const script = `(${fn.toString()})(${argsLiteral})`;
+    const r2 = await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/evaluate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: this.profileId, script }),
+      signal: AbortSignal.timeout(3e4)
+    });
+    const j = await r2.json().catch(() => ({}));
+    if (j?.result && typeof j.result === "object" && j.result.__error) {
+      throw new Error(j.result.__error);
+    }
+    return j?.result;
+  }
+  keyboard = {
+    press: async (key) => {
+      const keyMap = { Escape: 27, ArrowRight: 39, ArrowLeft: 37 };
+      await this.evaluate((k2, code) => {
+        const ev = new KeyboardEvent("keydown", { key: k2, code: k2, keyCode: code, which: code, bubbles: true });
+        document.dispatchEvent(ev);
+      }, key, keyMap[key] ?? 0).catch(() => {
+      });
+    }
+  };
+};
 function mediaIdToShortcode(id) {
   const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
   const numericPart = id.split("_")[0];
@@ -164079,7 +164126,7 @@ var AutomationEngine = class {
    *  → Follows" enabled.  Calls the EB IPC server (Electron main process) which manages
    *  the BrowserWindow lifecycle.  Resolves with the same shape as client.followUser(). */
   async followUserViaBrowser(profileId, targetUsername, proxy, igApiCookies) {
-    const ebIpcPort = process.env.n;
+    const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
       return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
     }
@@ -164105,12 +164152,12 @@ var AutomationEngine = class {
     }
   }
   async postPhotoViaBrowser(profileId, imageBuffer, caption) {
-    const ebIpcPort = process.env.n;
+    const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
       return { ok: false, message: "Browser-post not available outside Electron" };
     }
     try {
-      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/n`, {
+      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-post`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -164124,6 +164171,51 @@ var AutomationEngine = class {
       return await r2.json();
     } catch (err) {
       return { ok: false, message: `Browser-post error: ${err?.message}` };
+    }
+  }
+  /**
+   * Ensures a silent (never-shown) EB window is open for this profile, backed
+   * by the account's normal EB session partition/cookies. Safe to call
+   * repeatedly — /eb/open is idempotent (focuses/no-ops if already open).
+   * Returns false if EB_IPC_PORT is not set (dev/Replit — no Electron process).
+   */
+  async ensureSilentEbOpen(profile) {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) return false;
+    try {
+      const stateRes = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/state?profileId=${profile.id}`).catch(() => null);
+      const state = stateRes && stateRes.ok ? await stateRes.json().catch(() => null) : null;
+      if (state?.open) return true;
+      const p = profile;
+      const proxy = p.proxyHost && p.proxyPort ? {
+        host: p.proxyHost,
+        port: p.proxyPort,
+        user: p.proxyUsername ?? void 0,
+        pass: p.proxyPassword ?? void 0,
+        type: p.proxyType ?? "http"
+      } : void 0;
+      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: profile.id,
+          username: profile.username,
+          password: p.password ?? "",
+          twoFAKey: p.twoFASecretKey ?? "",
+          proxy,
+          userAgent: p.userAgent ?? void 0,
+          apiUA: p.userAgentApi ?? "",
+          ebFingerprint: p.ebFingerprint ?? void 0,
+          silentMode: true
+        }),
+        signal: AbortSignal.timeout(2e4)
+      });
+      if (!r2.ok) return false;
+      await sleep(3e3);
+      return true;
+    } catch (err) {
+      console.warn(`[engine] @${profile.username}: ensureSilentEbOpen error: ${err?.message}`);
+      return false;
     }
   }
   cookieBakerStates = /* @__PURE__ */ new Map();
@@ -165538,6 +165630,10 @@ ${err?.stack ?? ""}`);
   }
   // ── Ensure logged-in client ───────────────────────────────────────────────
   async ensureClient(profile, state) {
+    if (profile.apiLimits?.disableApi === true) {
+      console.log(`[engine] @${profile.username}: Disable API mode \u2014 all mobile API calls blocked`);
+      return null;
+    }
     const proxyUrl = await this.buildProxyUrl(profile);
     if (!proxyUrl) {
       console.error(`[engine] @${profile.username}: no proxy assigned \u2014 refusing to connect without proxy`);
@@ -166028,20 +166124,369 @@ ${err?.stack ?? ""}`);
     const skipChance = randInt2(min, max);
     return Math.random() * 100 < skipChance;
   }
+  // Browser-only human session used when Disable API is on.
+  // Navigates the EB to Instagram pages to simulate human presence without any mobile API call.
+  async runBrowserOnlyHumanSession(profile, tool, state) {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    let page;
+    if (ebIpcPort) {
+      const opened = await this.ensureSilentEbOpen(profile);
+      if (!opened) {
+        console.log(`[engine] @${profile.username}: [EB-only] could not open silent EB \u2014 skipping browser human session`);
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API \u2014 silent EB open failed, no browser human session run");
+        return;
+      }
+      page = new EbIpcPage(profile.id, ebIpcPort);
+    } else {
+      const browser = getExistingBrowser(profile.id);
+      if (!browser) {
+        console.log(`[engine] @${profile.username}: [EB-only] EB not open \u2014 skipping browser human session`);
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API \u2014 EB not open, no browser human session run");
+        return;
+      }
+      const pages = await browser.pages();
+      page = pages[0];
+      if (!page) {
+        console.log(`[engine] @${profile.username}: [EB-only] no EB page found`);
+        return;
+      }
+    }
+    const s = tool.settings;
+    const limits = profile.apiLimits ?? {};
+    const toMs = (v3) => v3 < 1e3 ? v3 * 1e3 : v3;
+    const winMin = toMs(Number(limits.everySecondsMin ?? 8));
+    const winMax = toMs(Number(limits.everySecondsMax ?? 20));
+    const rMin = Math.max(1, Number(limits.requestsMin ?? 1));
+    const rMax = Math.max(rMin, Number(limits.requestsMax ?? 1));
+    const actionDelay = () => randInt2(
+      Math.max(1e3, Math.round(winMin / rMax)),
+      Math.max(2e3, Math.round(winMax / rMin))
+    );
+    try {
+      const nav = async (url2, label) => {
+        console.log(`[engine] @${profile.username}: \u{1F310} [EB-only] \u2192 ${label}`);
+        await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 3e4 });
+      };
+      if (s.humanSessionEnabled === true && !state.stop.stopped) {
+        try {
+          await nav("https://www.instagram.com/", "home (audit)");
+          await sleep(actionDelay());
+          await nav(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
+          await sleep(actionDelay());
+          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB \u2014 audit: home + own profile");
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+        }
+      }
+      if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
+        try {
+          const feedCount = randInt2(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
+          if (page.url() !== "https://www.instagram.com/" && !page.url().startsWith("https://www.instagram.com/?")) {
+            await nav("https://www.instagram.com/", "home feed");
+            await sleep(actionDelay());
+          }
+          for (let i2 = 0; i2 < feedCount && !state.stop.stopped; i2++) {
+            await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250));
+            await sleep(actionDelay());
+          }
+          this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `EB scrolled feed (${feedCount} scrolls)`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} scrolled feed ${feedCount}\xD7`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
+        }
+      }
+      if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
+        try {
+          const storyCount = randInt2(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
+          if (!page.url().startsWith("https://www.instagram.com/")) {
+            await nav("https://www.instagram.com/", "home (stories)");
+            await sleep(actionDelay());
+          }
+          let storiesViewed = 0;
+          for (let i2 = 0; i2 < storyCount && !state.stop.stopped; i2++) {
+            try {
+              const clicked = await page.evaluate((idx) => {
+                const btns = Array.from(document.querySelectorAll('div[role="button"]'));
+                const btn = btns[idx];
+                if (!btn) return false;
+                btn.click();
+                return true;
+              }, i2).catch(() => false);
+              if (!clicked) break;
+              await sleep(actionDelay());
+              const slides = randInt2(2, 5);
+              for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
+                await page.keyboard.press("ArrowRight");
+                await sleep(randInt2(1500, 3500));
+              }
+              await page.keyboard.press("Escape");
+              await sleep(actionDelay());
+              storiesViewed++;
+            } catch {
+            }
+          }
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `EB viewed ${storiesViewed} story tray item(s)`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u{1F4D6} viewed ${storiesViewed} stories`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: [EB-only] checkTimelineStories error: ${e?.message}`);
+        }
+      }
+      if (s.checkDmEnabled === true && !state.stop.stopped) {
+        try {
+          const dmCount = randInt2(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
+          await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
+          await sleep(actionDelay());
+          let opened = 0;
+          for (let i2 = 0; i2 < dmCount && !state.stop.stopped; i2++) {
+            try {
+              const clicked = await page.evaluate((idx) => {
+                const threads = Array.from(document.querySelectorAll('div[role="listitem"]'));
+                const el = threads[idx];
+                if (!el) return false;
+                el.click();
+                return true;
+              }, i2).catch(() => false);
+              if (!clicked) break;
+              await sleep(actionDelay());
+              opened++;
+            } catch {
+            }
+          }
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `EB opened ${opened}/${dmCount} DM thread(s)`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u{1F4AC} opened ${opened} DM threads`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: [EB-only] checkDm error: ${e?.message}`);
+        }
+      }
+      if (s.likeTimelinePostsEnabled === true && !state.stop.stopped) {
+        const likeCount = randInt2(Number(s.likeTimelinePostsMin ?? 0), Number(s.likeTimelinePostsMax ?? 0));
+        if (likeCount > 0) {
+          try {
+            if (!page.url().startsWith("https://www.instagram.com/")) {
+              await nav("https://www.instagram.com/", "home (likes)");
+              await sleep(actionDelay());
+            }
+            let liked = 0;
+            for (let attempt = 0; liked < likeCount && attempt < likeCount * 4 && !state.stop.stopped; attempt++) {
+              await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {
+              });
+              await sleep(500);
+              const clickedOne = await page.evaluate(() => {
+                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
+                const h4 = hearts[0];
+                if (!h4) return false;
+                h4.closest("button")?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) {
+                liked++;
+                await sleep(actionDelay());
+              }
+            }
+            for (let i2 = 0; i2 < liked; i2++) await storage.incrementStat(profile.id, "like").catch(() => {
+            });
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);
+            console.log(`[engine] @${profile.username}: [EB-only] \u2764\uFE0F liked ${liked} posts`);
+          } catch (e) {
+            console.warn(`[engine] @${profile.username}: [EB-only] likeTimelinePosts error: ${e?.message}`);
+          }
+        }
+      }
+      if (!state.stop.stopped) {
+        const hsTools = await storage.getToolsByProfile(profile.id);
+        const followTool = hsTools.find((t2) => t2.type === "follow");
+        if (followTool?.enabled === true && !state.stop.stopped) {
+          const execFollowTool = (await storage.getToolsByProfile(profile.id)).find((t2) => t2.type === "follow");
+          if (execFollowTool?.enabled) {
+            await this.runBrowserFollowSession(profile, execFollowTool, page, actionDelay, state).catch((e) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] follow session error: ${e?.message}`);
+            });
+          }
+        }
+        const unfollowTool = hsTools.find((t2) => t2.type === "unfollow");
+        if (unfollowTool?.enabled === true && !state.stop.stopped) {
+          const execUnfollowTool = (await storage.getToolsByProfile(profile.id)).find((t2) => t2.type === "unfollow");
+          if (execUnfollowTool?.enabled) {
+            await this.runBrowserUnfollowSession(profile, execUnfollowTool, page, actionDelay, state).catch((e) => {
+              console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
+            });
+          }
+        }
+      }
+      console.log(`[engine] @${profile.username}: \u2705 [EB-only] browser human session complete`);
+    } catch (e) {
+      console.warn(`[engine] @${profile.username}: [EB-only] browser human session error: ${e?.message}`);
+    }
+  }
+  // ── Browser-only follow session (Disable API mode) ─────────────────────────
+  async runBrowserFollowSession(profile, followTool, page, actionDelay, state) {
+    const fs6 = followTool.settings;
+    const globalSettings2 = await storage.getGlobalSettings();
+    const hikerEnabled = globalSettings2.hikerApiEnabled === "true";
+    const hikerToken = globalSettings2.hikerApiToken ?? "";
+    if (!hikerEnabled || !hikerToken) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 HikerAPI disabled/no token, cannot get candidates`);
+      this.logAction(profile.id, followTool.id, "follow", "", "", "", "skip", "Browser-only follow: HikerAPI required for candidate scraping");
+      return;
+    }
+    const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+    const hikerClient2 = new HikerApiClient2(hikerToken);
+    const sources2 = await storage.getSourcesByTool(followTool.id);
+    const enabledSources = sources2.filter((s) => s.enabled !== false);
+    if (!enabledSources.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 no enabled sources`);
+      return;
+    }
+    const source = this.pickSource(sources2);
+    const processCount = randInt2(Number(fs6.processMin ?? 3), Number(fs6.processMax ?? 8));
+    const maxPerDay = randInt2(Number(fs6.maxPerDayMin ?? 0), Number(fs6.maxPerDayMax ?? 0));
+    const maxPerHour = randInt2(Number(fs6.maxPerHourMin ?? 0), Number(fs6.maxPerHourMax ?? 0));
+    if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 daily limit hit`);
+      return;
+    }
+    if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) {
+      console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 hourly limit hit`);
+      return;
+    }
+    let candidates = [];
+    try {
+      if (source.type === "hashtag") {
+        const cursor = await storage.getHashtagCursor(source.value);
+        const result = await hikerClient2.getHashtagUsers(source.value, processCount * 3, cursor);
+        candidates = result.users;
+        if (result.nextCursor) await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {
+        });
+      } else if (source.type === "account") {
+        const result = await hikerClient2.getFollowers(source.value, processCount * 3);
+        candidates = result.users;
+      } else {
+        console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 unsupported source type: ${source.type}`);
+        return;
+      }
+    } catch (e) {
+      console.warn(`[engine] @${profile.username}: [EB-only] follow scrape error: ${e?.message}`);
+      return;
+    }
+    const alreadyFollowed = await storage.getFollowedUsersByProfile(profile.id, 1e5);
+    const followedSet = new Set(alreadyFollowed.map((u) => u.instagramUsername.toLowerCase()));
+    candidates = candidates.filter((c3) => !followedSet.has(c3.username.toLowerCase())).slice(0, processCount);
+    console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 ${candidates.length} candidates from ${source.type}:${source.value}`);
+    let followed = 0;
+    for (const candidate of candidates) {
+      if (state.stop.stopped || maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
+      if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) break;
+      try {
+        await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25e3 });
+        await sleep(randInt2(1500, 3e3));
+        const clicked = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll("button"));
+          const btn = btns.find((b3) => b3.textContent?.trim() === "Follow");
+          if (btn) {
+            btn.click();
+            return true;
+          }
+          return false;
+        }).catch(() => false);
+        if (clicked) {
+          followed++;
+          this.bump(state);
+          await storage.createFollowedUser({
+            profileId: profile.id,
+            instagramUsername: candidate.username,
+            instagramUserId: String(candidate.pk ?? ""),
+            sourceValue: source.value,
+            sourceType: source.type,
+            followedAt: (/* @__PURE__ */ new Date()).toISOString()
+          }).catch(() => {
+          });
+          await storage.incrementStat(profile.id, "follow").catch(() => {
+          });
+          this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "ok", `EB followed @${candidate.username} [${followed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u2795 followed @${candidate.username}`);
+        } else {
+          console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 no Follow button on @${candidate.username} (already following or private)`);
+          this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button \u2014 already following or private");
+        }
+        await sleep(actionDelay());
+      } catch (e) {
+        console.warn(`[engine] @${profile.username}: [EB-only] follow @${candidate.username} error: ${e?.message}`);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] follow session done \u2014 ${followed}/${candidates.length} followed`);
+  }
+  // ── Browser-only unfollow session (Disable API mode) ───────────────────────
+  async runBrowserUnfollowSession(profile, unfollowTool, page, actionDelay, state) {
+    const us = unfollowTool.settings;
+    const processCount = randInt2(Number(us.processMin ?? 3), Number(us.processMax ?? 8));
+    const maxPerDay = randInt2(Number(us.maxPerDayMin ?? 0), Number(us.maxPerDayMax ?? 0));
+    const minAgeDays = Number(us.minFollowAgeDays ?? 3);
+    if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
+      console.log(`[engine] @${profile.username}: [EB-only] unfollow \u2014 daily limit hit`);
+      return;
+    }
+    const all = await storage.getFollowedUsersByProfile(profile.id, 1e5);
+    const cutoff = Date.now() - minAgeDays * 864e5;
+    const candidates = all.filter((u) => !u.unfollowedAt && new Date(u.followedAt).getTime() < cutoff).slice(0, processCount);
+    if (!candidates.length) {
+      console.log(`[engine] @${profile.username}: [EB-only] unfollow \u2014 no candidates older than ${minAgeDays}d`);
+      return;
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] unfollow \u2014 ${candidates.length} candidates`);
+    let unfollowed = 0;
+    for (const fu of candidates) {
+      if (state.stop.stopped || maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
+      try {
+        await page.goto(`https://www.instagram.com/${fu.instagramUsername}/`, { waitUntil: "domcontentloaded", timeout: 25e3 });
+        await sleep(randInt2(1500, 3e3));
+        const clicked = await page.evaluate(async () => {
+          const btns = Array.from(document.querySelectorAll("button"));
+          const followingBtn = btns.find((b3) => b3.textContent?.trim() === "Following");
+          if (!followingBtn) return false;
+          followingBtn.click();
+          await new Promise((r2) => setTimeout(r2, 1200));
+          const allBtns = Array.from(document.querySelectorAll("button"));
+          const unfollowBtn = allBtns.find((b3) => b3.textContent?.trim() === "Unfollow");
+          if (!unfollowBtn) return false;
+          unfollowBtn.click();
+          return true;
+        }).catch(() => false);
+        if (clicked) {
+          unfollowed++;
+          this.bump(state);
+          await storage.incrementStat(profile.id, "unfollow").catch(() => {
+          });
+          this.logAction(profile.id, unfollowTool.id, "unfollow", fu.instagramUsername, "", "", "ok", `EB unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: [EB-only] \u2796 unfollowed @${fu.instagramUsername}`);
+        } else {
+          console.log(`[engine] @${profile.username}: [EB-only] unfollow \u2014 no Following button on @${fu.instagramUsername}`);
+        }
+        await sleep(actionDelay());
+      } catch (e) {
+        console.warn(`[engine] @${profile.username}: [EB-only] unfollow @${fu.instagramUsername} error: ${e?.message}`);
+      }
+    }
+    console.log(`[engine] @${profile.username}: [EB-only] unfollow session done \u2014 ${unfollowed}/${candidates.length} unfollowed`);
+  }
   async runHumanSessionTools(profile, tool, state) {
     const s = tool.settings;
+    const disableApi = profile.apiLimits?.disableApi === true;
     const client = await this.ensureClient(profile, state);
     if (!client) {
-      this.logAction(
-        profile.id,
-        tool.id,
-        "session_skipped",
-        "",
-        "",
-        "",
-        "warn",
-        "Human Session skipped \u2014 no Instagram session found. Run Verify Credentials to establish one."
-      );
+      if (disableApi) {
+        await this.runBrowserOnlyHumanSession(profile, tool, state);
+      } else {
+        this.logAction(
+          profile.id,
+          tool.id,
+          "session_skipped",
+          "",
+          "",
+          "",
+          "warn",
+          "Human Session skipped \u2014 no Instagram session found. Run Verify Credentials to establish one."
+        );
+      }
       return;
     }
     let sessionError = null;
@@ -170492,6 +170937,14 @@ ${stamp_l}` : stamp_l });
             if (igDid) cookieParts.push(`ig_did=${igDid}`);
             const freshCookies = cookieParts.join("; ");
             await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
+            if (effectiveProfile.apiLimits?.disableApi === true) {
+              console.log(`[verify:${profileId}] @${profile.username} \u2014 Disable API mode: skipping mobile API, marking valid from EB cookies`);
+              const disableApiMsg = `@${profile.username} \u2014 EB login confirmed (Disable API mode \u2014 browser-only)`;
+              sendLoginDone(profileId, true, disableApiMsg);
+              await storage.updateProfile(profile.id, { accountStatus: "valid", statusMessage: disableApiMsg, credentialsDirty: false });
+              verifyInFlight.delete(profileId);
+              return;
+            }
             void (async () => {
               try {
                 const _proxyStr = proxyConfig ? `${proxyConfig.host}:${proxyConfig.port}` : null;
@@ -172288,9 +172741,14 @@ ${stamp}` : stamp;
             if (mid) cookieParts.push(`mid=${mid}`);
             const freshCookies = cookieParts.join("; ");
             await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
-            const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies };
-            const apiResult = await verifyInstagramCredentials(profileWithCookies);
-            result = { ...apiResult, igApiCookies: freshCookies };
+            if (effectiveP.apiLimits?.disableApi === true) {
+              console.log(`[verify-all] @${profile.username} \u2014 Disable API mode: skipping mobile API, marking valid from EB cookies`);
+              result = { ok: true, accountStatus: "valid", message: `@${profile.username} \u2014 EB login confirmed (Disable API mode \u2014 browser-only)`, igApiCookies: freshCookies };
+            } else {
+              const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies };
+              const apiResult = await verifyInstagramCredentials(profileWithCookies);
+              result = { ...apiResult, igApiCookies: freshCookies };
+            }
           }
         } else {
           const msg = bulkLoginResult.message ?? "";

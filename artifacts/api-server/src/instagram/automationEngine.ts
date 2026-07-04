@@ -2,22 +2,18 @@
 // ║                  ARCHITECTURE — READ THIS BEFORE TOUCHING ANYTHING          ║
 // ╠══════════════════════════════════════════════════════════════════════════════╣
 // ║                                                                              ║
-// ║  THIS IS A MOBILE API BOT.                                                  ║
+// ║  DEFAULT MODE IS A MOBILE API BOT.                                          ║
 // ║                                                                              ║
-// ║  ALL INSTAGRAM ACTIONS GO THROUGH THE MOBILE PRIVATE API (i.instagram.com). ║
-// ║  This emulates a real Android Instagram app.  Every action — follow,        ║
-// ║  unfollow, like, comment, DM, story view, profile read — uses the mobile    ║
-// ║  API.  There are NO exceptions.                                              ║
+// ║  By default, all Instagram actions go through the mobile private API       ║
+// ║  (i.instagram.com), emulating a real Android Instagram app.                 ║
 // ║                                                                              ║
-// ║  THE EMBEDDED BROWSER (EB) IS ONLY USED FOR:                                ║
-// ║    • Manual browsing by the user (they are in control)                      ║
-// ║    • Completing login challenges / CAPTCHAs so the API session recovers     ║
-// ║    • NOTHING ELSE — the EB never performs automated actions                 ║
-// ║                                                                              ║
-// ║  NEVER:                                                                     ║
-// ║    • Use Puppeteer / browser automation for any action                      ║
-// ║    • Fall back to the EB browser when an API call fails                     ║
-// ║    • Use www.instagram.com endpoints for automated actions                  ║
+// ║  EXCEPTION — "Disable API" per-account mode:                                ║
+// ║  When a profile has Disable API enabled, actions for that profile run      ║
+// ║  through the embedded browser (EB) instead — this is intentional and       ║
+// ║  supported (see runBrowserOnlyHumanSession / runBrowserFollowSession /      ║
+// ║  runBrowserUnfollowSession below). The EB is driven via the ebManager.ts    ║
+// ║  IPC bridge (navigate/evaluate), optionally with silentMode so no window   ║
+// ║  is shown on screen. This is the ONLY case where EB automation is allowed. ║
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import { storage } from "../storage";
@@ -34,6 +30,63 @@ import { profileUsernameCache } from "../lib/profileUsernameCache";
 import { proxySlotManager } from "./proxySlotManager";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
+
+/**
+ * Minimal Puppeteer-`page`-compatible shim backed by ebManager.ts's IPC bridge
+ * (/eb/navigate, /eb/evaluate). Used so the browser-only Human Session code
+ * below can drive the REAL Electron EB window (silent or visible) instead of
+ * the disconnected standalone-Puppeteer session map in browserSession.ts.
+ * Only supports the subset of the page API actually used here: goto/url/
+ * evaluate/keyboard.press. All DOM querying+clicking must happen INSIDE the
+ * evaluate() callback (no element handles cross the IPC boundary).
+ */
+class EbIpcPage {
+  private _url = "";
+  constructor(private profileId: number, private ebIpcPort: string) {}
+
+  url(): string {
+    return this._url;
+  }
+
+  async goto(url: string): Promise<void> {
+    await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/navigate`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ profileId: this.profileId, url }),
+      signal:  AbortSignal.timeout(30_000),
+    });
+    this._url = url;
+    // /eb/navigate is fire-and-forget on the Electron side (loadURL, not awaited
+    // to completion) — give the page a moment to reach a usable DOM state.
+    await sleep(2500);
+  }
+
+  async evaluate<T = any>(fn: (...args: any[]) => T, ...args: any[]): Promise<T> {
+    const argsLiteral = args.map(a => JSON.stringify(a)).join(", ");
+    const script = `(${fn.toString()})(${argsLiteral})`;
+    const r = await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/evaluate`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ profileId: this.profileId, script }),
+      signal:  AbortSignal.timeout(30_000),
+    });
+    const j = await r.json().catch(() => ({})) as { result?: any };
+    if (j?.result && typeof j.result === "object" && j.result.__error) {
+      throw new Error(j.result.__error);
+    }
+    return j?.result as T;
+  }
+
+  keyboard = {
+    press: async (key: "Escape" | "ArrowRight" | "ArrowLeft"): Promise<void> => {
+      const keyMap: Record<string, number> = { Escape: 27, ArrowRight: 39, ArrowLeft: 37 };
+      await this.evaluate((k: string, code: number) => {
+        const ev = new KeyboardEvent("keydown", { key: k, code: k, keyCode: code, which: code, bubbles: true });
+        document.dispatchEvent(ev);
+      }, key, keyMap[key] ?? 0).catch(() => {});
+    },
+  };
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -295,6 +348,55 @@ class AutomationEngine {
       return { ok: false, message: `Browser-post error: ${err?.message}` };
     }
   }
+
+  /**
+   * Ensures a silent (never-shown) EB window is open for this profile, backed
+   * by the account's normal EB session partition/cookies. Safe to call
+   * repeatedly — /eb/open is idempotent (focuses/no-ops if already open).
+   * Returns false if EB_IPC_PORT is not set (dev/Replit — no Electron process).
+   */
+  private async ensureSilentEbOpen(profile: Profile): Promise<boolean> {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) return false;
+    try {
+      const stateRes = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/state?profileId=${profile.id}`).catch(() => null);
+      const state = stateRes && stateRes.ok
+        ? await stateRes.json().catch(() => null) as { open?: boolean } | null
+        : null;
+      if (state?.open) return true;
+
+      const p = profile as any;
+      const proxy = (p.proxyHost && p.proxyPort) ? {
+        host: p.proxyHost, port: p.proxyPort, user: p.proxyUsername ?? undefined,
+        pass: p.proxyPassword ?? undefined, type: p.proxyType ?? "http",
+      } : undefined;
+      const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/open`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          profileId:     profile.id,
+          username:      profile.username,
+          password:      p.password ?? "",
+          twoFAKey:      p.twoFASecretKey ?? "",
+          proxy,
+          userAgent:     p.userAgent ?? undefined,
+          apiUA:         p.userAgentApi ?? "",
+          ebFingerprint: p.ebFingerprint ?? undefined,
+          silentMode:    true,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!r.ok) return false;
+      // openEbWindow is fire-and-forget on the Electron side; give Chromium a
+      // moment to finish loading before the caller starts navigating/evaluating.
+      await sleep(3000);
+      return true;
+    } catch (err: any) {
+      console.warn(`[engine] @${profile.username}: ensureSilentEbOpen error: ${err?.message}`);
+      return false;
+    }
+  }
+
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
   private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
   private cookieBakerActivity  = new Map<number, CookieBakerSessionActivity[]>(); // last sessions per profile
@@ -2515,11 +2617,35 @@ class AutomationEngine {
   // Browser-only human session used when Disable API is on.
   // Navigates the EB to Instagram pages to simulate human presence without any mobile API call.
   private async runBrowserOnlyHumanSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
-    const browser = getExistingBrowser(profile.id);
-    if (!browser) {
-      console.log(`[engine] @${profile.username}: [EB-only] EB not open — skipping browser human session`);
-      this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API — EB not open, no browser human session run");
-      return;
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    let page: any;
+    if (ebIpcPort) {
+      // Electron desktop app — drive the REAL EB via the ebManager.ts IPC bridge.
+      // Opens a silent (never-shown) window if one isn't already open for this
+      // account, so this runs fully in the background regardless of whether the
+      // user has the EB panel open on screen.
+      const opened = await this.ensureSilentEbOpen(profile);
+      if (!opened) {
+        console.log(`[engine] @${profile.username}: [EB-only] could not open silent EB — skipping browser human session`);
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API — silent EB open failed, no browser human session run");
+        return;
+      }
+      page = new EbIpcPage(profile.id, ebIpcPort);
+    } else {
+      // Dev / Replit (no Electron process) — fall back to the standalone
+      // Puppeteer session, if one happens to be open.
+      const browser = getExistingBrowser(profile.id);
+      if (!browser) {
+        console.log(`[engine] @${profile.username}: [EB-only] EB not open — skipping browser human session`);
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API — EB not open, no browser human session run");
+        return;
+      }
+      const pages: any[] = await browser.pages();
+      page = pages[0];
+      if (!page) {
+        console.log(`[engine] @${profile.username}: [EB-only] no EB page found`);
+        return;
+      }
     }
     const s = tool.settings as any;
     const limits = (profile.apiLimits ?? {}) as any;
@@ -2538,13 +2664,6 @@ class AutomationEngine {
     );
 
     try {
-      const pages: any[] = await browser.pages();
-      const page = pages[0];
-      if (!page) {
-        console.log(`[engine] @${profile.username}: [EB-only] no EB page found`);
-        return;
-      }
-
       const nav = async (url: string, label: string) => {
         console.log(`[engine] @${profile.username}: 🌐 [EB-only] → ${label}`);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -2590,22 +2709,29 @@ class AutomationEngine {
             await nav("https://www.instagram.com/", "home (stories)");
             await sleep(actionDelay());
           }
-          // Story circles live in the tray at the top of the home feed
-          const storyBtns: any[] = await page.$$('div[role="button"]').catch(() => []);
-          const toView = storyBtns.slice(0, storyCount);
+          // Story circles live in the tray at the top of the home feed.
+          // Click-by-index happens INSIDE evaluate() so no element handle needs
+          // to cross the IPC boundary — works identically for the real EB and
+          // the Puppeteer fallback.
           let storiesViewed = 0;
-          for (const btn of toView) {
-            if (state.stop.stopped) break;
+          for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
             try {
-              await btn.click();
+              const clicked: boolean = await page.evaluate((idx: number) => {
+                const btns = Array.from(document.querySelectorAll('div[role="button"]'));
+                const btn = btns[idx] as HTMLElement | undefined;
+                if (!btn) return false;
+                btn.click();
+                return true;
+              }, i).catch(() => false);
+              if (!clicked) break;
               await sleep(actionDelay());
               // Advance through a few slides then close
               const slides = randInt(2, 5);
               for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
-                await page.keyboard.press("ArrowRight").catch(() => {});
+                await page.keyboard.press("ArrowRight");
                 await sleep(randInt(1500, 3500));
               }
-              await page.keyboard.press("Escape").catch(() => {});
+              await page.keyboard.press("Escape");
               await sleep(actionDelay());
               storiesViewed++;
             } catch {}
@@ -2623,11 +2749,17 @@ class AutomationEngine {
           const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
           await sleep(actionDelay());
-          const threads: any[] = await page.$$('div[role="listitem"]').catch(() => []);
           let opened = 0;
-          for (let i = 0; i < Math.min(dmCount, threads.length) && !state.stop.stopped; i++) {
+          for (let i = 0; i < dmCount && !state.stop.stopped; i++) {
             try {
-              await threads[i].click();
+              const clicked: boolean = await page.evaluate((idx: number) => {
+                const threads = Array.from(document.querySelectorAll('div[role="listitem"]'));
+                const el = threads[idx] as HTMLElement | undefined;
+                if (!el) return false;
+                el.click();
+                return true;
+              }, i).catch(() => false);
+              if (!clicked) break;
               await sleep(actionDelay());
               opened++;
             } catch {}
@@ -2652,11 +2784,16 @@ class AutomationEngine {
             for (let attempt = 0; liked < likeCount && attempt < likeCount * 4 && !state.stop.stopped; attempt++) {
               await page.evaluate(() => window.scrollBy(0, 350)).catch(() => {});
               await sleep(500);
-              const hearts: any[] = await page.$$('svg[aria-label="Like"]').catch(() => []);
-              for (const h of hearts) {
-                if (liked >= likeCount || state.stop.stopped) break;
-                try { await h.click(); liked++; await sleep(actionDelay()); } catch {}
-              }
+              // Click one not-yet-liked heart per round-trip (inside evaluate — no
+              // handles cross the IPC boundary), so `liked` count stays accurate.
+              const clickedOne: boolean = await page.evaluate(() => {
+                const hearts = Array.from(document.querySelectorAll('svg[aria-label="Like"]'));
+                const h = hearts[0] as SVGElement | undefined;
+                if (!h) return false;
+                (h.closest("button") as HTMLElement | null)?.click();
+                return true;
+              }).catch(() => false);
+              if (clickedOne) { liked++; await sleep(actionDelay()); }
             }
             for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
             this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);

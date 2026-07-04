@@ -1999,8 +1999,18 @@ export async function openEbWindow(opts: {
   verifyMode?: boolean;
   /** When true, skip all proxy setup and use the machine's home broadband (direct connection). */
   useHomeIp?: boolean;
+  /**
+   * When true the window is created and fully driven (navigate/evaluate/CDP)
+   * exactly like a normal EB, but is NEVER shown to the user — the
+   * ready-to-show handler skips show()/maximize() entirely. Used by the
+   * automation engine's browser-only Human Session (Disable API mode) so
+   * follow/unfollow/scroll/like/DM actions can run in the background without
+   * a visible window. The window still lives in ebMap under the account's
+   * normal partition, so it shares cookies/session with the regular EB.
+   */
+  silentMode?: boolean;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp, silentMode } = opts;
   const isGhostBrowser = profileId === -1;
   _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
@@ -2381,6 +2391,12 @@ export async function openEbWindow(opts: {
   });
   win.once("ready-to-show", () => {
     if (win.isDestroyed()) return;
+    if (silentMode) {
+      // Never show — the window stays fully hidden for the lifetime of this
+      // session. All CDP/navigate/evaluate calls still work on a hidden
+      // BrowserWindow; only show()/showInactive()/maximize() are skipped.
+      return;
+    }
     if (isGhostBrowser || verifyMode) {
       if (verifyMode) {
         // Appear without stealing focus — NEVER minimize, Chromium throttles
@@ -4482,6 +4498,7 @@ export function startEbIpcServer(
           ebFingerprint: parsedFp,
           initialUrl: body.initialUrl ?? undefined,
           verifyMode: body.verifyMode === true,
+          silentMode: body.silentMode === true,
         }).catch(err => console.error(`[eb:open:${pid}] openEbWindow error:`, err?.message ?? err));
         return send(res, 200, { ok: true });
       }

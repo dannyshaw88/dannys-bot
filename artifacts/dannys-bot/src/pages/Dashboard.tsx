@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.323",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "New Feature",
+        text: "The Human Session browser tools (feed scrolling, checking stories, checking DMs, liking posts, following, unfollowing) now run for real when Disable API mode is on, using the same Chrome window as your login session.",
+      },
+      {
+        category: "New Feature",
+        text: "These background browser actions can now run completely invisibly — no Chrome window pops up on screen while they happen.",
+      },
+    ],
+  },
+  {
     version: "1.1.322",
     date: "4 Jul 2026",
     items: [
