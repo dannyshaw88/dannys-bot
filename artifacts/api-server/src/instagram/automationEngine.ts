@@ -3074,31 +3074,47 @@ class AutomationEngine {
           const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
           await sleep(actionDelay());
-          // The inbox thread list uses role="listitem" nested inside role="list" —
-          // wait for it before indexing, otherwise the first click always misses
-          // because the inbox virtualized list hasn't hydrated yet.
-          await waitFor('div[role="listitem"]', 8000);
-          let opened = 0;
-          for (let i = 0; i < dmCount && !state.stop.stopped; i++) {
-            try {
-              const clicked: boolean = await page.evaluate((idx: number) => {
-                const threads = Array.from(document.querySelectorAll('div[role="listitem"]'));
-                const el = threads[idx] as HTMLElement | undefined;
-                if (!el) return false;
-                el.click();
-                return true;
-              }, i).catch(() => false);
-              if (!clicked) break;
-              await sleep(actionDelay());
-              opened++;
-              // Return to the inbox list before opening the next thread.
-              await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
-              await sleep(actionDelay());
-            } catch {}
+          // Anchor on <a href="/direct/t/..."> links — these only exist inside real
+          // conversation listitems. Using the generic div[role="listitem"] was too
+          // broad: it also matched story bubbles, "Your note", and other sidebar
+          // elements, causing false-positive clicks (and a misleading "0/3" log)
+          // when the EB was hidden and the page rendered those non-thread elements.
+          const hasThreads = await waitFor('a[href*="/direct/t/"]', 8000);
+          if (!hasThreads) {
+            // Inbox is genuinely empty — nothing to open.
+            this.logAction(profile.id, tool.id, "check_dm", "", "", "", "skipped", "EB — DM inbox empty");
+            this.logGhostBrowserCall(profile.id, profile.username, "check_dm", "EB — DM inbox empty");
+          } else {
+            let opened = 0;
+            for (let i = 0; i < dmCount && !state.stop.stopped; i++) {
+              try {
+                const clicked: boolean = await page.evaluate((idx: number) => {
+                  // Only target real DM conversation threads (have /direct/t/ link).
+                  // scrollIntoView + pointer events work in both visible and hidden EB.
+                  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/direct/t/"]'));
+                  const thread = (links[idx]?.closest('div[role="listitem"]') ?? links[idx]) as HTMLElement | undefined;
+                  if (!thread) return false;
+                  thread.scrollIntoView({ block: 'center', behavior: 'instant' });
+                  thread.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                  thread.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true }));
+                  thread.click();
+                  return true;
+                }, i).catch(() => false);
+                if (!clicked) break;
+                await sleep(actionDelay());
+                opened++;
+                // Return to the inbox list before opening the next thread.
+                await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
+                await sleep(actionDelay());
+                // After re-loading the inbox, re-check threads still exist.
+                const stillHas = await waitFor('a[href*="/direct/t/"]', 5000);
+                if (!stillHas) break;
+              } catch {}
+            }
+            this.logAction(profile.id, tool.id, "check_dm", "", "", "", opened > 0 ? "ok" : "skipped", `EB opened ${opened}/${dmCount} DM thread(s)`);
+            this.logGhostBrowserCall(profile.id, profile.username, "check_dm", `EB opened ${opened}/${dmCount} DM thread(s)`);
+            console.log(`[engine] @${profile.username}: [EB-only] 💬 opened ${opened} DM threads`);
           }
-          this.logAction(profile.id, tool.id, "check_dm", "", "", "", opened > 0 ? "ok" : "skipped", `EB opened ${opened}/${dmCount} DM thread(s)`);
-          this.logGhostBrowserCall(profile.id, profile.username, "check_dm", `EB opened ${opened}/${dmCount} DM thread(s)`);
-          console.log(`[engine] @${profile.username}: [EB-only] 💬 opened ${opened} DM threads`);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: [EB-only] checkDm error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "check_dm", e?.message ?? "error", true);

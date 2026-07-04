@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.329",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Check Direct Messages no longer shows a confusing \"0/3\" log when your inbox is empty — it now correctly says \"DM inbox empty\" and skips without counting phantom threads.",
+      },
+      {
+        category: "Fixed",
+        text: "DM inbox checking no longer clicks story bubbles or \"Your note\" by mistake — only real conversation threads (with a /direct/t/ link) are now targeted, so the hidden browser won't misfire on non-thread elements.",
+      },
+      {
+        category: "Fixed",
+        text: "DM thread clicking now uses the same scroll + pointer-event method as the likes fix, so it works correctly whether the browser window is visible or hidden.",
+      },
+    ],
+  },
+  {
     version: "1.1.328",
     date: "4 Jul 2026",
     items: [
