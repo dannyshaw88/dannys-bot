@@ -3958,14 +3958,14 @@ export class InstagramWebClient {
   // Simulates a user opening the DM inbox, then tapping into `count` threads.
   // Produces N+1 API call log entries: 1 × GetDirectMessages (inbox overview)
   // + N × GetDirectMessageThread (one per thread opened).
-  // Calls GetDirectMessages directly — no NotificationsBadge warm-up.
+  // Runs _buildWarmedIgClient() first (NotificationsBadge warm-up) to lift
+  // the 4415001 "Prompt has contribution" gate on direct_v2/inbox/.
   // Returns the full mapped inbox thread list so auto-reply can reuse it
   // without a second inbox fetch.
   async getDirectMessagesInternal(count: number = 5): Promise<{
     count: number;
     ok: boolean;
     threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
-    sessionGated?: boolean;
   }> {
     // Check a mobile session is available before making any calls.
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!this._deviceAuthorization;
@@ -3973,6 +3973,16 @@ export class InstagramWebClient {
       console.warn("[webClient] getDirectMessagesInternal: no mobile session — skipping DM check");
       return { count: 0, ok: false, threads: [] };
     }
+
+    // ── Step 1: warm up the session (NotificationsBadge) ─────────────────────
+    // _buildWarmedIgClient fires news/inbox via mobileSessionGet, which tells
+    // Instagram "this device is active" and lifts the 4415001 "Prompt has
+    // contribution" gate that blocks direct_v2/inbox/ on un-warmed sessions.
+    // The result is cached per-session — if sendDM or another caller already
+    // ran the bootstrap, this returns immediately from the cache at zero cost.
+    // Without this warm-up, direct_v2/inbox/ returns 4415001 and the DM check
+    // fails every time.
+    await this._buildWarmedIgClient();
 
     // Extract own user ID from igApiCookies (ds_user_id=…) for fromMe detection.
     const dsMatch = (this.igApiCookies ?? "").match(/(?:^|;)\s*ds_user_id=([^;]+)/);
@@ -4002,7 +4012,7 @@ export class InstagramWebClient {
       };
     };
 
-    // ── Step 2: fetch inbox — single call, no warm-up, no retry ─────────────
+    // ── Step 2: fetch inbox overview ──────────────────────────────────────────
     let inboxThreads: any[] = [];
     let firstProbeOk = false;
     try {
@@ -4018,17 +4028,9 @@ export class InstagramWebClient {
       const msg = String(e?.message ?? "");
       console.warn(`[webClient] getDirectMessagesInternal: inbox failed — ${msg}`);
       // Re-throw only hard account-level errors so the engine can mark the account.
+      // prompt_required_4415001 and other soft gates are non-fatal — skip DMs this session.
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
         throw e;
-      }
-      // 4415001 "Prompt has contribution" is a soft gate — the session is still valid,
-      // but Instagram requires the user to answer a prompt before any further API calls.
-      // Returning sessionGated:true signals the engine to abort the remaining session
-      // tools WITHOUT marking the account as logged_out.  If we continue and fire
-      // another call (e.g. FeedTimeline), Instagram escalates to logout_reason:3
-      // (forced server-side session revocation) on the very next request.
-      if (msg.includes("prompt_required_4415001")) {
-        return { count: 0, ok: false, threads: [], sessionGated: true };
       }
       return { count: 0, ok: false, threads: [] };
     }
