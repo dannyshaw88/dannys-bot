@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.333",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Inject Profile Browsing now always shows a 'Profile browsing started' entry in the activity log the moment it fires — so you can tell immediately whether the browse ran at all, even if individual actions (visit, feed, stories) fail.",
+      },
+      {
+        category: "Fixed",
+        text: "Profile visit, feed scroll, watch stories, view highlights, and view reels errors now appear in the activity log with the specific error message instead of being silently swallowed — so you can see exactly which API call is failing and why.",
+      },
+    ],
+  },
+  {
     version: "1.1.332",
     date: "4 Jul 2026",
     items: [

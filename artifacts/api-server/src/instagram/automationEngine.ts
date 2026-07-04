@@ -5201,12 +5201,20 @@ class AutomationEngine {
     // optionally watch stories and highlights, and optionally post a comment.
     // Used for both the between-follows injection and the before-follow browse.
     const browseTargetProfile = async (label: string, targetUser: { pk: string; username: string }) => {
+      // Visible marker so the user always sees the browse start in the activity log,
+      // even when individual sub-actions fail silently.
+      engineLog("INFO", `@${profile.username}: [${label}] starting profile browse of @${targetUser.username} (pk=${targetUser.pk})`);
+      this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "profile", "ok", `[${label}] Profile browsing started`);
+
       // 1. Visit profile — always first, not in queue
       try {
         await client.visitUserProfile(targetUser.pk, "profile");
         engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
         this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `Visited profile`);
-      } catch { /* non-critical */ }
+      } catch (err: any) {
+        engineLog("WARN", `@${profile.username}: [${label}] visitUserProfile failed: ${err?.message ?? err}`);
+        this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "profile", "error", `visitProfile failed: ${err?.message ?? err}`);
+      }
 
       // 2. Scroll feed — gated by chance %; feeds profilePosts for engagement actions
       const feedChance = randInt(injectProfileBrowsingFeedChanceMin, injectProfileBrowsingFeedChanceMax);
@@ -5219,7 +5227,10 @@ class AutomationEngine {
             : await client.viewUserFeed(targetUser.pk, feedCount);
           engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
           this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `Scrolled ${profilePosts.length} posts`);
-        } catch { /* non-critical */ }
+        } catch (err: any) {
+          engineLog("WARN", `@${profile.username}: [${label}] viewUserFeed failed: ${err?.message ?? err}`);
+          this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "profile", "error", `viewFeed failed: ${err?.message ?? err}`);
+        }
       }
 
       // 3. Build ordered engagement queue — each action draws a random order value from
@@ -5316,15 +5327,14 @@ class AutomationEngine {
                   await storage.incrementStat(profile.id, "story");
                 }
               } catch (err: any) {
-                // session_expired / logout_reason:N means the session is server-side dead —
-                // mark the account logged_out immediately so the next human session cycle
-                // re-logs in the EB instead of hitting the login wall silently.
                 const msg: string = err?.message ?? "";
                 if (/session_expired|login_required/i.test(msg)) {
                   console.warn(`[engine] @${profile.username}: [${label}] viewStories — ${msg} — marking logged_out`);
                   await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                } else {
+                  engineLog("WARN", `@${profile.username}: [${label}] viewStories failed: ${msg}`);
+                  this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "story", "error", `watchStories failed: ${msg}`);
                 }
-                // other errors (network blip, no stories) are non-critical
               }
             }
           },
@@ -5345,12 +5355,13 @@ class AutomationEngine {
                   this.logAction(profile.id, tool.id, "view_highlights", targetUser.username, "", "highlight", "ok", `Viewed highlights from profile browse`);
                 }
               } catch (err: any) {
-                // Same as viewStories — logout_reason:N on highlights_tray means
-                // server-side session revocation. Mark logged_out immediately.
                 const msg: string = err?.message ?? "";
                 if (/session_expired|login_required/i.test(msg)) {
                   console.warn(`[engine] @${profile.username}: [${label}] viewHighlights — ${msg} — marking logged_out`);
                   await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                } else {
+                  engineLog("WARN", `@${profile.username}: [${label}] viewHighlights failed: ${msg}`);
+                  this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "highlight", "error", `viewHighlights failed: ${msg}`);
                 }
               }
             }
@@ -5372,16 +5383,14 @@ class AutomationEngine {
                   this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
                 }
               } catch (err: any) {
-                // viewReels throws "session_expired — ..." when clips/user returns
-                // login_required / logout_reason:3.  That is a server-side forced
-                // revocation that also invalidates the browser session — mark
-                // the account logged_out immediately so the EB gets re-logged-in.
                 const msg: string = err?.message ?? "";
                 if (/session_expired|login_required/i.test(msg)) {
                   console.warn(`[engine] @${profile.username}: [${label}] viewReels — ${msg} — marking logged_out`);
                   await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+                } else {
+                  engineLog("WARN", `@${profile.username}: [${label}] viewReels failed: ${msg}`);
+                  this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "reel", "error", `viewReels failed: ${msg}`);
                 }
-                // other errors (network blips, empty feed) are non-critical
               }
             }
           },
