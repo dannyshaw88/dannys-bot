@@ -3330,7 +3330,23 @@ class AutomationEngine {
                     console.warn(`[engine] @${profile.username}: makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
                   }
                 }
-                postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+                if ((profile as any).postViaBrowser) {
+                  // Browser-post path: send to EB via /eb/silent-post
+                  const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
+                  postedMediaId = bpResult.ok ? (bpResult.mediaId ?? `browser:${Date.now()}`) : null;
+                  if (!bpResult.ok) {
+                    console.warn(`[engine] @${profile.username}: browser post failed for ${fileName}: ${bpResult.message}`);
+                  } else {
+                    // Write synthetic api-calls entry so the stats pie chart picks it up
+                    storage.createInstagramApiCall({
+                      profileId: profile.id, username: profile.username,
+                      operationName: "PostMedia", date: new Date().toISOString(),
+                      source: "browser", transport: "browser", isError: false,
+                    }).catch(() => {});
+                  }
+                } else {
+                  postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+                }
               }
 
               if (postedMediaId) {

@@ -166752,7 +166752,26 @@ ${err?.stack ?? ""}`);
                     console.warn(`[engine] @${profile.username}: makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
                   }
                 }
-                postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+                if (profile.postViaBrowser) {
+                  const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
+                  postedMediaId = bpResult.ok ? bpResult.mediaId ?? `browser:${Date.now()}` : null;
+                  if (!bpResult.ok) {
+                    console.warn(`[engine] @${profile.username}: browser post failed for ${fileName}: ${bpResult.message}`);
+                  } else {
+                    storage.createInstagramApiCall({
+                      profileId: profile.id,
+                      username: profile.username,
+                      operationName: "PostMedia",
+                      date: (/* @__PURE__ */ new Date()).toISOString(),
+                      source: "browser",
+                      transport: "browser",
+                      isError: false
+                    }).catch(() => {
+                    });
+                  }
+                } else {
+                  postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+                }
               }
               if (postedMediaId) {
                 if (s.repostDisableComments) {

@@ -5080,11 +5080,25 @@ export function startEbIpcServer(
       }
 
       // ── POST /eb/silent-post ───────────────────────────────────────────────────
-      // Opens a hidden BrowserWindow, navigates to Instagram, uploads an image via
-      // the web Create-post flow, types a caption, clicks Share, waits for the
-      // "Your post has been shared" confirmation, clicks Done, then destroys the
-      // window.  Used by the automation engine when "Do Actions Via Browser →
-      // Make a Post" is enabled.  The browser is NEVER shown to the user.
+      // Performs a browser-based Instagram post using the embedded browser.
+      //
+      // Mode A: EB window already open for this profile → reuse it.
+      //   The visible browser navigates through the post flow, then restores
+      //   the previous URL when done.
+      //
+      // Mode B: No EB window open → create a temporary off-screen 1280×820
+      //   window using the same persist: partition (which holds the account's
+      //   Instagram cookies from the last EB login).  Destroyed when done.
+      //
+      // Navigation flow (matches Instagram's current desktop web UI):
+      //   1. Navigate to https://www.instagram.com/
+      //   2. Hover over the "+" Create button in the left sidebar
+      //   3. Click "Create" from the expanded nav menu
+      //   4. Click "Post" from the submenu
+      //   5. Inject image via CDP DOM.setFileInputFiles on the hidden file input
+      //   6. Next (crop) → Next (filter) → type caption → Share
+      //   7. Wait for "Your post has been shared" confirmation
+      //   8. Mode A: restore prevUrl; Mode B: destroy temp window
       if (req.method === "POST" && u.pathname === "/eb/silent-post") {
         const imageBase64: string = body.imageBase64 ?? "";
         const caption: string     = String(body.caption ?? "");
@@ -5094,147 +5108,213 @@ export function startEbIpcServer(
         try { fs.writeFileSync(tmpPath, Buffer.from(imageBase64, "base64")); }
         catch (we: any) { return send(res, 500, { ok: false, message: `Failed to write temp image: ${we?.message}` }); }
 
-        let spProxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
-        let spUA: string | undefined;
-        let spUseHomeIp = false;
-        try {
-          const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
-          if (proxyRes.ok) {
-            const pd: any = await proxyRes.json();
-            spProxy     = pd.proxy     || undefined;
-            spUA        = pd.userAgent || undefined;
-            spUseHomeIp = !!pd.useHomeIp;
-          }
-        } catch { /* proceed without */ }
+        // ── Mode A vs Mode B ────────────────────────────────────────────────
+        const spEbEntry = ebMap.get(pid);
+        const spEbIsOpen = !!(spEbEntry && !spEbEntry.win.isDestroyed());
+        let spWin: BrowserWindow;
+        let spTempWin: BrowserWindow | null = null;
 
-        const spPartition = `persist:eb-${pid}`;
-        const spSes = electronSession.fromPartition(spPartition);
+        // Safety net: if anything in Mode B window setup throws before spCleanup
+        // is defined, make sure the temp file is always deleted.
+        let _spTmpUnlinked = false;
+        const _spSafeUnlink = () => { if (!_spTmpUnlinked) { _spTmpUnlinked = true; try { fs.unlinkSync(tmpPath); } catch {} } };
 
-        if (spProxy && !spUseHomeIp) {
-          const spCfg = buildProxyConfig(spProxy);
-          await spSes.setProxy(spCfg).catch(() => {});
-          try { await spSes.clearHostResolverCache(); } catch {}
-          await new Promise(r => setTimeout(r, 150));
-          await spSes.setProxy(spCfg).catch(() => {});
+        if (spEbIsOpen) {
+          // Mode A — reuse the existing open EB window (user will see it move)
+          spWin = spEbEntry!.win;
+          _ipcLog(`[eb:silent-post:${pid}] mode A — reusing open EB window`);
+        } else {
+          // Mode B — off-screen 1280×820 window with same persist: partition
+          const spPartition = `persist:eb-${pid}`;
+          const spSes = electronSession.fromPartition(spPartition);
+
+          // Inject cookies from the account's cookie file so the hidden window
+          // is authenticated before the first navigation
+          try {
+            const cfPath = cookieFilePath(pid);
+            if (fs.existsSync(cfPath)) {
+              const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
+              for (const c of rawCookies) {
+                await spSes.cookies.set({
+                  url: "https://www.instagram.com",
+                  name: c.name, value: c.value,
+                  domain: c.domain ?? ".instagram.com",
+                  path:   c.path   ?? "/",
+                  secure: true, sameSite: "no_restriction",
+                }).catch(() => {});
+              }
+            }
+          } catch { /* rely on partition cookies */ }
+
+          // Apply the account's proxy and fetch UA
+          let _spUA: string | undefined;
+          try {
+            const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
+            if (proxyRes.ok) {
+              const pd: any = await proxyRes.json();
+              if (pd.proxy && !pd.useHomeIp) {
+                const spCfg = buildProxyConfig(pd.proxy);
+                await spSes.clearHostResolverCache().catch(() => {});
+                await spSes.setProxy(spCfg).catch(() => {});
+              }
+              if (pd.userAgent) _spUA = pd.userAgent;
+            }
+          } catch { /* proceed without */ }
+
+          const { width: _spSw } = eScreen.getPrimaryDisplay().workAreaSize;
+          spTempWin = new BrowserWindow({
+            width: 1280, height: 820,
+            x: _spSw + 10, y: 0, // off right edge — never visible
+            show: false, skipTaskbar: true,
+            webPreferences: {
+              nodeIntegration: false, contextIsolation: true,
+              partition: spPartition,
+            },
+          });
+          // showInactive before first navigation so Chromium doesn't throttle
+          spTempWin.showInactive();
+          if (_spUA) spTempWin.webContents.setUserAgent(_spUA);
+          spWin = spTempWin;
+          _ipcLog(`[eb:silent-post:${pid}] mode B — created off-screen 1280×820 window`);
         }
 
-        try {
-          const cfPath = cookieFilePath(pid);
-          if (fs.existsSync(cfPath)) {
-            const rawCookies: any[] = JSON.parse(fs.readFileSync(cfPath, "utf8"));
-            for (const c of rawCookies) {
-              await spSes.cookies.set({
-                url: "https://www.instagram.com",
-                name: c.name, value: c.value,
-                domain: c.domain ?? ".instagram.com",
-                path:   c.path   ?? "/",
-                secure: true, sameSite: "no_restriction",
-              }).catch(() => {});
-            }
+        // Remember previous URL (mode A: restore when done; mode B: N/A)
+        const spPrevUrl = spEbIsOpen ? (() => {
+          try { const u2 = spWin.webContents.getURL(); return u2 && u2 !== "about:blank" ? u2 : "https://www.instagram.com/"; } catch { return "https://www.instagram.com/"; }
+        })() : "https://www.instagram.com/";
+
+        const spCleanup = () => {
+          if (spTempWin) {
+            try { if (!spTempWin.isDestroyed()) spTempWin.destroy(); } catch {}
+            spTempWin = null;
+          } else {
+            // Mode A: navigate back to where the user was
+            try { spWin.webContents.loadURL(spPrevUrl).catch(() => {}); } catch {}
           }
-        } catch { /* rely on partition cookies */ }
+          _spSafeUnlink(); // idempotent — safe to call multiple times
+        };
 
-        const spWin = new BrowserWindow({
-          show: false, width: 390, height: 844,
-          webPreferences: {
-            partition: spPartition,
-            nodeIntegration: false,
-            contextIsolation: true,
-          },
-        });
+        let spSettled = false;
+        const spWatchdog = setTimeout(() => {
+          if (spSettled) return;
+          spSettled = true;
+          _ipcLog(`[ERROR] [eb:silent-post:${pid}] WATCHDOG — handler exceeded 120s`);
+          spCleanup();
+          try { send(res, 200, { ok: false, message: "watchdog_timeout — post took too long" }); } catch {}
+        }, 120_000);
 
         try {
-          if (spUA) spWin.webContents.setUserAgent(spUA);
-
-          // Attach CDP debugger for file-input injection
+          // ── Attach CDP debugger ───────────────────────────────────────────
           const dbg = spWin.webContents.debugger;
           try { dbg.attach("1.3"); } catch { /* already attached */ }
           await dbg.sendCommand("DOM.enable").catch(() => {});
 
-          console.log(`[eb:silent-post:${pid}] navigating to instagram.com`);
-          await spWin.webContents.loadURL("https://www.instagram.com/").catch(() => {});
+          // ── Navigate to Instagram homepage ────────────────────────────────
+          _ipcLog(`[eb:silent-post:${pid}] navigating to instagram.com homepage`);
+          await Promise.race([
+            spWin.webContents.loadURL("https://www.instagram.com/").catch(() => {}),
+            new Promise(r => setTimeout(r, 30_000)),
+          ]);
 
-          // Wait until logged in (URL is not the login page)
-          const loggedIn = await new Promise<boolean>(resolve => {
+          // ── Wait until logged in ──────────────────────────────────────────
+          const spLoggedIn = await new Promise<boolean>(resolve => {
             let tries = 0;
             const t = setInterval(() => {
               const url = spWin.isDestroyed() ? "" : spWin.webContents.getURL();
-              if (
-                url.includes("instagram.com") &&
-                !url.includes("/accounts/login") &&
-                !url.includes("/auth_platform/") &&
-                url !== "about:blank"
-              ) { clearInterval(t); resolve(true); return; }
+              if (url.includes("instagram.com") && !url.includes("/accounts/login") && !url.includes("/auth_platform/") && url !== "about:blank") {
+                clearInterval(t); resolve(true); return;
+              }
               if (++tries >= 60) { clearInterval(t); resolve(false); }
             }, 500);
           });
-          if (!loggedIn) throw new Error("Instagram page not ready — not logged in");
-          await new Promise(r => setTimeout(r, 2500));
+          if (!spLoggedIn) throw new Error("Instagram page not ready — account not logged in");
 
-          // ── Try to click the "+" / New-post create button ─────────────────
-          const clickedCreate: boolean = await spWin.webContents.executeJavaScript(`
+          // Allow the left sidebar nav to fully render
+          await new Promise(r => setTimeout(r, 3000));
+
+          // ── Step 1: Find the Create ("+" plus) button and hover it ────────
+          // Hovering causes Instagram to expand the sidebar labels, making the
+          // "Create" text visible and the submenu reliably clickable.
+          _ipcLog(`[eb:silent-post:${pid}] locating Create button to hover`);
+          const spCreatePos: { x: number; y: number; found: boolean } = await spWin.webContents.executeJavaScript(`
             (function() {
-              var allWithLabel = Array.from(document.querySelectorAll('[aria-label]'));
-              var target = allWithLabel.find(function(el) {
-                var lbl = (el.getAttribute('aria-label') || '').toLowerCase();
-                return lbl.includes('new post') || lbl === 'create' || lbl.includes('create');
-              });
-              if (target) {
-                var btn = target.closest('[role="button"], button, a') || target;
-                btn.click(); return true;
+              var btn = null;
+              // Try aria-label first (most reliable)
+              btn = document.querySelector('[aria-label="New post"], [aria-label="Create"]');
+              // Try href
+              if (!btn) btn = document.querySelector('a[href="/create/"]');
+              // Try by visible text "Create" inside a nav link
+              if (!btn) {
+                var spans = Array.from(document.querySelectorAll('nav span, [role="navigation"] span, a span, div span'));
+                var createSpan = spans.find(function(s) { return s.textContent.trim() === 'Create' && s.offsetHeight > 0; });
+                if (createSpan) btn = createSpan.closest('a, [role="link"], [role="button"], button') || createSpan;
               }
-              var createLink = document.querySelector('a[href*="/create"]');
-              if (createLink) { createLink.click(); return true; }
+              // Try SVG title matching "Create" or "+"
+              if (!btn) {
+                var titles = Array.from(document.querySelectorAll('svg title'));
+                var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
+                if (ct) btn = ct.closest('a, [role="link"], button') || null;
+              }
+              if (!btn) return { found: false, x: 0, y: 0 };
+              var rect = btn.getBoundingClientRect();
+              return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+            })()
+          `, true).catch(() => ({ found: false, x: 0, y: 0 }));
+
+          if (spCreatePos.found) {
+            // Dispatch a mousemove to the button's centre — triggers sidebar expansion
+            await dbg.sendCommand("Input.dispatchMouseEvent", {
+              type: "mouseMoved", x: spCreatePos.x, y: spCreatePos.y,
+              button: "none", clickCount: 0,
+            }).catch(() => {});
+            await new Promise(r => setTimeout(r, 800)); // wait for hover animation
+          }
+
+          // ── Step 2: Click "Create" from the (now expanded) nav ───────────
+          _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item`);
+          const spClickedCreate: boolean = await spWin.webContents.executeJavaScript(`
+            (function() {
+              var btn = document.querySelector('[aria-label="New post"], [aria-label="Create"]');
+              if (!btn) btn = document.querySelector('a[href="/create/"]');
+              if (!btn) {
+                var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
+                btn = els.find(function(el) {
+                  var txt = (el.textContent || '').trim();
+                  var lbl = (el.getAttribute('aria-label') || '').toLowerCase();
+                  return txt === 'Create' || lbl === 'create' || lbl === 'new post';
+                });
+              }
+              if (btn) { btn.click(); return true; }
               return false;
             })()
           `, true).catch(() => false);
 
-          if (!clickedCreate) {
-            // ── Fallback: profile page "Share your first photo" (0-posts accounts) ─
-            console.log(`[eb:silent-post:${pid}] create button not found — trying profile page`);
-            let profileUsername = "";
-            try {
-              const pRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}`);
-              if (pRes.ok) { const pData: any = await pRes.json(); profileUsername = pData.username ?? ""; }
-            } catch {}
+          if (!spClickedCreate) throw new Error("Could not find Create button in the Instagram left nav — is the account logged in?");
+          await new Promise(r => setTimeout(r, 1500));
 
-            if (profileUsername) {
-              await spWin.webContents.loadURL(
-                `https://www.instagram.com/${encodeURIComponent(profileUsername)}/`
-              ).catch(() => {});
-              await new Promise(r => setTimeout(r, 3000));
-            }
+          // ── Step 3: Click "Post" from the submenu ─────────────────────────
+          _ipcLog(`[eb:silent-post:${pid}] clicking Post from submenu`);
+          const spClickedPost: boolean = await spWin.webContents.executeJavaScript(`
+            (function() {
+              var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
+              var postItem = all.find(function(el) {
+                return el.textContent.trim() === 'Post' && el.offsetHeight > 0;
+              });
+              if (postItem) {
+                var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
+                clickable.click();
+                return true;
+              }
+              return false;
+            })()
+          `, true).catch(() => false);
 
-            const clickedShareFirst: boolean = await spWin.webContents.executeJavaScript(`
-              (function() {
-                var btns = Array.from(document.querySelectorAll('a, button'));
-                var btn = btns.find(function(b) {
-                  var t = (b.textContent || '').toLowerCase();
-                  return t.includes('share your first photo') || t.includes('share photos') || t.includes('your first photo');
-                });
-                if (btn) { btn.click(); return true; }
-                return false;
-              })()
-            `, true).catch(() => false);
-
-            if (!clickedShareFirst) throw new Error("Could not find create-post button or Share your first photo button");
-          }
-
+          if (!spClickedPost) throw new Error("Could not find Post option in the Create submenu");
           await new Promise(r => setTimeout(r, 2000));
 
-          // Handle format picker (Post / Story / Reel) if shown
-          await spWin.webContents.executeJavaScript(`
-            (function() {
-              var items = Array.from(document.querySelectorAll('button, [role="menuitem"], li'));
-              var postItem = items.find(function(el) { return (el.textContent || '').trim() === 'Post'; });
-              if (postItem) postItem.click();
-            })()
-          `, true).catch(() => {});
-          await new Promise(r => setTimeout(r, 1000));
-
-          // ── Wait for the file input and inject file via CDP ───────────────
-          console.log(`[eb:silent-post:${pid}] waiting for file input`);
-          const fileInputFound = await new Promise<boolean>(resolve => {
+          // ── Step 4: Wait for file input and inject image via CDP ──────────
+          _ipcLog(`[eb:silent-post:${pid}] waiting for file input (Select from computer dialog)`);
+          const spFileInputFound = await new Promise<boolean>(resolve => {
             let tries = 0;
             const poll = setInterval(async () => {
               if (spWin.isDestroyed()) { clearInterval(poll); resolve(false); return; }
@@ -5245,23 +5325,23 @@ export function startEbIpcServer(
               if (++tries >= 24) { clearInterval(poll); resolve(false); }
             }, 500);
           });
-          if (!fileInputFound) throw new Error("File input not found — Create new post dialog did not open");
+          if (!spFileInputFound) throw new Error("File input not found — Create new post dialog did not open");
 
-          const docResult = await dbg.sendCommand("DOM.getDocument", { depth: -1 });
-          const inputResult = await dbg.sendCommand("DOM.querySelector", {
-            nodeId: (docResult as any).root.nodeId,
+          const spDocResult = await dbg.sendCommand("DOM.getDocument", { depth: -1 });
+          const spInputResult = await dbg.sendCommand("DOM.querySelector", {
+            nodeId: (spDocResult as any).root.nodeId,
             selector: "input[type='file']",
           }).catch(() => ({ nodeId: 0 }));
-          if (!(inputResult as any).nodeId) throw new Error("CDP could not locate file input node");
+          if (!(spInputResult as any).nodeId) throw new Error("CDP could not locate file input node");
           await dbg.sendCommand("DOM.setFileInputFiles", {
             files: [tmpPath],
-            nodeId: (inputResult as any).nodeId,
+            nodeId: (spInputResult as any).nodeId,
           });
-          console.log(`[eb:silent-post:${pid}] image injected via CDP`);
+          _ipcLog(`[eb:silent-post:${pid}] image injected via CDP`);
           await new Promise(r => setTimeout(r, 2500));
 
           // ── Helper: poll-click a button by its exact visible text ─────────
-          const clickBtnText = async (text: string, timeoutMs: number): Promise<boolean> => {
+          const spClickBtnText = async (text: string, timeoutMs: number): Promise<boolean> => {
             const deadline = Date.now() + timeoutMs;
             while (Date.now() < deadline) {
               if (spWin.isDestroyed()) return false;
@@ -5280,18 +5360,18 @@ export function startEbIpcServer(
           };
 
           // ── Crop step → Next ──────────────────────────────────────────────
-          console.log(`[eb:silent-post:${pid}] clicking Next (crop)`);
-          if (!await clickBtnText("Next", 12000)) throw new Error("Crop Next button not found");
+          _ipcLog(`[eb:silent-post:${pid}] clicking Next (crop)`);
+          if (!await spClickBtnText("Next", 12000)) throw new Error("Crop Next button not found");
           await new Promise(r => setTimeout(r, 2000));
 
           // ── Filter step → Next ────────────────────────────────────────────
-          console.log(`[eb:silent-post:${pid}] clicking Next (filter)`);
-          await clickBtnText("Next", 12000);
+          _ipcLog(`[eb:silent-post:${pid}] clicking Next (filter)`);
+          await spClickBtnText("Next", 12000);
           await new Promise(r => setTimeout(r, 2000));
 
           // ── Caption step ──────────────────────────────────────────────────
           if (caption) {
-            console.log(`[eb:silent-post:${pid}] typing caption`);
+            _ipcLog(`[eb:silent-post:${pid}] typing caption (${caption.length} chars)`);
             await spWin.webContents.executeJavaScript(`
               (function() {
                 var el = document.querySelector("textarea[aria-label*='caption'], textarea[aria-label*='Caption']")
@@ -5309,12 +5389,12 @@ export function startEbIpcServer(
           }
 
           // ── Click Share ───────────────────────────────────────────────────
-          console.log(`[eb:silent-post:${pid}] clicking Share`);
-          if (!await clickBtnText("Share", 15000)) throw new Error("Share button not found");
+          _ipcLog(`[eb:silent-post:${pid}] clicking Share`);
+          if (!await spClickBtnText("Share", 15000)) throw new Error("Share button not found");
 
           // ── Wait for "Your post has been shared" confirmation ─────────────
-          console.log(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);
-          const confirmed = await new Promise<boolean>(resolve => {
+          _ipcLog(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);
+          const spConfirmed = await new Promise<boolean>(resolve => {
             let tries = 0;
             const poll = setInterval(async () => {
               if (spWin.isDestroyed()) { clearInterval(poll); resolve(false); return; }
@@ -5329,22 +5409,25 @@ export function startEbIpcServer(
             }, 500);
           });
 
-          if (confirmed) {
-            console.log(`[eb:silent-post:${pid}] clicking Done`);
-            await clickBtnText("Done", 5000);
+          if (spConfirmed) {
+            _ipcLog(`[eb:silent-post:${pid}] clicking Done`);
+            await spClickBtnText("Done", 5000);
             await new Promise(r => setTimeout(r, 500));
           }
 
-          console.log(`[eb:silent-post:${pid}] post completed ✓`);
-          spWin.destroy();
+          _ipcLog(`[eb:silent-post:${pid}] post completed ✓`);
+          spSettled = true;
+          clearTimeout(spWatchdog);
+          spCleanup();
           return send(res, 200, { ok: true, mediaId: String(Date.now()) });
 
         } catch (spErr: any) {
-          try { spWin.destroy(); } catch {}
-          console.error(`[eb:silent-post:${pid}] error: ${spErr?.message}`);
+          if (spSettled) return; // watchdog already responded
+          spSettled = true;
+          clearTimeout(spWatchdog);
+          _ipcLog(`[ERROR] [eb:silent-post:${pid}] error: ${spErr?.message}`);
+          spCleanup();
           return send(res, 200, { ok: false, message: spErr?.message ?? "Unknown error" });
-        } finally {
-          try { fs.unlinkSync(tmpPath); } catch { /* already removed */ }
         }
       }
 
