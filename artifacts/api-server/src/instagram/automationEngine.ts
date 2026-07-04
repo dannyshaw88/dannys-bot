@@ -3105,6 +3105,18 @@ class AutomationEngine {
           dmCount = result.count;
           dmOk = result.ok;
           console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : " (read failed)"}`);
+          // 4415001 "Prompt has contribution" — Instagram requires the user to answer
+          // a prompt before more API calls are accepted.  If we continue and fire the
+          // next tool (e.g. FeedTimeline), Instagram escalates to logout_reason:3
+          // (forced server-side session revocation) on the very next request.
+          // Abort the remaining session tools by setting sessionError, but do NOT
+          // mark the account as logged_out — the session cookies are still valid.
+          if (result.sessionGated) {
+            console.warn(`[engine] @${profile.username}: DM inbox returned prompt_required_4415001 — aborting remaining session tools to prevent logout_reason:3`);
+            this.logAction(profile.id, tool.id, "check_dm", "", "", "", "error", "DM check skipped — Instagram prompt gate (4415001), session paused");
+            sessionError = "prompt_required_4415001";
+            return;
+          }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_dm")) return;
           console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
