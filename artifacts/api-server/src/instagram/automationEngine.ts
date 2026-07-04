@@ -469,36 +469,40 @@ class AutomationEngine {
       for (const [id, state] of this.states) {
         if (!activeFollow.has(id)) {
           state.stop.stopped = true;
-          this.states.delete(id);
-          console.log(`[engine] Stopped follow runner for profile ${id}`);
+          // Do NOT delete from states here — the runner coroutine deletes itself
+          // when its loop exits.  Deleting prematurely would make the next
+          // reconcile (10 s later) see no runner and re-launch one while the
+          // original coroutine is still mid-session.
+          console.log(`[engine] Stopping follow runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.unfollowStates) {
         if (!activeUnfollow.has(id)) {
           state.stop.stopped = true;
-          this.unfollowStates.delete(id);
-          console.log(`[engine] Stopped unfollow runner for profile ${id}`);
+          console.log(`[engine] Stopping unfollow runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.dmStates) {
         if (!activeDM.has(id)) {
           state.stop.stopped = true;
-          this.dmStates.delete(id);
-          console.log(`[engine] Stopped DM runner for profile ${id}`);
+          console.log(`[engine] Stopping DM runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.contactStates) {
         if (!activeContact.has(id)) {
           state.stop.stopped = true;
-          this.contactStates.delete(id);
-          console.log(`[engine] Stopped contact runner for profile ${id}`);
+          console.log(`[engine] Stopping contact runner for profile ${id}`);
         }
       }
       for (const [id, state] of this.humanSessionStates) {
         if (!activeHumanSession.has(id)) {
           state.stop.stopped = true;
-          this.humanSessionStates.delete(id);
-          console.log(`[engine] Stopped human session runner for profile ${id}`);
+          // Same as above: do NOT delete from humanSessionStates here.  The
+          // runner coroutine deletes itself at exit.  Premature deletion caused
+          // reconcile to re-launch a new HS runner while the first runner's
+          // runHumanSessionTools coroutine was still mid-session — producing
+          // double follows/actions within a single session cycle.
+          console.log(`[engine] Stopping human session runner for profile ${id}`);
         }
       }
 

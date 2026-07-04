@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.316",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed double-follow bug: saving tool settings rapidly could cause two sessions to run back-to-back for the same account. When a runner was told to stop, it was being removed from the active runners list immediately — so the next scheduled check (10 seconds later) saw no runner and launched a fresh one while the original session was still mid-follow. Now the runner is only removed from the list when it actually finishes, preventing the second session from starting.",
+      },
+    ],
+  },
+  {
     version: "1.1.315",
     date: "4 Jul 2026",
     items: [
