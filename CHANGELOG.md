@@ -4,6 +4,88 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.318] — 2026-07-04
+
+### Fixed
+
+#### Browser post (Make-a-Post via browser) — three independent bugs fixed (`ebManager.ts`, `automationEngine.ts`)
+
+**Bug 1 — CDP `DOM.enable` hang causes 120-second timeout on every Mode B attempt**
+
+When `postViaBrowser` is enabled and the embedded browser is not currently open for the account, the handler creates a temporary off-screen window (Mode B). Immediately after creation, before any navigation, the handler attaches a Chrome DevTools Protocol (CDP) debugger and sends a `DOM.enable` command:
+
+```typescript
+await dbg.sendCommand("DOM.enable").catch(() => {});
+```
+
+The `.catch(() => {})` guard only suppresses promise rejections — it does not handle a *hang*. On a freshly-created Electron `BrowserWindow`, the underlying Chromium renderer is not yet ready to process CDP commands. The promise neither resolves nor rejects; it hangs indefinitely. This consumed the entire 120-second watchdog budget before even attempting to navigate to Instagram.
+
+**Fix:** The `DOM.enable` call is now wrapped in a `Promise.race` with an 8-second timeout. If the renderer is not ready within 8 seconds, the race resolves and execution continues to the navigation step:
+
+```typescript
+await Promise.race([
+  dbg.sendCommand("DOM.enable").catch(() => {}),
+  new Promise(r => setTimeout(r, 8000)),
+]);
+```
+
+---
+
+**Bug 2 — "Could not find Create button" with collapsed sidebar (Mode A)**
+
+When the embedded browser *is* open (Mode A — reusing the existing EB window), the handler navigates to the Instagram homepage and then searches for the Create (`+`) button using these selectors:
+
+```javascript
+// Previous selectors
+document.querySelector('[aria-label="New post"], [aria-label="Create"]')
+document.querySelector('a[href="/create/"]')
+// text span search with offsetHeight > 0 requirement
+spans.find(s => s.textContent.trim() === 'Create' && s.offsetHeight > 0)
+```
+
+When the left sidebar is in its **collapsed (icon-only) state**, the text spans inside the nav links have `offsetHeight === 0` (they are visually hidden by CSS). The aria-label and href selectors also fail because Instagram's current DOM uses a different structure in this state. The result: `spClickedCreate = false` → error thrown → post fails.
+
+**Fix:** Both the hover step and the click step now use a broader, layered selector chain that works regardless of sidebar state:
+
+1. `[aria-label="New post"], [aria-label="Create"], [aria-label="create"]` — exact label matches
+2. `[aria-label*="reate"]` — substring match (catches variants like "Create new post")
+3. `a[href="/create/"], a[href*="/create"]` — href-based (partial match)
+4. Any `a / [role="link"] / [role="button"] / button` whose `aria-label` or `title` attribute equals `"create"`, `"new post"`, or contains `"create post"`
+5. SVG `<title>` child matching `"create"` or `"new post"` (collapsed-icon fallback)
+
+The `offsetHeight > 0` guard is removed from fallback passes since collapsed icon elements are intentionally zero-height in text but still fully interactive.
+
+---
+
+**Bug 3 — Activity log shows generic "Upload failed" instead of the real browser error**
+
+When a browser post fails, the code path reads:
+
+```typescript
+// in the local-folder repost failure block
+const uploadErr = client.lastUploadError || "Upload failed";
+this.logAction(..., `Upload failed for: ${fileName} (${uploadErr})`);
+```
+
+`client.lastUploadError` is a field on the Instagram private-API client — it is only populated when an *API-based* upload fails. For browser-post failures, it is always `undefined`, so the fallback `"Upload failed"` is logged every time, hiding the real reason (e.g. `"Browser-post error: The operation was aborted due to timeout"` or `"Could not find Create button in the Instagram left nav — is the account logged in?"`).
+
+**Fix:** A `browserPostErr` variable is captured from `bpResult.message` when the browser post fails, and it is placed first in the fallback chain:
+
+```typescript
+let browserPostErr: string | undefined;
+// ...
+if (!bpResult.ok) {
+  browserPostErr = bpResult.message;  // captured here
+  console.warn(...);
+}
+// ...
+const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
+```
+
+The activity log now shows the actual error text from the browser automation, making failures immediately diagnosable.
+
+---
+
 ## [1.1.311] — 2026-07-03
 
 ### Fixed (Critical)

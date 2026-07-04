@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.318",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed browser posts silently hanging for two full minutes then showing 'Upload failed' with no explanation. When the background browser window was brand new, a startup step was freezing indefinitely instead of completing quickly — so the post timed out before it even tried to navigate to Instagram. It now moves on after a few seconds regardless.",
+      },
+      {
+        category: "Fix",
+        text: "Fixed 'Could not find Create button in the Instagram left nav' error when the embedded browser sidebar is in its collapsed (icon-only) state. The button search was only looking for expanded text labels, so icon-only buttons were invisible to it. The detector now also checks button titles, aria attributes, and link targets so it finds the Create button whether the sidebar is expanded or collapsed.",
+      },
+      {
+        category: "Fix",
+        text: "Fixed the activity log showing 'Upload failed' instead of the real reason when a browser post fails. It now shows the actual error — for example 'browser timed out' or 'Create button not found' — so you can see exactly what went wrong.",
+      },
+    ],
+  },
+  {
     version: "1.1.317",
     date: "4 Jul 2026",
     items: [

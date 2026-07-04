@@ -5207,7 +5207,12 @@ export function startEbIpcServer(
           // ── Attach CDP debugger ───────────────────────────────────────────
           const dbg = spWin.webContents.debugger;
           try { dbg.attach("1.3"); } catch { /* already attached */ }
-          await dbg.sendCommand("DOM.enable").catch(() => {});
+          // Race with a 8s timeout so a newly-created window that isn't yet
+          // ready for CDP doesn't block the handler for the full 120s watchdog.
+          await Promise.race([
+            dbg.sendCommand("DOM.enable").catch(() => {}),
+            new Promise(r => setTimeout(r, 8000)),
+          ]);
 
           // ── Navigate to Instagram homepage ────────────────────────────────
           _ipcLog(`[eb:silent-post:${pid}] navigating to instagram.com homepage`);
@@ -5239,17 +5244,27 @@ export function startEbIpcServer(
           const spCreatePos: { x: number; y: number; found: boolean } = await spWin.webContents.executeJavaScript(`
             (function() {
               var btn = null;
-              // Try aria-label first (most reliable)
-              btn = document.querySelector('[aria-label="New post"], [aria-label="Create"]');
-              // Try href
-              if (!btn) btn = document.querySelector('a[href="/create/"]');
-              // Try by visible text "Create" inside a nav link
+              // 1. aria-label exact matches (most reliable when sidebar is expanded)
+              btn = document.querySelector('[aria-label="New post"], [aria-label="Create"], [aria-label="create"]');
+              // 2. Broad aria-label substring — catches "Create" inside longer labels
+              if (!btn) btn = document.querySelector('[aria-label*="reate"]');
+              // 3. href-based
+              if (!btn) btn = document.querySelector('a[href="/create/"], a[href*="/create"]');
+              // 4. Visible text "Create" in any span/anchor (sidebar expanded)
               if (!btn) {
                 var spans = Array.from(document.querySelectorAll('nav span, [role="navigation"] span, a span, div span'));
                 var createSpan = spans.find(function(s) { return s.textContent.trim() === 'Create' && s.offsetHeight > 0; });
                 if (createSpan) btn = createSpan.closest('a, [role="link"], [role="button"], button') || createSpan;
               }
-              // Try SVG title matching "Create" or "+"
+              // 5. Any element (including collapsed icons) whose accessible text is "Create"
+              if (!btn) {
+                var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
+                btn = els.find(function(el) {
+                  var lbl = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
+                  return lbl === 'create' || lbl === 'new post' || lbl.includes('create post');
+                }) || null;
+              }
+              // 6. SVG title matching
               if (!btn) {
                 var titles = Array.from(document.querySelectorAll('svg title'));
                 var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
@@ -5274,15 +5289,27 @@ export function startEbIpcServer(
           _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item`);
           const spClickedCreate: boolean = await spWin.webContents.executeJavaScript(`
             (function() {
-              var btn = document.querySelector('[aria-label="New post"], [aria-label="Create"]');
-              if (!btn) btn = document.querySelector('a[href="/create/"]');
+              var btn = null;
+              // 1. aria-label exact matches
+              btn = document.querySelector('[aria-label="New post"], [aria-label="Create"], [aria-label="create"]');
+              // 2. Broad aria-label substring
+              if (!btn) btn = document.querySelector('[aria-label*="reate"]');
+              // 3. href-based
+              if (!btn) btn = document.querySelector('a[href="/create/"], a[href*="/create"]');
+              // 4. Any clickable element whose label/title/text indicates "Create"
               if (!btn) {
                 var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
                 btn = els.find(function(el) {
                   var txt = (el.textContent || '').trim();
-                  var lbl = (el.getAttribute('aria-label') || '').toLowerCase();
-                  return txt === 'Create' || lbl === 'create' || lbl === 'new post';
-                });
+                  var lbl = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
+                  return txt === 'Create' || lbl === 'create' || lbl === 'new post' || lbl.includes('create post');
+                }) || null;
+              }
+              // 5. SVG title fallback
+              if (!btn) {
+                var titles = Array.from(document.querySelectorAll('svg title'));
+                var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
+                if (ct) btn = ct.closest('a, [role="link"], button') || null;
               }
               if (btn) { btn.click(); return true; }
               return false;

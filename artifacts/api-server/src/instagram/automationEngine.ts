@@ -3294,6 +3294,7 @@ class AutomationEngine {
               }
 
               let postedMediaId: string | null = null;
+              let browserPostErr: string | undefined;
               const uniqueTag = makeUnique ? " +unique" : "";
               console.log(`[engine] @${profile.username}: 🔁 repost upload starting — file="${fileName}" isImage=${isImage} isVideo=${isVideo} makeUnique=${makeUnique} level=${level} captionLen=${caption.length}`);
 
@@ -3331,10 +3332,11 @@ class AutomationEngine {
                   }
                 }
                 if ((profile as any).postViaBrowser) {
-                  // Browser-post path: send to EB via /eb/silent-post
+                  // Browser-post path: send to EB via /eb/n
                   const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
                   postedMediaId = bpResult.ok ? (bpResult.mediaId ?? `browser:${Date.now()}`) : null;
                   if (!bpResult.ok) {
+                    browserPostErr = bpResult.message;
                     console.warn(`[engine] @${profile.username}: browser post failed for ${fileName}: ${bpResult.message}`);
                   } else {
                     // Write synthetic api-calls entry so the stats pie chart picks it up
@@ -3379,7 +3381,7 @@ class AutomationEngine {
                   }
                 }
               } else {
-                const uploadErr = client.lastUploadError || "Upload failed";
+                const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
                 console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName} — ${uploadErr}`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName} (${uploadErr})`);
               }

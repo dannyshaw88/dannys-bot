@@ -164079,7 +164079,7 @@ var AutomationEngine = class {
    *  → Follows" enabled.  Calls the EB IPC server (Electron main process) which manages
    *  the BrowserWindow lifecycle.  Resolves with the same shape as client.followUser(). */
   async followUserViaBrowser(profileId, targetUsername, proxy, igApiCookies) {
-    const ebIpcPort = process.env.EB_IPC_PORT;
+    const ebIpcPort = process.env.n;
     if (!ebIpcPort) {
       return { ok: false, status: "follow_blocked", reason: "Browser-follow not available outside Electron" };
     }
@@ -164105,12 +164105,12 @@ var AutomationEngine = class {
     }
   }
   async postPhotoViaBrowser(profileId, imageBuffer, caption) {
-    const ebIpcPort = process.env.EB_IPC_PORT;
+    const ebIpcPort = process.env.n;
     if (!ebIpcPort) {
       return { ok: false, message: "Browser-post not available outside Electron" };
     }
     try {
-      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-post`, {
+      const r2 = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/n`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166721,6 +166721,7 @@ ${err?.stack ?? ""}`);
                 }
               }
               let postedMediaId = null;
+              let browserPostErr;
               const uniqueTag = makeUnique ? " +unique" : "";
               console.log(`[engine] @${profile.username}: \u{1F501} repost upload starting \u2014 file="${fileName}" isImage=${isImage} isVideo=${isVideo} makeUnique=${makeUnique} level=${level} captionLen=${caption.length}`);
               if (isVideo) {
@@ -166756,6 +166757,7 @@ ${err?.stack ?? ""}`);
                   const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
                   postedMediaId = bpResult.ok ? bpResult.mediaId ?? `browser:${Date.now()}` : null;
                   if (!bpResult.ok) {
+                    browserPostErr = bpResult.message;
                     console.warn(`[engine] @${profile.username}: browser post failed for ${fileName}: ${bpResult.message}`);
                   } else {
                     storage.createInstagramApiCall({
@@ -166809,7 +166811,7 @@ ${err?.stack ?? ""}`);
                   }
                 }
               } else {
-                const uploadErr = client.lastUploadError || "Upload failed";
+                const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
                 console.warn(`[engine] @${profile.username}: \u{1F501} local folder upload failed: ${fileName} \u2014 ${uploadErr}`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName} (${uploadErr})`);
               }
