@@ -4935,37 +4935,52 @@ export function startEbIpcServer(
             const tapX = Math.round(rect.x + (0.30 + acctSeed * 0.40) * rect.w);
             const tapY = Math.round(rect.y + (0.35 + ((acctSeed * 7919) % 0.30)) * rect.h);
 
-            // Try CDP tap first, fall back to JS click.
-            let followed = false;
+            // Click strategy:
+            // - Mode A (EB open, normal on-screen window): try CDP tap first — it
+            //   fires real mouse events at the exact pixel.  Fall back to JS click
+            //   if CDP fails.
+            // - Mode B (off-screen background window): skip CDP tap entirely.
+            //   CDP Input events dispatched to a window positioned beyond the
+            //   screen edge are silently swallowed by the OS hit-testing layer on
+            //   Windows.  cdpTapGesture() doesn't throw in that case — it just
+            //   returns success without the click reaching the DOM.  JS click()
+            //   bypasses all coordinate/OS hit-testing and is 100% reliable for
+            //   off-screen windows.
             const sfDbg = sfWin.webContents.debugger;
             let dbgAttached = false;
+            const useCdp = !sfTempWin; // mode A only
             try {
-              try { sfDbg.attach("1.3"); dbgAttached = true; } catch {}
+              if (useCdp) {
+                try { sfDbg.attach("1.3"); dbgAttached = true; } catch {}
+              }
+              let cdpOk = false;
               if (dbgAttached) {
-                try { await cdpTapGesture(sfDbg, tapX, tapY); followed = true; } catch {}
+                try { await cdpTapGesture(sfDbg, tapX, tapY); cdpOk = true; } catch {}
               }
-              if (!followed) {
-                await Promise.race([
-                  sfWin.webContents.executeJavaScript(`
-                    (function() {
-                      var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
-                        if (b.disabled) return false;
-                        var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
-                        var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
-                        if (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) return true;
-                        return t === 'follow' || t === 'follow back';
-                      });
-                      if (btn) btn.click();
-                    })()
-                  `, true).catch(() => {}),
-                  new Promise<void>(r => setTimeout(() => r(), 3_000)),
-                ]);
-              }
+              // Always also fire JS click — harmless if CDP already worked, essential
+              // in mode B and as a safety net when CDP tap is swallowed silently.
+              await Promise.race([
+                sfWin.webContents.executeJavaScript(`
+                  (function() {
+                    var btn = Array.from(document.querySelectorAll('button, [role="button"]')).find(function(b) {
+                      if (b.disabled) return false;
+                      var l = ((b.getAttribute ? b.getAttribute('aria-label') : '') || '').toLowerCase().trim();
+                      var t = (b.innerText || b.textContent || '').replace(/\\s+/g, ' ').toLowerCase().trim();
+                      if (l && (l === 'follow' || l === 'follow back' || (l.startsWith('follow ') && !l.startsWith('following') && !l.startsWith('follow request')))) return true;
+                      return t === 'follow' || t === 'follow back';
+                    });
+                    if (btn) { btn.click(); return true; }
+                    return false;
+                  })()
+                `, true).catch(() => false),
+                new Promise<boolean>(r => setTimeout(() => r(false), 3_000)),
+              ]);
+              _ipcLog(`[eb:silent-follow:${pid}] click dispatched (cdp=${cdpOk}, js=always, tap=${tapX},${tapY})`);
 
               // Confirm state change to Following/Requested.
               const confirmMs = 1800 + Math.round(acctSeed * 600) + Math.round(Math.random() * 300);
               let confirmed = false;
-              const confirmDeadline = Date.now() + confirmMs + 2000;
+              const confirmDeadline = Date.now() + confirmMs + 3000;
               while (Date.now() < confirmDeadline) {
                 await new Promise(r => setTimeout(r, 300));
                 const state: any = await Promise.race([
@@ -4990,14 +5005,20 @@ export function startEbIpcServer(
                 if (state?.done) { confirmed = true; break; }
                 if (!state?.stillFollow && !state?.done) { confirmed = true; break; }
               }
+
               if (!confirmed) {
-                _ipcLog(`[WARN] [eb:silent-follow:${pid}] tap sent but Following state not confirmed for @${targetUsername}`);
+                // The click fired but Instagram's UI never flipped to "Following".
+                // Do NOT count this as a follow — return failure so the engine
+                // does not log a follow that never happened.
+                _ipcLog(`[WARN] [eb:silent-follow:${pid}] click sent but Following state NOT confirmed for @${targetUsername} — returning failure`);
+                sfRestoreUrl();
+                return sfRespond(200, { ok: false, status: "follow_blocked", reason: "tap_not_confirmed — click fired but Instagram did not register the follow" });
               }
             } finally {
               if (dbgAttached) try { sfDbg.detach(); } catch {}
             }
 
-            _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms)`);
+            _ipcLog(`[eb:silent-follow:${pid}] followed @${targetUsername} ✓ (tap ${tapX},${tapY} dwell=${dwellMs}ms confirmed)`);
             sfRestoreUrl();
             return sfRespond(200, { ok: true });
 

@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.313",
+    date: "4 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Fixed browser-follows being logged as successful when they never actually happened. The app was clicking the Follow button but the click was being silently swallowed by Windows when the background window is positioned off-screen. The app now uses a direct JavaScript click instead, which works regardless of window position, and only counts a follow as done once Instagram's button visibly changes to Following/Requested — if it doesn't, the follow is logged as blocked, not succeeded.",
+      },
+    ],
+  },
+  {
     version: "1.1.312",
     date: "4 Jul 2026",
     items: [
