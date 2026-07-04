@@ -1111,7 +1111,6 @@ export function ProfileDetailsPage() {
                 groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
                 onChange={val => updateField({ tags: val })}
               />
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap shrink-0">Group</Label>
             </div>
           </div>
 
