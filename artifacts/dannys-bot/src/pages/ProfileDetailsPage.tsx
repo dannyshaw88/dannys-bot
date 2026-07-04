@@ -1140,7 +1140,7 @@ export function ProfileDetailsPage() {
               )}
               <div className="flex items-center gap-1.5 ml-1">
                 <Switch
-                  checked={profile?.accountStatus !== "stopped"}
+                  checked={!!profile && profile.accountStatus !== "stopped"}
                   disabled={updateAccountStatusMutation.isPending}
                   onCheckedChange={checked => {
                     if (!checked) {
