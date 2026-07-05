@@ -5827,18 +5827,23 @@ export function startEbIpcServer(
                 await new Promise(r => setTimeout(r, 500));
                 continue;
               }
-              // Step 2: trusted CDP click at the Share button's coordinates
-              await spRealClick(spSharePrep.x, spSharePrep.y);
-              // Step 3: restore pointer-events on any overlays we disabled
-              await spWin.webContents.executeJavaScript(`
-                (function() {
-                  var saved = window.__shareOverlaysSaved || [];
-                  for (var i = 0; i < saved.length; i++) {
-                    saved[i].el.style.pointerEvents = saved[i].prev;
-                  }
-                  delete window.__shareOverlaysSaved;
-                })()
-              `, true).catch(() => {});
+              // Steps 2+3: trusted CDP click, then ALWAYS restore pointer-events
+              // even if the click throws (try/finally guarantees restoration).
+              const spRestore = () => spWin.isDestroyed() ? Promise.resolve() :
+                spWin.webContents.executeJavaScript(`
+                  (function() {
+                    var saved = window.__shareOverlaysSaved || [];
+                    for (var i = 0; i < saved.length; i++) {
+                      saved[i].el.style.pointerEvents = saved[i].prev;
+                    }
+                    delete window.__shareOverlaysSaved;
+                  })()
+                `, true).catch(() => {});
+              try {
+                await spRealClick(spSharePrep.x, spSharePrep.y);
+              } finally {
+                await spRestore();
+              }
               return true;
             }
             return false;
