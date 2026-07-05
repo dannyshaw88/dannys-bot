@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.347",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed a bug where the timeline feed's Like% could like far fewer posts than the configured percentage — liking now reliably hits the target amount.",
+      },
+      {
+        category: "Added",
+        text: "The app now automatically detects captcha and other security-check pages while loading the home feed, marks the account's status accordingly, and stops the session immediately instead of waiting it out.",
+      },
+      {
+        category: "Added",
+        text: "Added a new Reel Like% setting so accounts can automatically like a percentage of the reels they watch, matching the same behaviour as timeline post liking.",
+      },
+      {
+        category: "Improved",
+        text: "The activity log no longer records \"liked 0 posts\" style entries — likes are only logged when something was actually liked, keeping the log cleaner and easier to read.",
+      },
+    ],
+  },
+  {
     version: "1.1.346",
     date: "5 Jul 2026",
     items: [

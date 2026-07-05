@@ -89,6 +89,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vr_chance",   label: "Chance % (% chance reels run at all)", settingKeys: ["reelWatchChanceMin","reelWatchChanceMax"] },
         { key: "vr_count",    label: "Reels/Op (how many reels to watch)", settingKeys: ["reelWatchCountMin","reelWatchCountMax"] },
         { key: "vr_view_pct", label: "% of each reel to watch", settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
+        { key: "vr_like_pct", label: "% of reels to like",      settingKeys: ["reelLikePercentMin","reelLikePercentMax"] },
         { key: "vr_skip",     label: "Skip chance %",     settingKeys: ["viewReelsNotUsedMin","viewReelsNotUsedMax"] },
       ]},
       { key: "humanSession", label: "Human Jitter", description: "Core session order and cool-down", subOptions: [
@@ -582,6 +583,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelWatchChanceMax: 100,
       reelWatchCountMin: 1,
       reelWatchCountMax: 3,
+      reelLikePercentMin: 0,
+      reelLikePercentMax: 0,
       repostMin: 1,
       repostMax: 3,
     };
@@ -654,6 +657,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelWatchPercentMin: 0, reelWatchPercentMax: 100,
       reelWatchChanceMin: 100, reelWatchChanceMax: 100,
       reelWatchCountMin: 1, reelWatchCountMax: 3,
+      reelLikePercentMin: 0, reelLikePercentMax: 0,
       repostMin: 1, repostMax: 3,
     };
     setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
@@ -1242,6 +1246,12 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
                   <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+                </div>
+                <div className="h-4 w-px bg-border/60 shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("reelLikePercentMin", "reelLikePercentMax")}
+                  <Heart className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel Like%</span>
                 </div>
               </div>
             </div>

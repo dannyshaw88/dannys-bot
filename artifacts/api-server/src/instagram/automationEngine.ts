@@ -23,7 +23,7 @@ import { HikerApiClient, HikerCacheMissError } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs, classifyEbChallengeUrl } from "./browserSession";
 import { getAdapterProxyPort, getAdapterIp, startAdapterProxy } from "./adapterProxy";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
@@ -2878,6 +2878,26 @@ class AutomationEngine {
               return `title="${t}" url="${url.slice(0,100)}" articles=${articles} main-imgs=${mainImgs} all-imgs=${allImgs}`;
             }).catch(() => "evaluate failed");
             console.log(`[engine] @${profile.username}: [EB-only] 📰 feed waitFor timed out — DOM: ${_feedDebug}`);
+
+            // The feed can legitimately fail to load because Instagram redirected
+            // to a challenge/checkpoint page (captcha, phone verification, account
+            // disabled, etc). Detect this via the same classifier used elsewhere
+            // in the EB (classifyEbChallengeUrl) so the account status pill always
+            // reflects reality, and abort the rest of this session immediately
+            // instead of burning 20+ seconds on further futile waits.
+            const _challengeUrl = await page.evaluate(() => location.href).catch(() => "");
+            const _challengeStatus = classifyEbChallengeUrl(_challengeUrl);
+            if (_challengeStatus) {
+              console.warn(`[engine] @${profile.username}: [EB-only] 🚧 challenge page detected during feed load (${_challengeStatus}) — url: ${_challengeUrl.slice(0, 120)}`);
+              await storage.updateProfile(profile.id, {
+                accountStatus: _challengeStatus as any,
+                statusMessage: "Challenge/security check detected while loading home feed — complete in embedded browser",
+              }).catch(() => {});
+              const challengeErr: any = new Error(`Challenge page detected (${_challengeStatus})`);
+              challengeErr.__ebChallenge = true;
+              challengeErr.__ebChallengeStatus = _challengeStatus;
+              throw challengeErr;
+            }
           }
 
           // ── Expand Caption% + Like% — resolved ONCE here, then applied INLINE
@@ -2942,7 +2962,7 @@ class AutomationEngine {
             // Inline like — likes the post currently being scrolled past, on the
             // fly, in the SAME forward pass. No scrollTo(0,0), no second walk
             // through the feed. Marks the post so it's not liked twice.
-            if (likeCount > 0 && liked < likeCount && Math.random() * 100 < likePct) {
+            if (likeCount > 0 && liked < likeCount) {
               const likedOne: boolean = await page.evaluate(() => {
                 const articles = Array.from(document.querySelectorAll('article'));
                 // Find the next un-liked article — NO viewport check here. When the
@@ -3001,12 +3021,17 @@ class AutomationEngine {
             console.log(`[engine] @${profile.username}: [EB-only] 📖 expanded ${expanded} caption(s) inline`);
           }
 
-          if (likeCount > 0) {
-            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) inline while scrolling`);
+          if (liked > 0) {
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) inline while scrolling`);
             this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) inline while scrolling`);
             console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts inline while scrolling`);
           }
         } catch (e: any) {
+          if (e?.__ebChallenge) {
+            console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed aborted — challenge page detected (${e.__ebChallengeStatus})`);
+            this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "challenge detected", true);
+            throw e;
+          }
           console.warn(`[engine] @${profile.username}: [EB-only] viewTimelineFeed error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
         }
@@ -3038,7 +3063,18 @@ class AutomationEngine {
             const rvMax = Math.min(100, Math.max(0, Number(s.reelWatchPercentMax ?? 100)));
             const reelViewPctMin = Math.min(rvMin, rvMax);
             const reelViewPctMax = Math.max(rvMin, rvMax);
-            console.log(`[engine] @${profile.username}: 🎲 [EB] View Reels chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% — reels ON (${reelCount} reels)`);
+            // Reel Like% — same "% of items to like" model as the timeline feed's
+            // inline Like%. Resolved ONCE per session (mirrors the feed logic) into
+            // a fixed target count, then the reel loop below tries to like reels
+            // (up to that count) as it watches through them — no per-step random
+            // gate, since likeCount already encodes the probability.
+            const rlMin = Math.min(100, Math.max(0, Number(s.reelLikePercentMin ?? 0)));
+            const rlMax = Math.min(100, Math.max(0, Number(s.reelLikePercentMax ?? 0)));
+            const reelLikePctMin = Math.min(rlMin, rlMax);
+            const reelLikePctMax = Math.max(rlMin, rlMax);
+            const reelLikePct = reelLikePctMax > 0 ? reelLikePctMin + Math.random() * (reelLikePctMax - reelLikePctMin) : 0;
+            const reelLikeCount = reelLikePctMax > 0 ? Math.round(reelCount * reelLikePct / 100) : 0;
+            console.log(`[engine] @${profile.username}: 🎲 [EB] View Reels chance ${reelChanceRoll.toFixed(1)}% < ${reelChance.toFixed(1)}% — reels ON (${reelCount} reels, like target ${reelLikeCount})`);
             try {
               await nav("https://www.instagram.com/reels/", "reels feed");
               await sleep(actionDelay());
@@ -3055,6 +3091,7 @@ class AutomationEngine {
               let watched = 0;
               let totalWatchMs = 0;
               let totalViewPct = 0;
+              let reelLiked = 0;
               if (videoFound) {
                 for (let i = 0; i < reelCount && !state.stop.stopped; i++) {
                   // Dwell for reelViewPct% of an estimated 8–20s reel duration.
@@ -3062,6 +3099,26 @@ class AutomationEngine {
                   const reelDurMs = randInt(8000, 20000);
                   const watchMs = Math.max(2000, Math.round((reelViewPct / 100) * reelDurMs));
                   await sleep(watchMs);
+                  // Reel Like — try once per reel while it's on screen, up to the
+                  // pre-computed reelLikeCount target (no per-step random gate; see
+                  // the double-random-gate bug this pattern avoids on the feed above).
+                  if (reelLikeCount > 0 && reelLiked < reelLikeCount) {
+                    const likedReel: boolean = await page.evaluate(() => {
+                      const heartSvg = document.querySelector('svg[aria-label="Like"]') as SVGElement | null;
+                      if (!heartSvg) return false;
+                      const btn = heartSvg.closest<HTMLElement>('[role="button"], button');
+                      if (!btn) return false;
+                      btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                      btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                      btn.click();
+                      return true;
+                    }).catch(() => false);
+                    if (likedReel) {
+                      reelLiked++;
+                      await storage.incrementStat(profile.id, "like").catch(() => {});
+                      await sleep(actionDelay());
+                    }
+                  }
                   await page.keyboard.press("ArrowDown").catch(() => {});
                   await sleep(randInt(600, 1400));
                   watched++;
@@ -3077,6 +3134,11 @@ class AutomationEngine {
               this.logAction(profile.id, tool.id, "view_reel_from_feed", "", "", "reel", watched > 0 ? "ok" : "skipped", reelDetail);
               this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", reelDetail);
               console.log(`[engine] @${profile.username}: [EB-only] 🎬 watched ${watched} reels`);
+              if (reelLiked > 0) {
+                this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "reel", "ok", `EB liked ${reelLiked} reel(s) while watching`);
+                this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${reelLiked} reel(s) while watching`);
+                console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${reelLiked} reels`);
+              }
             } catch (e: any) {
               console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
               this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
@@ -3325,8 +3387,10 @@ class AutomationEngine {
               if (clickedOne) { liked++; await sleep(actionDelay()); }
             }
             for (let i = 0; i < liked; i++) await storage.incrementStat(profile.id, "like").catch(() => {});
-            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", liked > 0 ? "ok" : "skipped", `EB liked ${liked} post(s) via browser`);
-            this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via browser`);
+            if (liked > 0) {
+              this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", `EB liked ${liked} post(s) via browser`);
+              this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", `EB liked ${liked} post(s) via browser`);
+            }
             console.log(`[engine] @${profile.username}: [EB-only] ❤️ liked ${liked} posts`);
           } catch (e: any) {
             console.warn(`[engine] @${profile.username}: [EB-only] likeTimelinePosts error: ${e?.message}`);

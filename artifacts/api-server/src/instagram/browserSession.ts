@@ -59,10 +59,10 @@ function log(msg: string, _category?: string) {
 // ── EB challenge classifier ───────────────────────────────────────────────────
 // Maps an Instagram URL (redirect target or current page) to an accountStatus
 // value so the DB always reflects what the embedded browser is actually showing.
-function classifyEbChallengeUrl(url: string): string | null {
+export function classifyEbChallengeUrl(url: string): string | null {
   if (!url || !url.includes("instagram.com")) return null;
   if (/confirm_email|email.*verif|verif.*email|email_confirmation/i.test(url)) return "email_confirmation";
-  if (/update_risky_contactpoint|\/challenge\//i.test(url))                     return "captcha";
+  if (/update_risky_contactpoint|\/challenge\/|auth_platform\/recaptcha/i.test(url))  return "captcha";
   if (/accounts\/disabled/i.test(url))                                          return "account_disabled";
   if (/accounts\/suspended/i.test(url))                                         return "confirm_human";
   if (/phone.*verif|verif.*phone|phone_required|confirm.*phone/i.test(url))     return "phone_verification";
