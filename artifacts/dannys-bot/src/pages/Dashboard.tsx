@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.345",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Improved",
+        text: "Browser automation sessions now open and close a browser window per session instead of keeping one open permanently — reduces memory usage significantly when running many accounts.",
+        technical: [
+          "ensureSilentEbOpen() now returns { ok, weOpenedIt } instead of a plain boolean. If a window was already open (user has it open), we reuse it and do NOT destroy it when the session finishes — it belongs to the user.",
+          "If we opened a new silentMode window for the session, closeSilentEb() is called in a finally block after runBrowserOnlyHumanSession() completes (success or error). The window is destroyed via /eb/close which calls win.destroy().",
+          "This keeps live browser windows bounded to the number of concurrently running sessions (typically 3-10), not the total number of profiles (1,000+). Each Chromium instance uses 200-500MB RAM — this change makes the app viable at scale.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.344",
     date: "5 Jul 2026",
     items: [

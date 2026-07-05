@@ -385,15 +385,31 @@ class AutomationEngine {
    * repeatedly — /eb/open is idempotent (focuses/no-ops if already open).
    * Returns false if EB_IPC_PORT is not set (dev/Replit — no Electron process).
    */
-  private async ensureSilentEbOpen(profile: Profile): Promise<boolean> {
+  /**
+   * Ensures a browser window is open for this profile's automation session.
+   * Returns { ok, weOpenedIt }:
+   *   ok          — whether a usable window is available
+   *   weOpenedIt  — true if WE opened a NEW silentMode window for this session.
+   *                 The caller must call closeSilentEb() in a finally block so
+   *                 the ephemeral window is destroyed when the session ends.
+   *                 false means we reused the user's already-open window — do
+   *                 NOT destroy it (the user still wants it).
+   *
+   * With 1,000+ profiles only a handful of sessions run concurrently, so the
+   * total number of live silentMode windows at any moment is small.  They are
+   * created on session start and destroyed on session end, never left open.
+   */
+  private async ensureSilentEbOpen(profile: Profile): Promise<{ ok: boolean; weOpenedIt: boolean }> {
     const ebIpcPort = process.env.EB_IPC_PORT;
-    if (!ebIpcPort) return false;
+    if (!ebIpcPort) return { ok: false, weOpenedIt: false };
     try {
       const stateRes = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/state?profileId=${profile.id}`).catch(() => null);
       const state = stateRes && stateRes.ok
         ? await stateRes.json().catch(() => null) as { open?: boolean } | null
         : null;
-      if (state?.open) return true;
+      // Window already open (user has it open, or a previous session left it).
+      // Reuse it — do NOT destroy it when we finish.
+      if (state?.open) return { ok: true, weOpenedIt: false };
 
       const p = profile as any;
       const proxy = (p.proxyHost && p.proxyPort) ? {
@@ -416,15 +432,27 @@ class AutomationEngine {
         }),
         signal: AbortSignal.timeout(20_000),
       });
-      if (!r.ok) return false;
+      if (!r.ok) return { ok: false, weOpenedIt: false };
       // openEbWindow is fire-and-forget on the Electron side; give Chromium a
       // moment to finish loading before the caller starts navigating/evaluating.
       await sleep(3000);
-      return true;
+      return { ok: true, weOpenedIt: true };
     } catch (err: any) {
       console.warn(`[engine] @${profile.username}: ensureSilentEbOpen error: ${err?.message}`);
-      return false;
+      return { ok: false, weOpenedIt: false };
     }
+  }
+
+  /** Destroys the silentMode window opened by ensureSilentEbOpen for this profile. */
+  private async closeSilentEb(profileId: number): Promise<void> {
+    const ebIpcPort = process.env.EB_IPC_PORT;
+    if (!ebIpcPort) return;
+    await fetch(`http://127.0.0.1:${ebIpcPort}/eb/close`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ profileId }),
+      signal:  AbortSignal.timeout(10_000),
+    }).catch(() => {});
   }
 
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
@@ -2685,17 +2713,22 @@ class AutomationEngine {
   private async runBrowserOnlyHumanSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
     const ebIpcPort = process.env.EB_IPC_PORT;
     let page: any;
+    // Track whether WE opened the window so we can destroy it when done.
+    // If the user already had it open we must NOT destroy it — they still want it.
+    let _weOpenedEb = false;
     if (ebIpcPort) {
       // Electron desktop app — drive the REAL EB via the ebManager.ts IPC bridge.
-      // Opens a silent (never-shown) window if one isn't already open for this
-      // account, so this runs fully in the background regardless of whether the
-      // user has the EB panel open on screen.
-      const opened = await this.ensureSilentEbOpen(profile);
-      if (!opened) {
+      // Opens an off-screen silentMode window if one isn't already open for this
+      // account.  The window is destroyed via closeSilentEb() in the finally block
+      // below — with 1,000+ profiles we only keep a handful of windows alive at
+      // any given moment (one per concurrently running session), not one per profile.
+      const { ok, weOpenedIt } = await this.ensureSilentEbOpen(profile);
+      if (!ok) {
         console.log(`[engine] @${profile.username}: [EB-only] could not open silent EB — skipping browser human session`);
         this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API: silent EB open failed, no browser human session run");
         return;
       }
+      _weOpenedEb = weOpenedIt;
       page = new EbIpcPage(profile.id, ebIpcPort);
     } else {
       // Dev / Replit (no Electron process) — fall back to the standalone
@@ -3431,6 +3464,16 @@ class AutomationEngine {
       console.log(`[engine] @${profile.username}: ✅ [EB-only] browser human session complete`);
     } catch (e: any) {
       console.warn(`[engine] @${profile.username}: [EB-only] browser human session error: ${e?.message}`);
+    } finally {
+      // Destroy the silentMode window if WE opened it for this session.
+      // This keeps memory bounded with 1,000+ profiles — only a handful of
+      // windows exist at any moment (one per concurrently running session).
+      // If the user had a window open already (weOpenedIt=false), we leave it
+      // alone — it is their persistent window and they may still be using it.
+      if (_weOpenedEb && ebIpcPort) {
+        await this.closeSilentEb(profile.id);
+        console.log(`[engine] @${profile.username}: [EB-only] silentMode EB closed (ephemeral — session done)`);
+      }
     }
   }
 
