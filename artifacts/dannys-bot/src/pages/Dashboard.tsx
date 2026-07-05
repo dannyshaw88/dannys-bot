@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.354",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Found and fixed the actual cause of the Create button not working when making a post — the app was hovering over the button correctly, but the click itself was a simulated click that Instagram was quietly ignoring. Clicking is now done the same way a real click from your mouse works, so Instagram accepts it and opens the post window every time.",
+      },
+    ],
+  },
+  {
     version: "1.1.353",
     date: "5 Jul 2026",
     items: [

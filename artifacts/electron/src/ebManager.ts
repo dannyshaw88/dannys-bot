@@ -5419,6 +5419,28 @@ export function startEbIpcServer(
               return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
             })()
           `;
+          // Helper: dispatch a REAL trusted click via CDP at (x, y) — mousePressed
+          // then mouseReleased. Confirmed root cause (v1.1.353 log evidence:
+          // "found the Create button but the click never registered" on every
+          // single attempt, for every account): the hover mousemove is a real
+          // CDP-dispatched event (isTrusted=true) and visibly worked, but the
+          // click was a synthetic in-page element.click()/PointerEvent
+          // (isTrusted=false always, per spec — script-dispatched events can
+          // never be trusted). Instagram's Create button silently ignores
+          // untrusted clicks on this specific control, which is exactly why
+          // hovering "highlighted" it but nothing else ever happened. This
+          // same real-CDP-click pattern is already used elsewhere in this file
+          // (ghost-signup nav, cookie banner dismissal) for the same reason.
+          const spRealClick = async (x: number, y: number) => {
+            await dbg.sendCommand("Input.dispatchMouseEvent", {
+              type: "mousePressed", x, y, button: "left", clickCount: 1,
+            }).catch(() => {});
+            await new Promise(r => setTimeout(r, 60));
+            await dbg.sendCommand("Input.dispatchMouseEvent", {
+              type: "mouseReleased", x, y, button: "left", clickCount: 1,
+            }).catch(() => {});
+          };
+
           let spClickedCreate = false;
           const spCreateDeadline = Date.now() + 20_000;
           let spLastFoundButNotClicked = false;
@@ -5434,76 +5456,77 @@ export function startEbIpcServer(
                 type: "mouseMoved", x: spCreatePos.x, y: spCreatePos.y,
                 button: "none", clickCount: 0,
               }).catch(() => {});
-              await new Promise(r => setTimeout(r, 800)); // wait for hover animation
+              await new Promise(r => setTimeout(r, 800)); // wait for hover/expand animation
 
-              _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item`);
-              const clicked: boolean = await spWin.webContents.executeJavaScript(`
+              // Re-fetch the position AFTER the hover animation — the sidebar
+              // expands on hover (icon-only → icon+text), which shifts the
+              // button's centre. Clicking the stale pre-hover coordinate can
+              // miss the button entirely even though it was "found".
+              const spFreshPos: { x: number; y: number; found: boolean } =
+                await spWin.webContents.executeJavaScript(spFindCreateJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
+              const clickX = spFreshPos.found ? spFreshPos.x : spCreatePos.x;
+              const clickY = spFreshPos.found ? spFreshPos.y : spCreatePos.y;
+
+              _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item at (${clickX}, ${clickY}) via trusted CDP click`);
+              await spRealClick(clickX, clickY);
+              await new Promise(r => setTimeout(r, 700));
+
+              // Verify the click actually opened the Create dropdown/submenu
+              // (look for the "Post" option) rather than trusting a boolean
+              // return value from an in-page click, which can't tell us
+              // whether Instagram's own handler actually reacted.
+              const spMenuOpened: boolean = await spWin.webContents.executeJavaScript(`
                 (function() {
-                  var btn = null;
-                  btn = document.querySelector('[aria-label="New post"], [aria-label="Create"], [aria-label="create"]');
-                  if (!btn) btn = document.querySelector('[aria-label*="reate"]');
-                  if (!btn) btn = document.querySelector('a[href="/create/"], a[href*="/create"]');
-                  if (!btn) {
-                    var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
-                    btn = els.find(function(el) {
-                      var txt = (el.textContent || '').trim();
-                      var lbl = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
-                      return txt === 'Create' || lbl === 'create' || lbl === 'new post' || lbl.includes('create post');
-                    }) || null;
-                  }
-                  if (!btn) {
-                    var titles = Array.from(document.querySelectorAll('svg title'));
-                    var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
-                    if (ct) btn = ct.closest('a, [role="link"], button') || null;
-                  }
-                  if (!btn) return false;
-                  // Plain .click() is silently swallowed or triggers native href
-                  // navigation on Instagram's React-controlled nav (looks like a
-                  // hover with no effect, then the timeline just refreshes).
-                  // Dispatch real pointer events first — same fix used for
-                  // likes/follows/DMs elsewhere in this codebase.
-                  btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                  btn.click();
-                  return true;
+                  var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
+                  return all.some(function(el) { return el.textContent.trim() === 'Post' && el.offsetHeight > 0; });
                 })()
               `, true).catch(() => false);
 
-              if (clicked) { spClickedCreate = true; break; }
-              // Button was found but the click-time re-query missed it (DOM
-              // re-rendered between find and click) — loop again immediately.
+              if (spMenuOpened) { spClickedCreate = true; break; }
+              // Click didn't open the menu — loop again (re-find + re-hover + re-click).
             }
             await new Promise(r => setTimeout(r, 500));
           }
 
           if (!spClickedCreate) {
             const reason = spLastFoundButNotClicked
-              ? "found the Create button but the click never registered"
+              ? "found the Create button and clicked it, but the Post dropdown never opened"
               : "the Create button never appeared in the Instagram left nav after 20s — is the account logged in?";
             throw new Error(`Could not click Create button — ${reason}`);
           }
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 500));
 
           // ── Step 3: Click "Post" from the submenu ─────────────────────────
+          // Same fix as Step 1: use a real trusted CDP click, and poll up to
+          // 10s in case the dropdown is still animating in.
           _ipcLog(`[eb:silent-post:${pid}] clicking Post from submenu`);
-          const spClickedPost: boolean = await spWin.webContents.executeJavaScript(`
+          const spFindPostJs = `
             (function() {
               var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
               var postItem = all.find(function(el) {
                 return el.textContent.trim() === 'Post' && el.offsetHeight > 0;
               });
-              if (postItem) {
-                var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
-                clickable.scrollIntoView({ behavior: 'instant', block: 'center' });
-                clickable.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                clickable.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                clickable.click();
-                return true;
-              }
-              return false;
+              if (!postItem) return { found: false, x: 0, y: 0 };
+              var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
+              clickable.scrollIntoView({ behavior: 'instant', block: 'center' });
+              var rect = clickable.getBoundingClientRect();
+              return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
             })()
-          `, true).catch(() => false);
+          `;
+          let spClickedPost = false;
+          const spPostDeadline = Date.now() + 10_000;
+          while (Date.now() < spPostDeadline) {
+            if (spWin.isDestroyed()) break;
+            const spPostPos: { x: number; y: number; found: boolean } =
+              await spWin.webContents.executeJavaScript(spFindPostJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
+            if (spPostPos.found) {
+              await spRealClick(spPostPos.x, spPostPos.y);
+              await new Promise(r => setTimeout(r, 600));
+              spClickedPost = true;
+              break;
+            }
+            await new Promise(r => setTimeout(r, 400));
+          }
 
           if (!spClickedPost) throw new Error("Could not find Post option in the Create submenu");
           await new Promise(r => setTimeout(r, 2000));
