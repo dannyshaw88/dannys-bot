@@ -5771,17 +5771,79 @@ export function startEbIpcServer(
           }
 
           // ── Click Share ───────────────────────────────────────────────────
-          // v1.1.361 fix: the previous "reject candidates overlapping the
-          // photo" filter (spFindShareBtnPos) was itself the bug — it still
-          // ended up clicking the photo/tag-people overlay in production.
-          // Share is the EXACT SAME header button element as the crop/filter
-          // "Next" button (Instagram just relabels it) — so this now reuses
-          // the identical generic-text button finder (spFindBtnPos) already
-          // proven reliable for Next, via spClickBtnTextOnce (single click,
-          // no auto-retry, to avoid any risk of double-posting). Success is
-          // verified separately below via the "post shared" text.
+          // v1.1.362 fix: confirmed root cause of every prior "clicking photo
+          // instead of Share" failure. The caption step renders a transparent
+          // "Click photo to tag people" hit-target ([role="button"]) that sits
+          // above the header in the DOM stacking order. Coordinate-based CDP
+          // clicks at the Share button's (x,y) are intercepted by this overlay
+          // even though Share is visually above it — z-index/stacking context
+          // in Instagram's React tree puts the overlay on top of the dialog header.
+          //
+          // Fix: before dispatching the CDP click, use document.elementsFromPoint
+          // to find every element sitting above the Share button at its click
+          // coordinates and temporarily set pointer-events:none on them. The CDP
+          // click then reaches the Share button directly. Pointer events are
+          // restored immediately after the click so the page is left in its
+          // normal state. The Share button is identified as the topmost "Share"
+          // candidate by minimum getBoundingClientRect().top (header = smallest Y).
           _ipcLog(`[eb:silent-post:${pid}] clicking Share`);
-          if (!await spClickBtnTextOnce("Share", 15000)) throw new Error("Share button not found");
+          const spShareClickOk = await (async () => {
+            const deadline = Date.now() + 15_000;
+            while (Date.now() < deadline) {
+              if (spWin.isDestroyed()) return false;
+              // Step 1: find topmost Share button, disable blocking overlays
+              const spSharePrep: { found: boolean; x: number; y: number } =
+                await spWin.webContents.executeJavaScript(`
+                  (function() {
+                    var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
+                    var candidates = all.filter(function(el) {
+                      return (el.textContent || '').trim() === 'Share' && el.offsetHeight > 0;
+                    });
+                    if (candidates.length === 0) return { found: false, x: 0, y: 0 };
+                    // Pick topmost — the header Share button has the smallest Y
+                    var btn = candidates.reduce(function(a, b) {
+                      return a.getBoundingClientRect().top <= b.getBoundingClientRect().top ? a : b;
+                    });
+                    btn.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+                    var rect = btn.getBoundingClientRect();
+                    var cx = Math.round(rect.left + rect.width / 2);
+                    var cy = Math.round(rect.top + rect.height / 2);
+                    // Disable pointer-events on any elements stacked above the
+                    // Share button at its click point, so the CDP click reaches
+                    // the button instead of being intercepted by an overlay.
+                    var stack = document.elementsFromPoint(cx, cy);
+                    var saved = [];
+                    for (var i = 0; i < stack.length; i++) {
+                      var el = stack[i];
+                      if (el === btn || el.tagName === 'HTML' || el.tagName === 'BODY') break;
+                      saved.push({ el: el, prev: el.style.pointerEvents });
+                      el.style.pointerEvents = 'none';
+                    }
+                    window.__shareOverlaysSaved = saved;
+                    return { found: true, x: cx, y: cy };
+                  })()
+                `, true).catch(() => ({ found: false, x: 0, y: 0 }));
+              if (!spSharePrep.found) {
+                await new Promise(r => setTimeout(r, 500));
+                continue;
+              }
+              // Step 2: trusted CDP click at the Share button's coordinates
+              await spRealClick(spSharePrep.x, spSharePrep.y);
+              // Step 3: restore pointer-events on any overlays we disabled
+              await spWin.webContents.executeJavaScript(`
+                (function() {
+                  var saved = window.__shareOverlaysSaved || [];
+                  for (var i = 0; i < saved.length; i++) {
+                    saved[i].el.style.pointerEvents = saved[i].prev;
+                  }
+                  delete window.__shareOverlaysSaved;
+                })()
+              `, true).catch(() => {});
+              return true;
+            }
+            return false;
+          })();
+          if (!spShareClickOk) throw new Error("Share button not found");
 
           // ── Wait for "Your post has been shared" confirmation ─────────────
           _ipcLog(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);

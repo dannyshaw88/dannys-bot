@@ -4226,6 +4226,12 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  app.delete("/api/profiles/:id/reposted-posts", async (req, res) => {
+    const profileId = Number(req.params.id);
+    await storage.deleteAllRepostedPostsByProfile(profileId);
+    res.json({ ok: true });
+  });
+
   // ── Contact DM Sent (new-follower DM tracker) ─────────────────────────────
   app.get("/api/profiles/:profileId/contact-dm-sent", async (req, res) => {
     const profileId = Number(req.params.profileId);

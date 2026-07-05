@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.362",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed Make a Post still clicking the photo (opening the tag-people search box) instead of pressing Share. Root cause confirmed: Instagram's caption step renders a transparent \"Click photo to tag people\" layer that sits above the Share header button in the page's stacking order, intercepting every coordinate-based click aimed at Share. The fix temporarily disables pointer events on any elements blocking the Share button's click point, fires the trusted click directly onto the button, then immediately restores the page to its normal state.",
+      },
+      {
+        category: "Improved",
+        text: "Posted Posts list now has a Delete button beside each individual post, letting you remove specific entries so those images can be re-posted. A Delete All button in the list header clears every entry at once.",
+      },
+    ],
+  },
+  {
     version: "1.1.361",
     date: "5 Jul 2026",
     items: [

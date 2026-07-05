@@ -111,6 +111,7 @@ export interface IStorage {
   getRepostedPostsByProfile(profileId: number, limit?: number): Promise<RepostedPost[]>;
   createRepostedPost(entry: InsertRepostedPost): Promise<RepostedPost>;
   deleteRepostedPost(id: number): Promise<void>;
+  deleteAllRepostedPostsByProfile(profileId: number): Promise<void>;
   isAlreadyReposted(profileId: number, mediaId: string): Promise<boolean>;
 
   // Contact DM Sent (new-followers DM tracker)
@@ -866,6 +867,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteRepostedPost(id: number): Promise<void> {
     await db.delete(repostedPosts).where(eq(repostedPosts.id, id));
+  }
+
+  async deleteAllRepostedPostsByProfile(profileId: number): Promise<void> {
+    await db.delete(repostedPosts).where(eq(repostedPosts.profileId, profileId));
   }
 
   async isAlreadyReposted(profileId: number, mediaId: string): Promise<boolean> {
