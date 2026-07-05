@@ -5364,13 +5364,28 @@ export function startEbIpcServer(
           `, true).catch(() => {});
 
           // Allow the left sidebar nav to fully render
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 1000));
 
-          // ── Step 1: Find the Create ("+" plus) button and hover it ────────
-          // Hovering causes Instagram to expand the sidebar labels, making the
-          // "Create" text visible and the submenu reliably clickable.
-          _ipcLog(`[eb:silent-post:${pid}] locating Create button to hover`);
-          const spCreatePos: { x: number; y: number; found: boolean } = await spWin.webContents.executeJavaScript(`
+          // ── Step 1 + 2: Poll for the Create ("+" plus) button, hover it, then
+          // click it — combined into ONE retry loop (up to 20s).
+          //
+          // BUG HISTORY: this used to be a single fixed 3s sleep followed by a
+          // ONE-SHOT selector check with no retry — every other wait in this
+          // same flow (file input, Next, Share, Done — see spClickBtnText and
+          // spFileInputFound below) already used a proper poll-until-found loop.
+          // That inconsistency was the actual root cause of the intermittent
+          // "Could not find Create button" failures: a hard navigation to
+          // instagram.com/ can take longer than 3s to hydrate the left nav
+          // depending on proxy latency/machine speed, so the one-shot check
+          // would sometimes run before the sidebar existed at all — with no
+          // retry, it failed immediately and the cleanup step then reloaded
+          // the previous URL, which is exactly what looked like "hovers over
+          // Create, then the homepage just refreshes" to the user.
+          // This does NOT retry the actual post/click action against Instagram
+          // multiple times — it only waits for the UI to be ready, then performs
+          // exactly one hover + one click, same as every other step here.
+          _ipcLog(`[eb:silent-post:${pid}] locating Create button (poll up to 20s)`);
+          const spFindCreateJs = `
             (function() {
               var btn = null;
               // 1. aria-label exact matches (most reliable when sidebar is expanded)
@@ -5399,62 +5414,75 @@ export function startEbIpcServer(
                 var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
                 if (ct) btn = ct.closest('a, [role="link"], button') || null;
               }
-              if (!btn) return { found: false, x: 0, y: 0 };
+              if (!btn || btn.offsetHeight === 0) return { found: false, x: 0, y: 0 };
               var rect = btn.getBoundingClientRect();
               return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
             })()
-          `, true).catch(() => ({ found: false, x: 0, y: 0 }));
+          `;
+          let spClickedCreate = false;
+          const spCreateDeadline = Date.now() + 20_000;
+          let spLastFoundButNotClicked = false;
+          while (Date.now() < spCreateDeadline) {
+            if (spWin.isDestroyed()) break;
+            const spCreatePos: { x: number; y: number; found: boolean } =
+              await spWin.webContents.executeJavaScript(spFindCreateJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
 
-          if (spCreatePos.found) {
-            // Dispatch a mousemove to the button's centre — triggers sidebar expansion
-            await dbg.sendCommand("Input.dispatchMouseEvent", {
-              type: "mouseMoved", x: spCreatePos.x, y: spCreatePos.y,
-              button: "none", clickCount: 0,
-            }).catch(() => {});
-            await new Promise(r => setTimeout(r, 800)); // wait for hover animation
+            if (spCreatePos.found) {
+              spLastFoundButNotClicked = true;
+              // Dispatch a mousemove to the button's centre — triggers sidebar expansion
+              await dbg.sendCommand("Input.dispatchMouseEvent", {
+                type: "mouseMoved", x: spCreatePos.x, y: spCreatePos.y,
+                button: "none", clickCount: 0,
+              }).catch(() => {});
+              await new Promise(r => setTimeout(r, 800)); // wait for hover animation
+
+              _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item`);
+              const clicked: boolean = await spWin.webContents.executeJavaScript(`
+                (function() {
+                  var btn = null;
+                  btn = document.querySelector('[aria-label="New post"], [aria-label="Create"], [aria-label="create"]');
+                  if (!btn) btn = document.querySelector('[aria-label*="reate"]');
+                  if (!btn) btn = document.querySelector('a[href="/create/"], a[href*="/create"]');
+                  if (!btn) {
+                    var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
+                    btn = els.find(function(el) {
+                      var txt = (el.textContent || '').trim();
+                      var lbl = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
+                      return txt === 'Create' || lbl === 'create' || lbl === 'new post' || lbl.includes('create post');
+                    }) || null;
+                  }
+                  if (!btn) {
+                    var titles = Array.from(document.querySelectorAll('svg title'));
+                    var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
+                    if (ct) btn = ct.closest('a, [role="link"], button') || null;
+                  }
+                  if (!btn) return false;
+                  // Plain .click() is silently swallowed or triggers native href
+                  // navigation on Instagram's React-controlled nav (looks like a
+                  // hover with no effect, then the timeline just refreshes).
+                  // Dispatch real pointer events first — same fix used for
+                  // likes/follows/DMs elsewhere in this codebase.
+                  btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                  btn.click();
+                  return true;
+                })()
+              `, true).catch(() => false);
+
+              if (clicked) { spClickedCreate = true; break; }
+              // Button was found but the click-time re-query missed it (DOM
+              // re-rendered between find and click) — loop again immediately.
+            }
+            await new Promise(r => setTimeout(r, 500));
           }
 
-          // ── Step 2: Click "Create" from the (now expanded) nav ───────────
-          _ipcLog(`[eb:silent-post:${pid}] clicking Create nav item`);
-          const spClickedCreate: boolean = await spWin.webContents.executeJavaScript(`
-            (function() {
-              var btn = null;
-              // 1. aria-label exact matches
-              btn = document.querySelector('[aria-label="New post"], [aria-label="Create"], [aria-label="create"]');
-              // 2. Broad aria-label substring
-              if (!btn) btn = document.querySelector('[aria-label*="reate"]');
-              // 3. href-based
-              if (!btn) btn = document.querySelector('a[href="/create/"], a[href*="/create"]');
-              // 4. Any clickable element whose label/title/text indicates "Create"
-              if (!btn) {
-                var els = Array.from(document.querySelectorAll('a, [role="link"], [role="button"], button'));
-                btn = els.find(function(el) {
-                  var txt = (el.textContent || '').trim();
-                  var lbl = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
-                  return txt === 'Create' || lbl === 'create' || lbl === 'new post' || lbl.includes('create post');
-                }) || null;
-              }
-              // 5. SVG title fallback
-              if (!btn) {
-                var titles = Array.from(document.querySelectorAll('svg title'));
-                var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
-                if (ct) btn = ct.closest('a, [role="link"], button') || null;
-              }
-              if (!btn) return false;
-              // Plain .click() is silently swallowed or triggers native href
-              // navigation on Instagram's React-controlled nav (looks like a
-              // hover with no effect, then the timeline just refreshes).
-              // Dispatch real pointer events first — same fix used for
-              // likes/follows/DMs elsewhere in this codebase.
-              btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-              btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-              btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-              btn.click();
-              return true;
-            })()
-          `, true).catch(() => false);
-
-          if (!spClickedCreate) throw new Error("Could not find Create button in the Instagram left nav — is the account logged in?");
+          if (!spClickedCreate) {
+            const reason = spLastFoundButNotClicked
+              ? "found the Create button but the click never registered"
+              : "the Create button never appeared in the Instagram left nav after 20s — is the account logged in?";
+            throw new Error(`Could not click Create button — ${reason}`);
+          }
           await new Promise(r => setTimeout(r, 1500));
 
           // ── Step 3: Click "Post" from the submenu ─────────────────────────

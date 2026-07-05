@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.353",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed \"Make a Post\" for browser-mode accounts for real this time — the app was only waiting a fixed 3 seconds for the Create button to show up before giving up, but every other step in the posting flow already waited and re-checked until things were ready. Now the Create button gets the same treatment: the app keeps checking for up to 20 seconds and clicks it the moment it appears, instead of giving up early and quietly refreshing back to the timeline.",
+      },
+    ],
+  },
+  {
     version: "1.1.352",
     date: "5 Jul 2026",
     items: [
