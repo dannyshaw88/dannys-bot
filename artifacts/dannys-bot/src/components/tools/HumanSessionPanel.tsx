@@ -596,7 +596,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelLikePercentMin: 0,
       reelLikePercentMax: 0,
       repostMin: 1,
-      repostMax: 3,
+      repostMax: 1,
     };
     return { ...def, ...(tool.settings as Record<string, any> || {}) };
   });
@@ -668,7 +668,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelWatchChanceMin: 100, reelWatchChanceMax: 100,
       reelWatchCountMin: 1, reelWatchCountMax: 3,
       reelLikePercentMin: 0, reelLikePercentMax: 0,
-      repostMin: 1, repostMax: 3,
+      repostMin: 1, repostMax: 1,
     };
     setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
   }, [tool.id]);
@@ -1615,10 +1615,27 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <label htmlFor="repostDisableComments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
                 </div>
               </div>
-              <div className="flex gap-1.5">
+            </div>
+
+            <p className="text-[10px] text-muted-foreground/70">
+              You can use multi-level spin syntax for the caption. Leave blank to use the original post's caption.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Textarea
+                className="text-xs font-mono resize-none h-[72px] leading-relaxed flex-1"
+                rows={3}
+                value={(settings as any).repostCaptionText ?? ""}
+                onChange={(e) => {
+                  setSettings({ ...settings, repostCaptionText: e.target.value } as any);
+                  setSpinPreview(null);
+                  setSpinSyntaxMsg(null);
+                }}
+              />
+              <div className="flex flex-col gap-1 self-center">
                 <button
                   type="button"
-                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors whitespace-nowrap"
                   onClick={() => {
                     const t = (settings as any).repostCaptionText ?? "";
                     let depth = 0;
@@ -1632,11 +1649,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     setSpinPreview(null);
                   }}
                 >
-                  Check Spin Syntax
+                  Check Spintax
                 </button>
                 <button
                   type="button"
-                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors whitespace-nowrap"
                   onClick={() => {
                     let result = (settings as any).repostCaptionText ?? "";
                     let i = 0;
@@ -1656,22 +1673,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </button>
               </div>
             </div>
-
-            <p className="text-[10px] text-muted-foreground/70">
-              You can use multi-level spin syntax for the caption. Leave blank to use the original post's caption.
-            </p>
-
-            <Textarea
-              className="text-xs font-mono resize-none h-[72px] leading-relaxed max-w-[280px]"
-              rows={3}
-              placeholder="Type a caption or use a token"
-              value={(settings as any).repostCaptionText ?? ""}
-              onChange={(e) => {
-                setSettings({ ...settings, repostCaptionText: e.target.value } as any);
-                setSpinPreview(null);
-                setSpinSyntaxMsg(null);
-              }}
-            />
 
             {/* Token chips */}
             <div className="flex flex-wrap gap-1">
