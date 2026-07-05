@@ -1057,10 +1057,16 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   try{Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';},configurable:true});}catch(e){}
   try{Object.defineProperty(document,'hidden',{get:function(){return false;},configurable:true});}catch(e){}
   try{Object.defineProperty(navigator,"languages",{get:function(){return ["en-US","en"];}});}catch(e){}
-  // Android WebView does NOT expose window.chrome — sending the desktop shape
-  // while also declaring Android UA is an instant contradiction.
-  // Desktop branch keeps a minimal shape (Electron exposes it by default).
-  if(_M){try{delete window.chrome;}catch(_e){try{Object.defineProperty(window,'chrome',{get:function(){return undefined;},configurable:true});}catch(_e2){}}}else{try{if(!window.chrome)window.chrome={runtime:{}};}catch(_e){}}
+  // window.chrome MUST be present on both Android Chrome and Desktop Chrome —
+  // real Chrome (any platform, any version in our range) always exposes it as
+  // long as navigator.vendor === "Google Inc.".  Deleting it entirely (the old
+  // behaviour here) is itself a well-known bot signal: headless/automated
+  // Chromium and older stealth-evasion scripts historically stripped window.chrome,
+  // so detectors specifically check for its ABSENCE as a red flag. Real Android
+  // Chrome's window.chrome is a minimal object (no loadTimes/csi — those were
+  // removed from both desktop and mobile Chrome years ago), so we expose the
+  // same minimal shape on both branches instead of contradicting the UA.
+  try{if(!window.chrome)Object.defineProperty(window,'chrome',{value:{runtime:undefined},configurable:true,writable:true,enumerable:true});}catch(_e){}
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
     if(_oq){navigator.permissions.query=function(p){
       return p.name==="notifications"?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};}}catch(e){}
@@ -1131,16 +1137,22 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     };
   }catch(e){}
   try{
+    // Real behaviour was to CONCAT the fake device onto the host's real
+    // enumerateDevices() result — meaning Instagram still saw the actual PC's
+    // real camera/mic hardware (device count, group IDs) alongside the fake
+    // Android entries. A phone never has an extra desktop webcam + headset
+    // showing up next to its stock camera/mic. Now we IGNORE the real result
+    // entirely and always return a fixed, realistic Android device set (one
+    // rear + one front camera, one mic, one speaker) — matching a stock phone
+    // and never leaking anything about the host PC's real hardware.
     if(navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices){
-      var _oED=navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
       navigator.mediaDevices.enumerateDevices=function(){
-        return _oED().then(function(devs){
-          return devs.concat([
-            {deviceId:_MVID,groupId:_MVID.slice(0,8),kind:'videoinput',label:'',toJSON:function(){return {};}},
-            {deviceId:_MAID,groupId:_MAID.slice(0,8),kind:'audioinput',label:'',toJSON:function(){return {};}},
-            {deviceId:_MSID,groupId:_MSID.slice(0,8),kind:'audiooutput',label:'',toJSON:function(){return {};}}
-          ]);
-        });
+        return Promise.resolve([
+          {deviceId:_MVID,groupId:_MVID.slice(0,8),kind:'videoinput',label:'',toJSON:function(){return {};}},
+          {deviceId:_MVID.slice(0,16)+'f',groupId:_MVID.slice(0,8),kind:'videoinput',label:'',toJSON:function(){return {};}},
+          {deviceId:_MAID,groupId:_MAID.slice(0,8),kind:'audioinput',label:'',toJSON:function(){return {};}},
+          {deviceId:_MSID,groupId:_MSID.slice(0,8),kind:'audiooutput',label:'',toJSON:function(){return {};}}
+        ]);
       };
     }
   }catch(e){}

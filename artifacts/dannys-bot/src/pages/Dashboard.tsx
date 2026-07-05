@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.349",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Closed two subtle browser fingerprint gaps in the embedded browser that could make an account look automated: a missing browser feature that real phones always have, and the media device list revealing your computer's own camera/microphone instead of only showing phone-like hardware.",
+      },
+    ],
+  },
+  {
     version: "1.1.348",
     date: "5 Jul 2026",
     items: [
