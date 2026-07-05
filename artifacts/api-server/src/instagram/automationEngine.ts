@@ -3091,10 +3091,14 @@ class AutomationEngine {
               // Always click index 0 — the first item in the current tray state.
               // After the previous story was dismissed this will be the next user.
               const clicked: boolean = await page.evaluate((sel: string) => {
-                const canvases = Array.from(document.querySelectorAll(sel));
-                const canvas = canvases[0] as HTMLElement | undefined;
-                const btn = canvas?.closest('div[role="button"]') as HTMLElement | null;
-                if (!btn) return false;
+                const matches = Array.from(document.querySelectorAll(sel));
+                const el = matches[0] as HTMLElement | undefined;
+                if (!el) return false;
+                // The matched element may be a button itself (new selectors) OR
+                // a canvas/img inside a button wrapper (old selectors).
+                // Walk up to find the nearest clickable ancestor; if none found,
+                // click the element itself.
+                const btn = (el.closest('button, [role="button"], a, div[tabindex]') ?? el) as HTMLElement;
                 btn.click();
                 return true;
               }, storySelector).catch(() => false);
@@ -4067,12 +4071,9 @@ class AutomationEngine {
     };
 
     // ── Human Session ────────────────────────────────────────────────────────
-    // _jitterSkipped was rolled above for the audit block — reuse the same
-    // decision here so the audit and jitter actions always agree on whether
-    // to run or skip this session.
     enqueue("humanSession",
-      s.humanSessionEnabled === true && !_jitterSkipped,
-      "", "",  // skip chance already decided by _jitterSkipped above
+      s.humanSessionEnabled === true,
+      "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
         // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.
