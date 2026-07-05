@@ -5423,8 +5423,17 @@ export function startEbIpcServer(
                 var ct = titles.find(function(t) { var tx = (t.textContent || '').toLowerCase(); return tx === 'create' || tx.includes('new post'); });
                 if (ct) btn = ct.closest('a, [role="link"], button') || null;
               }
-              if (btn) { btn.click(); return true; }
-              return false;
+              if (!btn) return false;
+              // Plain .click() is silently swallowed or triggers native href
+              // navigation on Instagram's React-controlled nav (looks like a
+              // hover with no effect, then the timeline just refreshes).
+              // Dispatch real pointer events first — same fix used for
+              // likes/follows/DMs elsewhere in this codebase.
+              btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+              btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+              btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+              btn.click();
+              return true;
             })()
           `, true).catch(() => false);
 
@@ -5441,6 +5450,9 @@ export function startEbIpcServer(
               });
               if (postItem) {
                 var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
+                clickable.scrollIntoView({ behavior: 'instant', block: 'center' });
+                clickable.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                clickable.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
                 clickable.click();
                 return true;
               }
@@ -5488,8 +5500,12 @@ export function startEbIpcServer(
                 (function(t) {
                   var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
                   var btn = all.find(function(el) { return (el.textContent || '').trim() === t; });
-                  if (btn) { btn.click(); return true; }
-                  return false;
+                  if (!btn) return false;
+                  btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                  btn.click();
+                  return true;
                 })(${JSON.stringify(text)})
               `, true).catch(() => false);
               if (clicked) return true;

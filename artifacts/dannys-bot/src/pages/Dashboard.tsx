@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.351",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed \"Make a Post\" for browser-mode accounts getting stuck at the Create button — the embedded browser was hovering over it but the click wasn't registering, so the app just refreshed the timeline instead of opening the new post window. Posting through the browser now works reliably.",
+      },
+    ],
+  },
+  {
     version: "1.1.350",
     date: "5 Jul 2026",
     items: [
