@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.342",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed the real reason background actions could still fail when the browser window is hidden or minimized on Windows.",
+        technical: [
+          "The main browser window already had a setting that stops Windows from slowing down its page while it's hidden. But the separate tab you actually browse in, and a few other background windows the app uses briefly (for verifying accounts, posting, and other quiet tasks), did not have that same setting.",
+          "Without it, once the window is hidden, minimized, or covered by another window, Windows can slow the page down so much that Instagram's feed, story tray, and Follow button never finish loading — which is exactly why actions kept reporting nothing found even though the browser looked like it was working.",
+          "All of these windows now use the same 'never slow down' setting as the main window, so actions keep working correctly no matter whether the browser is visible, hidden, or minimized.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.341",
     date: "5 Jul 2026",
     items: [

@@ -310,6 +310,14 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
 
+## EB Hidden-Window Throttling Fix Log — READ THIS BEFORE TOUCHING webPreferences ON ANY BrowserWindow/BrowserView
+
+### Failure: Actions STILL failing after the /eb/navigate + /eb/evaluate active-tab fix, specifically when the EB window is hidden/minimized on Windows (5 Jul 2026)
+- **Symptom**: Even after routing `/eb/navigate` and `/eb/evaluate` to `getActiveWc(pid)` (see EB Multi-Tab IPC Fix Log below), Follow/Stories/Reels/Feed checks kept returning empty ("No Follow button found", "EB liked 0 post(s)", "EB viewed 0 story tray items") specifically in production on Windows, where the EB window is hidden/minimized/occluded during automated runs.
+- **Root cause**: The main EB `BrowserWindow` already had `backgroundThrottling: false` in its `webPreferences` (with a comment explicitly warning this is CRITICAL for exactly this failure mode). But `getActiveWc()` returns the active tab's separate `BrowserView.webContents` once a tab is open — and that `BrowserView` (created in the `"new-tab"` IPC handler) was created WITHOUT `backgroundThrottling: false`. Several other short-lived windows used for verify/post/search/leak-test flows (`sfTempWin`, `spTempWin`, `ssTempWin`, `leakWin`, `_hiddenWin`, plus the toolbar `BrowserView`) were missing it too. Chromium throttles timers/rAF/lazy-loading per-WebContents when that WebContents is hidden or occluded — so the tab holding the actual Instagram page never finished rendering the feed/story tray/follow button while the parent window was hidden, even though the top-level window's own webContents (unused once a tab is active) had the flag.
+- **Fix (v1.1.342)**: Added `backgroundThrottling: false` to every `webPreferences` block in `ebManager.ts` that creates a `BrowserWindow` or `BrowserView` used to hold real page content: the tab `BrowserView` (`new-tab` handler), the toolbar `BrowserView`, `sfTempWin`, `spTempWin`, `ssTempWin`, `leakWin`, and `_hiddenWin`.
+- **What is FORBIDDEN**: Adding any new `BrowserWindow` or `BrowserView` in `ebManager.ts` without `backgroundThrottling: false` in its `webPreferences`. This applies even to windows that start with `show: true` — they can be hidden, minimized, or occluded later in their lifecycle, and Windows in particular applies OS-level occlusion throttling independent of Electron's own show/hide state.
+
 ## EB Multi-Tab IPC Fix Log — READ THIS BEFORE TOUCHING /eb/navigate OR /eb/evaluate
 
 ### Failure: ALL background page checks (Reels, Stories, Follow, Feed) silently returning empty/undefined (5 Jul 2026)

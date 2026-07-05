@@ -2902,6 +2902,7 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // keep toolbar clock/URL bar live when window is hidden
     },
   });
   _ebCrashLog(profileId, "STEP-26: BrowserView created, calling addBrowserView");
@@ -4154,7 +4155,18 @@ function setupToolbarIpc(): void {
         // falling into a fresh 'persist:eb--1' session with no proxy configured.
         const partition = ebPartition(foundPid);
         const tabView = new BrowserView({
-          webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
+          webPreferences: {
+            partition,
+            contextIsolation: true,
+            nodeIntegration: false,
+            // CRITICAL: without this, Chromium throttles timers/rAF/lazy-loading
+            // for this BrowserView whenever the parent EB window is hidden,
+            // minimized, or occluded on Windows — Instagram's virtualized feed,
+            // story tray, and follow button never finish rendering, so every
+            // DOM check silently returns undefined/empty. See EB Multi-Tab IPC
+            // Fix Log in replit.md.
+            backgroundThrottling: false,
+          },
         });
         state.views.set(newTabId, tabView);
         state.tabs.push({ id: newTabId, url: "https://www.google.com/", title: "New Tab" });
@@ -4761,6 +4773,7 @@ export function startEbIpcServer(
               nodeIntegration:  false,
               contextIsolation: true,
               partition:        sfPartition,
+              backgroundThrottling: false,
             },
           });
           // Show immediately — off-screen so user never sees it, but Chromium
@@ -5217,6 +5230,7 @@ export function startEbIpcServer(
             webPreferences: {
               nodeIntegration: false, contextIsolation: true,
               partition: spPartition,
+              backgroundThrottling: false,
             },
           });
           // showInactive before first navigation so Chromium doesn't throttle
@@ -5562,7 +5576,7 @@ export function startEbIpcServer(
             width: 1280, height: 820,
             x: _ssSw + 10, y: 0,
             show: false, skipTaskbar: true,
-            webPreferences: { nodeIntegration: false, contextIsolation: true, partition: ssPartition },
+            webPreferences: { nodeIntegration: false, contextIsolation: true, partition: ssPartition, backgroundThrottling: false },
           });
           ssTempWin.showInactive();
           ssWin = ssTempWin;
@@ -5768,6 +5782,7 @@ export function startEbIpcServer(
               partition,
               nodeIntegration: false,
               contextIsolation: true,
+              backgroundThrottling: false,
             },
           });
 
@@ -5882,6 +5897,7 @@ export function startEbIpcServer(
               nodeIntegration: false,
               contextIsolation: true,
               partition,
+              backgroundThrottling: false,
             },
           });
           _verifyWin = _hiddenWin;
