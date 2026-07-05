@@ -221,6 +221,8 @@ Root cause confirmed v1.1.344, 5 Jul 2026 — do not re-investigate.
 
 See `.agents/memory/make-a-post-log.md` for the EB-click-driven posting flow's bug history (clicks, visibility, Escape-key, recycling) — that log is separate from the image-upload API path below.
 
+**Share button click (v1.1.361, current rule, do not regress):** Share is clicked via the exact same generic text-match button finder (`spClickBtnTextOnce`/`spFindBtnPos`) already used for "Done" and (as `spClickBtnText`) for both crop/filter "Next" clicks — because Share is literally the SAME header button element as Next, just relabelled. Do NOT reintroduce a bespoke "reject candidates overlapping the photo" heuristic for Share — that exact approach (v1.1.359) was tried and confirmed to still click the photo/tag-people overlay in production. Prefer the proven generic mechanism over a one-off heuristic for a sibling button in the same flow.
+
 ### Diagnosis chain
 
 #### ProcessingFailedError — Image upload transcode non-retryable failure (25 Jun 2026)

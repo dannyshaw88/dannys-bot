@@ -5770,68 +5770,18 @@ export function startEbIpcServer(
             }
           }
 
-          // ── Helper: find the Share button's centre coords, but reject any
-          // candidate whose clickable area overlaps the photo/video preview.
-          // The bug this guards against: Instagram's write-caption screen
-          // also has an invisible/near-invisible "tag people on this photo"
-          // hit-target layered over the image. If a stale or duplicate
-          // element ever matches the text lookup while positioned over the
-          // photo, clicking it opens the manual photo-tagging flow instead
-          // of sharing the post. Only a Share candidate that does NOT
-          // overlap any <img>/<video>/<canvas> on the page is accepted.
-          const spFindShareBtnPos = async (): Promise<{ found: boolean; x: number; y: number }> =>
-            spWin.webContents.executeJavaScript(`
-              (function() {
-                var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
-                var candidates = all.filter(function(el) {
-                  return (el.textContent || '').trim() === 'Share' && el.offsetHeight > 0;
-                });
-                if (!candidates.length) return { found: false, x: 0, y: 0 };
-                var media = Array.from(document.querySelectorAll('img, video, canvas'));
-                function overlaps(r1, r2) {
-                  return !(r1.right <= r2.left || r1.left >= r2.right || r1.bottom <= r2.top || r1.top >= r2.bottom);
-                }
-                var btn = candidates.find(function(el) {
-                  var r = el.getBoundingClientRect();
-                  return !media.some(function(m) {
-                    var mr = m.getBoundingClientRect();
-                    return mr.width > 20 && mr.height > 20 && overlaps(r, mr);
-                  });
-                });
-                if (!btn) return { found: false, x: 0, y: 0 };
-                btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                var rect = btn.getBoundingClientRect();
-                return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
-              })()
-            `, true).catch(() => ({ found: false, x: 0, y: 0 }));
-
-          // ── Helper: find + click by a custom position-finder exactly once
-          // (no auto-retry). Used for Share where a duplicate click carries
-          // real risk (double-posting). Callers verify success separately.
-          const spClickPosOnce = async (
-            findFn: () => Promise<{ found: boolean; x: number; y: number }>,
-            timeoutMs: number,
-          ): Promise<boolean> => {
-            const deadline = Date.now() + timeoutMs;
-            while (Date.now() < deadline) {
-              if (spWin.isDestroyed()) return false;
-              const pos = await findFn();
-              if (pos.found) {
-                await spRealClick(pos.x, pos.y);
-                return true;
-              }
-              await new Promise(r => setTimeout(r, 500));
-            }
-            return false;
-          };
-
           // ── Click Share ───────────────────────────────────────────────────
-          // Uses the ONCE-only trusted click on the photo-overlap-safe finder
-          // — never auto-retries here, to eliminate any risk of
-          // double-posting. Success is verified separately below via the
-          // "post shared" text.
+          // v1.1.361 fix: the previous "reject candidates overlapping the
+          // photo" filter (spFindShareBtnPos) was itself the bug — it still
+          // ended up clicking the photo/tag-people overlay in production.
+          // Share is the EXACT SAME header button element as the crop/filter
+          // "Next" button (Instagram just relabels it) — so this now reuses
+          // the identical generic-text button finder (spFindBtnPos) already
+          // proven reliable for Next, via spClickBtnTextOnce (single click,
+          // no auto-retry, to avoid any risk of double-posting). Success is
+          // verified separately below via the "post shared" text.
           _ipcLog(`[eb:silent-post:${pid}] clicking Share`);
-          if (!await spClickPosOnce(spFindShareBtnPos, 15000)) throw new Error("Share button not found");
+          if (!await spClickBtnTextOnce("Share", 15000)) throw new Error("Share button not found");
 
           // ── Wait for "Your post has been shared" confirmation ─────────────
           _ipcLog(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);

@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.361",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed Make a Post clicking on the photo (opening the manual tag-people popup) instead of pressing Share. The previous \"avoid the photo\" safety check for the Share button was itself buggy — Share is now found and clicked the exact same proven way the Next button already was (same button element, just relabelled), which is far more reliable.",
+      },
+    ],
+  },
+  {
     version: "1.1.360",
     date: "5 Jul 2026",
     items: [
