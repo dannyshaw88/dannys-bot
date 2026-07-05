@@ -1379,7 +1379,16 @@ app.commandLine.appendSwitch("disable-quic");
 // Note: the PAC-script proxy approach in ebManager.ts is the primary IPv6 leak
 // fix (Chrome sends hostname to proxy via CONNECT; proxy resolves DNS, so IPv6
 // never appears on the client side).  These flags are an additional layer.
-app.commandLine.appendSwitch("disable-features", "HappyEyeballsV3,IPv6Reachability");
+app.commandLine.appendSwitch("disable-features", "HappyEyeballsV3,IPv6Reachability,CalculateNativeWinOcclusion");
+// ── Prevent renderer backgrounding ───────────────────────────────────────────
+// CalculateNativeWinOcclusion: Windows-specific feature where Chromium detects
+// fully-occluded windows (covered by other windows) and suspends their compositor.
+// Disabling it keeps all WebContents compositing even when another app is on top.
+// disable-renderer-backgrounding: prevents Chromium from lowering the renderer
+// thread priority / frame rate for windows that are not in the foreground.
+// Together these ensure automation windows produce frames and run JS at full speed
+// regardless of what else is on screen, complementing backgroundThrottling:false.
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
 // ── Anti-bot: suppress Chromium's automation flag ─────────────────────────────
 // Electron sets navigator.webdriver = true at the Blink native level before any
 // page script runs. JS Object.defineProperty overrides cannot fully mask this

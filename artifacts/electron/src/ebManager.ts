@@ -2064,8 +2064,13 @@ export async function openEbWindow(opts: {
       }
       const _wasHidden = !existing.win.isVisible();
       if (existing.win.isMinimized()) existing.win.restore();
+      // Restore the window to the visible taskbar in case it was moved off-screen
+      // by the close-handler (which uses setPosition+setSkipTaskbar instead of
+      // hide() so Chromium's compositor keeps running during automation).
+      existing.win.setSkipTaskbar(false);
       if (!isGhostBrowser && !existing.win.isMaximized()) {
         // Use explicit workArea bounds so the window never covers the Windows taskbar.
+        // This also moves it back on-screen if the close-handler had parked it off-screen.
         const _eb = existing.win.getBounds();
         const _disp = eScreen.getDisplayNearestPoint({ x: _eb.x, y: _eb.y });
         existing.win.setBounds(_disp.workArea);
@@ -2703,12 +2708,37 @@ export async function openEbWindow(opts: {
     return { action: "deny" };
   });
 
-  // Hide to tray on close (matching main-window behaviour) so the EB session
-  // survives an accidental X-click. The /eb/close IPC endpoint calls win.destroy()
-  // directly when the user explicitly closes from the BrowserPanel.
+  // On close, move off-screen instead of hiding — win.hide() fully suspends
+  // Chromium's compositor at the OS level.  Beyond what backgroundThrottling
+  // covers: a hidden window gets zero frames composed, IntersectionObserver
+  // reports nothing intersecting (viewport is effectively 0×0), and Instagram's
+  // React SPA never mounts <article>/story-tray/Follow DOM nodes because its
+  // virtualised lists skip off-viewport content.  That is the root cause of
+  // "No Follow button found" / "0 story tray items" on hidden windows.
+  //
+  // Jarvee/SuSocial never call hide() on automation windows; they position them
+  // far off the visible screen so Windows treats them as fully visible:
+  //   • Chromium compositor keeps running (frames are produced normally)
+  //   • IntersectionObserver sees real viewport intersections
+  //   • Instagram's SPA hydrates feed/story/profile DOM as usual
+  //   • backgroundThrottling:false keeps timers firing at full rate
+  //
+  // setSkipTaskbar(true) removes the window from the taskbar / alt-tab so the
+  // user cannot accidentally click it back into view while it is off-screen.
   win.on("close", (event) => {
     event.preventDefault();
-    win.hide();
+    try {
+      const bounds = win.getBounds();
+      const _disp  = eScreen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+      const sw = _disp.workAreaSize.width;
+      const sh = _disp.workAreaSize.height;
+      const offX = sw + 10;
+      const offY = Math.max(0, Math.floor((sh - bounds.height) / 2));
+      win.setPosition(offX, offY);
+      win.setSkipTaskbar(true);
+    } catch {
+      // Fallback: if setPosition fails (e.g. window already destroyed), ignore.
+    }
   });
 
   win.on("closed", () => {

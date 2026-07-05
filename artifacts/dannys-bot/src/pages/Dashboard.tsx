@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.344",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Embedded browser actions (Follow, Stories, Reels, Feed) now work correctly even when the browser window is closed or running in the background.",
+        technical: [
+          "Root cause: closing the EB window called win.hide(), which suspends Chromium's compositor entirely at the OS level — deeper than backgroundThrottling covers. With the compositor paused, IntersectionObserver reports zero intersections, Instagram's virtualised React lists never mount article/story-tray/Follow DOM nodes, and every waitForSelector times out regardless of how long it waits.",
+          "Fix: replaced win.hide() with an off-screen position move (sw+10, centred vertically) + setSkipTaskbar(true). The window stays 'visible' to Windows and Chromium — compositor runs, IntersectionObserver fires, React mounts the full DOM. Invisible to the user: not on screen, not in taskbar, not in alt-tab. Opening the EB from the UI restores it instantly (setSkipTaskbar(false) + setBounds to work area).",
+          "Also added CalculateNativeWinOcclusion to the disabled Chromium features list (prevents compositor suspension when the window is covered by other apps) and added --disable-renderer-backgrounding (prevents Chromium from deprioritising renderer threads for background windows). Together these ensure automation windows render at full speed regardless of what else is on screen.",
+          "This is the approach Jarvee and SuSocial use: automation windows are always technically visible to the OS, just positioned off the visible screen area.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.343",
     date: "5 Jul 2026",
     items: [

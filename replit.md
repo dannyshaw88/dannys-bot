@@ -312,6 +312,24 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 
 ## EB Hidden-Window Throttling Fix Log — READ THIS BEFORE TOUCHING webPreferences ON ANY BrowserWindow/BrowserView
 
+### ROOT CAUSE CONFIRMED AND FIXED (v1.1.344, 5 Jul 2026) — DO NOT RE-INVESTIGATE THIS
+
+**The actual root cause (confirmed, not a theory):** `win.hide()` in the `win.on("close")` handler suspends Chromium's compositor entirely at the OS level. This is deeper than anything `backgroundThrottling: false` or `document.visibilityState` overrides can address. With the compositor paused:
+- `IntersectionObserver` reports zero intersections (effective viewport is 0×0)
+- Instagram's virtualised React lists (`<article>`, story tray, Follow button, Reels video) are never mounted into the DOM because React skips off-viewport content
+- `waitForSelector('article', 20000)` always times out — not because the feed didn't load, but because the DOM nodes were never created
+
+**The fix (what Jarvee/SuSocial actually do):** Never call `win.hide()` on automation windows. Instead, move the window off-screen using `win.setPosition(sw + 10, y)` and call `win.setSkipTaskbar(true)`. The window stays "visible" to Windows and Chromium — compositor runs at full speed, IntersectionObserver fires with real intersections, React mounts the full page DOM. The user cannot see it: not on screen, not in taskbar, not in alt-tab. When the user opens the EB from the UI, `setSkipTaskbar(false)` + `setBounds(workArea)` brings it back instantly.
+
+**Also added:**
+- `CalculateNativeWinOcclusion` to the `disable-features` Chromium flag — prevents compositor suspension when the window is fully occluded by another app on screen
+- `--disable-renderer-backgrounding` — prevents Chromium from deprioritising renderer threads for background windows
+
+**What is FORBIDDEN:**
+- Calling `win.hide()` on any EB window used for automation. Use off-screen positioning instead.
+- Removing `CalculateNativeWinOcclusion` from `disable-features` or `disable-renderer-backgrounding` from Chromium flags.
+- Assuming `backgroundThrottling: false` alone is sufficient — it is necessary but not sufficient. The compositor suspension from `win.hide()` is a separate, deeper issue.
+
 ### Failure: Actions STILL failing after the /eb/navigate + /eb/evaluate active-tab fix, specifically when the EB window is hidden/minimized on Windows (5 Jul 2026)
 - **Symptom**: Even after routing `/eb/navigate` and `/eb/evaluate` to `getActiveWc(pid)` (see EB Multi-Tab IPC Fix Log below), Follow/Stories/Reels/Feed checks kept returning empty ("No Follow button found", "EB liked 0 post(s)", "EB viewed 0 story tray items") specifically in production on Windows, where the EB window is hidden/minimized/occluded during automated runs.
 - **Root cause**: The main EB `BrowserWindow` already had `backgroundThrottling: false` in its `webPreferences` (with a comment explicitly warning this is CRITICAL for exactly this failure mode). But `getActiveWc()` returns the active tab's separate `BrowserView.webContents` once a tab is open — and that `BrowserView` (created in the `"new-tab"` IPC handler) was created WITHOUT `backgroundThrottling: false`. Several other short-lived windows used for verify/post/search/leak-test flows (`sfTempWin`, `spTempWin`, `ssTempWin`, `leakWin`, `_hiddenWin`, plus the toolbar `BrowserView`) were missing it too. Chromium throttles timers/rAF/lazy-loading per-WebContents when that WebContents is hidden or occluded — so the tab holding the actual Instagram page never finished rendering the feed/story tray/follow button while the parent window was hidden, even though the top-level window's own webContents (unused once a tab is active) had the flag.
