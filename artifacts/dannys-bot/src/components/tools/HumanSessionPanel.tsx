@@ -1714,6 +1714,29 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             )}
           </div>
 
+          {/* Posts per session — always visible regardless of source */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground font-semibold">Posts per session (min / max)</Label>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Min</Label>
+                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
+                    value={settings.repostMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, repostMin: v })}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Max</Label>
+                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
+                    value={settings.repostMax ?? 1}
+                    onChange={(v) => setSettings({ ...settings, repostMax: v })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Source 1: @username */}
           <div className="border border-border/60 rounded-lg p-3 space-y-2">
             <div className="flex items-center gap-2">
@@ -1741,25 +1764,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   value={settings.repostSourceUsername ?? ""}
                   onChange={(e) => setSettings({ ...settings, repostSourceUsername: e.target.value.replace(/^@/, '') })}
                 />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Posts per session (min / max)</Label>
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Min</Label>
-                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
-                    value={settings.repostMin ?? 1}
-                    onChange={(v) => setSettings({ ...settings, repostMin: v })}
-                  />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Max</Label>
-                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
-                    value={settings.repostMax ?? 1}
-                    onChange={(v) => setSettings({ ...settings, repostMax: v })}
-                  />
-                </div>
               </div>
             </div>
             <div className="space-y-1.5">

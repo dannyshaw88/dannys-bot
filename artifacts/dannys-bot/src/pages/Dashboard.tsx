@@ -78,6 +78,29 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.363",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Posts per session (min / max) controls in Make a Post are now always visible regardless of which source is active. Previously these controls were buried inside the Instagram Account source block and disappeared entirely when that source was disabled — so anyone posting from a Local Folder had no way to control how many posts ran per cycle.",
+        technical: [
+          "Moved repostMin / repostMax NumField controls out of the {!settings.repostDisableUsernameSource && ...} conditional block",
+          "Controls now render at the top of the Make a Post options section, above both source boxes (Instagram Account + Local Folder)",
+          "Both sources already respected repostMin/repostMax in the engine — this was a pure UI visibility fix",
+        ],
+      },
+      {
+        category: "Improved",
+        text: "Default posts per session changed from 1–3 to 1–1. New accounts and tools now default to exactly one post per Human Session run, preventing unintended multi-post bursts on first use.",
+      },
+      {
+        category: "Improved",
+        text: "Caption field in Make a Post: placeholder text removed (the hint text below the field is sufficient). The Check Spintax and Spin Text buttons moved from the header bar above the field to the right side of the textarea, stacked vertically and centred against the field height, so they sit next to the text you're editing rather than floating above it.",
+      },
+    ],
+  },
+  {
     version: "1.1.362",
     date: "5 Jul 2026",
     items: [
