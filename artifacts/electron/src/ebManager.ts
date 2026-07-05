@@ -248,6 +248,18 @@ interface EbEntry {
 }
 export const ebMap = new Map<number, EbEntry>();
 
+// ── ip-api.com timezone cache ─────────────────────────────────────────────────
+// ip-api.com free tier allows 1,000 requests/day.  Without a cache, every
+// openEbWindow call (one per account per EB open) consumes one request.
+// Opening 50 accounts burns 50 requests; hitting the limit causes ALL accounts
+// opened after that to fall back to the machine's real system timezone, which
+// creates a cross-account timezone clustering signal Instagram can detect.
+//
+// Cache key: proxy host string.  Value: IANA timezone string (e.g. "America/Sao_Paulo").
+// Scope: lifetime of the Electron process (cleared on app restart).
+// Effect: all accounts sharing the same proxy host share one lookup per session.
+const _tzCache = new Map<string, string>();
+
 // ── CDP emulation serialization lock ────────────────────────────────────────
 // Concurrent Emulation.setDeviceMetricsOverride / setTouchEmulationEnabled
 // calls across multiple BrowserWindow instances cause a Chromium SIGSEGV crash
@@ -1341,7 +1353,12 @@ function apiUAToBrowserUA(apiUA: string): { browserUA: string; androidVersion: s
   const m = apiUA.match(/^\d+\/(\d+);\s*\d+dpi;\s*\d+x\d+;\s*[^;]+;\s*([^;]+)/i);
   const androidVersion = m ? m[1].trim() : "14";
   const deviceModel    = m ? m[2].trim() : "motorola edge 40 pro";
-  const browserUA = `Mozilla/5.0 (Linux; Android ${androidVersion}; ${deviceModel}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36`;
+  // Use the actual Chromium major version bundled with this Electron build so
+  // the advertised Chrome version matches reality.  Hardcoding "131" meant all
+  // ghost/verify windows presented the same UA regardless of the Electron build,
+  // which is a trivial bot-detection signal.
+  const chromeMajor = process.versions.chrome?.split(".")[0] ?? "131";
+  const browserUA = `Mozilla/5.0 (Linux; Android ${androidVersion}; ${deviceModel}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Mobile Safari/537.36`;
   return { browserUA, androidVersion, deviceModel };
 }
 
@@ -2545,18 +2562,31 @@ export async function openEbWindow(opts: {
 
   if (proxy) {
     // Resolve proxy timezone — awaited here (max 5 s) so it's ready before loadURL.
+    // Uses a session-scoped cache keyed by proxy host so ip-api.com's 1,000 req/day
+    // free limit is not hit when many accounts share the same proxy or when the same
+    // account's EB is closed and reopened.  Without the cache, opening 50 accounts
+    // exhausts the quota and every subsequent account falls back to the machine's
+    // real system timezone — a cross-account linking signal.
     _ebCrashLog(profileId, `STEP-15: starting timezone fetch for ${proxy.host}`);
-    try {
-      const _tzAc = new AbortController();
-      const _tzTimer = setTimeout(() => _tzAc.abort(), 5000);
-      const tzRes = await fetch(
-        `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
-        { signal: _tzAc.signal },
-      );
-      clearTimeout(_tzTimer);
-      const tzJson = await tzRes.json() as { timezone?: string };
-      if (tzJson.timezone) _resolvedTz = tzJson.timezone;
-    } catch { /* ip-api unreachable — skip override, use machine timezone */ }
+    if (_tzCache.has(proxy.host)) {
+      _resolvedTz = _tzCache.get(proxy.host)!;
+      _ebCrashLog(profileId, `STEP-15b: timezone cache hit tz=${_resolvedTz}`);
+    } else {
+      try {
+        const _tzAc = new AbortController();
+        const _tzTimer = setTimeout(() => _tzAc.abort(), 5000);
+        const tzRes = await fetch(
+          `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
+          { signal: _tzAc.signal },
+        );
+        clearTimeout(_tzTimer);
+        const tzJson = await tzRes.json() as { timezone?: string };
+        if (tzJson.timezone) {
+          _resolvedTz = tzJson.timezone;
+          _tzCache.set(proxy.host, _resolvedTz);
+        }
+      } catch { /* ip-api unreachable — skip override, use machine timezone */ }
+    }
     _ebCrashLog(profileId, `STEP-16: timezone fetch done tz=${_resolvedTz ?? "none"}`);
 
     if (_resolvedTz) {
@@ -4830,6 +4860,14 @@ export function startEbIpcServer(
           // treats it as a normal visible window (no timer throttling, no
           // deferred renderer initialization).
           sfTempWin.showInactive();
+          // Supply proxy credentials for 407 challenges.  Without this handler
+          // Electron cancels the auth challenge and the request falls through
+          // to the machine's real IP — silently leaking the home broadband
+          // address to Instagram for every background follow/unfollow action.
+          sfTempWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
+            event.preventDefault();
+            cb(bodyProxy?.user ?? "", bodyProxy?.pass ?? "");
+          });
           sfWin = sfTempWin;
           _ipcLog(`[eb:silent-follow:${pid}] mode B — created off-screen background window (partition=${sfPartition}) for @${targetUsername}`);
         }
@@ -5259,11 +5297,13 @@ export function startEbIpcServer(
 
           // Apply the account's proxy and fetch UA
           let _spUA: string | undefined;
+          let _spProxyCreds: { user?: string; pass?: string } | null = null;
           try {
             const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
             if (proxyRes.ok) {
               const pd: any = await proxyRes.json();
               if (pd.proxy && !pd.useHomeIp) {
+                _spProxyCreds = { user: pd.proxy.user, pass: pd.proxy.pass };
                 const spCfg = buildProxyConfig(pd.proxy);
                 await spSes.clearHostResolverCache().catch(() => {});
                 await spSes.setProxy(spCfg).catch(() => {});
@@ -5285,6 +5325,13 @@ export function startEbIpcServer(
           });
           // showInactive before first navigation so Chromium doesn't throttle
           spTempWin.showInactive();
+          // Supply proxy credentials for 407 challenges.  Without this handler
+          // Electron cancels the auth challenge and the request falls through
+          // to the machine's real IP — silently leaking home broadband to Instagram.
+          spTempWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
+            event.preventDefault();
+            cb(_spProxyCreds?.user ?? "", _spProxyCreds?.pass ?? "");
+          });
           if (_spUA) spTempWin.webContents.setUserAgent(_spUA);
           spWin = spTempWin;
           _ipcLog(`[eb:silent-post:${pid}] mode B — created off-screen 1280×820 window`);
@@ -5948,6 +5995,13 @@ export function startEbIpcServer(
             webPreferences: { nodeIntegration: false, contextIsolation: true, partition: ssPartition, backgroundThrottling: false },
           });
           ssTempWin.showInactive();
+          // Supply proxy credentials for 407 challenges.  Without this handler
+          // Electron cancels the auth challenge and the request falls through
+          // to the machine's real IP — silently leaking home broadband to Instagram.
+          ssTempWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
+            event.preventDefault();
+            cb(bodyProxy?.user ?? "", bodyProxy?.pass ?? "");
+          });
           ssWin = ssTempWin;
           _ipcLog(`[eb:silent-search:${pid}] mode B — created off-screen window for "${ssUsername}"`);
         }
@@ -6153,6 +6207,15 @@ export function startEbIpcServer(
               contextIsolation: true,
               backgroundThrottling: false,
             },
+          });
+          // Supply proxy credentials for 407 challenges — without this the
+          // leak-test requests fall through to the real machine IP, making the
+          // WebRTC / DNS / IP-match results meaningless (they'd reflect the
+          // home broadband, not the proxy, even though the proxy IS configured).
+          leakWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
+            event.preventDefault();
+            const _lkProxy = ebMap.get(pid)?.proxy;
+            cb(_lkProxy?.user ?? "", _lkProxy?.pass ?? "");
           });
 
           // Load via data URL so no web server is needed.  Inline scripts are

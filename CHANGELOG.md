@@ -4,6 +4,103 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.364] — 2026-07-05
+
+### Security — Critical: Real IP Leak on All Background Automation Actions (Mode B)
+
+#### Root cause
+
+`buildProxyConfig()` for HTTP proxies never embeds credentials in the proxy URL
+(`ERR_NO_SUPPORTED_PROXIES` prevents it). Credentials must be supplied at the
+Electron level via a `webContents 'login'` event when the proxy responds with a
+407 challenge. Without a handler, Electron's own comment states: *"either shows a
+dialog or cancels the request, causing a silent fall-through to the home IP."*
+
+Three automation windows that run in the background (Mode B — when the account's
+embedded browser is not already open) were created without any `login` event
+handler. The proxy's 407 auth challenge was silently cancelled and every request
+fell through to the machine's real home broadband IP. Instagram saw hundreds of
+actions from the same real IP across all accounts simultaneously — a trivial
+account-farm signal — which triggered the mass ban wave.
+
+#### Affected windows and actions
+
+| Window | IPC route | Actions affected |
+|---|---|---|
+| `sfTempWin` | `/eb/silent-follow` | All background follows and unfollows |
+| `spTempWin` | `/eb/silent-post` | All background Make-a-Post / Repost |
+| `ssTempWin` | `/eb/silent-search` | All background user-search lookups |
+| `leakWin` | `/eb/run-leak-test` | Leak test results reflected real IP, not proxy |
+
+Mode B runs whenever the account's EB is not already open — which is the normal
+state during scheduled automation. This meant **every single background action**
+for every account leaked the home IP.
+
+#### Fix
+
+Added `webContents.on('login', ...)` handlers to all four windows immediately
+after `showInactive()` / `new BrowserWindow()`. Each handler calls
+`event.preventDefault()` and supplies the account's proxy credentials from the
+request context (`bodyProxy` for silent-follow and silent-search; a hoisted
+`_spProxyCreds` variable for silent-post; `ebMap.get(pid)?.proxy` for leakWin).
+
+This matches the pattern already used correctly on the main EB window
+(`win.webContents.on('login', ...)` at line ~2766), tab BrowserViews
+(`tabView.webContents.on('login', ...)`), and the silent-verify hidden window
+(`_hiddenWin.webContents.on('login', ...)`).
+
+#### Previously unaffected (no action needed)
+
+- Main EB window — had `login` handler, correct
+- Tab BrowserViews — had `login` handler, correct
+- Silent-verify `_hiddenWin` — had `login` handler, correct
+- SOCKS5 proxies — credentials embedded directly in `proxyRules` URL, no 407 cycle
+
+---
+
+### Fixed — Ghost/verify browser UA used hardcoded `Chrome/131` regardless of Electron build
+
+`apiUAToBrowserUA()` converted Instagram API-format user agents
+(`34/14; 420dpi; 1080x2340; ...`) to browser UAs for ghost browser and verify
+windows. It always emitted `Chrome/131.0.0.0` regardless of which Chromium version
+was actually bundled with the running Electron build.
+
+**Effect:** Every ghost browser window and every verify window advertised the same
+Chrome major version string. If the running Electron ships Chromium 130 or 132,
+the advertised version was wrong. Instagram's fingerprinting compares the UA string
+against the CDP `Emulation.setUserAgentOverride` `userAgentMetadata` — a mismatch
+is an immediate bot signal.
+
+**Fix:** `apiUAToBrowserUA()` now derives the Chrome major from
+`process.versions.chrome` (the actual Chromium version bundled in this Electron
+build) instead of a hardcoded literal. The fallback remains `"131"` when
+`process.versions.chrome` is unavailable (e.g. unit test environments).
+
+---
+
+### Fixed — ip-api.com timezone lookup exhausted 1,000 req/day free quota, causing all-accounts timezone fallback to machine's real timezone
+
+Every `openEbWindow` call made one HTTP request to `ip-api.com` to resolve the
+proxy's timezone. With 50+ accounts, each EB-open event consumed one request.
+Opening all accounts in a session exhausted the 1,000 req/day free tier; every
+subsequent account silently fell back to the machine's real system timezone instead
+of the proxy's timezone.
+
+**Effect:** All accounts opened after the quota was hit presented the machine's
+actual timezone (e.g. `America/New_York`) regardless of proxy location. Instagram
+cross-references the declared timezone (from `Intl.DateTimeFormat` / CDP
+`Emulation.setTimezoneOverride`) against the account's proxy geolocation. A
+mismatch between the proxy's region and the timezone is a clustering signal linking
+all accounts on that machine to the same operator.
+
+**Fix:** Added a process-lifetime `Map<string, string>` cache (`_tzCache`) keyed
+by proxy host. The timezone is fetched once per proxy host per app launch and
+reused for all subsequent `openEbWindow` calls with the same proxy. Accounts
+sharing a proxy host (or the same proxy re-opened) consume zero additional ip-api
+requests. Cache is cleared on app restart so a rotated proxy gets a fresh lookup.
+
+---
+
 ## [1.1.346] — 2026-07-05
 
 ### Fixed
