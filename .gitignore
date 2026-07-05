@@ -52,5 +52,15 @@ Thumbs.db
 *.db-shm
 *.db-wal
 
+# SQLite databases (runtime state — do not commit)
+*.db
+
+# Browser session data and cookies (sensitive credentials)
+**/browser-data/
+**/cookies-*.json
+
+# Debug / server logs
+*.log
+
 # Sensitive files that should never be committed
 attached_assets/*.txt

@@ -49,16 +49,22 @@ class EbIpcPage {
   }
 
   async goto(url: string): Promise<void> {
-    await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/navigate`, {
+    const r = await fetch(`http://127.0.0.1:${this.ebIpcPort}/eb/navigate`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ profileId: this.profileId, url }),
       signal:  AbortSignal.timeout(30_000),
     });
+    // Non-OK means the window was destroyed or never opened between ensureSilentEbOpen
+    // and the first navigation. Throw immediately so the session fails fast instead of
+    // sleeping 4.5 s and then timing out in waitFor with DOM: undefined.
+    if (!r.ok) throw new Error(`/eb/navigate HTTP ${r.status} — window not open or destroyed`);
     this._url = url;
     // /eb/navigate is fire-and-forget on the Electron side (loadURL, not awaited
     // to completion) — give the page a moment to reach a usable DOM state.
-    await sleep(2500);
+    // 4500ms is the minimum reliable wait: Instagram's SPA takes ~3-4s to mount
+    // virtualised list nodes after navigation; 2500ms caused frequent timeouts.
+    await sleep(4500);
   }
 
   async evaluate<T = any>(fn: (...args: any[]) => T, ...args: any[]): Promise<T> {
@@ -70,6 +76,10 @@ class EbIpcPage {
       body:    JSON.stringify({ profileId: this.profileId, script }),
       signal:  AbortSignal.timeout(30_000),
     });
+    // Non-OK (e.g. 404 "no window") must throw so waitFor's .catch(()=>false)
+    // fires correctly. Without this check, 404 silently returns undefined and
+    // waitFor spins for 20 s returning undefined (falsy) before timing out.
+    if (!r.ok) throw new Error(`/eb/evaluate HTTP ${r.status} — window not open or IPC error`);
     const j = await r.json().catch(() => ({})) as { result?: any };
     if (j?.result && typeof j.result === "object" && j.result.__error) {
       throw new Error(j.result.__error);
@@ -416,6 +426,12 @@ class AutomationEngine {
         host: p.proxyHost, port: p.proxyPort, user: p.proxyUsername ?? undefined,
         pass: p.proxyPassword ?? undefined, type: p.proxyType ?? "http",
       } : undefined;
+      // useHomeIp must be passed for accounts with no proxy that deliberately
+      // run on the machine's home IP (browserDirectConnection=true).
+      // Without it, openEbWindow throws [IP-LEAK BLOCKED] silently (the /eb/open
+      // endpoint is fire-and-forget), the window is never created, and every
+      // subsequent /eb/evaluate returns 404 → DOM: undefined for 20 s.
+      const useHomeIp = !proxy && p.browserDirectConnection === true;
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/open`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -425,6 +441,7 @@ class AutomationEngine {
           password:      p.password ?? "",
           twoFAKey:      p.twoFASecretKey ?? "",
           proxy,
+          useHomeIp,
           userAgent:     p.userAgent ?? undefined,
           apiUA:         p.userAgentApi ?? "",
           ebFingerprint: p.ebFingerprint ?? undefined,
@@ -433,10 +450,19 @@ class AutomationEngine {
         signal: AbortSignal.timeout(20_000),
       });
       if (!r.ok) return { ok: false, weOpenedIt: false };
-      // openEbWindow is fire-and-forget on the Electron side; give Chromium a
-      // moment to finish loading before the caller starts navigating/evaluating.
-      await sleep(3000);
-      return { ok: true, weOpenedIt: true };
+      // Poll /eb/state until the window is confirmed open (up to 15 s).
+      // A blind sleep(3000) was unreliable: openEbWindow is fire-and-forget and
+      // Chromium may take longer than 3 s to init the partition + load cookies.
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        await sleep(500);
+        const sr = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/state?profileId=${profile.id}`).catch(() => null);
+        const ss = sr?.ok ? await sr.json().catch(() => null) as { open?: boolean } | null : null;
+        if (ss?.open) return { ok: true, weOpenedIt: true };
+      }
+      // Window never appeared within 15 s — treat as failure.
+      console.warn(`[engine] @${profile.username}: ensureSilentEbOpen timed out waiting for window`);
+      return { ok: false, weOpenedIt: false };
     } catch (err: any) {
       console.warn(`[engine] @${profile.username}: ensureSilentEbOpen error: ${err?.message}`);
       return { ok: false, weOpenedIt: false };

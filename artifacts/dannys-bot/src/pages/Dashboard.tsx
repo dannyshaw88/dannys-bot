@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.346",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Browser actions (Follow, Stories, Reels, Feed, DMs) now work reliably in the background — eliminated the root cause of 'DOM: undefined' timeouts that affected accounts with no proxy and all accounts during the first navigation.",
+        technical: [
+          "Bug 1 — IP-leak block swallowed silently: Accounts using 'Direct Connection' (no proxy) caused openEbWindow to throw [IP-LEAK BLOCKED] inside a fire-and-forget call. The /eb/open endpoint returned 200 regardless, ensureSilentEbOpen assumed success, but the window was never created. Every subsequent /eb/evaluate returned 404 → DOM: undefined for 20 s. Fix: ensureSilentEbOpen now reads browserDirectConnection from the profile and passes useHomeIp: true when no proxy is configured.",
+          "Bug 2 — Blind sleep instead of confirmed window open: After calling /eb/open, the code slept 3 s and assumed the window existed. Chromium partition init + cookie loading can take longer than 3 s on a loaded machine. Fix: polls /eb/state every 500 ms for up to 15 s. Only proceeds once open: true is confirmed. Returns ok: false (session skipped) if the window never appears, instead of proceeding into a broken state.",
+          "Bug 3 — Double-navigation race: openEbWindow fired an initial loadURL the moment the window opened (STEP-29), then goto() fired a second loadURL immediately after. During the abort/reload transition between the two navigations, executeJavaScript returns undefined instead of throwing — so waitFor's .catch(()=>false) never fired. waitFor received undefined (falsy, not an exception) and timed out after 20 s. Fix: silentMode windows skip STEP-29 entirely. The automation's first goto() is the only navigation.",
+          "Bug 4 — evaluate() silently swallowed 404: When the window was not open, /eb/evaluate returned HTTP 404 with {error:'no window'}. The code called r.json() without checking r.ok, got {} (no result field), and returned undefined. waitFor's .catch(()=>false) never fired. Fix: evaluate() now throws immediately on non-OK HTTP status.",
+          "Bug 5 — goto() silently continued after failed navigation: If the window was destroyed between the state check and the first navigation, goto() returned successfully and the caller slept 4.5 s before failing. Fix: goto() now throws immediately on non-OK /eb/navigate response.",
+          "Navigation wait increased from 2500 ms to 4500 ms: Instagram's SPA takes 3–4 s to mount virtualised list nodes (article, story tray, Follow button) after a navigation. 2500 ms was not enough on slow proxies or cold first loads.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.345",
     date: "5 Jul 2026",
     items: [

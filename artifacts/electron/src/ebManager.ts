@@ -3638,10 +3638,18 @@ export async function openEbWindow(opts: {
   // Navigate to the initial URL.
   // Ghost browsers (profileId < 0, any slot): load the provided initialUrl directly —
   // never auto-navigate to Instagram, the warmup handles all navigation.
+  // silentMode windows: skip the initial loadURL entirely. The automation caller
+  // (ensureSilentEbOpen → goto()) will navigate as its very first action. Firing
+  // loadURL here and then having goto() fire a second loadURL immediately after
+  // creates a double-navigation race: during the abort/reload transition between
+  // the two navigations, executeJavaScript resolves undefined (no JS context) →
+  // waitFor() receives undefined (falsy, not an exception) for up to 20 s → timeout.
   // Regular account EBs: go to homepage if sessionid exists, otherwise login page.
   if (win.isDestroyed()) { _ebCrashLog(profileId, "GUARD-4: window destroyed before loadURL — returning early"); return; }
   _ebCrashLog(profileId, "STEP-28: guard-4 passed, calling loadURL");
-  if (profileId < 0) {
+  if (silentMode) {
+    _ebCrashLog(profileId, "STEP-29: silentMode — skipping initial loadURL (automation goto() will navigate)");
+  } else if (profileId < 0) {
     win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
     _ebCrashLog(profileId, `STEP-29: ghost loadURL called — ${initialUrl || "about:blank"}`);
   } else {

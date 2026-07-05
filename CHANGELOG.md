@@ -4,6 +4,28 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.346] — 2026-07-05
+
+### Fixed
+
+#### Browser human sessions: DOM: undefined / waitFor always times out (silentMode)
+
+Four compounding bugs were causing every silentMode browser action (follow, stories, reels, DMs) to silently fail with `feed waitFor timed out — DOM: undefined`:
+
+1. **useHomeIp never passed to openEbWindow** — Accounts with no proxy but `browserDirectConnection=true` caused `openEbWindow` to throw `[IP-LEAK BLOCKED]` silently (the `/eb/open` endpoint is fire-and-forget and returns 200 regardless). The window was never created; every subsequent `/eb/evaluate` returned 404 → `DOM: undefined` for 20 s. Fixed: `ensureSilentEbOpen` now reads `profile.browserDirectConnection` and passes `useHomeIp: true` when no proxy is configured.
+
+2. **Blind 3 s sleep instead of confirmed window open** — After posting to `/eb/open`, the code slept 3 s and assumed the window existed. Chromium partition init + cookie loading can take longer. Fixed: `ensureSilentEbOpen` now polls `/eb/state` every 500 ms (up to 15 s) and only proceeds once `open: true` is confirmed. Returns `ok: false` if the window never appears.
+
+3. **Double-navigation race in silentMode** — `openEbWindow` fired an initial `loadURL` (STEP-29) as soon as the window opened, then the automation caller immediately fired `goto()` → a second `loadURL`. During the abort/reload transition between the two navigations, `executeJavaScript` resolves `undefined` (no JS context) instead of throwing, so `waitFor()`'s `.catch(()=>false)` never fired — it received `undefined` (falsy) and spun for 20 s before timing out. Fixed: STEP-29 `loadURL` is skipped entirely for `silentMode` windows. The automation's first `goto()` is the only navigation.
+
+4. **EbIpcPage.evaluate() silently swallowed 404** — When the window wasn't open, `/eb/evaluate` returned HTTP 404 `{"error":"no window"}`. The code called `r.json()` without checking `r.ok`, got `{}` (no `result` field), and returned `undefined`. Fixed: throws immediately on non-OK HTTP status so `waitFor`'s `.catch(()=>false)` fires correctly and the session fails fast instead of spinning.
+
+#### goto() navigation wait increased 2500 ms → 4500 ms
+
+Instagram's SPA takes 3–4 s to mount virtualised list nodes (`<article>`, story tray, follow button) after a navigation. The previous 2500 ms sleep caused frequent `waitFor` timeouts on slow proxies or first-load cold pages.
+
+---
+
 ## [1.1.326] — 2026-07-04
 
 ### Fixed
