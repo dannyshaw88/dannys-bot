@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.352",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed the real cause of \"Make a Post\" failing on browser-mode accounts — the embedded browser window wasn't fully waking up Instagram's page when it ran in the background, so the Create button never appeared even though the page looked loaded. Posting through the browser now works.",
+      },
+    ],
+  },
+  {
     version: "1.1.351",
     date: "5 Jul 2026",
     items: [

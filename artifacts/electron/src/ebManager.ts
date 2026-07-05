@@ -5346,6 +5346,23 @@ export function startEbIpcServer(
           });
           if (!spLoggedIn) throw new Error("Instagram page not ready — account not logged in");
 
+          // Force visibilityState=visible so Instagram's SPA actually hydrates
+          // the left nav even when the EB window is off-screen/not shown to
+          // the user. Without this, Chrome reports visibilityState="hidden" →
+          // Instagram suppresses hydration of nav buttons → every selector for
+          // the Create button comes back empty even though the page "loaded".
+          // Same fix already applied to viewTimelineFeed / likeTimelinePosts /
+          // the Follow button and story tray flows in automationEngine.ts —
+          // was missing here, which is why this flow always failed at
+          // "Could not find Create button" regardless of click mechanism.
+          await spWin.webContents.executeJavaScript(`
+            (function() {
+              try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch (e) {}
+              try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch (e) {}
+              document.dispatchEvent(new Event('visibilitychange'));
+            })()
+          `, true).catch(() => {});
+
           // Allow the left sidebar nav to fully render
           await new Promise(r => setTimeout(r, 3000));
 
