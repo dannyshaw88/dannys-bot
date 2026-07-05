@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.348",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Improved",
+        text: "The Follow tool now gives a specific, exact reason when it can't follow someone — it tells you whether they're already followed (confirmed by Instagram), whether a follow request is already pending on a private account, or whether the page simply failed to load in time, instead of one vague catch-all message.",
+      },
+      {
+        category: "Fixed",
+        text: "When the Follow tool finds someone is already followed or was skipped for any other reason, it now automatically moves on and follows a different person instead, so your follow target for the session is still reached rather than coming up short.",
+      },
+      {
+        category: "Fixed",
+        text: "If Instagram shows someone as already followed but our records didn't know about it, the account is now automatically added to your followed list so it won't be attempted again in future sessions.",
+      },
+    ],
+  },
+  {
     version: "1.1.347",
     date: "5 Jul 2026",
     items: [

@@ -3854,14 +3854,21 @@ class AutomationEngine {
       return;
     }
 
-    // Dedup against already-followed users
+    // Dedup against already-followed users. NOTE: candidates are intentionally
+    // NOT sliced to processCount here — the full scraped pool is kept as a
+    // queue so that when a candidate is skipped (already following on IG,
+    // private/requested, or a genuine render issue) the loop below simply
+    // moves on to the next candidate instead of ending the session short.
+    // This is what makes a skip get "replaced" by an actual follow whenever
+    // there are more candidates left in the pool.
     const alreadyFollowed = await storage.getFollowedUsersByProfile(profile.id, 100_000);
     const followedSet = new Set(alreadyFollowed.map((u: any) => u.instagramUsername.toLowerCase()));
-    candidates = candidates.filter((c: any) => !followedSet.has(c.username.toLowerCase())).slice(0, processCount);
-    console.log(`[engine] @${profile.username}: [EB-only] follow — ${candidates.length} candidates from ${source.type}:${source.value}`);
+    candidates = candidates.filter((c: any) => !followedSet.has(c.username.toLowerCase()));
+    console.log(`[engine] @${profile.username}: [EB-only] follow — ${candidates.length} candidates from ${source.type}:${source.value} (target ${processCount})`);
 
     let followed = 0;
     for (const candidate of candidates) {
+      if (followed >= processCount) break;
       if (state.stop.stopped || (maxPerDay > 0 && this.daily(state) >= maxPerDay)) break;
       if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) break;
       try {
@@ -3909,7 +3916,12 @@ class AutomationEngine {
           }
         }
 
-        const clicked = abandonedAfterBrowse ? false : await page.evaluate(() => {
+        // Returns a specific reason instead of a plain boolean, so a skip can
+        // be logged with the ACTUAL cause (already following on IG, a pending
+        // request on a private account, or a genuine render issue) instead of
+        // one ambiguous catch-all message.
+        type FollowResult = { clicked: boolean; reason: "clicked" | "already_following" | "already_requested" | "private_no_button" | "not_found" };
+        const result: FollowResult = abandonedAfterBrowse ? { clicked: false, reason: "not_found" } : await page.evaluate(() => {
           // Try <button> elements first — match "Follow" or "Follow Back" exactly,
           // then fall back to aria-label. Instagram changed from exact text to
           // aria-label on some page variants in 2025.
@@ -3935,18 +3947,40 @@ class AutomationEngine {
             btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
             btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
             btn.click();
-            return true;
+            return { clicked: true, reason: "clicked" };
           }
-          return false;
-        }).catch(() => false);
+          // No "Follow"/"Follow Back" button — figure out WHY instead of
+          // guessing. Instagram renders one of these instead when a relation
+          // already exists: "Following" (public account you already follow —
+          // usually means the app's followedUsers DB fell out of sync with
+          // Instagram), or "Requested" (private account, a follow request is
+          // already pending from a previous run).
+          const relationBtn = btns.find((b: any) => {
+            const text = b.textContent?.trim();
+            const al = b.getAttribute?.('aria-label') ?? '';
+            return text === "Following" || text === "Requested"
+              || al === "Following" || al === "Requested";
+          }) as HTMLElement | undefined;
+          if (relationBtn) {
+            const text = (relationBtn.textContent?.trim() || relationBtn.getAttribute('aria-label') || "");
+            return { clicked: false, reason: text === "Requested" ? "already_requested" : "already_following" };
+          }
+          // Neither a Follow nor a relation button rendered at all — this is
+          // the genuinely ambiguous case (SPA header failed to hydrate, page
+          // still loading, etc). Note whether the account is private purely
+          // as extra diagnostic context in the log message.
+          const bodyText = document.body?.innerText || "";
+          const isPrivate = /this account is private/i.test(bodyText) || !!document.querySelector('svg[aria-label="Private"]');
+          return { clicked: false, reason: "not_found", isPrivate } as any;
+        }).catch(() => ({ clicked: false, reason: "not_found" as const }));
 
-        if (!clicked && !abandonedAfterBrowse) {
+        if (!result.clicked && !abandonedAfterBrowse) {
           // Dump button texts so we can see exactly what's on the profile page
           const _followDebug = await page.evaluate(() => (window as any).__ebFollowDebug ?? "n/a").catch(() => "eval failed");
           console.log(`[engine] @${profile.username}: [EB-only] follow debug @${candidate.username} — buttons: ${_followDebug}`);
         }
 
-        if (clicked) {
+        if (result.clicked) {
           followed++;
           this.bump(state);
           await storage.createFollowedUser({
@@ -3970,9 +4004,31 @@ class AutomationEngine {
             }
           }
         } else if (!abandonedAfterBrowse) {
-          console.log(`[engine] @${profile.username}: [EB-only] follow — no Follow button on @${candidate.username} (button not found: may be a render issue, already following, or private)`);
-          this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "skipped", "No Follow button found (may be a render issue, already following, or private)");
-          this.logGhostBrowserCall(profile.id, profile.username, "follow", `No Follow button found on @${candidate.username} (render issue, already following, or private)`);
+          if (result.reason === "already_following") {
+            // Instagram confirms this account is already followed even though
+            // it wasn't in our followedUsers table — self-heal the DB record
+            // now so this specific user is never re-scraped/re-attempted again.
+            await storage.createFollowedUser({
+              profileId: profile.id,
+              instagramUsername: candidate.username,
+              instagramUserId: String((candidate as any).pk ?? ""),
+              sourceValue: source.value,
+              sourceType: source.type,
+              followedAt: new Date().toISOString(),
+            }).catch(() => {});
+            console.log(`[engine] @${profile.username}: [EB-only] follow — @${candidate.username} is ALREADY FOLLOWED on Instagram (DB record was missing, now reconciled) — moving to next candidate`);
+            this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "skipped", `Already following @${candidate.username} (confirmed on Instagram) — skipped, trying next candidate instead`);
+            this.logGhostBrowserCall(profile.id, profile.username, "follow", `Already following @${candidate.username} — skipped`);
+          } else if (result.reason === "already_requested") {
+            console.log(`[engine] @${profile.username}: [EB-only] follow — @${candidate.username} already has a pending follow request (private account) — moving to next candidate`);
+            this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "skipped", `Follow request already pending for @${candidate.username} (private account) — skipped, trying next candidate instead`);
+            this.logGhostBrowserCall(profile.id, profile.username, "follow", `Follow request already pending for @${candidate.username} — skipped`);
+          } else {
+            const privacyNote = (result as any).isPrivate ? " — account is private" : "";
+            console.log(`[engine] @${profile.username}: [EB-only] follow — no Follow/Following/Requested button rendered on @${candidate.username} (likely a page render/timing issue${privacyNote}) — moving to next candidate`);
+            this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "skipped", `Follow button did not render for @${candidate.username} — page render/timing issue${privacyNote}, skipped and trying next candidate instead`);
+            this.logGhostBrowserCall(profile.id, profile.username, "follow", `Follow button did not render for @${candidate.username}${privacyNote}`);
+          }
         }
 
         await sleep(actionDelay());
@@ -6202,17 +6258,30 @@ class AutomationEngine {
       }
 
       // Browser follow reports "already following" as ok:true + status:"already_following" —
-      // treat it the same as a skip so it doesn't count as a new follow in stats.
+      // treat it the same as a skip so it doesn't count as a new follow in stats. Self-heal
+      // the DB record too since it means our followedUsers table missed this relationship.
       if (result.status === "already_following") {
         console.log(`[engine] @${profile.username}: skip @${user.username} (already following via browser)`);
-        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following");
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", `Already following @${user.username} (confirmed via browser) — skipped, trying next candidate instead`);
+        storage.createFollowedUser({
+          profileId: profile.id,
+          instagramUsername: user.username,
+          instagramUserId: String(user.pk ?? ""),
+          sourceValue: source.value,
+          sourceType: source.type,
+          followedAt: new Date().toISOString(),
+        }).catch(() => {});
         skipped++;
         continue;
       }
 
       if (!result.ok) {
-        console.log(`[engine] @${profile.username}: skip @${user.username} (already following / private)`);
-        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following or private account");
+        // Mobile API returned ok:false with no matched status/reason above (rare) — this is a
+        // genuine unclassified failure, not a confirmed "already following"/"private" state, so
+        // don't mislabel it. The raw reason (if any) is included for diagnosis.
+        const rawReason = (result as any).reason ? `: ${(result as any).reason}` : " (no reason returned by Instagram)";
+        console.log(`[engine] @${profile.username}: skip @${user.username} — follow attempt failed${rawReason}`);
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", `Follow attempt failed for @${user.username}${rawReason} — skipped, trying next candidate instead`);
         skipped++;
         continue;
       }
@@ -6447,12 +6516,29 @@ class AutomationEngine {
             await sleep(randInt(followMin, followMax)); continue;
           }
           // Browser follow reports "already following" as ok:true + status:"already_following" —
-          // treat it the same as a skip so it doesn't count as a new follow in stats.
+          // treat it the same as a skip so it doesn't count as a new follow in stats. Self-heal
+          // the DB record too since it means our followedUsers table missed this relationship.
           if (result.status === "already_following") {
+            console.log(`[engine] @${profile.username}: skip @${user.username} (already following via browser) — trying next candidate`);
+            this.logAction(profile.id, tool.id, "follow_skipped", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", `Already following @${user.username} (confirmed via browser) — skipped, trying next candidate instead`);
+            storage.createFollowedUser({
+              profileId: profile.id,
+              instagramUsername: user.username,
+              instagramUserId: String(user.pk ?? ""),
+              sourceValue: rescrapeSource.value,
+              sourceType: rescrapeSource.type,
+              followedAt: new Date().toISOString(),
+            }).catch(() => {});
             skipped++;
             continue;
           }
-          if (!result.ok) { skipped++; continue; }
+          if (!result.ok) {
+            const rawReason = (result as any).reason ? `: ${(result as any).reason}` : " (no reason returned by Instagram)";
+            console.log(`[engine] @${profile.username}: skip @${user.username} — follow attempt failed${rawReason} — trying next candidate`);
+            this.logAction(profile.id, tool.id, "follow_skipped", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", `Follow attempt failed for @${user.username}${rawReason} — skipped, trying next candidate instead`);
+            skipped++;
+            continue;
+          }
           try {
             await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: rescrapeSource.value, sourceType: rescrapeSource.type, followedAt: new Date().toISOString() });
           } catch {}
