@@ -78,6 +78,26 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.340",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Follow, Stories, Reels, and Feed selectors updated with broader fallbacks and longer timeouts to handle Instagram's updated 2025 DOM structure.",
+        technical: [
+          "Feed: 'article' waitFor extended from 12s to 20s. Added 'div[data-media-id]' as a fallback selector. Added DOM debug log (title, url, image counts) when waitFor times out — this will appear in the equinox-debug.log so we can see exactly what's on the page.",
+          "Reels: 'video' waitFor extended from 8s to 15s. Added DOM debug log (url, title, video/img counts, body length) when video not found.",
+          "Stories: Story tray selector expanded from 2 canvas-based selectors to 8 alternatives including img-based selectors, aria-label patterns ('s story, story), and 2025 listbox pattern. Also added DOM debug log when tray not found.",
+          "Follow: Button matching now accepts 'Follow', 'Follow Back', aria-label='Follow', and aria-label='Follow Back'. Expanded from button to button + [role='button']. Added debug log that dumps all button text and aria-labels on the profile page when Follow is not found.",
+        ],
+      },
+      {
+        category: "Debug",
+        text: "Added comprehensive debug logging for Human Jitter skip chance so the actual stored setting values are visible in equinox-debug.log. This confirms whether the DB values match what the UI shows.",
+      },
+    ],
+  },
+  {
     version: "1.1.339",
     date: "5 Jul 2026",
     items: [

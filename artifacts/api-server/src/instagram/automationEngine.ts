@@ -2752,7 +2752,11 @@ class AutomationEngine {
       // Uses the same humanSessionNotUsedMin/Max skip chance as the full jitter
       // enqueue block below. If the skip roll fires, neither the audit nav nor
       // any of the subsequent jitter actions (notifs, settings, activity, saved) run.
+      // DEBUG: log the actual stored skip-chance values so we can confirm the
+      // settings are reaching the engine correctly.
+      console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skip settings — humanSessionNotUsedMin=${JSON.stringify(s.humanSessionNotUsedMin)}, humanSessionNotUsedMax=${JSON.stringify(s.humanSessionNotUsedMax)}`);
       const _jitterSkipped = this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax");
+      console.log(`[engine] @${profile.username}: [EB-only] Human Jitter _jitterSkipped=${_jitterSkipped}`);
       if (s.humanSessionEnabled === true && !_jitterSkipped && !state.stop.stopped) {
         try {
           await nav("https://www.instagram.com/", "home (jitter)");
@@ -2797,10 +2801,25 @@ class AutomationEngine {
             document.dispatchEvent(new Event('visibilitychange'));
           }).catch(() => {});
           // Wait for SPA content and detect whether the feed has any posts.
-          // waitFor polls every 400ms — if it returns true, articles exist.
-          // Using the poll result directly avoids the race where articles appear
-          // just after a one-shot querySelector check.
-          feedHadPosts = await waitFor('article', 12000);
+          // Try a broad set of selectors — Instagram uses <article> for feed posts
+          // but occasionally changes class/structure. 20s gives React more time to
+          // hydrate; most sessions see content in <5s.
+          // 'div[data-media-id]' is a common Instagram post card wrapper.
+          // 'main [class] img[src]' catches any image in the main content area.
+          const _feedSelector = 'article, div[data-media-id]';
+          feedHadPosts = await waitFor(_feedSelector, 20000);
+          if (!feedHadPosts) {
+            // Debug: dump a quick DOM snapshot so we know what's on the page
+            const _feedDebug = await page.evaluate(() => {
+              const t = document.title;
+              const url = location.href;
+              const articles = document.querySelectorAll('article').length;
+              const mainImgs = document.querySelectorAll('main img, [role="main"] img').length;
+              const allImgs = document.querySelectorAll('img').length;
+              return `title="${t}" url="${url.slice(0,100)}" articles=${articles} main-imgs=${mainImgs} all-imgs=${allImgs}`;
+            }).catch(() => "evaluate failed");
+            console.log(`[engine] @${profile.username}: [EB-only] 📰 feed waitFor timed out — DOM: ${_feedDebug}`);
+          }
 
           // ── Expand Caption% + Like% — resolved ONCE here, then applied INLINE
           // during the single forward scroll pass below. Previously each
@@ -2907,7 +2926,7 @@ class AutomationEngine {
           // (which itself gives the SPA more time to render) before trusting
           // a false result.
           if (!feedHadPosts) {
-            const recheck: boolean = await page.evaluate(() => !!document.querySelector('article')).catch(() => false);
+            const recheck: boolean = await page.evaluate(() => !!(document.querySelector('article') || document.querySelector('div[data-media-id]'))).catch(() => false);
             if (recheck) {
               console.log(`[engine] @${profile.username}: [EB-only] 📰 feed re-check found posts after all — not empty`);
               feedHadPosts = true;
@@ -2964,7 +2983,16 @@ class AutomationEngine {
             try {
               await nav("https://www.instagram.com/reels/", "reels feed");
               await sleep(actionDelay());
-              const videoFound = await waitFor("video", 8000);
+              // Give reels page more time — React hydrates slowly and video
+              // elements are injected after the SPA shell renders.
+              const videoFound = await waitFor("video", 15000);
+              if (!videoFound) {
+                // Debug: dump page state so we know what's there
+                const _reelDebug = await page.evaluate(() => {
+                  return `url="${location.href.slice(0,120)}" title="${document.title}" videos=${document.querySelectorAll('video').length} imgs=${document.querySelectorAll('img').length} bodyLen=${document.body?.innerHTML?.length ?? 0}`;
+                }).catch(() => "evaluate failed");
+                console.log(`[engine] @${profile.username}: [EB-only] 🎬 reels debug — ${_reelDebug}`);
+              }
               let watched = 0;
               let totalWatchMs = 0;
               let totalViewPct = 0;
@@ -3009,7 +3037,19 @@ class AutomationEngine {
           // far more stable than indexing every role="button" on the page
           // (which also matches nav icons, and was why story clicks silently
           // missed their target before).
-          const storySelector = 'ul li div[role="button"] canvas, section div[role="button"] canvas';
+          // Story tray selectors — Instagram changed from canvas to img for
+          // story ring avatars in 2024/2025. Try multiple selectors in order
+          // of most-to-least specific. Any match means the tray is rendered.
+          const storySelector = [
+            'ul li div[role="button"] canvas',            // old: canvas-rendered avatars
+            'section div[role="button"] canvas',          // old: alternate section wrapper
+            'ul li button canvas',                        // variant
+            'ul li div[role="button"] img',               // new: <img> avatars
+            'ul li button img[alt]',                      // new: button with img
+            'div[role="listbox"] button',                 // 2025 listbox pattern
+            '[aria-label$="\'s story"]',                  // aria-label ends with "'s story"
+            '[aria-label*=" story"]',                     // aria-label containing " story"
+          ].join(', ');
           let storiesViewed = 0;
           // ── Per-story loop ────────────────────────────────────────────────────
           // Each iteration: navigate to home feed, click the FIRST tray item
@@ -3034,7 +3074,17 @@ class AutomationEngine {
               await sleep(actionDelay());
               const trayPresent = await waitFor(storySelector, 6000);
               if (!trayPresent) {
-                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i}`);
+                // Debug: dump page DOM state so we can see what selector IS present
+                const _storyDebug = await page.evaluate(() => {
+                  const url = location.href.slice(0, 100);
+                  const ulLi = document.querySelectorAll('ul li').length;
+                  const canvases = document.querySelectorAll('canvas').length;
+                  const imgs = document.querySelectorAll('ul li img').length;
+                  const btnRole = document.querySelectorAll('[role="button"]').length;
+                  const ariaStory = document.querySelectorAll('[aria-label*="story"]').length;
+                  return `url="${url}" ul-li=${ulLi} canvas=${canvases} ul-li-img=${imgs} role-btn=${btnRole} aria-story=${ariaStory}`;
+                }).catch(() => "eval failed");
+                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i} — ${_storyDebug}`);
                 break;
               }
               hasTray = true;
@@ -3693,11 +3743,31 @@ class AutomationEngine {
         }
 
         const clicked = abandonedAfterBrowse ? false : await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll("button"));
-          const btn = btns.find((b: any) => b.textContent?.trim() === "Follow");
-          if (btn) { (btn as HTMLElement).click(); return true; }
+          // Try <button> elements first — match "Follow" or "Follow Back" exactly,
+          // then fall back to aria-label. Instagram changed from exact text to
+          // aria-label on some page variants in 2025.
+          const btns = Array.from(document.querySelectorAll("button, [role='button']"));
+          // Debug: collect all visible button texts for logging
+          (window as any).__ebFollowDebug = btns.slice(0, 30).map((b: any) => {
+            const t = b.textContent?.trim().slice(0, 30);
+            const al = b.getAttribute?.('aria-label')?.slice(0, 30) ?? '';
+            return `"${t}"${al ? `[al:${al}]` : ''}`;
+          }).join(' | ');
+          const btn = btns.find((b: any) => {
+            const text = b.textContent?.trim();
+            const al = b.getAttribute?.('aria-label') ?? '';
+            return text === "Follow" || text === "Follow Back"
+              || al === "Follow" || al === "Follow Back";
+          }) as HTMLElement | undefined;
+          if (btn) { btn.click(); return true; }
           return false;
         }).catch(() => false);
+
+        if (!clicked && !abandonedAfterBrowse) {
+          // Dump button texts so we can see exactly what's on the profile page
+          const _followDebug = await page.evaluate(() => (window as any).__ebFollowDebug ?? "n/a").catch(() => "eval failed");
+          console.log(`[engine] @${profile.username}: [EB-only] follow debug @${candidate.username} — buttons: ${_followDebug}`);
+        }
 
         if (clicked) {
           followed++;
