@@ -3652,10 +3652,14 @@ class AutomationEngine {
                     } else {
                       console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
                       this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", "Make a Post Failed");
+                      // Make 1 attempt only — do not keep cycling through more
+                      // images from the folder after a failure in the same run.
+                      break;
                     }
                   } catch (e: any) {
                     console.warn(`[engine] @${profile.username}: [EB-only] repost error for ${fileName}: ${e?.message}`);
                     this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", e?.message ?? "unknown error");
+                    break;
                   }
                 }
               }
@@ -5317,6 +5321,9 @@ class AutomationEngine {
                 const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
                 console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName} — ${uploadErr}`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", "Make a Post Failed");
+                // Make 1 attempt only — do not keep cycling through more
+                // images from the folder after a failure in the same run.
+                break;
               }
             }
           } catch (e: any) {

@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.360",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed Make a Post closing the post instead of sharing it: right after typing the caption, the app was pressing Escape every single time, which usually hit the \"Create new post\" window itself and closed it (same as clicking the white X), throwing away the post. It now only presses Escape when a real @mention or #hashtag suggestion popup is actually open.",
+      },
+      {
+        category: "Fixed",
+        text: "Fixed Make a Post trying multiple images in a row after a failure — it now makes exactly one attempt and stops, instead of cycling through several photos in the same run.",
+      },
+    ],
+  },
+  {
     version: "1.1.359",
     date: "5 Jul 2026",
     items: [

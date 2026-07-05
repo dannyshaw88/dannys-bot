@@ -51,6 +51,15 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-05 — Escape-after-caption was closing the post modal itself (v1.1.360)
+- Context: user reported two remaining bugs after v1.1.359: (1) after typing the caption, the flow was clicking the white "X" close button and discarding the post instead of clicking blue "Share"; (2) after a failed post, the automation kept "recycling" — trying more images in the same run instead of stopping after 1 attempt.
+- Root cause #1: the caption-typing step unconditionally sent an Escape keypress via CDP after every caption, intended only to dismiss a lingering @mention/#hashtag autocomplete dropdown. Since most captions never contain "@"/"#", no dropdown was ever open — Instagram's "Create new post" modal itself caught the Escape and closed/discarded the post, which looks identical to the user clicking the white X.
+- Fix #1: query the DOM for an actual `[role="listbox"]`/`[role="option"]`/mention-dropdown element before sending Escape; skip Escape entirely when no such element is present.
+- Root cause #2: `automationEngine.ts` builds a `picked` array of files (sized by `repostMin`/`repostMax`) and loops over it in two places (EB-only mode and API-mode local-folder posting) without stopping the loop after a failed attempt — it just moved on to the next file.
+- Fix #2: added `break` on the failure branch (and inside the `catch`) in both loops so exactly one attempt is made per run, regardless of `targetCount`.
+- **Lesson**: any "dismiss a possible popup" keypress sent unconditionally into a page that also treats that same key as "close the whole dialog" is a landmine — always gate cleanup keypresses (Escape especially) on positive detection of the specific popup being dismissed, never send them defensively as a blanket cleanup step.
+- Status: UNCONFIRMED — pushed as v1.1.360 (pending user push instruction), awaiting production confirmation.
+
 ### 2026-07-05 — Share click landing on the photo instead of the Share button (v1.1.359)
 - Context: user confirmed v1.1.358 was "100% better" (Create/upload-dialog-skip fix worked), but reported one remaining bug: after the caption is typed, instead of clicking Share (top-right of the popup), the click lands inside the photo as if starting a manual "tag a person" action, and the whole post attempt then fails/recycles.
 - Root cause (best available evidence — logs did not show the exact DOM at fault, but the symptom is unambiguous: a click intended for a text-matched "Share" button visually landed on the photo preview instead): most likely typing `@`/`#` in the caption left Instagram's mention/hashtag autocomplete dropdown open, and/or the write-caption screen still had a lingering "tag people on this photo" hit-target layered over the image when Share's coordinates were computed and clicked.

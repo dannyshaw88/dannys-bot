@@ -5743,15 +5743,31 @@ export function startEbIpcServer(
             }
             // Typing "@" or "#" can leave Instagram's mention/hashtag
             // autocomplete dropdown open over the caption box. If that
-            // dropdown (or a lingering "Tag People" affordance on the photo
-            // preview) is still up when we compute the Share button's
-            // coordinates below, the real click can land on the photo
-            // instead — which Instagram interprets as starting a manual
-            // people-tag on the image, silently discarding the post attempt.
-            // Escape closes any such popup without erasing the caption text.
-            await dbg.sendCommand("Input.dispatchKeyEvent", { type: "rawKeyDown", windowsVirtualKeyCode: 27, key: "Escape" }).catch(() => {});
-            await dbg.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", windowsVirtualKeyCode: 27, key: "Escape" }).catch(() => {});
-            await new Promise(r => setTimeout(r, 500));
+            // dropdown is still up when we compute the Share button's
+            // coordinates below, the real click can land on the dropdown
+            // (or the photo behind it) instead of Share.
+            //
+            // BUG (found in production): sending Escape UNCONDITIONALLY here
+            // — even when no autocomplete dropdown was actually open — was
+            // caught by the "Create new post" modal itself, not by a
+            // dropdown. Instagram's modal treats Escape exactly like
+            // clicking the white X in the top-right corner: it discards the
+            // post immediately. Since most captions never contain "@" or
+            // "#", the dropdown was almost never actually open, so this was
+            // silently discarding nearly every post right after typing the
+            // caption. Fix: only send Escape when a mention/hashtag
+            // suggestion dropdown is actually present in the DOM.
+            const spDropdownOpen: boolean = await spWin.webContents.executeJavaScript(`
+              (function() {
+                return !!document.querySelector('[role="listbox"], [role="option"], ul[id*="mention"], div[id*="mention"]');
+              })()
+            `, true).catch(() => false);
+            if (spDropdownOpen) {
+              _ipcLog(`[eb:silent-post:${pid}] mention/hashtag dropdown detected — dismissing with Escape`);
+              await dbg.sendCommand("Input.dispatchKeyEvent", { type: "rawKeyDown", windowsVirtualKeyCode: 27, key: "Escape" }).catch(() => {});
+              await dbg.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", windowsVirtualKeyCode: 27, key: "Escape" }).catch(() => {});
+              await new Promise(r => setTimeout(r, 500));
+            }
           }
 
           // ── Helper: find the Share button's centre coords, but reject any
