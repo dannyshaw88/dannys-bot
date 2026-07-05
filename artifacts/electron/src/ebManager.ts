@@ -5532,15 +5532,50 @@ export function startEbIpcServer(
           await new Promise(r => setTimeout(r, 2000));
 
           // ── Step 4: Click "Select from Computer", then inject image via CDP ─
-          // Previous versions skipped clicking this button entirely and just
-          // waited for an <input type="file"> to exist anywhere on the page,
-          // then injected into it. That's fragile — the dialog can render
-          // with the input not yet mounted/wired, and there can be other
-          // stray file inputs elsewhere on a heavy Instagram feed page. Now
-          // we click the actual blue "Select from Computer" button with a
-          // real trusted CDP click first (exactly what a human does), which
-          // is also what wires the input up, then locate the input scoped to
-          // the open dialog.
+          // v1.1.357 root-cause fix: clicking "Select from Computer" is a REAL
+          // trusted click on a control wired to a native <input type="file">.
+          // A real trusted click on that control does not just "wire up" a
+          // hidden input for us to inject into later — it makes Chromium try
+          // to open the actual OS-native file-picker dialog, exactly like a
+          // human clicking it would. In an automated/hidden Electron window
+          // nothing is there to interact with that native dialog, so it sits
+          // open forever; the page underneath never receives a file, and
+          // whatever outer watchdog/retry logic is driving this call
+          // eventually times out and reloads the page — which is exactly the
+          // "circles back to the homepage, refreshes, then recycles" symptom
+          // reported in production. Confirmed by the attached page source:
+          // the <input type="file"> already exists in the DOM on the initial
+          // drag-and-drop screen, before the button is ever clicked — so
+          // "wait for a file input to appear" always passed instantly and hid
+          // the real problem, which is the native dialog opening afterward.
+          //
+          // Fix: use CDP's Page.setInterceptFileChooserDialog. This tells
+          // Chromium to intercept the file chooser BEFORE it becomes a real
+          // OS dialog and instead emit a Page.fileChooserOpened event with
+          // the backendNodeId of the input that triggered it. We answer that
+          // event directly with DOM.setFileInputFiles — the native dialog is
+          // never shown, so there is nothing left to hang or time out on.
+          _ipcLog(`[eb:silent-post:${pid}] arming file-chooser interception`);
+          await dbg.sendCommand("Page.enable").catch(() => {});
+          await dbg.sendCommand("Page.setInterceptFileChooserDialog", { enabled: true });
+
+          const spFileChooserPromise = new Promise<number | null>(resolve => {
+            let settled = false;
+            const onMessage = (_event: any, method: string, params: any) => {
+              if (method !== "Page.fileChooserOpened" || settled) return;
+              settled = true;
+              dbg.removeListener("message", onMessage);
+              resolve(typeof params?.backendNodeId === "number" ? params.backendNodeId : null);
+            };
+            dbg.on("message", onMessage);
+            setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              dbg.removeListener("message", onMessage);
+              resolve(null);
+            }, 15_000);
+          });
+
           _ipcLog(`[eb:silent-post:${pid}] clicking "Select from Computer"`);
           const spFindSelectComputerJs = `
             (function() {
@@ -5568,39 +5603,22 @@ export function startEbIpcServer(
             }
             await new Promise(r => setTimeout(r, 400));
           }
-          if (!spClickedSelectComputer) throw new Error('Could not find "Select from Computer" button — Create new post dialog did not open');
-          await new Promise(r => setTimeout(r, 800));
+          if (!spClickedSelectComputer) {
+            await dbg.sendCommand("Page.setInterceptFileChooserDialog", { enabled: false }).catch(() => {});
+            throw new Error('Could not find "Select from Computer" button — Create new post dialog did not open');
+          }
 
-          _ipcLog(`[eb:silent-post:${pid}] waiting for file input`);
-          const spFileInputFound = await new Promise<boolean>(resolve => {
-            let tries = 0;
-            const poll = setInterval(async () => {
-              if (spWin.isDestroyed()) { clearInterval(poll); resolve(false); return; }
-              const found: boolean = await spWin.webContents.executeJavaScript(
-                `!!document.querySelector("input[type='file']")`, true
-              ).catch(() => false);
-              if (found) { clearInterval(poll); resolve(true); return; }
-              if (++tries >= 24) { clearInterval(poll); resolve(false); }
-            }, 500);
-          });
-          if (!spFileInputFound) throw new Error("File input not found after clicking Select from Computer");
-
-          // Use a shallow getDocument (depth 0, root only) — DOM.querySelector
-          // resolves against Chrome's own backend tree and does not require
-          // the client to have pre-fetched the whole (very large) DOM, unlike
-          // the previous depth:-1 call which pulled the entire Instagram feed
-          // tree into memory on every post attempt.
-          const spDocResult = await dbg.sendCommand("DOM.getDocument", { depth: 0 });
-          const spInputResult = await dbg.sendCommand("DOM.querySelector", {
-            nodeId: (spDocResult as any).root.nodeId,
-            selector: "input[type='file']",
-          }).catch(() => ({ nodeId: 0 }));
-          if (!(spInputResult as any).nodeId) throw new Error("CDP could not locate file input node");
+          _ipcLog(`[eb:silent-post:${pid}] waiting for intercepted file chooser`);
+          const spBackendNodeId = await spFileChooserPromise;
+          await dbg.sendCommand("Page.setInterceptFileChooserDialog", { enabled: false }).catch(() => {});
+          if (spBackendNodeId == null) {
+            throw new Error("File chooser never opened after clicking \"Select from Computer\" (native dialog interception timed out)");
+          }
           await dbg.sendCommand("DOM.setFileInputFiles", {
             files: [tmpPath],
-            nodeId: (spInputResult as any).nodeId,
+            backendNodeId: spBackendNodeId,
           });
-          _ipcLog(`[eb:silent-post:${pid}] image injected via CDP`);
+          _ipcLog(`[eb:silent-post:${pid}] image injected via intercepted file chooser`);
           await new Promise(r => setTimeout(r, 2500));
 
           // ── Helper: find a visible button's centre coords by exact text ────

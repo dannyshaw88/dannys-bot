@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.357",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Found the real reason posting still froze right after choosing a photo: pressing \"Select from Computer\" was actually working, but it was opening a real Windows \"choose a file\" popup behind the scenes that nothing could click through — so the app just sat there until it gave up and bounced back to the home screen. Posting now hands the photo over directly the instant that button is pressed, so no popup ever appears and there's nothing left to get stuck on.",
+      },
+    ],
+  },
+  {
     version: "1.1.356",
     date: "5 Jul 2026",
     items: [
