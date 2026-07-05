@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.359",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed the last posting bug: right after typing the caption, the app was sometimes clicking on the photo itself (like it was trying to tag someone) instead of pressing the Share button in the top right, which caused the whole post attempt to fail. The app now double-checks it's really clicking the Share button and nothing on top of the photo, and clears away any leftover popup from typing before it clicks.",
+      },
+      {
+        category: "Improved",
+        text: "Cleaned up the activity list on the dashboard — posting results now show a simple \"Make a Post Successful\" or \"Make a Post Failed\" instead of a long file path.",
+      },
+    ],
+  },
+  {
     version: "1.1.358",
     date: "5 Jul 2026",
     items: [

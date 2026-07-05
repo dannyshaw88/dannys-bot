@@ -3628,7 +3628,7 @@ class AutomationEngine {
                     const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
                     if (bpResult.ok) {
                       console.log(`[engine] @${profile.username}: [EB-only] 🔁 uploaded image from local folder: ${fileName}`);
-                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "ok", `Uploaded image from local folder: ${fileName} (alteration: ${level})`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "ok", "Make a Post Successful");
                       this.logGhostBrowserCall(profile.id, profile.username, "make_a_post", `EB: uploaded ${fileName}`);
                       await storage.incrementStat(profile.id, "repost");
                       storage.createInstagramApiCall({
@@ -3651,7 +3651,7 @@ class AutomationEngine {
                       }
                     } else {
                       console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
-                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", `Upload failed for: ${fileName} (${bpResult.message ?? "unknown error"})`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", "Make a Post Failed");
                     }
                   } catch (e: any) {
                     console.warn(`[engine] @${profile.username}: [EB-only] repost error for ${fileName}: ${e?.message}`);
@@ -5290,7 +5290,7 @@ class AutomationEngine {
                 }
                 const mediaType = isVideo ? "video" : "image";
                 console.log(`[engine] @${profile.username}: 🔁 uploaded ${mediaType} from local folder: ${fileName}${uniqueTag} [${uploadedCount + 1}/${targetCount}]`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded ${mediaType} from local folder: ${fileName} (alteration: ${level}${uniqueTag}) [${uploadedCount + 1}/${targetCount}]`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", "Make a Post Successful");
                 await storage.incrementStat(profile.id, "repost");
                 if (noRepeat) {
                   try {
@@ -5316,7 +5316,7 @@ class AutomationEngine {
               } else {
                 const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
                 console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName} — ${uploadErr}`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName} (${uploadErr})`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", "Make a Post Failed");
               }
             }
           } catch (e: any) {
