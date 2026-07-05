@@ -4825,16 +4825,26 @@ export function startEbIpcServer(
             _ipcLog(`[WARN] [eb:silent-follow:${pid}] mode B — no igApiCookies provided; session will be unauthenticated`);
           }
 
-          // Apply the account's proxy so the hidden window routes through the
-          // same exit IP as the real EB would.
+          // ── Hard proxy gate ──────────────────────────────────────────────────
+          // Every account MUST have a proxy.  If no proxy is present in the
+          // request body — or if Chromium rejects the proxy config — we ABORT
+          // immediately.  Silently proceeding without a proxy would route every
+          // background follow/unfollow through the operator's real home IP,
+          // which Instagram sees as hundreds of simultaneous actions from one
+          // address — the root cause of mass bans.
           const bodyProxy = body.proxy as { host?: string; port?: number; user?: string; pass?: string; type?: string } | null | undefined;
-          if (bodyProxy?.host && bodyProxy?.port) {
-            try {
-              await sfSes.clearHostResolverCache();
-              await sfSes.setProxy(buildProxyConfig(bodyProxy as any));
-            } catch (proxyErr: any) {
-              _ipcLog(`[WARN] [eb:silent-follow:${pid}] mode B — proxy set failed: ${proxyErr?.message}`);
-            }
+          if (!bodyProxy?.host || !bodyProxy?.port) {
+            _sfInProgress.delete(pid);
+            _ipcLog(`[ERROR] [eb:silent-follow:${pid}] mode B — no proxy configured for this account; action aborted to prevent real IP leak`);
+            return send(res, 400, { error: `No proxy configured for account ${pid} — action aborted to prevent real IP leak` });
+          }
+          try {
+            await sfSes.clearHostResolverCache();
+            await sfSes.setProxy(buildProxyConfig(bodyProxy as any));
+          } catch (proxyErr: any) {
+            _sfInProgress.delete(pid);
+            _ipcLog(`[ERROR] [eb:silent-follow:${pid}] mode B — proxy set failed; action aborted to prevent real IP leak: ${proxyErr?.message}`);
+            return send(res, 500, { error: `Proxy setup failed for account ${pid} — action aborted to prevent real IP leak: ${proxyErr?.message}` });
           }
 
           // Position completely off-screen and call showInactive() immediately
@@ -5295,22 +5305,29 @@ export function startEbIpcServer(
             }
           } catch { /* rely on partition cookies */ }
 
-          // Apply the account's proxy and fetch UA
+          // ── Hard proxy gate ──────────────────────────────────────────────────
+          // Every account MUST route through its assigned proxy.  If the proxy
+          // cannot be resolved or set we ABORT — never proceed on the home IP.
           let _spUA: string | undefined;
           let _spProxyCreds: { user?: string; pass?: string } | null = null;
           try {
             const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
-            if (proxyRes.ok) {
-              const pd: any = await proxyRes.json();
-              if (pd.proxy && !pd.useHomeIp) {
-                _spProxyCreds = { user: pd.proxy.user, pass: pd.proxy.pass };
-                const spCfg = buildProxyConfig(pd.proxy);
-                await spSes.clearHostResolverCache().catch(() => {});
-                await spSes.setProxy(spCfg).catch(() => {});
-              }
-              if (pd.userAgent) _spUA = pd.userAgent;
+            if (!proxyRes.ok) throw new Error(`eb-proxy fetch returned ${proxyRes.status}`);
+            const pd: any = await proxyRes.json();
+            if (!pd.proxy?.host || !pd.proxy?.port) {
+              _spSafeUnlink();
+              _ipcLog(`[ERROR] [eb:silent-post:${pid}] mode B — no proxy configured for this account; action aborted to prevent real IP leak`);
+              return send(res, 400, { error: `No proxy configured for account ${pid} — action aborted to prevent real IP leak` });
             }
-          } catch { /* proceed without */ }
+            _spProxyCreds = { user: pd.proxy.user, pass: pd.proxy.pass };
+            await spSes.clearHostResolverCache().catch(() => {});
+            await spSes.setProxy(buildProxyConfig(pd.proxy));
+            if (pd.userAgent) _spUA = pd.userAgent;
+          } catch (proxyErr: any) {
+            _spSafeUnlink();
+            _ipcLog(`[ERROR] [eb:silent-post:${pid}] mode B — proxy fetch/set failed; action aborted to prevent real IP leak: ${proxyErr?.message}`);
+            return send(res, 500, { error: `Proxy setup failed for account ${pid} — action aborted to prevent real IP leak: ${proxyErr?.message}` });
+          }
 
           const { width: _spSw } = eScreen.getPrimaryDisplay().workAreaSize;
           spTempWin = new BrowserWindow({
@@ -5980,12 +5997,22 @@ export function startEbIpcServer(
               } catch {}
             }
           }
+          // ── Hard proxy gate ──────────────────────────────────────────────────
+          // Every account MUST route through its assigned proxy.  If no proxy
+          // is present in the request body — or if Chromium rejects the config
+          // — we ABORT immediately.  Silently proceeding on the home IP would
+          // expose the operator's real address to Instagram.
           const bodyProxy = body.proxy as { host?: string; port?: number; user?: string; pass?: string; type?: string } | null | undefined;
-          if (bodyProxy?.host && bodyProxy?.port) {
-            try {
-              await ssSes.clearHostResolverCache();
-              await ssSes.setProxy(buildProxyConfig(bodyProxy as any));
-            } catch {}
+          if (!bodyProxy?.host || !bodyProxy?.port) {
+            _ipcLog(`[ERROR] [eb:silent-search:${pid}] mode B — no proxy configured for this account; action aborted to prevent real IP leak`);
+            return send(res, 400, { error: `No proxy configured for account ${pid} — action aborted to prevent real IP leak` });
+          }
+          try {
+            await ssSes.clearHostResolverCache();
+            await ssSes.setProxy(buildProxyConfig(bodyProxy as any));
+          } catch (proxyErr: any) {
+            _ipcLog(`[ERROR] [eb:silent-search:${pid}] mode B — proxy set failed; action aborted to prevent real IP leak: ${proxyErr?.message}`);
+            return send(res, 500, { error: `Proxy setup failed for account ${pid} — action aborted to prevent real IP leak: ${proxyErr?.message}` });
           }
           const { width: _ssSw } = eScreen.getPrimaryDisplay().workAreaSize;
           ssTempWin = new BrowserWindow({
