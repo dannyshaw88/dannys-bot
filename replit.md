@@ -127,6 +127,24 @@ The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSess
 
 53. Do not skip any file during imports — every file matters for git
 
+## Hard Proxy Gate — current rules (non-negotiable, do not regress)
+
+**Every account MUST route through its assigned proxy. No automation window may ever open, navigate, or perform any action on the machine's real IP. This is an absolute rule with no exceptions and no `useHomeIp` bypass.**
+
+### Where this is enforced (mode-B temp windows in `ebManager.ts`):
+
+- `sfTempWin` (`/eb/silent-follow`): hard abort (HTTP 400) if `bodyProxy.host`/`port` absent; hard abort (HTTP 500) if `setProxy()` throws
+- `spTempWin` (`/eb/silent-post`): hard abort (HTTP 400/500) if `eb-proxy` fetch fails, returns no proxy, or `setProxy()` throws; `useHomeIp` bypass removed
+- `ssTempWin` (`/eb/silent-search`): same as `sfTempWin`
+
+### What is FORBIDDEN:
+
+- Any `if (proxy?.host)` soft guard on proxy setup — these silently skip proxy config and open the window on the real home IP
+- `useHomeIp` bypass or any other path that allows an action to proceed without the assigned proxy
+- `catch { /* proceed without */ }` around `setProxy()` — proxy failure must be a hard abort, not a silent skip
+
+---
+
 ## EB IP Leak Prevention — current rules (non-negotiable, do not regress)
 
 Do not re-attempt anything in the attempt history below as confirmed-not-the-issue.

@@ -78,6 +78,34 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.365",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Background automation windows now refuse to open if an account has no proxy configured. Previously, if the proxy was missing from the request or could not be applied, the window would silently open on the machine's real home IP and perform the action (follow, post, search) from that address. This is now a hard error — the action is cancelled and logged, never allowed to proceed on the home IP.",
+      },
+    ],
+  },
+  {
+    version: "1.1.364",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed real IP leak on all background automation actions. When the embedded browser was not already open (the normal state during scheduled automation), three hidden automation windows were created without the proxy authentication handler. Instagram's proxy would send a 407 auth challenge; without a handler Electron silently cancelled the request and fell through to the real home broadband IP. Every background follow, unfollow, post, and search was leaking the home IP to Instagram. Fixed by adding proxy credential handlers to all three background windows.",
+      },
+      {
+        category: "Fixed",
+        text: "Ghost browser and verify windows were always advertising Chrome 131 in their user agent, regardless of which version of Chrome is actually bundled with the installed app. If the app ships a different Chromium version, the mismatch is a fingerprinting signal. Now derives the correct Chrome version from the running build automatically.",
+      },
+      {
+        category: "Fixed",
+        text: "Timezone lookups for proxy geolocation were not cached. With many accounts each opening the browser, ip-api.com's 1,000 requests/day free limit was being hit, causing all accounts opened after the limit to silently fall back to the machine's real system timezone instead of the proxy's timezone. Timezone results are now cached per proxy host for the lifetime of the app session.",
+      },
+    ],
+  },
+  {
     version: "1.1.363",
     date: "5 Jul 2026",
     items: [

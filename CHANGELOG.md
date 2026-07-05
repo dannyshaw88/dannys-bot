@@ -4,6 +4,34 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.365] — 2026-07-05
+
+### Security — Hard abort if no proxy configured on mode-B automation windows
+
+**Rule:** Every account MUST route through its assigned proxy. If no proxy is present or proxy setup fails, the action is aborted immediately. There is no fallback to the real IP — ever.
+
+Three mode-B temp windows previously had soft `if (bodyProxy?.host && bodyProxy?.port)` guards that silently skipped `session.setProxy()` and allowed the window to open on the machine's real home IP when:
+- No proxy was provided in the request body
+- The `eb-proxy` fetch failed (network error to localhost)
+- `setProxy()` threw an exception
+
+Additionally, `spTempWin` had a `useHomeIp` bypass (`if (pd.proxy && !pd.useHomeIp)`) that could intentionally skip proxy setup entirely.
+
+**All three windows now have hard aborts:**
+
+| Window | Condition | Response |
+|---|---|---|
+| `sfTempWin` (`/eb/silent-follow`) | No `bodyProxy.host`/`port` | HTTP 400 — action dead |
+| `sfTempWin` | `setProxy()` throws | HTTP 500 — action dead |
+| `spTempWin` (`/eb/silent-post`) | `eb-proxy` fetch fails or returns no proxy | HTTP 500 — action dead |
+| `spTempWin` | `setProxy()` throws | HTTP 500 — action dead |
+| `ssTempWin` (`/eb/silent-search`) | No `bodyProxy.host`/`port` | HTTP 400 — action dead |
+| `ssTempWin` | `setProxy()` throws | HTTP 500 — action dead |
+
+The `useHomeIp` bypass in `spTempWin` was also removed.
+
+---
+
 ## [1.1.364] — 2026-07-05
 
 ### Security — Critical: Real IP Leak on All Background Automation Actions (Mode B)
