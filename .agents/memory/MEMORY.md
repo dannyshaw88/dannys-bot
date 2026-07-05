@@ -2,6 +2,4 @@
 - [Verify bootstrap timing & call-order bugs](verify-bootstrap-bugs.md) — core verify fires with NO delay between calls (loginApiThrottle only in Phase 2d); call order is always fixed/identical
 - [tlsRequest CycleTLS header stripping](tls-request-header-fix.md) — tlsRequest must strip Host, Connection, Content-Length before passing to CycleTLS or Instagram returns "something went wrong"
 - [Make a Post fix log](make-a-post-log.md) — chronological history of EB-driven posting flow bugs (clicks, visibility, Escape-key, recycling); read before touching that flow
-- [EB IP/DNS leak fix history](eb-leak-fix-history.md) — full attempt log behind the current leak-prevention rules in replit.md; don't re-attempt anything marked confirmed-not-the-issue
-- [EB hidden-window throttling & multi-tab IPC history](eb-throttling-fix-history.md) — diagnosis chain for why hidden/backgrounded EB windows silently returned empty automation results
-- [Image upload fix history](image-upload-fix-history.md) — diagnosis chain behind the sharp re-encode + shared-proxy-agent rules for rupload/configure
+- Note (5 Jul 2026): EB IP/DNS leak history, EB throttling/multi-tab IPC history, and image upload fix history were merged back into `replit.md` at the user's request (full detail preferred over a trimmed index). Read those sections directly in `replit.md`, not the old topic files.
