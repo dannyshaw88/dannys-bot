@@ -5559,24 +5559,60 @@ export function startEbIpcServer(
           _ipcLog(`[eb:silent-post:${pid}] image injected via CDP`);
           await new Promise(r => setTimeout(r, 2500));
 
-          // ── Helper: poll-click a button by its exact visible text ─────────
+          // ── Helper: find a visible button's centre coords by exact text ────
+          const spFindBtnPos = async (text: string): Promise<{ found: boolean; x: number; y: number }> =>
+            spWin.webContents.executeJavaScript(`
+              (function(t) {
+                var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
+                var btn = all.find(function(el) { return (el.textContent || '').trim() === t && el.offsetHeight > 0; });
+                if (!btn) return { found: false, x: 0, y: 0 };
+                btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                var rect = btn.getBoundingClientRect();
+                return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+              })(${JSON.stringify(text)})
+            `, true).catch(() => ({ found: false, x: 0, y: 0 }));
+
+          // ── Helper: poll-click a button by its exact visible text, using a
+          // real trusted CDP click (see spRealClick above — the root cause of
+          // every prior "Make a Post" failure at every step was Instagram
+          // silently ignoring synthetic/untrusted clicks). After clicking,
+          // confirms the SAME button is gone from screen before declaring
+          // success — if it's still there, the click didn't register and we
+          // click again. Safe to auto-retry for idempotent nav buttons
+          // (Next) since re-clicking "Next" twice on the same screen has no
+          // side effect. NOT used for Share (see spClickBtnTextOnce below) to
+          // avoid any risk of double-posting.
           const spClickBtnText = async (text: string, timeoutMs: number): Promise<boolean> => {
             const deadline = Date.now() + timeoutMs;
             while (Date.now() < deadline) {
               if (spWin.isDestroyed()) return false;
-              const clicked: boolean = await spWin.webContents.executeJavaScript(`
-                (function(t) {
-                  var all = Array.from(document.querySelectorAll('button, [role="button"], [type="submit"]'));
-                  var btn = all.find(function(el) { return (el.textContent || '').trim() === t; });
-                  if (!btn) return false;
-                  btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                  btn.click();
-                  return true;
-                })(${JSON.stringify(text)})
-              `, true).catch(() => false);
-              if (clicked) return true;
+              const pos = await spFindBtnPos(text);
+              if (pos.found) {
+                await spRealClick(pos.x, pos.y);
+                await new Promise(r => setTimeout(r, 900));
+                const stillThere = await spFindBtnPos(text);
+                if (!stillThere.found) return true;
+                // Button still on screen — click didn't register, or Instagram
+                // hasn't transitioned yet. Loop and try again.
+              }
+              await new Promise(r => setTimeout(r, 500));
+            }
+            return false;
+          };
+
+          // ── Helper: find + click a button exactly once (no auto-retry).
+          // Used for Share/Done where a duplicate click carries real risk
+          // (double-posting). Callers are expected to verify success
+          // separately (e.g. the "post shared" confirmation poll below).
+          const spClickBtnTextOnce = async (text: string, timeoutMs: number): Promise<boolean> => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              if (spWin.isDestroyed()) return false;
+              const pos = await spFindBtnPos(text);
+              if (pos.found) {
+                await spRealClick(pos.x, pos.y);
+                return true;
+              }
               await new Promise(r => setTimeout(r, 500));
             }
             return false;
@@ -5612,8 +5648,11 @@ export function startEbIpcServer(
           }
 
           // ── Click Share ───────────────────────────────────────────────────
+          // Uses the ONCE-only trusted click (spClickBtnTextOnce) — never
+          // auto-retries here, to eliminate any risk of double-posting.
+          // Success is verified separately below via the "post shared" text.
           _ipcLog(`[eb:silent-post:${pid}] clicking Share`);
-          if (!await spClickBtnText("Share", 15000)) throw new Error("Share button not found");
+          if (!await spClickBtnTextOnce("Share", 15000)) throw new Error("Share button not found");
 
           // ── Wait for "Your post has been shared" confirmation ─────────────
           _ipcLog(`[eb:silent-post:${pid}] waiting for post-shared confirmation`);
@@ -5634,7 +5673,7 @@ export function startEbIpcServer(
 
           if (spConfirmed) {
             _ipcLog(`[eb:silent-post:${pid}] clicking Done`);
-            await spClickBtnText("Done", 5000);
+            await spClickBtnTextOnce("Done", 5000);
             await new Promise(r => setTimeout(r, 500));
           }
 

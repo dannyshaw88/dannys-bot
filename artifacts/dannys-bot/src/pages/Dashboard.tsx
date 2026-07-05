@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.355",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed the same click problem for the rest of the posting flow — the Next, Share, and Done buttons were also using the old simulated click that Instagram sometimes ignores. All of them now click the same trustworthy way as the Create button, so posting no longer gets stuck after the photo picker and bounces back to the home screen.",
+      },
+    ],
+  },
+  {
     version: "1.1.354",
     date: "5 Jul 2026",
     items: [
