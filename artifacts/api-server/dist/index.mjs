@@ -23381,7 +23381,7 @@ var require_response = __commonJS({
       this.append("Set-Cookie", cookie.serialize(name, String(val), opts));
       return this;
     };
-    res.location = function location(url2) {
+    res.location = function location2(url2) {
       return this.set("Location", encodeUrl(url2));
     };
     res.redirect = function redirect(url2) {
@@ -31352,9 +31352,9 @@ var require_websocket = __commonJS({
         emitErrorAndClose(websocket, err);
       });
       req.on("response", (res) => {
-        const location = res.headers.location;
+        const location2 = res.headers.location;
         const statusCode = res.statusCode;
-        if (location && opts.followRedirects && statusCode >= 300 && statusCode < 400) {
+        if (location2 && opts.followRedirects && statusCode >= 300 && statusCode < 400) {
           if (++websocket._redirects > opts.maxRedirects) {
             abortHandshake(websocket, req, "Maximum redirects exceeded");
             return;
@@ -31362,9 +31362,9 @@ var require_websocket = __commonJS({
           req.abort();
           let addr;
           try {
-            addr = new URL4(location, address);
+            addr = new URL4(location2, address);
           } catch (e) {
-            const err = new SyntaxError(`Invalid URL: ${location}`);
+            const err = new SyntaxError(`Invalid URL: ${location2}`);
             emitErrorAndClose(websocket, err);
             return;
           }
@@ -56561,8 +56561,8 @@ var require_url_parse = __commonJS({
       else if (typeof global !== "undefined") globalVar = global;
       else if (typeof self !== "undefined") globalVar = self;
       else globalVar = {};
-      var location = globalVar.location || {};
-      loc = loc || location;
+      var location2 = globalVar.location || {};
+      loc = loc || location2;
       var finaldestination = {}, type = typeof loc, key;
       if ("blob:" === loc.protocol) {
         finaldestination = new Url(unescape(loc.pathname), {});
@@ -56583,10 +56583,10 @@ var require_url_parse = __commonJS({
     function isSpecial(scheme) {
       return scheme === "file:" || scheme === "ftp:" || scheme === "http:" || scheme === "https:" || scheme === "ws:" || scheme === "wss:";
     }
-    function extractProtocol(address, location) {
+    function extractProtocol(address, location2) {
       address = trimLeft(address);
       address = address.replace(CRHTLF, "");
-      location = location || {};
+      location2 = location2 || {};
       var match = protocolre.exec(address);
       var protocol = match[1] ? match[1].toLowerCase() : "";
       var forwardSlashes = !!match[2];
@@ -56619,7 +56619,7 @@ var require_url_parse = __commonJS({
         if (forwardSlashes) {
           rest = rest.slice(2);
         }
-      } else if (slashesCount >= 2 && isSpecial(location.protocol)) {
+      } else if (slashesCount >= 2 && isSpecial(location2.protocol)) {
         rest = match[4];
       }
       return {
@@ -56648,23 +56648,23 @@ var require_url_parse = __commonJS({
       if (last === "." || last === "..") path6.push("");
       return path6.join("/");
     }
-    function Url(address, location, parser) {
+    function Url(address, location2, parser) {
       address = trimLeft(address);
       address = address.replace(CRHTLF, "");
       if (!(this instanceof Url)) {
-        return new Url(address, location, parser);
+        return new Url(address, location2, parser);
       }
-      var relative, extracted, parse3, instruction, index, key, instructions = rules.slice(), type = typeof location, url2 = this, i2 = 0;
+      var relative, extracted, parse3, instruction, index, key, instructions = rules.slice(), type = typeof location2, url2 = this, i2 = 0;
       if ("object" !== type && "string" !== type) {
-        parser = location;
-        location = null;
+        parser = location2;
+        location2 = null;
       }
       if (parser && "function" !== typeof parser) parser = qs.parse;
-      location = lolcation(location);
-      extracted = extractProtocol(address || "", location);
+      location2 = lolcation(location2);
+      extracted = extractProtocol(address || "", location2);
       relative = !extracted.protocol && !extracted.slashes;
-      url2.slashes = extracted.slashes || relative && location.slashes;
-      url2.protocol = extracted.protocol || location.protocol || "";
+      url2.slashes = extracted.slashes || relative && location2.slashes;
+      url2.protocol = extracted.protocol || location2.protocol || "";
       address = extracted.rest;
       if (extracted.protocol === "file:" && (extracted.slashesCount !== 2 || windowsDriveLetter.test(address)) || !extracted.slashes && (extracted.protocol || extracted.slashesCount < 2 || !isSpecial(url2.protocol))) {
         instructions[3] = [/(.*)/, "pathname"];
@@ -56694,12 +56694,12 @@ var require_url_parse = __commonJS({
           url2[key] = index[1];
           address = address.slice(0, index.index);
         }
-        url2[key] = url2[key] || (relative && instruction[3] ? location[key] || "" : "");
+        url2[key] = url2[key] || (relative && instruction[3] ? location2[key] || "" : "");
         if (instruction[4]) url2[key] = url2[key].toLowerCase();
       }
       if (parser) url2.query = parser(url2.query);
-      if (relative && location.slashes && url2.pathname.charAt(0) !== "/" && (url2.pathname !== "" || location.pathname !== "")) {
-        url2.pathname = resolve(url2.pathname, location.pathname);
+      if (relative && location2.slashes && url2.pathname.charAt(0) !== "/" && (url2.pathname !== "" || location2.pathname !== "")) {
+        url2.pathname = resolve(url2.pathname, location2.pathname);
       }
       if (url2.pathname.charAt(0) !== "/" && isSpecial(url2.protocol)) {
         url2.pathname = "/" + url2.pathname;
@@ -90749,10 +90749,10 @@ var require_redirect = __commonJS({
       var request3 = self2.request;
       var redirectTo = null;
       if (response.statusCode >= 300 && response.statusCode < 400 && response.caseless.has("location")) {
-        var location = response.caseless.get("location");
-        request3.debug("redirect", location);
+        var location2 = response.caseless.get("location");
+        request3.debug("redirect", location2);
         if (self2.followAllRedirects) {
-          redirectTo = location;
+          redirectTo = location2;
         } else if (self2.followRedirects) {
           switch (request3.method) {
             case "PATCH":
@@ -90761,7 +90761,7 @@ var require_redirect = __commonJS({
             case "DELETE":
               break;
             default:
-              redirectTo = location;
+              redirectTo = location2;
               break;
           }
         }
@@ -104438,10 +104438,10 @@ var require_publish_service = __commonJS({
         const length = _PublishService.read32(buffer, ["moov", "mvhd"], 12 + 4);
         return Math.floor(length / timescale * 1e3);
       }
-      static makeLocationOptions(location) {
+      static makeLocationOptions(location2) {
         const options = {};
-        if (typeof location !== "undefined") {
-          const { lat, lng, external_id_source, external_id, name, address } = location;
+        if (typeof location2 !== "undefined") {
+          const { lat, lng, external_id_source, external_id, name, address } = location2;
           options.location = {
             name,
             lat,
@@ -166328,18 +166328,23 @@ ${err?.stack ?? ""}`);
         }
         return false;
       };
-      if (s.humanSessionEnabled === true && !state.stop.stopped) {
+      console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skip settings \u2014 humanSessionNotUsedMin=${JSON.stringify(s.humanSessionNotUsedMin)}, humanSessionNotUsedMax=${JSON.stringify(s.humanSessionNotUsedMax)}`);
+      const _jitterSkipped = this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax");
+      console.log(`[engine] @${profile.username}: [EB-only] Human Jitter _jitterSkipped=${_jitterSkipped}`);
+      if (s.humanSessionEnabled === true && !_jitterSkipped && !state.stop.stopped) {
         try {
-          await nav2("https://www.instagram.com/", "home (audit)");
+          await nav2("https://www.instagram.com/", "home (jitter)");
           await sleep(actionDelay2());
-          await nav2(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
+          await nav2(`https://www.instagram.com/${profile.username}/`, "own profile (jitter)");
           await sleep(actionDelay2());
-          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB: audit: home + own profile");
-          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB: audit: home + own profile");
+          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB: Human Jitter");
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB: Human Jitter");
         } catch (e) {
-          console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+          console.warn(`[engine] @${profile.username}: [EB-only] humanSession jitter error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
         }
+      } else if (_jitterSkipped) {
+        console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skipped (chance roll)`);
       }
       let feedHadPosts = true;
       let feedCount = 0;
@@ -166362,7 +166367,19 @@ ${err?.stack ?? ""}`);
             document.dispatchEvent(new Event("visibilitychange"));
           }).catch(() => {
           });
-          feedHadPosts = await waitFor("article", 12e3);
+          const _feedSelector = "article, div[data-media-id]";
+          feedHadPosts = await waitFor(_feedSelector, 2e4);
+          if (!feedHadPosts) {
+            const _feedDebug = await page2.evaluate(() => {
+              const t2 = document.title;
+              const url2 = location.href;
+              const articles = document.querySelectorAll("article").length;
+              const mainImgs = document.querySelectorAll('main img, [role="main"] img').length;
+              const allImgs = document.querySelectorAll("img").length;
+              return `title="${t2}" url="${url2.slice(0, 100)}" articles=${articles} main-imgs=${mainImgs} all-imgs=${allImgs}`;
+            }).catch(() => "evaluate failed");
+            console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} feed waitFor timed out \u2014 DOM: ${_feedDebug}`);
+          }
           const ecPctRaw0 = Math.min(100, Math.max(0, Number(s.expandCaptionPercentMin ?? 0)));
           const ecPctRaw1 = Math.min(100, Math.max(0, Number(s.expandCaptionPercentMax ?? 0)));
           const ecPctMin = Math.min(ecPctRaw0, ecPctRaw1);
@@ -166431,7 +166448,7 @@ ${err?.stack ?? ""}`);
             }
           }
           if (!feedHadPosts) {
-            const recheck = await page2.evaluate(() => !!document.querySelector("article")).catch(() => false);
+            const recheck = await page2.evaluate(() => !!(document.querySelector("article") || document.querySelector("div[data-media-id]"))).catch(() => false);
             if (recheck) {
               console.log(`[engine] @${profile.username}: [EB-only] \u{1F4F0} feed re-check found posts after all \u2014 not empty`);
               feedHadPosts = true;
@@ -166476,7 +166493,13 @@ ${err?.stack ?? ""}`);
             try {
               await nav2("https://www.instagram.com/reels/", "reels feed");
               await sleep(actionDelay2());
-              const videoFound = await waitFor("video", 8e3);
+              const videoFound = await waitFor("video", 15e3);
+              if (!videoFound) {
+                const _reelDebug = await page2.evaluate(() => {
+                  return `url="${location.href.slice(0, 120)}" title="${document.title}" videos=${document.querySelectorAll("video").length} imgs=${document.querySelectorAll("img").length} bodyLen=${document.body?.innerHTML?.length ?? 0}`;
+                }).catch(() => "evaluate failed");
+                console.log(`[engine] @${profile.username}: [EB-only] \u{1F3AC} reels debug \u2014 ${_reelDebug}`);
+              }
               let watched = 0;
               let totalWatchMs = 0;
               let totalViewPct = 0;
@@ -166514,7 +166537,24 @@ ${err?.stack ?? ""}`);
       if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
         try {
           const storyCount = randInt2(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
-          const storySelector = 'ul li div[role="button"] canvas, section div[role="button"] canvas';
+          const storySelector = [
+            'ul li div[role="button"] canvas',
+            // old: canvas-rendered avatars
+            'section div[role="button"] canvas',
+            // old: alternate section wrapper
+            "ul li button canvas",
+            // variant
+            'ul li div[role="button"] img',
+            // new: <img> avatars
+            "ul li button img[alt]",
+            // new: button with img
+            'div[role="listbox"] button',
+            // 2025 listbox pattern
+            `[aria-label$="'s story"]`,
+            // aria-label ends with "'s story"
+            '[aria-label*=" story"]'
+            // aria-label containing " story"
+          ].join(", ");
           let storiesViewed = 0;
           let hasTray = false;
           for (let i2 = 0; i2 < storyCount && !state.stop.stopped; i2++) {
@@ -166523,15 +166563,24 @@ ${err?.stack ?? ""}`);
               await sleep(actionDelay2());
               const trayPresent = await waitFor(storySelector, 6e3);
               if (!trayPresent) {
-                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i2}`);
+                const _storyDebug = await page2.evaluate(() => {
+                  const url2 = location.href.slice(0, 100);
+                  const ulLi = document.querySelectorAll("ul li").length;
+                  const canvases = document.querySelectorAll("canvas").length;
+                  const imgs = document.querySelectorAll("ul li img").length;
+                  const btnRole = document.querySelectorAll('[role="button"]').length;
+                  const ariaStory = document.querySelectorAll('[aria-label*="story"]').length;
+                  return `url="${url2}" ul-li=${ulLi} canvas=${canvases} ul-li-img=${imgs} role-btn=${btnRole} aria-story=${ariaStory}`;
+                }).catch(() => "eval failed");
+                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i2} \u2014 ${_storyDebug}`);
                 break;
               }
               hasTray = true;
               const clicked = await page2.evaluate((sel) => {
-                const canvases = Array.from(document.querySelectorAll(sel));
-                const canvas = canvases[0];
-                const btn = canvas?.closest('div[role="button"]');
-                if (!btn) return false;
+                const matches = Array.from(document.querySelectorAll(sel));
+                const el = matches[0];
+                if (!el) return false;
+                const btn = el.closest('button, [role="button"], a, div[tabindex]') ?? el;
                 btn.click();
                 return true;
               }, storySelector).catch(() => false);
@@ -167098,14 +167147,27 @@ ${err?.stack ?? ""}`);
           }
         }
         const clicked = abandonedAfterBrowse ? false : await page2.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll("button"));
-          const btn = btns.find((b3) => b3.textContent?.trim() === "Follow");
+          const btns = Array.from(document.querySelectorAll("button, [role='button']"));
+          window.__ebFollowDebug = btns.slice(0, 30).map((b3) => {
+            const t2 = b3.textContent?.trim().slice(0, 30);
+            const al = b3.getAttribute?.("aria-label")?.slice(0, 30) ?? "";
+            return `"${t2}"${al ? `[al:${al}]` : ""}`;
+          }).join(" | ");
+          const btn = btns.find((b3) => {
+            const text2 = b3.textContent?.trim();
+            const al = b3.getAttribute?.("aria-label") ?? "";
+            return text2 === "Follow" || text2 === "Follow Back" || al === "Follow" || al === "Follow Back";
+          });
           if (btn) {
             btn.click();
             return true;
           }
           return false;
         }).catch(() => false);
+        if (!clicked && !abandonedAfterBrowse) {
+          const _followDebug = await page2.evaluate(() => window.__ebFollowDebug ?? "n/a").catch(() => "eval failed");
+          console.log(`[engine] @${profile.username}: [EB-only] follow debug @${candidate.username} \u2014 buttons: ${_followDebug}`);
+        }
         if (clicked) {
           followed++;
           this.bump(state);

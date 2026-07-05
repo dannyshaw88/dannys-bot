@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.341",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Found and fixed the real reason Reels, Stories, Follow, and Feed actions were all failing at once — the app was reading the wrong browser tab.",
+        technical: [
+          "When an account's embedded browser window has more than one tab open, every background action (checking the feed, looking for a Follow button, counting reels, etc.) was being run against the toolbar/shell frame instead of the actual Instagram tab that was open. The toolbar frame has no Instagram page in it, so every single check silently came back empty — while simple actions like scrolling never threw an error, because scrolling an empty frame doesn't fail, it just does nothing.",
+          "This explains every symptom reported: 'no video found' on Reels, 'no story tray', Follow button never matching, and Explore firing even though the feed had scrolled — the checks were never looking at the real page at all.",
+          "Both the page-navigation command and the page-reading command used by the automation engine now correctly target whichever tab is actually active, the same fix already in place for the sign-in flow.",
+          "Added a new debug line to equinox-debug.log for every background page check, showing which tab was used, what page it was actually looking at, and what it found — so any future mismatch is immediately visible in the logs.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.340",
     date: "5 Jul 2026",
     items: [

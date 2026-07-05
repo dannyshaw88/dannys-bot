@@ -4554,10 +4554,19 @@ export function startEbIpcServer(
       }
 
       // ── POST /eb/navigate ──────────────────────────────────────────────────────
+      // IMPORTANT: when the EB window has tabs open, e.win.webContents is the
+      // native toolbar/shell frame — NOT the active tab's Instagram page. Using
+      // it directly silently navigates the wrong WebContents (same bug class
+      // already fixed for doAutoLogin's silent-verify path above). Must resolve
+      // the active tab's WebContents via getActiveWc() first.
       if (req.method === "POST" && u.pathname === "/eb/navigate") {
         const e = ebMap.get(pid);
         if (e && !e.win.isDestroyed()) {
-          e.win.webContents.loadURL(body.url).catch(() => {});
+          const targetWc = getActiveWc(pid) ?? e.win.webContents;
+          console.log(`[eb-ipc:${pid}] /eb/navigate → url="${body.url}" target=${targetWc === e.win.webContents ? "win.webContents (shell/no-tabs)" : "active tab BrowserView"}`);
+          targetWc.loadURL(body.url).catch((err: any) => {
+            console.log(`[eb-ipc:${pid}] /eb/navigate loadURL error: ${err?.message}`);
+          });
         }
         return send(res, 200, { ok: true });
       }
@@ -4593,11 +4602,24 @@ export function startEbIpcServer(
       }
 
       // ── POST /eb/evaluate ──────────────────────────────────────────────────────
+      // Root cause of "all element queries return undefined while side-effect
+      // scripts (scrollBy etc.) appear to work": this handler was always running
+      // executeJavaScript against e.win.webContents (the toolbar/shell frame)
+      // instead of the active tab's BrowserView WebContents. Once tabs are open,
+      // the shell frame has no Instagram DOM at all, so every querySelector-based
+      // check silently evaluates against the wrong document and returns undefined
+      // — but scrollBy/dispatchEvent-style calls don't throw either, since they're
+      // valid no-op calls on any window, which is why they looked like they "worked".
+      // Fixed by resolving the active tab via getActiveWc(), same as doAutoLogin.
       if (req.method === "POST" && u.pathname === "/eb/evaluate") {
         const e = ebMap.get(pid);
         if (!e || e.win.isDestroyed()) return send(res, 404, { error: "window not open" });
-        const result = await e.win.webContents.executeJavaScript(body.script)
+        const targetWc = getActiveWc(pid) ?? e.win.webContents;
+        const targetKind = targetWc === e.win.webContents ? "win.webContents (shell/no-tabs)" : "active tab BrowserView";
+        const targetUrl = (() => { try { return targetWc.getURL(); } catch { return "(no getURL)"; } })();
+        const result = await targetWc.executeJavaScript(body.script)
           .catch((err: any) => ({ __error: err?.message }));
+        console.log(`[eb-ipc:${pid}] /eb/evaluate target=${targetKind} url="${targetUrl}" resultType=${typeof result} result=${JSON.stringify(result)?.slice(0, 200)}`);
         return send(res, 200, { result });
       }
 

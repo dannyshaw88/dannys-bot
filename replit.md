@@ -310,6 +310,14 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
 
+## EB Multi-Tab IPC Fix Log — READ THIS BEFORE TOUCHING /eb/navigate OR /eb/evaluate
+
+### Failure: ALL background page checks (Reels, Stories, Follow, Feed) silently returning empty/undefined (5 Jul 2026)
+- **Symptom**: Human Session background actions consistently failed — "no video found" on Reels, "no story tray", Follow button never matching, feed `article` waitFor always timing out — despite the EB visibly loading real Instagram pages and network requests succeeding. Side-effect-only scripts (e.g. `window.scrollBy()`) appeared to "work" (no errors), which made it look like the page was loading fine.
+- **Root cause**: `POST /eb/navigate` and `POST /eb/evaluate` in `ebManager.ts` both called `e.win.webContents` directly. When an EB window has tabs open, `e.win.webContents` is the native toolbar/shell frame (a `BrowserView` sits on top holding the real Instagram page) — not the active tab's page. Every `executeJavaScript` query ran against the shell frame, which has no Instagram DOM, so every `querySelector`-based check returned `undefined`. Side-effect calls like `scrollBy()` don't throw on an empty frame either, which is why those looked like they worked. This is the exact same bug class already fixed for `doAutoLogin`'s silent-verify path (see `getActiveWc()` usage there) — but `/eb/navigate` and `/eb/evaluate` were never updated to match.
+- **Fix (v1.1.341)**: Both handlers now resolve the target via `getActiveWc(pid) ?? e.win.webContents` before calling `loadURL` / `executeJavaScript`, exactly like the silent-verify login flow already did. Added a debug `console.log` on every `/eb/evaluate` call showing which target was used (shell vs. active tab BrowserView), the resolved page URL, and the result — visible in `equinox-debug.log` for verifying future page-state mismatches at a glance.
+- **What is FORBIDDEN**: Adding any new `/eb/*` IPC handler that reads `e.win.webContents` directly to interact with page content. Always resolve `getActiveWc(pid)` first and fall back to `e.win.webContents` only when no tabs are open (`activeId === 0`).
+
 ## Image Upload (Make-a-Post / Repost) Fix Log — READ THIS BEFORE TOUCHING UPLOAD CODE
 
 ### Failure: ProcessingFailedError — Image upload transcode non-retryable failure (25 Jun 2026)
