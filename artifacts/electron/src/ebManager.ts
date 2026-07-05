@@ -5442,6 +5442,7 @@ export function startEbIpcServer(
           };
 
           let spClickedCreate = false;
+          let spCreateOpenedDialogDirectly = false;
           const spCreateDeadline = Date.now() + 20_000;
           let spLastFoundButNotClicked = false;
           while (Date.now() < spCreateDeadline) {
@@ -5471,64 +5472,98 @@ export function startEbIpcServer(
               await spRealClick(clickX, clickY);
               await new Promise(r => setTimeout(r, 700));
 
-              // Verify the click actually opened the Create dropdown/submenu
-              // (look for the "Post" option) rather than trusting a boolean
-              // return value from an in-page click, which can't tell us
-              // whether Instagram's own handler actually reacted.
-              const spMenuOpened: boolean = await spWin.webContents.executeJavaScript(`
+              // Verify the click actually did something. This UI has two
+              // observed behaviours depending on Instagram's current
+              // rollout/account bucket:
+              //   (a) a dropdown appears with a "Post" menu item that must be
+              //       clicked separately (older/desktop-width layout), or
+              //   (b) clicking "Create" opens the "Create new post" upload
+              //       dialog DIRECTLY — no intermediate "Post" menu item ever
+              //       appears at all.
+              // v1.1.358: previously this only checked for case (a). When an
+              // account hit case (b), the check for "Post" text never
+              // matched, the code assumed the click failed, and it re-clicked
+              // Create over and over for 20s before giving up with "found
+              // the Create button and clicked it, but the Post dropdown
+              // never opened" — even though the upload dialog was already
+              // open and waiting the whole time. Now we detect either case.
+              const spMenuOrDialogState: { menu: boolean; dialog: boolean } = await spWin.webContents.executeJavaScript(`
                 (function() {
                   var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
-                  return all.some(function(el) { return el.textContent.trim() === 'Post' && el.offsetHeight > 0; });
+                  var menu = all.some(function(el) { return el.textContent.trim() === 'Post' && el.offsetHeight > 0; });
+                  var bodyText = document.body.innerText || '';
+                  var dialog = /select from computer/i.test(bodyText) || /create new post/i.test(bodyText) || /drag (photos|photo) and videos here/i.test(bodyText);
+                  return { menu: menu, dialog: dialog };
                 })()
-              `, true).catch(() => false);
+              `, true).catch(() => ({ menu: false, dialog: false }));
 
-              if (spMenuOpened) { spClickedCreate = true; break; }
-              // Click didn't open the menu — loop again (re-find + re-hover + re-click).
+              if (spMenuOrDialogState.menu || spMenuOrDialogState.dialog) {
+                spClickedCreate = true;
+                spCreateOpenedDialogDirectly = spMenuOrDialogState.dialog && !spMenuOrDialogState.menu;
+                break;
+              }
+              // Click didn't open the menu or dialog — loop again (re-find + re-hover + re-click).
             }
             await new Promise(r => setTimeout(r, 500));
           }
 
           if (!spClickedCreate) {
             const reason = spLastFoundButNotClicked
-              ? "found the Create button and clicked it, but the Post dropdown never opened"
+              ? "found the Create button and clicked it, but neither the Post dropdown nor the upload dialog ever opened"
               : "the Create button never appeared in the Instagram left nav after 20s — is the account logged in?";
             throw new Error(`Could not click Create button — ${reason}`);
           }
           await new Promise(r => setTimeout(r, 500));
 
-          // ── Step 3: Click "Post" from the submenu ─────────────────────────
-          // Same fix as Step 1: use a real trusted CDP click, and poll up to
-          // 10s in case the dropdown is still animating in.
-          _ipcLog(`[eb:silent-post:${pid}] clicking Post from submenu`);
-          const spFindPostJs = `
-            (function() {
-              var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
-              var postItem = all.find(function(el) {
-                return el.textContent.trim() === 'Post' && el.offsetHeight > 0;
-              });
-              if (!postItem) return { found: false, x: 0, y: 0 };
-              var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
-              clickable.scrollIntoView({ behavior: 'instant', block: 'center' });
-              var rect = clickable.getBoundingClientRect();
-              return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
-            })()
-          `;
-          let spClickedPost = false;
-          const spPostDeadline = Date.now() + 10_000;
-          while (Date.now() < spPostDeadline) {
-            if (spWin.isDestroyed()) break;
-            const spPostPos: { x: number; y: number; found: boolean } =
-              await spWin.webContents.executeJavaScript(spFindPostJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
-            if (spPostPos.found) {
-              await spRealClick(spPostPos.x, spPostPos.y);
-              await new Promise(r => setTimeout(r, 600));
-              spClickedPost = true;
-              break;
+          // ── Step 3: Click "Post" from the submenu (skipped if Create already
+          // opened the upload dialog directly — see v1.1.358 note above) ─────
+          if (spCreateOpenedDialogDirectly) {
+            _ipcLog(`[eb:silent-post:${pid}] Create opened the upload dialog directly — no Post submenu on this account, skipping`);
+          } else {
+            // Same fix as Step 1: use a real trusted CDP click, and poll up to
+            // 10s in case the dropdown is still animating in.
+            _ipcLog(`[eb:silent-post:${pid}] clicking Post from submenu`);
+            const spFindPostJs = `
+              (function() {
+                var all = Array.from(document.querySelectorAll('button, [role="menuitem"], [role="option"], a, span'));
+                var postItem = all.find(function(el) {
+                  return el.textContent.trim() === 'Post' && el.offsetHeight > 0;
+                });
+                if (!postItem) return { found: false, x: 0, y: 0 };
+                var clickable = postItem.closest('button, a, [role="menuitem"]') || postItem;
+                clickable.scrollIntoView({ behavior: 'instant', block: 'center' });
+                var rect = clickable.getBoundingClientRect();
+                return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+              })()
+            `;
+            let spClickedPost = false;
+            const spPostDeadline = Date.now() + 10_000;
+            while (Date.now() < spPostDeadline) {
+              if (spWin.isDestroyed()) break;
+              const spPostPos: { x: number; y: number; found: boolean } =
+                await spWin.webContents.executeJavaScript(spFindPostJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
+              if (spPostPos.found) {
+                await spRealClick(spPostPos.x, spPostPos.y);
+                await new Promise(r => setTimeout(r, 600));
+                spClickedPost = true;
+                break;
+              }
+              // While waiting for the "Post" item, also re-check whether the
+              // upload dialog appeared directly in the meantime (some
+              // accounts show a brief empty dropdown before redirecting
+              // straight into the dialog).
+              const spDialogAppeared: boolean = await spWin.webContents.executeJavaScript(`
+                (function() {
+                  var bodyText = document.body.innerText || '';
+                  return /select from computer/i.test(bodyText) || /create new post/i.test(bodyText);
+                })()
+              `, true).catch(() => false);
+              if (spDialogAppeared) { spClickedPost = true; break; }
+              await new Promise(r => setTimeout(r, 400));
             }
-            await new Promise(r => setTimeout(r, 400));
-          }
 
-          if (!spClickedPost) throw new Error("Could not find Post option in the Create submenu");
+            if (!spClickedPost) throw new Error("Could not find Post option in the Create submenu");
+          }
           await new Promise(r => setTimeout(r, 2000));
 
           // ── Step 4: Click "Select from Computer", then inject image via CDP ─

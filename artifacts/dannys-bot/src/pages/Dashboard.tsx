@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.358",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed posting getting stuck right after pressing Create — on some accounts Instagram skips showing the little \"Post\" menu and jumps straight to the upload screen, but the app was still waiting for that menu to appear and kept clicking Create over and over until it gave up and went back to the home page. It now recognizes when the upload screen has already opened and moves straight on to selecting the photo instead of waiting for a menu that was never coming.",
+      },
+    ],
+  },
+  {
     version: "1.1.357",
     date: "5 Jul 2026",
     items: [
