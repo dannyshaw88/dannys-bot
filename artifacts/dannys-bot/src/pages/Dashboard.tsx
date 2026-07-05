@@ -78,6 +78,29 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.338",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Stories, Reels, and Follow actions now work correctly when the EB window is running in the background (not visible on screen). Root cause: Chromium background-throttles hidden windows so JS timers fire late and the DOM never fully renders. Silent EB windows are now shown off-screen (invisibly, at x = screen width + 10) so Chromium renders them at full speed. This also fixes the Explore Page being visited unnecessarily when the feed appeared empty due to the same throttling.",
+        technical: [
+          "openEbWindow() ready-to-show handler: silentMode now calls win.showInactive() instead of returning early, and the window is positioned off-screen (sw+10) so it never appears on screen.",
+          "skipTaskbar is now true for silentMode windows so they are hidden from the taskbar and alt-tab switcher.",
+          "waitFor('article') timeout returning false on a throttled window was the cause of feedHadPosts=false, which incorrectly triggered Explore Page even when the feed had posts.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Follow action in the activity log now correctly shows as FOLLOW (not SKIPPED) when the Follow button is not found on a profile page. The action column always shows FOLLOW; the detail column explains the reason. Previously it appeared as a generic skip with no clear context.",
+      },
+      {
+        category: "Improved",
+        text: "All activity log entries have been cleaned up: double-hyphen separators removed throughout, and all EB prefixes now use 'EB:' format for consistency.",
+      },
+    ],
+  },
+  {
     version: "1.1.337",
     date: "5 Jul 2026",
     items: [
