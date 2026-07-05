@@ -5531,8 +5531,47 @@ export function startEbIpcServer(
           if (!spClickedPost) throw new Error("Could not find Post option in the Create submenu");
           await new Promise(r => setTimeout(r, 2000));
 
-          // ── Step 4: Wait for file input and inject image via CDP ──────────
-          _ipcLog(`[eb:silent-post:${pid}] waiting for file input (Select from computer dialog)`);
+          // ── Step 4: Click "Select from Computer", then inject image via CDP ─
+          // Previous versions skipped clicking this button entirely and just
+          // waited for an <input type="file"> to exist anywhere on the page,
+          // then injected into it. That's fragile — the dialog can render
+          // with the input not yet mounted/wired, and there can be other
+          // stray file inputs elsewhere on a heavy Instagram feed page. Now
+          // we click the actual blue "Select from Computer" button with a
+          // real trusted CDP click first (exactly what a human does), which
+          // is also what wires the input up, then locate the input scoped to
+          // the open dialog.
+          _ipcLog(`[eb:silent-post:${pid}] clicking "Select from Computer"`);
+          const spFindSelectComputerJs = `
+            (function() {
+              var all = Array.from(document.querySelectorAll('button, [role="button"]'));
+              var btn = all.find(function(el) {
+                var t = (el.textContent || '').trim();
+                return (t === 'Select from computer' || t === 'Select From Computer' || t === 'Select from Computer') && el.offsetHeight > 0;
+              });
+              if (!btn) return { found: false, x: 0, y: 0 };
+              btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+              var rect = btn.getBoundingClientRect();
+              return { found: true, x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+            })()
+          `;
+          let spClickedSelectComputer = false;
+          const spSelectComputerDeadline = Date.now() + 15_000;
+          while (Date.now() < spSelectComputerDeadline) {
+            if (spWin.isDestroyed()) break;
+            const spPos: { x: number; y: number; found: boolean } =
+              await spWin.webContents.executeJavaScript(spFindSelectComputerJs, true).catch(() => ({ found: false, x: 0, y: 0 }));
+            if (spPos.found) {
+              await spRealClick(spPos.x, spPos.y);
+              spClickedSelectComputer = true;
+              break;
+            }
+            await new Promise(r => setTimeout(r, 400));
+          }
+          if (!spClickedSelectComputer) throw new Error('Could not find "Select from Computer" button — Create new post dialog did not open');
+          await new Promise(r => setTimeout(r, 800));
+
+          _ipcLog(`[eb:silent-post:${pid}] waiting for file input`);
           const spFileInputFound = await new Promise<boolean>(resolve => {
             let tries = 0;
             const poll = setInterval(async () => {
@@ -5544,9 +5583,14 @@ export function startEbIpcServer(
               if (++tries >= 24) { clearInterval(poll); resolve(false); }
             }, 500);
           });
-          if (!spFileInputFound) throw new Error("File input not found — Create new post dialog did not open");
+          if (!spFileInputFound) throw new Error("File input not found after clicking Select from Computer");
 
-          const spDocResult = await dbg.sendCommand("DOM.getDocument", { depth: -1 });
+          // Use a shallow getDocument (depth 0, root only) — DOM.querySelector
+          // resolves against Chrome's own backend tree and does not require
+          // the client to have pre-fetched the whole (very large) DOM, unlike
+          // the previous depth:-1 call which pulled the entire Instagram feed
+          // tree into memory on every post attempt.
+          const spDocResult = await dbg.sendCommand("DOM.getDocument", { depth: 0 });
           const spInputResult = await dbg.sendCommand("DOM.querySelector", {
             nodeId: (spDocResult as any).root.nodeId,
             selector: "input[type='file']",

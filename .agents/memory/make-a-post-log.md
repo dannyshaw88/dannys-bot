@@ -51,6 +51,13 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-05 — Never actually clicked "Select from Computer" (v1.1.356)
+- Context: v1.1.355 fixed Next/Share/Done clicks, but the very next report showed a regression to zero progress — the Create button still worked, but the blue "Select from Computer" button inside the "Create new post" dialog was never pressed at all, and the flow sat frozen on that screen every time.
+- Root cause: the code never clicked that button in the first place. It only polled for `input[type='file']` to exist anywhere in the DOM and then injected the file directly into it via CDP `DOM.setFileInputFiles`, skipping the actual button click entirely. On a real Instagram feed page (lots of DOM behind the modal) this is fragile — the input may not be reliably locatable/wired without the click, and `DOM.getDocument({ depth: -1 })` (used to locate it) recursively pulls the ENTIRE DOM tree client-side, which is unnecessarily heavy on a big feed page.
+- Fix: explicitly find and click the visible "Select from Computer" button with a real trusted CDP click (`spRealClick`) first — exactly what a human does — THEN wait for/inject into the file input. Also switched `DOM.getDocument` from `depth: -1` to `depth: 0` (root only) since `DOM.querySelector` resolves against Chrome's backend tree and doesn't need the whole tree pre-fetched.
+- **Lesson reinforced again**: do not assume any UI transition happens "for free" via direct DOM/CDP manipulation without also performing the actual click a human would do. Every step in this flow must be audited for "did we actually click this, or did we assume it wasn't necessary?" — this is now the 3rd distinct click-related bug found in this single flow across 3 versions (Create, Next/Share/Done, Select from Computer).
+- Status: UNCONFIRMED — pushed as v1.1.356, awaiting production confirmation from user.
+
 ### 2026-07-05 — Same untrusted-click bug also hit Next/Share/Done (v1.1.355)
 - Context: v1.1.354 fixed the Create/Post click and was confirmed working in production — user reported the flow now gets past Create, the file picker appears, and the file injects successfully. But the flow then looped back to the homepage 5 times before giving up on that account.
 - Root cause: the SAME untrusted-click bug (`.click()` + `PointerEvent`, always `isTrusted=false`) was still present in `spClickBtnText`, used for the crop "Next", filter "Next", "Share", and "Done" buttons. Only the Create/Post click had been migrated to the real CDP click (`spRealClick`) in v1.1.354 — these were missed.

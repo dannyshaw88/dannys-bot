@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.356",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Posting now actually presses the blue \"Select from Computer\" button in the new post window, the same way a real click works, instead of silently waiting for a photo picker that never got triggered. This was the reason posting would freeze on that screen and eventually give up and go back to the home page.",
+      },
+    ],
+  },
+  {
     version: "1.1.355",
     date: "5 Jul 2026",
     items: [
