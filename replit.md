@@ -127,101 +127,60 @@ The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSess
 
 53. Do not skip any file during imports — every file matters for git
 
-## EB Leak Fix Attempt Log — READ THIS BEFORE TOUCHING ANY LEAK CODE
+## EB IP Leak Prevention — current rules (non-negotiable, do not regress)
 
-This is a chronological record of every approach that was tried and its outcome. If you are about to make a change to proxy/DNS/IPv6 handling, check this list first. Do NOT re-attempt anything listed as "confirmed not the issue" or "already in place".
-
-### Attempt 1 — Switched proxyRules → PAC script (v1.0.607)
-- **Theory**: `mode:'fixed_servers' + proxyRules` silently falls back to DIRECT in Electron 33 / Chromium 130 when the proxy is slow or the 407 auth cycle fails.
-- **Change**: HTTP proxies now use an inline `pacScript` string that returns `"PROXY host:port"` with NO `DIRECT` fallback. If the proxy is unreachable the request fails hard instead of leaking.
-- **Result**: WebRTC PASS, but DNS leak tab still showed 2 different IPs (Cloudflare vs ipify).
-
-### Attempt 2 — Removed DoH (v1.0.609)
-- **Theory**: `setDnsOverHttpsConfig({ enabled: true, server: 'https://1.1.1.1/dns-query' })` was sending DNS queries from Chrome directly to Cloudflare using the machine's real IP (not through the proxy). Cloudflare's trace endpoint then reported the real IP back.
-- **Change**: Removed the `setDnsOverHttpsConfig` call entirely. Also added double-setProxy (150ms gap), `clearHostResolverCache()` before each proxy set, and `did-start-loading` event re-apply.
-- **Result**: DNS leak tab STILL showed 2 different IPs. Cloudflare source was now returning the proxy IP correctly, but ipify source was still returning an IPv6 address.
-
-### Attempt 3 — Fixed the test tool itself (v1.0.611, CONFIRMED FIXED)
-- **Theory**: The `testDNS()` function was explicitly fetching `api64.ipify.org` — Cloudflare's dual-stack endpoint that supports QUIC/HTTP3. Chrome can open a QUIC/UDP connection to that endpoint as a DIRECT connection bypassing the HTTP proxy entirely (QUIC uses UDP, not TCP, and the proxy tunnel is TCP-only). This exposed the machine's real IPv6 on the ipify row. The proxy was routing correctly the whole time — the test tool itself was the bug.
-- **Evidence**: Cloudflare row showed the proxy exit IP (correct). ipify row showed the machine's real IPv6 (incorrect endpoint). Both `--disable-quic` and `--disable-ipv6` are already set as Chromium flags but `api64.ipify.org` was still triggering the leak in some Electron 33 builds.
-- **Change**: `testDNS()` in `leaksPage.ts` changed from `api64.ipify.org` to `api.ipify.org` (IPv4-only, no AAAA record, no QUIC support). Now all three DNS sources go through the proxy and report the same exit IP.
-- **Result**: DNS leak should now show PASS when the proxy is working. CONFIRMED in v1.0.611 build #538.
-
-### Attempt 4 — Fixed my-ip.io endpoint (v1.0.613)
-- **Theory**: `api.my-ip.io` has a AAAA record. Chrome opens it via a direct IPv6 socket that bypasses the HTTP proxy entirely — exact same failure mode as `api64.ipify.org` (Attempt 3). The test was reporting the real machine IPv6 (`2a0a:ef40:...`) from my-ip.io while Cloudflare and ipify both returned the proxy IP correctly.
-- **Change**: `testDNS()` in `leaksPage.ts` changed from `api.my-ip.io/v2/ip.json` to `api4.my-ip.io/v2/ip.json` (IPv4-only subdomain, no AAAA record). All three sources now route through the proxy.
-- **Result**: DNS leak should now show PASS. The earlier "my-ip.io is safe" note in this doc was wrong — it does have a AAAA record.
-
-### Attempt 6 — Residential auto-detection in Proxy IP Match (v1.0.619, REVERTED — WRONG)
-- **Theory (WRONG)**: Assumed exit IP `90.242.146.49` (Vodafone UK) was a residential proxy exit address.
-- **Reality**: `90.242.146.49` is the user's real home broadband. A residential-looking IP can always be the machine's actual ISP — there is NO reliable way to distinguish "residential proxy exit" from "real home broadband" from geo data alone.
-- **Change**: Added `is_datacenter` check — if exit IP is non-datacenter, showed INFO instead of FAIL. This was wrong and masked a real leak.
-- **Result**: REVERTED in v1.0.620. Proxy IP Match must always FAIL on mismatch. The user decides if it's a residential proxy or a real leak.
-
-### Attempt 5 — Reverted PAC script → fixed_servers with embedded credentials (v1.0.618)
-- **Theory**: The `pacScript` inline-string option in Electron's `session.setProxy()` is silently ignored in some Electron 33/34 builds on Windows. When ignored, no proxy is configured at all and all traffic goes DIRECT through the machine's real IP. The original "fixed_servers falls back to DIRECT" diagnosis (Attempt 1) was a false positive — the 2-IP result in the DNS test was actually the QUIC/IPv6 bypass in the test tool itself (subsequently fixed in Attempts 3-4), not a proxy routing failure.
-- **Change**: `buildProxyConfig()` now uses `mode:'fixed_servers'` + `proxyRules:'http://user:pass@host:port'` for HTTP proxies (same approach as SOCKS5). Credentials are embedded directly in the proxy URL, eliminating the 407-challenge cycle entirely — Chrome sends `Proxy-Authorization` preemptively on every CONNECT without needing the `login` event handler. The `login` handler is kept as belt-and-suspenders.
-- **Result**: Pending user confirmation.
-
-### What has NOT been tried yet (open issues as of v1.0.613):
-- **Proxy IP Match FAIL for rotating residential proxies**: The test compares the detected exit IP against the proxy HOST IP (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is a different residential address (e.g., `90.242.146.49`). This always shows FAIL because the test can't know the expected exit IP. This is a DISPLAY BUG in the test, not a real leak. The Proxy IP Match test needs logic to distinguish hostname-based proxies (show INFO instead of FAIL) from IP-based proxies.
-
-### Things already in place — do NOT add again:
-- `--disable-ipv6` Chromium flag (main.ts before app.whenReady)
-- `--disable-quic` Chromium flag
-- `--disable-features=HappyEyeballsV3,IPv6Reachability`
-- `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`
-- `--dns-prefetch-disable`
-- DoH is already DISABLED (do not re-enable)
-- PAC script already has no DIRECT fallback
-- Double-setProxy with 150ms gap already in place
-- `clearHostResolverCache()` already called before each setProxy
-- `did-start-loading` proxy re-apply already in place
-- WebRTC blocker already injected via CDP before page script runs
-
-## EB IP Leak Prevention — Current State (v1.0.611, non-negotiable, do not regress)
-
-**What is in place and MUST NOT be removed or changed without understanding the full leak chain:**
+Full attempt history / diagnosis chain: `.agents/memory/eb-leak-fix-history.md` — do not re-attempt anything listed there as confirmed-not-the-issue.
 
 ### Chromium launch flags (artifacts/electron/src/main.ts, before app.whenReady):
-- `--disable-ipv6` — removes IPv6 from every subsystem (DNS resolver, socket layer). Without this, Chrome opens a direct IPv6 socket to Cloudflare-fronted endpoints and exposes the real machine IPv6.
-- `--disable-quic` — disables QUIC/UDP (HTTP/3). Chrome can open QUIC directly (UDP, not TCP) to Cloudflare endpoints, bypassing the HTTP proxy entirely. This flag prevents that.
-- `--disable-features=HappyEyeballsV3,IPv6Reachability` — belt-and-suspenders: disables Chrome's IPv6 preference and reachability probing.
+- `--disable-ipv6`, `--disable-quic` — prevent Chrome from opening a direct IPv6/QUIC(UDP) socket to Cloudflare-fronted endpoints, which bypasses the HTTP proxy (TCP-only) entirely.
+- `--disable-features=HappyEyeballsV3,IPv6Reachability` — disables IPv6 preference/reachability probing.
 - `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` + `--enforce-webrtc-ip-permission-check` — WebRTC leak prevention.
-- `--dns-prefetch-disable` — stops DNS prefetch from resolving domains outside the proxy.
-- `--no-proxy-fallback` — no direct fallback (belt-and-suspenders; PAC is the primary enforcement).
-- `--proxy-bypass-list=127.0.0.1;[::1];localhost` — only loopback bypasses the proxy.
+- `--dns-prefetch-disable`, `--no-proxy-fallback`, `--proxy-bypass-list=127.0.0.1;[::1];localhost`.
 
 ### Session-level proxy config (artifacts/electron/src/ebManager.ts, buildProxyConfig):
-- HTTP proxies: inline PAC script (`pacScript` string, NOT `pacURL`, NOT `mode:'fixed_servers'`). The PAC script returns `"PROXY host:port"` with NO `DIRECT` fallback for non-loopback hosts. If the proxy is unreachable the request FAILS, not leaks.
+- HTTP proxies: inline PAC script (`pacScript` string, NOT `pacURL`, NOT `mode:'fixed_servers'`) with NO `DIRECT` fallback for non-loopback hosts — an unreachable proxy must fail hard, never leak.
 - SOCKS5 proxies: `mode:'fixed_servers'` + `proxyRules` (PAC can't carry SOCKS5 credentials).
 - DoH (`setDnsOverHttpsConfig`) is DISABLED — it sent DNS directly to Cloudflare via the real IP, bypassing the proxy.
-- Proxy is set TWICE (150ms gap) on EB window open to defeat the persistent-session race where Chrome reloads its on-disk proxy config and overwrites the PAC after `setProxy()` resolves.
-- `clearHostResolverCache()` called before each proxy set.
-- `did-start-loading` event re-applies proxy (in addition to `did-finish-load`) — fires before any page requests.
-- `app.get('login', ...)` handler provides 407 credentials so Chrome doesn't fail auth and fall back to DIRECT.
+- Proxy is set TWICE (150ms gap) on EB window open to defeat a persistent-session race where Chrome reloads its on-disk proxy config and overwrites the PAC. `clearHostResolverCache()` before each set. `did-start-loading` also re-applies proxy (fires before page requests). `app.get('login', ...)` supplies 407 credentials.
 
 ### Verify concurrency gate (artifacts/api-server/src/routes/instagram.ts):
-- `acquireSilentVerifySlot()` / `releaseSilentVerifySlot()` semaphore ensures only 1 hidden BrowserWindow runs at a time. Verifying 3+ accounts simultaneously previously crashed Electron's main process by spawning parallel Chromium instances.
+- `acquireSilentVerifySlot()` / `releaseSilentVerifySlot()` semaphore ensures only 1 hidden BrowserWindow runs at a time — parallel Chromium instances previously crashed Electron's main process.
 
-### DNS leak test (artifacts/api-server/src/instagram/leaksPage.ts):
-- Public IP test (`testIP`): uses `api.ipify.org` (IPv4-only, no AAAA, no QUIC). DO NOT change to `api64.ipify.org`.
-- DNS leak test (`testDNS`): also uses `api.ipify.org` (NOT `api64`). `api64.ipify.org` is Cloudflare-fronted, dual-stack, QUIC-enabled — Chrome can open it as a direct UDP connection bypassing the HTTP proxy, making the test report a false IPv6 leak. Using the IPv4-only endpoint ensures all three DNS sources route through the proxy.
-- `api4.my-ip.io` endpoint is used (NOT `api.my-ip.io` — that has a AAAA record and leaks real IPv6 via direct socket). `api4.my-ip.io` is the IPv4-only subdomain, no AAAA record.
-- `1.1.1.1/cdn-cgi/trace` is safe with `--disable-quic` in place.
+### DNS leak test endpoints (artifacts/api-server/src/instagram/leaksPage.ts):
+- Uses `api.ipify.org` (NOT `api64.ipify.org` — dual-stack/QUIC, bypasses proxy via direct UDP) and `api4.my-ip.io` (NOT `api.my-ip.io` — has a AAAA record, leaks real IPv6 via direct socket). `1.1.1.1/cdn-cgi/trace` is safe with `--disable-quic` in place.
 
 ### Proxy IP Match test logic (v1.0.620+):
-- Always shows **FAIL** when exit IP ≠ proxy host IP. There is no reliable way to distinguish "residential proxy exit IP" from "real home broadband IP" from geo data alone — both are non-datacenter. The user must manually decide if the mismatch is a real leak or an expected residential proxy routing difference.
+- Always shows **FAIL** when exit IP ≠ proxy host IP. There is no reliable way to distinguish "residential proxy exit IP" from "real home broadband IP" from geo data alone — the user must manually judge a mismatch.
+
+## EB Hidden-Window Throttling — current rules (non-negotiable, do not regress)
+
+Full diagnosis chain: `.agents/memory/eb-throttling-fix-history.md`. Root cause confirmed v1.1.344, 5 Jul 2026 — do not re-investigate.
+
+- **Never call `win.hide()`** on any EB automation window. `win.hide()` suspends Chromium's compositor entirely at the OS level — `IntersectionObserver` reports zero intersections, so React's virtualized lists (feed `<article>`, story tray, Follow button, Reels video) are never mounted into the DOM at all. Use off-screen positioning instead: `win.setPosition(sw + 10, y)` + `win.setSkipTaskbar(true)`. Restoring for the user: `setSkipTaskbar(false)` + `setBounds(workArea)`.
+- Every `BrowserWindow`/`BrowserView` in `ebManager.ts` that holds real page content must set `backgroundThrottling: false` in `webPreferences` — this applies even to windows that start `show: true`, since they can be hidden/occluded later.
+- Every EB flow that queries or clicks Instagram DOM elements must first override `document.visibilityState`/`document.hidden` to report visible (`Object.defineProperty` + dispatch `visibilitychange`) — Instagram's SPA skips hydrating UI it thinks isn't visible, independent of Chromium's own throttling. Use `scrollIntoView` + pointerdown/pointerup/click instead of a bare `.click()` (a plain click on a hidden window can be silently swallowed).
+- Chromium flags: `CalculateNativeWinOcclusion` in `disable-features`, `--disable-renderer-backgrounding`.
+
+## EB Multi-Tab IPC — current rule (non-negotiable)
+
+Full diagnosis: `.agents/memory/eb-throttling-fix-history.md`.
+
+- Any `/eb/*` IPC handler in `ebManager.ts` that interacts with page content must resolve `getActiveWc(pid) ?? e.win.webContents` first. Never call `e.win.webContents` directly to read/write page content — once tabs are open, that's the shell/toolbar frame, not the active tab's `BrowserView` holding the real Instagram page.
+
+## Image Upload (Make-a-Post / Repost) — current rules
+
+Full diagnosis: `.agents/memory/image-upload-fix-history.md`. Also see `.agents/memory/make-a-post-log.md` for the EB-click-driven posting flow's bug history (clicks, visibility, Escape-key, recycling).
+
+- Always normalize images through sharp before rupload: flatten alpha (white background) → force sRGB colorspace → baseline (non-progressive) JPEG. Never send a raw downloaded buffer straight to rupload — Instagram's server-side transcoder can reject progressive JPEGs / non-sRGB / exotic EXIF with a non-retryable `ProcessingFailedError`.
+- PATH B (rupload + configure) must use the SAME shared `HttpsProxyAgent` (`keepAlive: true, maxSockets: 1`) for both calls — different agents can land on different Instagram backend shards, causing "upload id is missing". The `rur` cookie from the rupload response must always overwrite any stale value, never be skipped.
+
+## UI conventions
 
 ### Sidebar — Jarvee-style edge-to-edge buttons (artifacts/dannys-bot/src/components/layout/Sidebar.tsx):
-- The `<nav>` element must have NO horizontal padding (`px-3` was causing button backgrounds to be inset from sidebar edges).
-- Bottom Settings `<div>` wrapper must also have no horizontal padding.
-- Buttons use `rounded-none` and `w-full` so backgrounds go edge-to-edge.
-- DO NOT add `px-3` back to the nav or the Settings div wrapper.
+- The `<nav>` element and the bottom Settings `<div>` wrapper must have NO horizontal padding (`px-3` insets button backgrounds from the sidebar edges). Buttons use `rounded-none` + `w-full` for edge-to-edge backgrounds. Do not add `px-3` back.
 
 ### Account sort persistence (artifacts/dannys-bot/src/pages/ProfilesPage.tsx):
-- Sort field, direction, and stable order are stored in `localStorage` (NOT `sessionStorage`). Using sessionStorage caused sort to reset on every app restart.
-- Default sort is `"account"` A–Z when no localStorage preference is stored.
+- Sort field, direction, and stable order are stored in `localStorage` (NOT `sessionStorage` — that reset sort on every app restart). Default sort is `"account"` A–Z when nothing is stored.
 
 ## Gotchas
 
@@ -294,8 +253,8 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.1.320**
-76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.324` → `1.0.325`
+75. Current version: **v1.1.360**
+76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.1.360` → `1.1.361`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
 79. Do NOT skip the version bump even for small/doc-only changes
@@ -304,79 +263,8 @@ Every push to GitHub **must** include a version bump in `artifacts/electron/pack
 
 Every push **must** also include a new entry at the top of the `CHANGELOG` array in `artifacts/dannys-bot/src/pages/Dashboard.tsx`.
 
-80. The `version` field must match the new version number in `artifacts/electron/package.json` (e.g. `"1.0.325"`)
+80. The `version` field must match the new version number in `artifacts/electron/package.json` (e.g. `"1.1.361"`)
 81. The `date` field should be today's date in plain format (e.g. `"15 May 2026"`)
 82. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
-
-## EB Hidden-Window Throttling Fix Log — READ THIS BEFORE TOUCHING webPreferences ON ANY BrowserWindow/BrowserView
-
-### ROOT CAUSE CONFIRMED AND FIXED (v1.1.344, 5 Jul 2026) — DO NOT RE-INVESTIGATE THIS
-
-**The actual root cause (confirmed, not a theory):** `win.hide()` in the `win.on("close")` handler suspends Chromium's compositor entirely at the OS level. This is deeper than anything `backgroundThrottling: false` or `document.visibilityState` overrides can address. With the compositor paused:
-- `IntersectionObserver` reports zero intersections (effective viewport is 0×0)
-- Instagram's virtualised React lists (`<article>`, story tray, Follow button, Reels video) are never mounted into the DOM because React skips off-viewport content
-- `waitForSelector('article', 20000)` always times out — not because the feed didn't load, but because the DOM nodes were never created
-
-**The fix (what Jarvee/SuSocial actually do):** Never call `win.hide()` on automation windows. Instead, move the window off-screen using `win.setPosition(sw + 10, y)` and call `win.setSkipTaskbar(true)`. The window stays "visible" to Windows and Chromium — compositor runs at full speed, IntersectionObserver fires with real intersections, React mounts the full page DOM. The user cannot see it: not on screen, not in taskbar, not in alt-tab. When the user opens the EB from the UI, `setSkipTaskbar(false)` + `setBounds(workArea)` brings it back instantly.
-
-**Also added:**
-- `CalculateNativeWinOcclusion` to the `disable-features` Chromium flag — prevents compositor suspension when the window is fully occluded by another app on screen
-- `--disable-renderer-backgrounding` — prevents Chromium from deprioritising renderer threads for background windows
-
-**What is FORBIDDEN:**
-- Calling `win.hide()` on any EB window used for automation. Use off-screen positioning instead.
-- Removing `CalculateNativeWinOcclusion` from `disable-features` or `disable-renderer-backgrounding` from Chromium flags.
-- Assuming `backgroundThrottling: false` alone is sufficient — it is necessary but not sufficient. The compositor suspension from `win.hide()` is a separate, deeper issue.
-
-### Failure: Actions STILL failing after the /eb/navigate + /eb/evaluate active-tab fix, specifically when the EB window is hidden/minimized on Windows (5 Jul 2026)
-- **Symptom**: Even after routing `/eb/navigate` and `/eb/evaluate` to `getActiveWc(pid)` (see EB Multi-Tab IPC Fix Log below), Follow/Stories/Reels/Feed checks kept returning empty ("No Follow button found", "EB liked 0 post(s)", "EB viewed 0 story tray items") specifically in production on Windows, where the EB window is hidden/minimized/occluded during automated runs.
-- **Root cause**: The main EB `BrowserWindow` already had `backgroundThrottling: false` in its `webPreferences` (with a comment explicitly warning this is CRITICAL for exactly this failure mode). But `getActiveWc()` returns the active tab's separate `BrowserView.webContents` once a tab is open — and that `BrowserView` (created in the `"new-tab"` IPC handler) was created WITHOUT `backgroundThrottling: false`. Several other short-lived windows used for verify/post/search/leak-test flows (`sfTempWin`, `spTempWin`, `ssTempWin`, `leakWin`, `_hiddenWin`, plus the toolbar `BrowserView`) were missing it too. Chromium throttles timers/rAF/lazy-loading per-WebContents when that WebContents is hidden or occluded — so the tab holding the actual Instagram page never finished rendering the feed/story tray/follow button while the parent window was hidden, even though the top-level window's own webContents (unused once a tab is active) had the flag.
-- **Fix (v1.1.342)**: Added `backgroundThrottling: false` to every `webPreferences` block in `ebManager.ts` that creates a `BrowserWindow` or `BrowserView` used to hold real page content: the tab `BrowserView` (`new-tab` handler), the toolbar `BrowserView`, `sfTempWin`, `spTempWin`, `ssTempWin`, `leakWin`, and `_hiddenWin`.
-- **What is FORBIDDEN**: Adding any new `BrowserWindow` or `BrowserView` in `ebManager.ts` without `backgroundThrottling: false` in its `webPreferences`. This applies even to windows that start with `show: true` — they can be hidden, minimized, or occluded later in their lifecycle, and Windows in particular applies OS-level occlusion throttling independent of Electron's own show/hide state.
-- **v1.1.342 CONFIRMED INSUFFICIENT (5 Jul 2026)**: User confirmed the exact same symptoms recurred after this fix shipped — Follow and Stories still returned "No Follow button found" / "0 story tray item(s)" even with `backgroundThrottling: false` everywhere. `backgroundThrottling` only stops Chromium from throttling timers/rAF on a hidden WebContents — it does NOT stop Instagram's own page script from checking `document.visibilityState`/`document.hidden` and deliberately skipping hydration of UI it thinks isn't visible. That is a page-level (app-code) behavior, not a Chromium-scheduler behavior, and no `webPreferences` flag can fix it. See the real fix below.
-
-### Failure: Follow and Stories STILL returning empty after backgroundThrottling fix — real root cause found (5 Jul 2026)
-- **Symptom**: Same as above, persisting after v1.1.342.
-- **Root cause**: `automationEngine.ts` already had a known, working fix for this exact failure mode in TWO flows — `viewTimelineFeed` (~line 2793) and `likeTimelinePosts` (~line 3219) — that forces `document.visibilityState`/`document.hidden` to report `"visible"`/`false` via `Object.defineProperty` + dispatches a `visibilitychange` event, specifically because Instagram's SPA checks page visibility and suppresses lazy-loading/hydration when it thinks the tab is hidden. Those two flows also already used `scrollIntoView` + a full `pointerdown`/`pointerup`/`click` event sequence instead of a plain `.click()`, because a plain `.click()` on a hidden window can be silently swallowed and `getBoundingClientRect()` returns zeros. **This exact fix was never applied to the Follow button click (~line 3749) or the story tray detection/click (~line 3070-3124)** — those two flows still relied on default `visibilityState` and plain `.click()`, which is why they kept failing while Feed and Likes worked.
-- **Fix (v1.1.343)**: Added the same `visibilityState`/`hidden` override (before `waitForSelector("header button")` in the follow flow, and before the story tray `waitFor` in `checkTimelineStories`) and the same `scrollIntoView` + pointer-event-sequence click pattern to both the Follow button click and the story tray item click.
-- **What is FORBIDDEN**: Adding any new EB flow that queries or clicks Instagram DOM elements without first applying the `visibilityState`/`hidden` override at the top of that flow (copy the pattern from `likeTimelinePosts`), and without using `scrollIntoView` + pointerdown/pointerup + `.click()` instead of a bare `.click()`. Do not assume `backgroundThrottling: false` alone is sufficient — it is necessary but not sufficient.
-
-### Failure: `/eb/silent-post` (Make a Post via browser) always failing at "Could not find Create button" (5 Jul 2026)
-- **Symptom**: Every browser-mode repost/Make-a-Post attempt failed identically at the "clicking Create nav item" step with "Could not find Create button in the Instagram left nav — is the account logged in?" — 100% failure rate across every file in the queue, no partial progress ever. User-visible symptom: EB appears to hover over Create but nothing happens; page just idles/refreshes.
-- **First (wrong) hypothesis**: Assumed the click mechanism itself was the problem — that Instagram's React nav ignores a plain `.click()`. Added `scrollIntoView` + `pointerdown`/`pointerup` dispatch before `.click()` on the Create button, Post submenu item, and the Next/Share/Done button helper. This shipped but did NOT fix the issue — logs after the fix showed the exact same "Could not find Create button" error, proving the element was never found in the first place, so the click-dispatch mechanism was never even reached.
-- **Real root cause**: Same class of bug as the Follow/Stories failures above — `/eb/silent-post` in `ebManager.ts` navigates to instagram.com in the EB window (which may be off-screen/backgrounded) but never overrides `document.visibilityState`/`document.hidden`. Instagram's SPA checks page visibility and skips hydrating the left nav (including the Create button) when it thinks the tab isn't visible, so every DOM selector for Create legitimately finds nothing — no amount of fixing the click event helps if the button was never rendered.
-- **Fix (v1.1.352)**: Added the same `visibilityState`/`hidden` override + `visibilitychange` dispatch (copied from `likeTimelinePosts`/`viewTimelineFeed`) right after `/eb/silent-post` confirms the account is logged in and before it starts querying for the Create button.
-- **Lesson — apply broadly**: When an EB flow's DOM selectors come back completely empty (not "clicked but nothing happened", but "element not found at all") even though navigation/login succeeded, suspect the missing `visibilityState` override FIRST, before touching click-event mechanics. Fixing the click sequence when the button was never in the DOM is a wasted round-trip.
-- **What is FORBIDDEN**: Same as above — do not add or debug any EB flow that queries Instagram DOM elements without checking it applies the `visibilityState`/`hidden` override first.
-
-## EB Multi-Tab IPC Fix Log — READ THIS BEFORE TOUCHING /eb/navigate OR /eb/evaluate
-
-### Failure: ALL background page checks (Reels, Stories, Follow, Feed) silently returning empty/undefined (5 Jul 2026)
-- **Symptom**: Human Session background actions consistently failed — "no video found" on Reels, "no story tray", Follow button never matching, feed `article` waitFor always timing out — despite the EB visibly loading real Instagram pages and network requests succeeding. Side-effect-only scripts (e.g. `window.scrollBy()`) appeared to "work" (no errors), which made it look like the page was loading fine.
-- **Root cause**: `POST /eb/navigate` and `POST /eb/evaluate` in `ebManager.ts` both called `e.win.webContents` directly. When an EB window has tabs open, `e.win.webContents` is the native toolbar/shell frame (a `BrowserView` sits on top holding the real Instagram page) — not the active tab's page. Every `executeJavaScript` query ran against the shell frame, which has no Instagram DOM, so every `querySelector`-based check returned `undefined`. Side-effect calls like `scrollBy()` don't throw on an empty frame either, which is why those looked like they worked. This is the exact same bug class already fixed for `doAutoLogin`'s silent-verify path (see `getActiveWc()` usage there) — but `/eb/navigate` and `/eb/evaluate` were never updated to match.
-- **Fix (v1.1.341)**: Both handlers now resolve the target via `getActiveWc(pid) ?? e.win.webContents` before calling `loadURL` / `executeJavaScript`, exactly like the silent-verify login flow already did. Added a debug `console.log` on every `/eb/evaluate` call showing which target was used (shell vs. active tab BrowserView), the resolved page URL, and the result — visible in `equinox-debug.log` for verifying future page-state mismatches at a glance.
-- **What is FORBIDDEN**: Adding any new `/eb/*` IPC handler that reads `e.win.webContents` directly to interact with page content. Always resolve `getActiveWc(pid)` first and fall back to `e.win.webContents` only when no tabs are open (`activeId === 0`).
-
-## Image Upload (Make-a-Post / Repost) Fix Log — READ THIS BEFORE TOUCHING UPLOAD CODE
-
-### Failure: ProcessingFailedError — Image upload transcode non-retryable failure (25 Jun 2026)
-- **Symptom**: Both PATH A (`ig.publish.photo` via IgApiClient) and PATH B (hand-rolled rupload+configure) fail with HTTP 400 `ProcessingFailedError: Image upload transcode non-retryable failure` (`retriable: false`). Seen on profile @gazpixewik (id 3614) reposting from @IMLISABERRY.
-- **Image at time of failure**: 910x910 JPEG, 150343B, aspect ratio 1.000 (within bounds).
-- **Root cause**: When the aspect ratio is within Instagram's allowed bounds (0.8–1.91), the code skipped re-encoding and passed the raw downloaded buffer straight to Instagram's rupload endpoint. Instagram's server-side transcoder rejected it — likely because the source image was a **progressive JPEG**, had a non-sRGB color space (CMYK/Adobe RGB), or had corrupt/exotic EXIF data. The crop paths already re-encoded via `sharp().jpeg()` so they were safe; the no-crop path was not.
-- **Fix (v1.0.751+)**: In `uploadPhoto()` in `instagramWebClient.ts`, the `else` branch (ratio OK, no crop) now always re-encodes through sharp: `.flatten({ background: white }).toColorspace("srgb").jpeg({ quality: 92, progressive: false, mozjpeg: false })`. The two crop paths were also updated to use the same sanitization flags (flatten, sRGB, non-progressive). This ensures every image sent to Instagram is a clean baseline sRGB JPEG regardless of what the source image looks like.
-- **What is FORBIDDEN**: Sending a downloaded image buffer to rupload without running it through sharp first. Always normalize: flatten alpha → force sRGB → baseline JPEG.
-
-### Failure: "upload id is missing, please send a valid upload id" — configure fails after rupload succeeds (25 Jun 2026)
-- **Symptom**: PATH A (`ig.publish.photo`) fails with `ProcessingFailedError`. PATH B rupload succeeds (`status=ok`, `upload_id` confirmed), but configure immediately returns `{"status":"fail","message":"upload id is missing, please send a valid upload id"}`.
-- **Rupload timing**: Upload took ~4 minutes (slow proxy at 37.97.113.161:29842, 79890-byte image). Rupload response returned **no `rur` cookie** in `Set-Cookie` (empty array).
-- **Root cause 1 — Separate proxy tunnels**: Rupload (`tlsMultipartPost`, `forceNodeHttps=true`) created its own `HttpsProxyAgent`, used it, then destroyed it. Configure (`igReq`, `forceNodeTls=true`) created a DIFFERENT `HttpsProxyAgent`. Two separate TCP connections → Instagram's load balancer may route them to DIFFERENT backend shards. The upload slot lives on shard A; configure hits shard B → "upload id is missing" even though the upload truly succeeded.
-- **Root cause 2 — stale rur bug**: `_mobileRupload` captured the `rur` cookie from the rupload response Set-Cookie, but only wrote it to `mobileCookieJar` if there was no `rur` already. If there was already a (stale, wrong-shard) `rur`, it was kept, meaning configure could still hit the wrong shard even if rupload did return a new `rur`.
-- **Fix (v1.1.165)**: 
-  1. `tlsRequest` (`igReq`) now accepts an `agentOverride` parameter. When provided (and `forceNodeTls=true`), it uses the caller's pre-created `HttpsProxyAgent` without destroying it.
-  2. `_mobileRupload` accepts a `sharedAgent` parameter and passes it to `tlsMultipartPost` as `agentOverride`.
-  3. `_configureViaIgClient` accepts a `sharedAgent` parameter and passes it to `igReq` as `agentOverride`.
-  4. `uploadPhoto` and `uploadVideo` now create a single `HttpsProxyAgent` (`keepAlive: true, maxSockets: 1`) before calling rupload, pass it to both rupload and configure, then destroy it in a `finally` block.
-  5. `_mobileRupload` rur logic changed to ALWAYS overwrite the `rur` entry in `mobileCookieJar` when the rupload response returns one (not skip it if one was already present).
-- **What is FORBIDDEN**: Calling `_mobileRupload` and `_configureViaIgClient` with different (or no) `sharedAgent` when running PATH B. The same agent MUST be passed to both. The `agentOverride` in `tlsMultipartPost` and the new `agentOverride` in `igReq`/`tlsRequest` exist specifically for this purpose — do not remove them.
