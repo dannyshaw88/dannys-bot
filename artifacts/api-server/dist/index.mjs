@@ -164132,7 +164132,7 @@ function igErrMsg(e) {
   if (!body) return base;
   const igMsg = body.message || body.feedback_message || body.error_title || body.spam_error;
   if (!igMsg || igMsg === base) return base;
-  return `${base} \u2014 "${igMsg}"`;
+  return `${base}: "${igMsg}"`;
 }
 function randInt2(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -165414,7 +165414,7 @@ ${err?.stack ?? ""}`);
       const remH = Math.floor(remMs / 36e5);
       const remM = Math.floor(remMs % 36e5 / 6e4);
       const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
-      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused \u2014 blocked by Instagram. ${remStr} remaining`);
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused: blocked by Instagram. ${remStr} remaining`);
       return 0;
     }
     if (s.contactEquinoxUserEnabled && (s.contactEquinoxMessage ?? "").trim()) {
@@ -165960,7 +165960,7 @@ ${err?.stack ?? ""}`);
       const remH = Math.floor(remMs / 36e5);
       const remM = Math.floor(remMs % 36e5 / 6e4);
       const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
-      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused \u2014 blocked by Instagram. ${remStr} remaining`);
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused: blocked by Instagram. ${remStr} remaining`);
       return { unfollowed: 0 };
     }
     const minAgeDays = s.minFollowAgeDays ?? 3;
@@ -166042,7 +166042,7 @@ ${err?.stack ?? ""}`);
         attempted++;
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
-          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram automated-behaviour warning \u2014 breaking unfollow session");
+          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram automated-behaviour warning: breaking unfollow session");
           break;
         }
         if (result) {
@@ -166285,7 +166285,7 @@ ${err?.stack ?? ""}`);
       const opened = await this.ensureSilentEbOpen(profile);
       if (!opened) {
         console.log(`[engine] @${profile.username}: [EB-only] could not open silent EB \u2014 skipping browser human session`);
-        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API \u2014 silent EB open failed, no browser human session run");
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API: silent EB open failed, no browser human session run");
         return;
       }
       page2 = new EbIpcPage(profile.id, ebIpcPort);
@@ -166293,7 +166293,7 @@ ${err?.stack ?? ""}`);
       const browser = getExistingBrowser(profile.id);
       if (!browser) {
         console.log(`[engine] @${profile.username}: [EB-only] EB not open \u2014 skipping browser human session`);
-        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API \u2014 EB not open, no browser human session run");
+        this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn", "Disable API: EB not open, no browser human session run");
         return;
       }
       const pages = await browser.pages();
@@ -166334,8 +166334,8 @@ ${err?.stack ?? ""}`);
           await sleep(actionDelay2());
           await nav2(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
           await sleep(actionDelay2());
-          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB \u2014 audit: home + own profile");
-          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB \u2014 audit: home + own profile");
+          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB: audit: home + own profile");
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB: audit: home + own profile");
         } catch (e) {
           console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
@@ -166580,8 +166580,8 @@ ${err?.stack ?? ""}`);
           await sleep(actionDelay2());
           const hasThreads = await waitFor('a[href*="/direct/t/"]', 8e3);
           if (!hasThreads) {
-            this.logAction(profile.id, tool.id, "check_dm", "", "", "", "skipped", "EB \u2014 DM inbox empty");
-            this.logGhostBrowserCall(profile.id, profile.username, "check_dm", "EB \u2014 DM inbox empty");
+            this.logAction(profile.id, tool.id, "check_dm", "", "", "", "skipped", "EB: DM inbox empty");
+            this.logGhostBrowserCall(profile.id, profile.username, "check_dm", "EB: DM inbox empty");
           } else {
             let opened = 0;
             for (let i2 = 0; i2 < dmCount && !state.stop.stopped; i2++) {
@@ -167130,9 +167130,9 @@ ${err?.stack ?? ""}`);
             }
           }
         } else if (!abandonedAfterBrowse) {
-          console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 no Follow button on @${candidate.username} (already following or private)`);
-          this.logAction(profile.id, followTool.id, "follow_skipped", candidate.username, source.value, source.type, "skipped", "No Follow button \u2014 already following or private");
-          this.logGhostBrowserCall(profile.id, profile.username, "follow_skipped", `No Follow button on @${candidate.username} \u2014 already following or private`);
+          console.log(`[engine] @${profile.username}: [EB-only] follow \u2014 no Follow button on @${candidate.username} (button not found: may be a render issue, already following, or private)`);
+          this.logAction(profile.id, followTool.id, "follow", candidate.username, source.value, source.type, "skipped", "No Follow button found (may be a render issue, already following, or private)");
+          this.logGhostBrowserCall(profile.id, profile.username, "follow", `No Follow button found on @${candidate.username} (render issue, already following, or private)`);
         }
         await sleep(actionDelay2());
       } catch (e) {
@@ -167418,8 +167418,8 @@ ${err?.stack ?? ""}`);
             }).catch(() => false);
             await sleep(actionDelay());
             console.log(`[engine] @${profile.username}: \u{1F514} EB tapped notifications icon (${clicked ? "ok" : "btn not found"})`);
-            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "EB \u2014 tapped notifications icon");
-            this.logGhostBrowserCall(profile.id, profile.username, "visit_notifications", "EB \u2014 tapped notifications icon");
+            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "EB: tapped notifications icon");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_notifications", "EB: tapped notifications icon");
           } catch (e) {
             console.warn(`[engine] @${profile.username}: notifications EB error: ${e?.message}`);
           }
@@ -167429,8 +167429,8 @@ ${err?.stack ?? ""}`);
             await nav(`https://www.instagram.com/${profile.username}/`, "own profile (jitter)");
             await sleep(actionDelay());
             console.log(`[engine] @${profile.username}: \u{1F464} EB visited own profile`);
-            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "EB \u2014 visited own profile page");
-            this.logGhostBrowserCall(profile.id, profile.username, "visit_own_profile", "EB \u2014 visited own profile page");
+            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "EB: visited own profile page");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_own_profile", "EB: visited own profile page");
           } catch (e) {
             console.warn(`[engine] @${profile.username}: own profile EB error: ${e?.message}`);
           }
@@ -167439,8 +167439,8 @@ ${err?.stack ?? ""}`);
           try {
             const ok = await clickHamburgerItem("Settings");
             console.log(`[engine] @${profile.username}: \u2699\uFE0F EB opened Settings via menu (${ok ? "ok" : "btn not found"})`);
-            this.logAction(profile.id, tool.id, "visit_settings", "", "", "", ok ? "ok" : "skipped", "EB \u2014 opened Settings via hamburger menu");
-            this.logGhostBrowserCall(profile.id, profile.username, "visit_settings", "EB \u2014 opened Settings via hamburger menu");
+            this.logAction(profile.id, tool.id, "visit_settings", "", "", "", ok ? "ok" : "skipped", "EB: opened Settings via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "visit_settings", "EB: opened Settings via hamburger menu");
           } catch (e) {
             console.warn(`[engine] @${profile.username}: settings EB error: ${e?.message}`);
           }
@@ -167449,8 +167449,8 @@ ${err?.stack ?? ""}`);
           try {
             const ok = await clickHamburgerItem("Your activity");
             console.log(`[engine] @${profile.username}: \u{1F4CA} EB opened Your Activity via menu (${ok ? "ok" : "btn not found"})`);
-            this.logAction(profile.id, tool.id, "view_activity", "", "", "", ok ? "ok" : "skipped", "EB \u2014 opened Your Activity via hamburger menu");
-            this.logGhostBrowserCall(profile.id, profile.username, "view_activity", "EB \u2014 opened Your Activity via hamburger menu");
+            this.logAction(profile.id, tool.id, "view_activity", "", "", "", ok ? "ok" : "skipped", "EB: opened Your Activity via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "view_activity", "EB: opened Your Activity via hamburger menu");
           } catch (e) {
             console.warn(`[engine] @${profile.username}: activity EB error: ${e?.message}`);
           }
@@ -167459,8 +167459,8 @@ ${err?.stack ?? ""}`);
           try {
             const ok = await clickHamburgerItem("Saved");
             console.log(`[engine] @${profile.username}: \u{1F516} EB opened Saved via menu (${ok ? "ok" : "btn not found"})`);
-            this.logAction(profile.id, tool.id, "view_saved", "", "", "", ok ? "ok" : "skipped", "EB \u2014 opened Saved via hamburger menu");
-            this.logGhostBrowserCall(profile.id, profile.username, "view_saved", "EB \u2014 opened Saved via hamburger menu");
+            this.logAction(profile.id, tool.id, "view_saved", "", "", "", ok ? "ok" : "skipped", "EB: opened Saved via hamburger menu");
+            this.logGhostBrowserCall(profile.id, profile.username, "view_saved", "EB: opened Saved via hamburger menu");
           } catch (e) {
             console.warn(`[engine] @${profile.username}: saved EB error: ${e?.message}`);
           }
@@ -167808,17 +167808,17 @@ ${err?.stack ?? ""}`);
           const storyItems = storyResult.items;
           if (watched === -1) {
             console.warn(`[engine] @${profile.username}: \u26A0\uFE0F View Stories skipped \u2014 no igApiCookies session (account not yet verified \u2014 run Verify Credentials first)`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no igApiCookies session \u2014 run Verify Credentials to establish one");
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no igApiCookies session (run Verify Credentials to establish one)");
           } else if (watched === -5) {
             console.warn(`[engine] @${profile.username}: \u26A0\uFE0F View Stories \u2014 Instagram rejected reels_tray (challenge/session error) \u2014 marking account`);
             const acctStatus = await this.applyAccountLevelError(profile.id, "challenge_required", state, tool.id);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "error", `Instagram rejected reels_tray: challenge_required${acctStatus ? ` \u2014 account marked ${acctStatus}` : ""}`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "error", `Instagram rejected reels_tray: challenge_required${acctStatus ? `: account marked ${acctStatus}` : ""}`);
           } else if (watched === -2) {
             console.warn(`[engine] @${profile.username}: \u26A0\uFE0F View Stories: tray was empty (0 stories in feed) \u2014 see server log for response keys`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed the tray is empty");
           } else if (watched === -3) {
             console.warn(`[engine] @${profile.username}: \u26A0\uFE0F View Stories: tray had entries but none contained story items \u2014 see server log for entry keys`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "View Stories: tray returned but no story items found in entries \u2014 check server log for details");
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "View Stories: tray returned but no story items found in entries (check server log for details)");
           } else {
             console.log(`[engine] @${profile.username}: \u{1F4D6} watched ${watched} timeline stories`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
@@ -168253,7 +168253,7 @@ ${err?.stack ?? ""}`);
             } else if (uploadAttempted > 0) {
               if (client.lastUploadLoginRequired) {
                 console.warn(`[engine] @${profile.username}: \u{1F501} repost \u2014 upload rejected (session expired / login_required), marking logged_out`);
-                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed: session expired \u2014 account marked for re-verify`);
+                this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed: session expired (account marked for re-verify)`);
                 await this.applyAccountLevelError(profile.id, "login_required", state, tool.id);
               } else {
                 console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
@@ -168371,7 +168371,7 @@ ${err?.stack ?? ""}`);
       const remH = Math.floor(remMs / 36e5);
       const remM = Math.floor(remMs % 36e5 / 6e4);
       const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
-      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused \u2014 blocked by Instagram. ${remStr} remaining`);
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused: blocked by Instagram. ${remStr} remaining`);
       return { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
     }
     const maxPerDay = randInt2(s.maxPerDayMin ?? 150, s.maxPerDayMax ?? 200);
@@ -168411,7 +168411,7 @@ ${err?.stack ?? ""}`);
     }
     const client = await this.ensureClient(profile, state);
     if (!client) {
-      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No active session \u2014 verify the account in the embedded browser first (Verify Credentials)");
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No active session: verify the account in embedded browser first (Verify Credentials)");
       return zero;
     }
     client.setApiCallSource("Follow Tool");
@@ -168994,15 +168994,15 @@ ${err?.stack ?? ""}`);
       }
       if (result.status === "checkpoint_detected") {
         console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow on @${user.username} \u2014 halting session, setting status to captcha`);
-        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", "Instagram checkpoint/suspicious-activity page detected \u2014 complete review in embedded browser");
-        await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow \u2014 complete review in embedded browser" });
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", "Instagram checkpoint/suspicious-activity page detected (complete review in embedded browser)");
+        await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow (complete review in embedded browser)" });
         hitHardLimit = true;
         break;
       }
       if (result.status === "user_not_found") {
         const reason = result.reason ?? `user ${user.username} not found (404)`;
         console.warn(`[engine] @${profile.username}: follow skipped @${user.username} \u2014 deleted/non-existent user (404)`);
-        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", `Stale user ID \u2014 account deleted or not found: ${reason}`);
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", `Stale user ID: account deleted or not found: ${reason}`);
         skipped++;
         if (followed + skipped + blocked >= processCount) break;
         continue;
@@ -169030,7 +169030,7 @@ ${err?.stack ?? ""}`);
               await storage.updateProfile(profile.id, { accountStatus: "valid" });
               await storage.incrementStat(profile.id, "abd");
               console.log(`[engine] @${profile.username}: ABD auto-dismissed \u2713 \u2014 continuing session`);
-              this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed \u2014 session continues");
+              this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed (session continues)");
               await sleep(5e3);
               continue;
             }
@@ -169238,8 +169238,8 @@ ${err?.stack ?? ""}`);
           }
           if (result.status === "checkpoint_detected") {
             console.warn(`[engine] @${profile.username}: checkpoint_detected via browser-follow (rescrape) on @${user.username} \u2014 halting session, setting status to captcha`);
-            this.logAction(profile.id, tool.id, "follow_blocked", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", "Instagram checkpoint/suspicious-activity page detected \u2014 complete review in embedded browser");
-            await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow \u2014 complete review in embedded browser" });
+            this.logAction(profile.id, tool.id, "follow_blocked", user.username, rescrapeSource.value, rescrapeSource.type, "skipped", "Instagram checkpoint/suspicious-activity page detected (complete review in embedded browser)");
+            await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / suspicious-activity page detected during browser follow (complete review in embedded browser)" });
             hitHardLimit = true;
             break;
           }
@@ -169262,7 +169262,7 @@ ${err?.stack ?? ""}`);
                   await storage.updateProfile(profile.id, { accountStatus: "valid" });
                   await storage.incrementStat(profile.id, "abd");
                   console.log(`[engine] @${profile.username}: ABD auto-dismissed \u2713 \u2014 continuing session`);
-                  this.logAction(profile.id, tool.id, "abd_dismissed", user.username, rescrapeSource.value, rescrapeSource.type, "ok", "Automated Behavior warning auto-dismissed \u2014 session continues");
+                  this.logAction(profile.id, tool.id, "abd_dismissed", user.username, rescrapeSource.value, rescrapeSource.type, "ok", "Automated Behavior warning auto-dismissed (session continues)");
                   await sleep(5e3);
                   continue;
                 }

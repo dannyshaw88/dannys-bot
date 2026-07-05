@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.339",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Stories, Reels, and Follow actions now work correctly when the EB window is not visible. The root fix is backgroundThrottling: false added to the Electron BrowserWindow webPreferences. This is the Chromium-level flag that prevents the engine from throttling timers and rendering for background windows regardless of their show/hide state. Previous attempts (showInactive + off-screen positioning) were partial workarounds; this is the definitive fix.",
+        technical: [
+          "backgroundThrottling: false added to webPreferences in openEbWindow() for ALL window types (ghost, verify, silent, regular). Chromium background-throttles hidden and off-screen windows by default, causing waitFor() to always time out and page.evaluate() to find no DOM elements.",
+          "showInactive() + off-screen positioning (sw+10) retained as belt-and-suspenders for silentMode, but backgroundThrottling: false is the primary fix.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Human Jitter skip chance now actually works. The home + own profile audit navigation was running unconditionally every session, ignoring the 75-100% skip chance setting. It now uses the same skip roll as the full Human Jitter action queue, so both either run or skip together.",
+      },
+      {
+        category: "Improved",
+        text: "Activity log label changed from 'EB: audit: home + own profile' to 'EB: Human Jitter' to match the tool name shown in settings.",
+      },
+    ],
+  },
+  {
     version: "1.1.338",
     date: "5 Jul 2026",
     items: [

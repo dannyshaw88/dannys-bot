@@ -2748,19 +2748,25 @@ class AutomationEngine {
         return false;
       };
 
-      // ── humanSession audit — own profile + notifications ──────────────────
-      if (s.humanSessionEnabled === true && !state.stop.stopped) {
+      // ── Human Jitter — home + own profile audit (respects skip chance) ──────
+      // Uses the same humanSessionNotUsedMin/Max skip chance as the full jitter
+      // enqueue block below. If the skip roll fires, neither the audit nav nor
+      // any of the subsequent jitter actions (notifs, settings, activity, saved) run.
+      const _jitterSkipped = this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax");
+      if (s.humanSessionEnabled === true && !_jitterSkipped && !state.stop.stopped) {
         try {
-          await nav("https://www.instagram.com/", "home (audit)");
+          await nav("https://www.instagram.com/", "home (jitter)");
           await sleep(actionDelay());
-          await nav(`https://www.instagram.com/${profile.username}/`, "own profile (audit)");
+          await nav(`https://www.instagram.com/${profile.username}/`, "own profile (jitter)");
           await sleep(actionDelay());
-          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB: audit: home + own profile");
-          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB: audit: home + own profile");
+          this.logAction(profile.id, tool.id, "eb_browse", "", "", "", "ok", "EB: Human Jitter");
+          this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", "EB: Human Jitter");
         } catch (e: any) {
-          console.warn(`[engine] @${profile.username}: [EB-only] humanSession audit error: ${e?.message}`);
+          console.warn(`[engine] @${profile.username}: [EB-only] humanSession jitter error: ${e?.message}`);
           this.logGhostBrowserCall(profile.id, profile.username, "human_session_audit", e?.message ?? "error", true);
         }
+      } else if (_jitterSkipped) {
+        console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skipped (chance roll)`);
       }
 
       // Tracks whether the home feed actually served posts this session.
@@ -3991,9 +3997,12 @@ class AutomationEngine {
     };
 
     // ── Human Session ────────────────────────────────────────────────────────
+    // _jitterSkipped was rolled above for the audit block — reuse the same
+    // decision here so the audit and jitter actions always agree on whether
+    // to run or skip this session.
     enqueue("humanSession",
-      s.humanSessionEnabled === true,
-      "humanSessionNotUsedMin", "humanSessionNotUsedMax",
+      s.humanSessionEnabled === true && !_jitterSkipped,
+      "", "",  // skip chance already decided by _jitterSkipped above
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
         // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.

@@ -2383,8 +2383,12 @@ export async function openEbWindow(opts: {
     // taskbar or alt-tab switcher — the user should not see or interact with them.
     skipTaskbar:     (verifyMode || silentMode) ? true : false,
     webPreferences: {
-      nodeIntegration:  false,
-      contextIsolation: true,
+      nodeIntegration:         false,
+      contextIsolation:        true,
+      backgroundThrottling:    false,   // CRITICAL: prevents Chromium from throttling timers,
+      // animations, and rendering when the window is hidden or off-screen.
+      // Without this flag, waitFor() always times out, DOM elements never appear,
+      // and every browser action (follow, stories, reels) silently returns 0.
       partition,
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
