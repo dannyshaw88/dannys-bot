@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.350",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "The \"Make a Post\" tool now actually works for accounts using \"Do Actions Via Browser\" mode — before, it silently did nothing for these accounts even when fully configured. It now picks images from your local folder, applies your alteration settings, and posts them through the embedded browser exactly as configured.",
+      },
+      {
+        category: "Fixed",
+        text: "If \"Make a Post\" is set to pull from another Instagram account (username source) on a \"Do Actions Via Browser\" account, it now tells you clearly that this combination isn't supported yet and suggests switching to a local folder source, instead of doing nothing with no explanation.",
+      },
+    ],
+  },
+  {
     version: "1.1.349",
     date: "5 Jul 2026",
     items: [

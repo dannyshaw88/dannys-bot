@@ -3551,6 +3551,128 @@ class AutomationEngine {
         }
       }
 
+      // ── Make a Post (repost) — Disable API mode ──────────────────────────────
+      // Disable API accounts never reached this feature before: this session
+      // only ran follow/unfollow/contact via the browser and returned. Since
+      // there is no mobile-API client in this mode, uploading must go through
+      // postPhotoViaBrowser (EB IPC /eb/silent-post), the same helper used for
+      // "Do Actions Via Browser" accounts in the API path.
+      if (!state.stop.stopped) {
+        const repostSourceUsernameEb = String(s.repostSourceUsername ?? "").trim();
+        const repostLocalFolderPathEb = String(s.repostLocalFolderPath ?? "").trim();
+        const repostLocalFolderEnabledEb = !!(s.repostLocalFolderEnabled && repostLocalFolderPathEb);
+        const repostUsernameSourceActiveEb = !s.repostDisableUsernameSource && !!repostSourceUsernameEb;
+        const repostEnabledEb = !!(s.repostEnabled && (repostUsernameSourceActiveEb || repostLocalFolderEnabledEb));
+
+        if (!repostEnabledEb) {
+          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (disabled)`);
+        } else if (this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
+          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (chance roll)`);
+        } else if (!ebIpcPort) {
+          console.log(`[engine] @${profile.username}: [EB-only] repost skipped — browser-post requires the desktop app (not available in dev/Replit)`);
+        } else {
+          try {
+            if (repostLocalFolderEnabledEb) {
+              const entries = await fsPromises.readdir(repostLocalFolderPathEb);
+              const mediaFiles = entries.filter(f => isImageFile(nodePath.extname(f).toLowerCase()));
+              if (mediaFiles.length === 0) {
+                console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder repost — no image files found in "${repostLocalFolderPathEb}"`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "No image files found in local folder (video is not supported in Disable API mode)");
+              } else {
+                const targetCount = randInt(
+                  Math.max(1, Number(s.repostMin ?? 1)),
+                  Math.max(1, Number(s.repostMax ?? 1)),
+                );
+                const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+                const captionTemplate = String(s.repostCaptionText ?? "").trim();
+                const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
+                const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
+                const makeUnique = !!(s as any).repostMakeUnique;
+                const pickRandom = !!(s as any).repostLocalFolderRandom;
+
+                let filteredFiles = mediaFiles;
+                if (noRepeat) {
+                  const existingReposted = await storage.getRepostedPostsByProfile(profile.id, 10000);
+                  const postedLocalSet = new Set(
+                    existingReposted.filter(r => r.mediaId.startsWith("local:")).map(r => r.mediaId.slice(6)),
+                  );
+                  filteredFiles = mediaFiles.filter(f => !postedLocalSet.has(f));
+                  if (filteredFiles.length === 0) {
+                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 local folder — all media already reposted (noRepeat=true)`);
+                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "All local folder media already reposted (Do not repost same image is ON)");
+                    filteredFiles = [];
+                  }
+                }
+
+                const ordered = pickRandom
+                  ? [...filteredFiles].sort(() => Math.random() - 0.5)
+                  : [...filteredFiles].sort((a, b) => a.localeCompare(b));
+                const picked = ordered.slice(0, targetCount);
+
+                for (const fileName of picked) {
+                  if (state.stop.stopped) break;
+                  const filePath = nodePath.join(repostLocalFolderPathEb, fileName);
+                  let caption = captionTemplate ? captionTemplate.replace(/\{own_username\}/g, profile.username) : "";
+                  try {
+                    const rawBuffer = await fsPromises.readFile(filePath);
+                    let alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
+                    if (makeUnique) {
+                      try {
+                        alteredBuffer = await makeUniqueImage(alteredBuffer);
+                      } catch (uqErr: any) {
+                        console.warn(`[engine] @${profile.username}: [EB-only] makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
+                      }
+                    }
+
+                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost upload starting — file="${fileName}" level=${level} captionLen=${caption.length}`);
+                    const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
+                    if (bpResult.ok) {
+                      console.log(`[engine] @${profile.username}: [EB-only] 🔁 uploaded image from local folder: ${fileName}`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "ok", `Uploaded image from local folder: ${fileName} (alteration: ${level})`);
+                      this.logGhostBrowserCall(profile.id, profile.username, "make_a_post", `EB: uploaded ${fileName}`);
+                      await storage.incrementStat(profile.id, "repost");
+                      storage.createInstagramApiCall({
+                        profileId: profile.id, username: profile.username,
+                        operationName: "PostMedia", date: new Date().toISOString(),
+                        source: "browser", transport: "browser", isError: false,
+                      }).catch(() => {});
+                      if (noRepeat) {
+                        await storage.createRepostedPost({
+                          profileId: profile.id, toolId: tool.id,
+                          sourceUsername: repostLocalFolderPathEb,
+                          mediaId: `local:${fileName}`, shortcode: "", caption: "",
+                          thumbnailUrl: "", repostedAt: new Date().toISOString(), postedShortcode: "",
+                        }).catch(() => {});
+                      }
+                      if (deleteAfterUpload) {
+                        try { await fsPromises.unlink(filePath); } catch (e: any) {
+                          console.warn(`[engine] @${profile.username}: [EB-only] could not delete ${filePath}: ${e?.message}`);
+                        }
+                      }
+                    } else {
+                      console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", `Upload failed for: ${fileName} (${bpResult.message ?? "unknown error"})`);
+                    }
+                  } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: [EB-only] repost error for ${fileName}: ${e?.message}`);
+                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", e?.message ?? "unknown error");
+                  }
+                }
+              }
+            } else if (repostUsernameSourceActiveEb) {
+              // ── @username source — requires an API-derived feed, which is not
+              // available in Disable API mode without a mobile-API client. Log a
+              // clear skip reason instead of silently doing nothing.
+              console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost skipped — @username source requires API access (not available in Disable API mode). Use "Source: Local PC Folder" instead.`);
+              this.logAction(profile.id, tool.id, "repost", repostSourceUsernameEb, "", "", "skip", "Username source repost is not supported in Disable API mode — use Local PC Folder instead");
+            }
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] repost session error: ${e?.message}`);
+            this.logAction(profile.id, tool.id, "repost", "", "", "", "fail", e?.message ?? "unknown error");
+          }
+        }
+      }
+
       console.log(`[engine] @${profile.username}: ✅ [EB-only] browser human session complete`);
     } catch (e: any) {
       console.warn(`[engine] @${profile.username}: [EB-only] browser human session error: ${e?.message}`);
