@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.343",
+    date: "5 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Fixed Follow and Stories actions returning nothing found when the browser window is hidden or minimized.",
+        technical: [
+          "The previous fix only stopped Windows from slowing the page down, but that was not the whole story. Instagram's own website checks whether the browser tab is actually visible on screen, and when it is hidden it deliberately skips loading parts of the page — including the story tray at the top of the feed and the Follow button on someone's profile.",
+          "The feed and Like button actions already had a workaround that tricks the page into thinking it's visible even when it isn't, so those kept working. The Follow and Stories actions never had that same trick applied, which is the actual reason they kept reporting 'no Follow button found' and '0 story tray items' no matter what window settings were changed.",
+          "Follow and Stories now use the same visibility trick as the feed and Like actions, and clicks are sent the same reliable way (scroll to it, then a full press-and-release sequence) instead of a plain click that can be silently ignored on a hidden window.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.342",
     date: "5 Jul 2026",
     items: [

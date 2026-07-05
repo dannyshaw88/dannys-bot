@@ -3072,6 +3072,16 @@ class AutomationEngine {
               // Always return to the home feed so the tray is in a clean state.
               await nav("https://www.instagram.com/", `home (stories ${i + 1}/${storyCount})`);
               await sleep(actionDelay());
+              // Force visibilityState=visible so Instagram's SPA hydrates the
+              // story tray even when the EB window is hidden/not shown to the
+              // user. Same fix already applied to viewTimelineFeed and
+              // likeTimelinePosts — was missing here, which is why the tray
+              // selector never matched and every run logged "0 story tray item(s)".
+              await page.evaluate(() => {
+                try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+                try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+                document.dispatchEvent(new Event('visibilitychange'));
+              }).catch(() => {});
               const trayPresent = await waitFor(storySelector, 6000);
               if (!trayPresent) {
                 // Debug: dump page DOM state so we can see what selector IS present
@@ -3099,6 +3109,13 @@ class AutomationEngine {
                 // Walk up to find the nearest clickable ancestor; if none found,
                 // click the element itself.
                 const btn = (el.closest('button, [role="button"], a, div[tabindex]') ?? el) as HTMLElement;
+                // scrollIntoView + full pointer event sequence — same fix as
+                // likeTimelinePosts. Plain .click() on a hidden window is
+                // silently swallowed; getBoundingClientRect returns zeros so
+                // Chrome's hit-testing before dispatching the click can no-op.
+                btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
                 btn.click();
                 return true;
               }, storySelector).catch(() => false);
@@ -3717,6 +3734,19 @@ class AutomationEngine {
       try {
         await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
         await sleep(randInt(1500, 3000));
+        // Force visibilityState=visible so Instagram's SPA fully hydrates the
+        // profile header even when the EB window is hidden/not shown to the
+        // user. Without this, Chrome reports visibilityState="hidden" →
+        // Instagram suppresses hydration of header buttons → the Follow
+        // button never renders → "No Follow button found" even on accounts
+        // that are not already followed/private. Same fix already applied to
+        // viewTimelineFeed and likeTimelinePosts — was missing here.
+        await page.evaluate(() => {
+          try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+          try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+          document.dispatchEvent(new Event('visibilitychange'));
+        }).catch(() => {});
+
         // Wait for the profile header buttons to hydrate before looking for
         // "Follow" — clicking immediately after navigation often finds
         // nothing because the SPA hasn't rendered the header yet.
@@ -3763,7 +3793,17 @@ class AutomationEngine {
             return text === "Follow" || text === "Follow Back"
               || al === "Follow" || al === "Follow Back";
           }) as HTMLElement | undefined;
-          if (btn) { btn.click(); return true; }
+          if (btn) {
+            // scrollIntoView + full pointer event sequence — same fix as
+            // likeTimelinePosts. Plain .click() on a hidden window is
+            // silently swallowed; getBoundingClientRect returns zeros so
+            // Chrome's hit-testing before dispatching the click can no-op.
+            btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+            btn.click();
+            return true;
+          }
           return false;
         }).catch(() => false);
 
