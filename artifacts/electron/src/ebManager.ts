@@ -1054,6 +1054,9 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   // disabled.  These are the first thing bot-detection scripts check.
   try{var _dK=Object.keys(window).filter(function(k){return k.indexOf('$cdc_')===0||k.indexOf('$chrome_')===0||k==='__driver_evaluate'||k==='__webdriver_evaluate'||k==='__selenium_evaluate'||k==='__fxdriver_evaluate';});_dK.forEach(function(k){try{delete window[k];}catch(_e){}});}catch(_e){}
   try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
+  // Android Chrome 129 removed Java-plugin support — javaEnabled() must return false.
+  // Electron returns true by default, which is a hard desktop/bot signal.
+  try{navigator.javaEnabled=function(){return false;};}catch(e){}
   if(_M){
     try{Object.defineProperty(screen,"width",{get:function(){return _SW;}});}catch(e){}
     try{Object.defineProperty(screen,"height",{get:function(){return _SH;}});}catch(e){}
@@ -1074,15 +1077,30 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       lock:function(){return Promise.reject(new DOMException("Not supported","NotSupportedError"));},
       unlock:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
       Object.defineProperty(screen,"orientation",{get:function(){return _ori;},configurable:true});}catch(e){}
-    if(!(navigator).connection){
-      var _cn={effectiveType:"4g",downlink:_CDL,rtt:_CRT,saveData:false,type:_CT,onchange:null,
-        addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
-      setInterval(function(){
-        _cn.downlink=Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));
-        _cn.rtt=Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));
-      },25000+Math.random()*10000);
-      try{Object.defineProperty(navigator,"connection",{get:function(){return _cn;},configurable:true});}catch(e){}
-    }
+    // navigator.connection: Chrome always has an existing NetworkInformation object,
+    // so the old "only create if absent" block never ran — leaving the real type/
+    // downlinkMax/etc. values visible (shows as "?" in the leak-test Network card).
+    // Fix: always override properties on the existing object; only create a mock when
+    // there is genuinely no connection object (e.g. non-Chrome Electron builds).
+    try{
+      var _nc2=(navigator).connection;
+      if(_nc2){
+        try{Object.defineProperty(_nc2,'type',{get:function(){return _CT;},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'effectiveType',{get:function(){return '4g';},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'downlink',{get:function(){return Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'rtt',{get:function(){return Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'saveData',{get:function(){return false;},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'downlinkMax',{get:function(){return Infinity;},configurable:true});}catch(_ce){}
+      }else{
+        var _cn={effectiveType:"4g",downlink:_CDL,rtt:_CRT,saveData:false,type:_CT,downlinkMax:Infinity,onchange:null,
+          addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+        setInterval(function(){
+          _cn.downlink=Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));
+          _cn.rtt=Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));
+        },25000+Math.random()*10000);
+        try{Object.defineProperty(navigator,"connection",{get:function(){return _cn;},configurable:true});}catch(e){}
+      }
+    }catch(_ce){}
     try{var _oMM=window.matchMedia.bind(window);window.matchMedia=function(q){
       var _mql={matches:false,media:q,onchange:null,addListener:function(){},removeListener:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
       if(/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q))return Object.assign({},_mql,{matches:true});
@@ -1098,6 +1116,18 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     try{Object.defineProperty(window,'outerWidth',{get:function(){return _SW;},configurable:true});}catch(e){}
     try{Object.defineProperty(window,'outerHeight',{get:function(){return _SH;},configurable:true});}catch(e){}
     try{if(window.ontouchstart===undefined)window.ontouchstart=null;}catch(e){}
+    // Android Chrome has zero plugins and zero MIME types.
+    // The ghost-signup patch already does this, but the regular EB fp script was
+    // missing it — leaking Electron's real "PDF Viewer / Print" plugin entries
+    // (5 plugins, 2 MIME types visible in Bot Detection on the leak-test page).
+    try{
+      var _ep2=Object.create(PluginArray.prototype);
+      Object.defineProperty(_ep2,'length',{get:function(){return 0;},configurable:true});
+      Object.defineProperty(navigator,'plugins',{get:function(){return _ep2;},configurable:true});
+      var _em2=Object.create(MimeTypeArray.prototype);
+      Object.defineProperty(_em2,'length',{get:function(){return 0;},configurable:true});
+      Object.defineProperty(navigator,'mimeTypes',{get:function(){return _em2;},configurable:true});
+    }catch(e){}
   }else{
     try{Object.defineProperty(screen,"width",{get:function(){return 1920;}});}catch(e){}
     try{Object.defineProperty(screen,"height",{get:function(){return 1080;}});}catch(e){}
@@ -1135,8 +1165,14 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   // same minimal shape on both branches instead of contradicting the UA.
   try{if(!window.chrome)Object.defineProperty(window,'chrome',{value:{runtime:undefined},configurable:true,writable:true,enumerable:true});}catch(_e){}
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
-    if(_oq){navigator.permissions.query=function(p){
-      return p.name==="notifications"?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};}}catch(e){}
+    if(_oq){
+      // Expand to all permissions that should be "prompt" on a real Android Chrome session.
+      // Previously only "notifications" was overridden; clipboard-read/write, midi, and
+      // payment-handler were returning "granted" (Electron defaults), which is a bot signal.
+      var _PPROMPT=['notifications','clipboard-read','clipboard-write','midi','payment-handler','background-sync'];
+      navigator.permissions.query=function(p){
+        return _PPROMPT.indexOf(p.name)>=0?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};
+    }}catch(e){}
   try{
     if(window.WebGLRenderingContext){
       var _oE1=WebGLRenderingContext.prototype.getExtension;
@@ -1288,7 +1324,12 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     })();
     // Separate OffscreenCanvas for monospace baseline measurement — avoids
     // mutating this.font inside the hook which would be a detectable side-effect.
-    var _fpC=new OffscreenCanvas(400,40),_fpX=_fpC.getContext('2d');
+    // Try OffscreenCanvas first; fall back to a detached document canvas if the
+    // GPU sandbox returns null for getContext('2d') (observed in some Electron
+    // configurations — causes a "Illegal invocation" WARN on the leak-test page).
+    var _fpX=null;
+    try{var _fpC=new OffscreenCanvas(400,40);_fpX=_fpC.getContext('2d');}catch(_fe){}
+    if(!_fpX){try{var _fpD=document.createElement('canvas');_fpD.width=400;_fpD.height=40;_fpX=_fpD.getContext('2d');}catch(_fe2){}}
     var _oMT=CanvasRenderingContext2D.prototype.measureText;
     CanvasRenderingContext2D.prototype.measureText=function(text){
       var r=_oMT.call(this,text);
