@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.379",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed a ban-risk fingerprint gap where the browser reported WebGL 2 as unsupported even though every real Android Chrome 128 device supports it. Instagram's client-side checks probe this signal directly — a missing WebGL 2 is an immediate red flag that the device is fake. The browser now uses a software fallback renderer that guarantees WebGL 2 is always available regardless of the PC's GPU or drivers.",
+      },
+      {
+        category: "Fixed",
+        text: "The protection log now confirms your proxy and security settings every time a browser window is reopened (reused from a previous session), not just when it is freshly created. Previously, a reused window left a gap in the log — there was no proof of what was actually active during that session, making it impossible to rule out a proxy issue after a ban. The log now shows the same full confirmation for reused windows as it does for new ones.",
+      },
+    ],
+  },
+  {
     version: "1.1.376",
     date: "6 Jul 2026",
     items: [
