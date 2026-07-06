@@ -4,3 +4,4 @@
 - [Make a Post fix log](make-a-post-log.md) — chronological history of EB-driven posting flow bugs (clicks, visibility, Escape-key, recycling); read before touching that flow
 - Note (5 Jul 2026): EB IP/DNS leak history, EB throttling/multi-tab IPC history, and image upload fix history were merged back into `replit.md` at the user's request (full detail preferred over a trimmed index). Read those sections directly in `replit.md`, not the old topic files.
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
+- EB Mode-B silent-window fingerprint gap (fixed 6 Jul 2026) — full diagnosis/fix/rule lives in `replit.md` under "EB Mode-B Silent-Window Fingerprint Gap"; bulk-action temp windows lacked fingerprint spoof, likely ban cause

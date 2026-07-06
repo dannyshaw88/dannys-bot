@@ -305,6 +305,7 @@ class AutomationEngine {
     targetUsername: string,
     proxy?: { host?: string | null; port?: number | null; username?: string | null; password?: string | null; type?: string | null } | null,
     igApiCookies?: string | null,
+    fp?: { userAgent?: string | null; apiUA?: string | null; ebFingerprint?: unknown } | null,
   ): Promise<{ ok: boolean; status?: string; reason?: string }> {
     const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) {
@@ -319,10 +320,17 @@ class AutomationEngine {
         pass: proxy.password ?? undefined,
         type: proxy.type ?? "http",
       } : null;
+      // userAgent/apiUA/ebFingerprint are forwarded so a Mode-B temp window
+      // (created when the EB isn't already open) can present the SAME
+      // fingerprint Instagram already associated with this account's session —
+      // without them the window falls back to Electron's raw default identity.
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-follow`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ profileId, targetUsername, proxy: proxyPayload, igApiCookies: igApiCookies ?? null }),
+        body:    JSON.stringify({
+          profileId, targetUsername, proxy: proxyPayload, igApiCookies: igApiCookies ?? null,
+          userAgent: fp?.userAgent ?? undefined, apiUA: fp?.apiUA ?? undefined, ebFingerprint: fp?.ebFingerprint ?? undefined,
+        }),
         signal:  AbortSignal.timeout(90_000),
       });
       if (!r.ok) return { ok: false, status: "follow_blocked", reason: `EB IPC HTTP ${r.status}` };
@@ -337,6 +345,7 @@ class AutomationEngine {
     username: string,
     proxy?: { host?: string | null; port?: number | null; username?: string | null; password?: string | null; type?: string | null } | null,
     igApiCookies?: string | null,
+    fp?: { userAgent?: string | null; apiUA?: string | null; ebFingerprint?: unknown } | null,
   ): Promise<boolean> {
     const ebIpcPort = process.env.EB_IPC_PORT;
     if (!ebIpcPort) return false;
@@ -351,7 +360,10 @@ class AutomationEngine {
       const r = await fetch(`http://127.0.0.1:${ebIpcPort}/eb/silent-search`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ profileId, username, proxy: proxyPayload, igApiCookies: igApiCookies ?? null }),
+        body:    JSON.stringify({
+          profileId, username, proxy: proxyPayload, igApiCookies: igApiCookies ?? null,
+          userAgent: fp?.userAgent ?? undefined, apiUA: fp?.apiUA ?? undefined, ebFingerprint: fp?.ebFingerprint ?? undefined,
+        }),
         signal:  AbortSignal.timeout(60_000),
       });
       if (!r.ok) return false;
@@ -5881,7 +5893,9 @@ class AutomationEngine {
       if (searchQuery) {
         try {
           const profileProxy = { host: (profile as any).proxyHost, port: (profile as any).proxyPort, username: (profile as any).proxyUsername, password: (profile as any).proxyPassword, type: (profile as any).proxyType };
-          const browserOk = await this.searchUserViaBrowser(profile.id, searchQuery, profileProxy, (profile as any).igApiCookies ?? null);
+          const browserOk = await this.searchUserViaBrowser(profile.id, searchQuery, profileProxy, (profile as any).igApiCookies ?? null, {
+            userAgent: profile.userAgentEmbedded ?? null, apiUA: profile.userAgentApi ?? null, ebFingerprint: (profile as any).ebFingerprint ?? null,
+          });
           if (!browserOk) await client.searchUserByUsername(searchQuery);
           engineLog("INFO", `@${profile.username}: injected user search for "${searchQuery}" before first follow${browserOk ? " [browser]" : " [mobile API]"}`);
         } catch { /* non-critical */ }
@@ -6222,7 +6236,9 @@ class AutomationEngine {
         if (!suggestedFired && injectSearchEnabled && injectSearchMidSlots.has(followed)) {
           try {
             const profileProxy = { host: (profile as any).proxyHost, port: (profile as any).proxyPort, username: (profile as any).proxyUsername, password: (profile as any).proxyPassword, type: (profile as any).proxyType };
-            const browserOk = await this.searchUserViaBrowser(profile.id, user.username, profileProxy, (profile as any).igApiCookies ?? null);
+            const browserOk = await this.searchUserViaBrowser(profile.id, user.username, profileProxy, (profile as any).igApiCookies ?? null, {
+              userAgent: profile.userAgentEmbedded ?? null, apiUA: profile.userAgentApi ?? null, ebFingerprint: (profile as any).ebFingerprint ?? null,
+            });
             if (!browserOk) await client.searchUserByUsername(user.username);
             engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}${browserOk ? " [browser]" : " [mobile API]"}`);
           } catch { /* non-critical */ }
@@ -6276,7 +6292,9 @@ class AutomationEngine {
             host: (profile as any).proxyHost, port: (profile as any).proxyPort,
             username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
             type: (profile as any).proxyType,
-          }, (profile as any).igApiCookies ?? null);
+          }, (profile as any).igApiCookies ?? null, {
+            userAgent: profile.userAgentEmbedded ?? null, apiUA: profile.userAgentApi ?? null, ebFingerprint: (profile as any).ebFingerprint ?? null,
+          });
         } else {
           result = await client.followUser(user.pk, user.username, sourceLabel);
         }
@@ -6578,7 +6596,9 @@ class AutomationEngine {
                 host: (profile as any).proxyHost, port: (profile as any).proxyPort,
                 username: (profile as any).proxyUsername, password: (profile as any).proxyPassword,
                 type: (profile as any).proxyType,
-              }, (profile as any).igApiCookies ?? null);
+              }, (profile as any).igApiCookies ?? null, {
+                userAgent: profile.userAgentEmbedded ?? null, apiUA: profile.userAgentApi ?? null, ebFingerprint: (profile as any).ebFingerprint ?? null,
+              });
             } else {
               result = await client.followUser(user.pk, user.username, sourceLabel);
             }

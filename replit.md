@@ -235,6 +235,21 @@ Root cause confirmed v1.1.344, 5 Jul 2026 — do not re-investigate.
 ### Current enforced rule
 - Any `/eb/*` IPC handler in `ebManager.ts` that interacts with page content must resolve `getActiveWc(pid) ?? e.win.webContents` first. Never call `e.win.webContents` directly to read/write page content — once tabs are open, that's the shell/toolbar frame, not the active tab's `BrowserView` holding the real Instagram page.
 
+## EB Mode-B Silent-Window Fingerprint Gap — current rule (non-negotiable, fixed 6 Jul 2026)
+
+### Diagnosis
+- **Symptom**: accounts getting banned during bulk automated follow/unfollow/DM/post actions, even though the main EB window and proxy gate were both fully compliant with every other documented rule.
+- **Root cause**: the Mode-B "silent" temp windows — `sfTempWin` (`/eb/silent-follow`), `spTempWin` (`/eb/silent-post`), `ssTempWin` (`/eb/silent-search`) — are created on demand when the EB isn't already open for that profile, to run one bulk action headless/off-screen. Unlike the main EB window, these never received `WEBRTC_BLOCKER_JS` + `buildFingerprintScript()` injection or the account's real browser/API user-agent. They launched with Electron's raw default Chromium fingerprint and UA. To Instagram, this looks like "same sessionid, suddenly a completely different device" — a strong automated-abuse signal — which is very likely what triggered bans during bulk actions specifically (not manual EB sessions, which were always fully spoofed).
+- **Compounding gap**: `automationEngine.ts`'s `followUserViaBrowser()`/`searchUserViaBrowser()` never even had a parameter to pass the profile's `userAgentEmbedded`/`userAgentApi`/`ebFingerprint` down to `/eb/silent-follow` and `/eb/silent-search` — only `/eb/silent-post` (via the `/api/profiles/:id/eb-proxy` route) had access to fingerprint data at all.
+
+### Fix (v1.1.365+ era)
+- New helper `armSilentWindowAntiDetection(win, {browserUA, apiUA, ebFingerprint})` in `ebManager.ts` (defined right after `WEBRTC_BLOCKER_JS`) attaches the CDP debugger, injects `WEBRTC_BLOCKER_JS` + `buildFingerprintScript()` via `Page.addScriptToEvaluateOnNewDocument`, and sets UA via both `webContents.setUserAgent()` and `Emulation.setUserAgentOverride` — called on `sfTempWin`, `spTempWin`, and `ssTempWin` BEFORE their first `loadURL`.
+- `automationEngine.ts`: `followUserViaBrowser()` and `searchUserViaBrowser()` now accept an `fp` param (`{userAgent, apiUA, ebFingerprint}`) forwarded in the POST body to `/eb/silent-follow`/`/eb/silent-search`; all call sites pass `profile.userAgentEmbedded`/`profile.userAgentApi`/`(profile as any).ebFingerprint`.
+
+### Current enforced rule
+- Any NEW Mode-B (on-demand, off-screen) temp window created in `ebManager.ts` for a silent/background action MUST call `armSilentWindowAntiDetection()` with the profile's real `browserUA`/`apiUA`/`ebFingerprint` before its first navigation. A temp window that runs with Electron's default fingerprint while reusing an account's real `igApiCookies`/sessionid is a device-mismatch signal to Instagram, independent of whether the proxy/IP is correct.
+- Any caller in `automationEngine.ts` that invokes a `/eb/silent-*` IPC route for an existing profile must forward that profile's `userAgentEmbedded`/`userAgentApi`/`ebFingerprint` in the request body — never call a silent-action route with only `proxy`/`igApiCookies` and no fingerprint data.
+
 ## Image Upload (Make-a-Post / Repost) — current rules
 
 See `.agents/memory/make-a-post-log.md` for the EB-click-driven posting flow's bug history (clicks, visibility, Escape-key, recycling) — that log is separate from the image-upload API path below.

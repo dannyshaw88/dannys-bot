@@ -454,6 +454,61 @@ const WEBRTC_BLOCKER_JS = `(function () {
   try { Object.defineProperty(window, 'webkitRTCPeerConnection',  { get: function () { return B; }, configurable: true }); } catch {}
 })();`;
 
+// Applies the SAME anti-detection stack the main EB window gets (WebRTC block,
+// canvas/WebGL/audio fingerprint spoof, UA + Client-Hints override) to a
+// short-lived Mode-B silent-action window (silent-follow / silent-post /
+// silent-search). Without this, those windows fall back to Electron's raw
+// default fingerprint — a stark mismatch from the mobile identity Instagram
+// already associated with the account's sessionid during EB login. Instagram
+// treats "same session, suddenly different device" as a strong automated-abuse
+// signal, which is exactly the pattern bulk follow/unfollow/DM actions produce
+// if this is skipped. MUST be called before the window's first loadURL.
+async function armSilentWindowAntiDetection(
+  win: BrowserWindow,
+  opts: { browserUA?: string | null; apiUA?: string | null; ebFingerprint?: EbFingerprintLite | string | null },
+): Promise<void> {
+  try {
+    const browserUA = opts.browserUA ?? null;
+    const apiUA = opts.apiUA ?? null;
+    let fp: EbFingerprintLite | null = null;
+    try {
+      fp = typeof opts.ebFingerprint === "string" ? JSON.parse(opts.ebFingerprint) : (opts.ebFingerprint ?? null);
+    } catch { fp = null; }
+    const isMobile = !!browserUA && (browserUA.includes("Mobile") || isApiFormatUA(browserUA));
+    const chromeMajor = browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+    const buildInfo = getChromeBuildInfo(chromeMajor);
+    const fpScript = buildFingerprintScript(isMobile, apiUA, fp, buildInfo.full, buildInfo.grease, buildInfo.greaseVer, null);
+
+    try { win.webContents.debugger.attach("1.3"); } catch { /* already attached */ }
+    await Promise.race([
+      (async () => {
+        try {
+          await win.webContents.debugger.sendCommand("Page.enable");
+          await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
+          await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: fpScript });
+        } catch { /* CDP unavailable — fall back to setUserAgent below only */ }
+      })(),
+      new Promise<void>(r => setTimeout(r, 1500)),
+    ]);
+
+    if (browserUA) {
+      try { win.webContents.setUserAgent(browserUA); } catch {}
+      try {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
+            userAgent: browserUA,
+            acceptLanguage: "en-US,en;q=0.9",
+            platform: isMobile ? "Linux armv8l" : "Win32",
+          }),
+          new Promise<void>(r => setTimeout(r, 1500)),
+        ]);
+      } catch {}
+    }
+  } catch (err: any) {
+    console.warn(`[armSilentWindowAntiDetection] failed: ${err?.message ?? err}`);
+  }
+}
+
 // Mouse-hover suppressor injected into the ghost signup browser via CDP.
 // When the user moves their real PC mouse over the Electron window, Chrome
 // forwards native MouseEvent/PointerEvent hover events to the page. Instagram
@@ -4878,6 +4933,15 @@ export function startEbIpcServer(
             event.preventDefault();
             cb(bodyProxy?.user ?? "", bodyProxy?.pass ?? "");
           });
+          // Apply the account's real fingerprint/UA BEFORE the first navigation —
+          // otherwise this window runs with Electron's raw default fingerprint,
+          // a mismatch from the mobile identity Instagram associated with this
+          // account's sessionid at login (see armSilentWindowAntiDetection doc).
+          await armSilentWindowAntiDetection(sfTempWin, {
+            browserUA: (body.userAgent as string | undefined) ?? null,
+            apiUA: (body.apiUA as string | undefined) ?? null,
+            ebFingerprint: body.ebFingerprint ?? null,
+          });
           sfWin = sfTempWin;
           _ipcLog(`[eb:silent-follow:${pid}] mode B — created off-screen background window (partition=${sfPartition}) for @${targetUsername}`);
         }
@@ -5309,6 +5373,8 @@ export function startEbIpcServer(
           // Every account MUST route through its assigned proxy.  If the proxy
           // cannot be resolved or set we ABORT — never proceed on the home IP.
           let _spUA: string | undefined;
+          let _spApiUA: string | undefined;
+          let _spFingerprint: EbFingerprintLite | null = null;
           let _spProxyCreds: { user?: string; pass?: string } | null = null;
           try {
             const proxyRes = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${pid}/eb-proxy`);
@@ -5323,6 +5389,8 @@ export function startEbIpcServer(
             await spSes.clearHostResolverCache().catch(() => {});
             await spSes.setProxy(buildProxyConfig(pd.proxy));
             if (pd.userAgent) _spUA = pd.userAgent;
+            if (pd.apiUA) _spApiUA = pd.apiUA;
+            if (pd.ebFingerprint) _spFingerprint = pd.ebFingerprint;
           } catch (proxyErr: any) {
             _spSafeUnlink();
             _ipcLog(`[ERROR] [eb:silent-post:${pid}] mode B — proxy fetch/set failed; action aborted to prevent real IP leak: ${proxyErr?.message}`);
@@ -5348,6 +5416,15 @@ export function startEbIpcServer(
           spTempWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
             event.preventDefault();
             cb(_spProxyCreds?.user ?? "", _spProxyCreds?.pass ?? "");
+          });
+          // Apply the account's real fingerprint/UA BEFORE the first navigation —
+          // otherwise this window runs with Electron's raw default fingerprint,
+          // a mismatch from the mobile identity Instagram associated with this
+          // account's sessionid at login (see armSilentWindowAntiDetection doc).
+          await armSilentWindowAntiDetection(spTempWin, {
+            browserUA: _spUA ?? null,
+            apiUA: _spApiUA ?? null,
+            ebFingerprint: _spFingerprint ?? null,
           });
           if (_spUA) spTempWin.webContents.setUserAgent(_spUA);
           spWin = spTempWin;
@@ -6028,6 +6105,15 @@ export function startEbIpcServer(
           ssTempWin.webContents.on("login", (event: any, _rq: any, _auth: any, cb: any) => {
             event.preventDefault();
             cb(bodyProxy?.user ?? "", bodyProxy?.pass ?? "");
+          });
+          // Apply the account's real fingerprint/UA BEFORE the first navigation —
+          // otherwise this window runs with Electron's raw default fingerprint,
+          // a mismatch from the mobile identity Instagram associated with this
+          // account's sessionid at login (see armSilentWindowAntiDetection doc).
+          await armSilentWindowAntiDetection(ssTempWin, {
+            browserUA: (body.userAgent as string | undefined) ?? null,
+            apiUA: (body.apiUA as string | undefined) ?? null,
+            ebFingerprint: body.ebFingerprint ?? null,
           });
           ssWin = ssTempWin;
           _ipcLog(`[eb:silent-search:${pid}] mode B — created off-screen window for "${ssUsername}"`);
