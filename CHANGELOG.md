@@ -4,6 +4,57 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.368] — 2026-07-06
+
+### Fixed — Font fingerprint WARN: "Illegal invocation" root cause + javaEnabled override
+
+**Font Fingerprint card still showing WARN after v1.1.367:**
+
+The v1.1.367 fix added a `document.createElement('canvas')` fallback for when `OffscreenCanvas.getContext('2d')` returns `null`. That fixed one failure mode, but the real-world failure was different: `OffscreenCanvas.getContext('2d')` was **succeeding** — returning a valid `OffscreenCanvasRenderingContext2D` — which is a **completely separate class** from `CanvasRenderingContext2D` in Blink's implementation. They share no prototype inheritance. The hook stored `_oMT = CanvasRenderingContext2D.prototype.measureText` and then called `_oMT.call(_fpX, text)` with an `OffscreenCanvasRenderingContext2D` as `this`. Chrome throws "Illegal invocation" because the native method's internal [[Call]] validates that `this` belongs to `CanvasRenderingContext2D`.
+
+The null-guard `if(!_fpX)return r` was irrelevant — `_fpX` was **not null**, it was the wrong type.
+
+**Root-cause fix — `_fpMT = _fpX.measureText.bind(_fpX)` pattern:**
+
+Rather than calling the hooked prototype method on `_fpX`, we now capture the native `measureText` bound directly to `_fpX` **before** the hook replaces the prototype method:
+
+```js
+var _fpX = null;
+try { var _fpC = new OffscreenCanvas(400,40); _fpX = _fpC.getContext('2d'); } catch(_fe) {}
+if (!_fpX) { try { var _fpD = document.createElement('canvas'); ... _fpX = _fpD.getContext('2d'); } catch(_fe2) {} }
+
+// Capture BEFORE hook install — works for any context type
+var _fpMT = _fpX ? _fpX.measureText.bind(_fpX) : null;
+var _oMT = CanvasRenderingContext2D.prototype.measureText; // ← hook installs next
+CanvasRenderingContext2D.prototype.measureText = function(text) {
+  ...
+  if (!_fpX || !_fpMT) return r;
+  _fpX.font = _sz + ' monospace';
+  var _bw = _fpMT(text).width;  // ← _fpMT, not _oMT.call(_fpX, text)
+  ...
+};
+```
+
+`_fpMT(text)` dispatches through `_fpX`'s own prototype chain regardless of type — `OffscreenCanvasRenderingContext2D.prototype.measureText` for OffscreenCanvas contexts, `CanvasRenderingContext2D.prototype.measureText` (pre-hook, bound) for document canvas contexts. No cross-prototype call, no "Illegal invocation".
+
+**`navigator.javaEnabled()` still returning `true` after v1.1.367:**
+
+The previous fix used direct property assignment:
+```js
+navigator.javaEnabled = function() { return false; };
+```
+This silently fails — the Navigator instance is sealed/frozen in Chromium and `javaEnabled` is non-writable on the instance. The assignment has no effect.
+
+Fix: patch the prototype directly:
+```js
+Object.defineProperty(Navigator.prototype, 'javaEnabled', {
+  value: function() { return false; }, writable: true, configurable: true
+});
+```
+This correctly overrides the method for all `navigator.javaEnabled()` calls.
+
+---
+
 ## [1.1.367] — 2026-07-06
 
 ### Fixed — Leak-test page: async cards frozen in "Fetching…" / "Running…" forever
