@@ -4,6 +4,22 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.372] — 2026-07-06
+
+### Fixed — Desktop (non-mobile) accounts leaked the real host machine's Client Hints, identical across every account and mismatched with the declared UA
+
+**Symptom:** found via a side-by-side leak-test comparison of two accounts with completely different declared browser UAs (one Mac, one Linux) — both reported byte-for-byte identical `Sec-CH-UA-Platform` ("Windows"), `Architecture` ("arm"), `Platform-Version` ("15.0.0"), and `Bitness` values, despite neither account's UA string claiming to be Windows at all.
+
+**Root cause:** every desktop (non-mobile) `Emulation.setUserAgentOverride` CDP call in `ebManager.ts` (main EB window open, Mode-B silent-window arming, and the login-flow override) only built a full `userAgentMetadata` object for the **mobile** branch. For desktop UAs, no `userAgentMetadata` was ever passed, so Chromium fell back to computing `navigator.userAgentData` / `Sec-CH-UA-*` from the **real host machine** it's running on — not from the account's assigned browser identity. Two consequences:
+1. Every desktop-UA account running on the same physical machine reported identical Client Hints regardless of proxy/canvas/audio/UA uniqueness — a hard cross-account correlation signal.
+2. Those leaked values didn't even match the account's own declared UA (UA said Macintosh/Linux, Client Hints said Windows) — a classic automation tell, since real browsers always keep Client Hints in sync with the UA string.
+
+**Fix:** added `buildDesktopUAMetadata()`, which derives `platform`/`navigatorPlatform`/`architecture`/`platformVersion`/`bitness` from the account's declared `browserUA` string (macOS UA → `platform: "macOS"`, realistic macOS version + arm/x86 architecture; Linux UA → `platform: "Linux"`; Windows UA → `platform: "Windows"` with a Win10/Win11-realistic platform version), varied deterministically per-account via a hash of the UA string itself so different accounts don't collide either. Applied at all three desktop CDP override call sites.
+
+**Note for existing accounts:** this only affects the Client Hints computed at EB-open time going forward — it does not retroactively change canvas/audio noise already stored for existing profiles from before the v1.1.370 entropy fix. If a leak test still shows two older accounts sharing an identical canvas/audio hash, use **Reset Device IDs** on those specific accounts to regenerate a fresh, full-entropy fingerprint.
+
+---
+
 ## [1.1.371] — 2026-07-06
 
 ### Fixed — Leak-test "Canvas Protection" / added "Audio Protection" always showed a hardcoded label, never reflected real state

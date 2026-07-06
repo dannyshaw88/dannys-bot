@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.372",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed a bug where desktop browser-only accounts (Mac/Linux/Windows) never got their device-type information sent consistently to Instagram — every one of them was leaking your PC's actual info instead, so all your desktop accounts looked identical to Instagram on this signal, and it didn't even match the identity they were supposed to have. This is now fixed so it matches the identity properly and each account looks different from the others, exactly like it should.",
+      },
+    ],
+  },
+  {
     version: "1.1.371",
     date: "6 Jul 2026",
     items: [

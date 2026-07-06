@@ -379,6 +379,73 @@ function getChromeBuildInfo(majorVersion: string): { full: string; grease: strin
   return CHROME_BUILD_INFO[majorVersion] ?? { full: `${majorVersion}.0.6778.260`, grease: " Not A;Brand", greaseVer: "8" };
 }
 
+// ── Desktop Client-Hints metadata resolver ────────────────────────────────────
+//
+// BUG THIS FIXES (found 6 Jul 2026 via side-by-side leak-test comparison):
+// Every desktop (non-mobile) CDP Emulation.setUserAgentOverride call in this
+// file omitted `userAgentMetadata` entirely — only the mobile branch built it.
+// With no override, Chromium computes navigator.userAgentData / Sec-CH-UA-*
+// from the REAL HOST MACHINE, not from the account's declared browserUA. Result:
+//   1. Every desktop-UA account on the same physical machine reported IDENTICAL
+//      Sec-CH-UA-Platform / Architecture / Platform-Version / Bitness — a hard
+//      cross-account correlation signal, regardless of how unique the rest of
+//      the fingerprint (canvas/audio/UA string) was.
+//   2. Those leaked real-host values were also internally inconsistent with the
+//      account's own declared UA (e.g. UA says "Macintosh"/"X11; Linux" while
+//      Client Hints said "Windows") — a textbook automation tell, since real
+//      browsers always keep Sec-CH-UA-Platform in sync with the UA string.
+// Fix: derive full Client-Hints metadata from the declared browserUA string so
+// platform/architecture/platformVersion/bitness always match what the UA
+// claims, and vary deterministically (hashed off the UA string itself, which
+// already differs per profile) so different accounts don't collide either.
+function _strHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function buildDesktopUAMetadata(browserUA: string): {
+  platform: string;
+  navigatorPlatform: string;
+  architecture: string;
+  platformVersion: string;
+  bitness: string;
+} {
+  const h = _strHash(browserUA);
+  if (browserUA.includes("Macintosh")) {
+    const macVersions = ["13.6.7", "14.4.1", "14.6.1", "15.0.1", "15.1.0"];
+    const archOptions = ["arm", "x86"];
+    return {
+      platform: "macOS",
+      navigatorPlatform: "MacIntel",
+      architecture: archOptions[h % archOptions.length],
+      platformVersion: macVersions[h % macVersions.length],
+      bitness: "64",
+    };
+  }
+  if (browserUA.includes("Linux") && !browserUA.includes("Android")) {
+    return {
+      platform: "Linux",
+      navigatorPlatform: "Linux x86_64",
+      architecture: "x86",
+      platformVersion: "",
+      bitness: "64",
+    };
+  }
+  // Windows (default) — Windows NT 10.0 in the UA string covers both Win10 and
+  // Win11; Sec-CH-UA-Platform-Version is how real Chrome actually distinguishes
+  // them, so vary it per-account instead of leaking whatever build the host
+  // machine happens to run.
+  const winVersions = ["10.0.0", "13.0.0", "15.0.0", "15.0.0", "19.0.0"];
+  return {
+    platform: "Windows",
+    navigatorPlatform: "Win32",
+    architecture: "x86",
+    platformVersion: winVersions[h % winVersions.length],
+    bitness: "64",
+  };
+}
+
 // ── Mobile device profile resolver ────────────────────────────────────────────
 //
 // Returns the CSS-pixel screen dimensions and DPR that the JS fingerprint script
@@ -494,11 +561,34 @@ async function armSilentWindowAntiDetection(
     if (browserUA) {
       try { win.webContents.setUserAgent(browserUA); } catch {}
       try {
+        const desktopMeta = isMobile ? null : buildDesktopUAMetadata(browserUA);
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
             userAgent: browserUA,
             acceptLanguage: "en-US,en;q=0.9",
-            platform: isMobile ? "Linux armv8l" : "Win32",
+            platform: isMobile ? "Linux armv8l" : (desktopMeta!.navigatorPlatform),
+            ...(desktopMeta ? {
+              userAgentMetadata: {
+                brands: [
+                  { brand: buildInfo.grease,  version: buildInfo.greaseVer },
+                  { brand: "Chromium",         version: chromeMajor },
+                  { brand: "Google Chrome",    version: chromeMajor },
+                ],
+                fullVersionList: [
+                  { brand: buildInfo.grease,  version: buildInfo.greaseVer + ".0.0.0" },
+                  { brand: "Chromium",         version: buildInfo.full },
+                  { brand: "Google Chrome",    version: buildInfo.full },
+                ],
+                fullVersion: buildInfo.full,
+                platform: desktopMeta.platform,
+                platformVersion: desktopMeta.platformVersion,
+                architecture: desktopMeta.architecture,
+                model: "",
+                mobile: false,
+                bitness: desktopMeta.bitness,
+                wow64: false,
+              },
+            } : {}),
           }),
           new Promise<void>(r => setTimeout(r, 1500)),
         ]);
@@ -1752,10 +1842,11 @@ async function doAutoLogin(
       const _androidVer = userAgent.match(/Android\s+(\d+)/i)?.[1] ?? "15";
       // Extract device model from UA string for Sec-CH-UA-Model.
       const _model = userAgent.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? "";
+      const _desktopMeta = _isMob ? null : buildDesktopUAMetadata(userAgent);
       await wc.debugger.sendCommand("Emulation.setUserAgentOverride", {
         userAgent,
         acceptLanguage: "en-US,en;q=0.9",
-        platform: _isMob ? "Linux armv8l" : "Win32",
+        platform: _isMob ? "Linux armv8l" : _desktopMeta!.navigatorPlatform,
         userAgentMetadata: {
           brands: [
             { brand: _buildInfo.grease,  version: _buildInfo.greaseVer },
@@ -1768,12 +1859,12 @@ async function doAutoLogin(
             { brand: "Google Chrome",    version: _buildInfo.full },
           ],
           fullVersion: _buildInfo.full,
-          platform: _isMob ? "Android" : "Windows",
-          platformVersion: _isMob ? _androidVer : "10.0.0",
-          architecture: _isMob ? "arm" : "x86",
+          platform: _isMob ? "Android" : _desktopMeta!.platform,
+          platformVersion: _isMob ? _androidVer : _desktopMeta!.platformVersion,
+          architecture: _isMob ? "arm" : _desktopMeta!.architecture,
           model: _isMob ? _model : "",
           mobile: _isMob,
-          bitness: _isMob ? "64" : "",
+          bitness: _isMob ? "64" : _desktopMeta!.bitness,
           wow64: false,
         },
       });
@@ -2814,32 +2905,31 @@ export async function openEbWindow(opts: {
   _ebCrashLog(profileId, `STEP-18: UA override — browserUA=${_browserUA ? _browserUA.slice(0,60) : "none"} mobile=${_fpIsMobile}`);
   if (_browserUA) {
     try {
+      const _desktopMeta2 = _fpIsMobile ? null : buildDesktopUAMetadata(_browserUA);
       await Promise.race([
         win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
           userAgent: _browserUA,
           acceptLanguage: "en-US,en;q=0.9",
-          platform: _fpIsMobile ? "Linux armv8l" : "Win32",
-          ...(_fpIsMobile ? {
-            userAgentMetadata: {
-              brands: [
-                { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
-                { brand: "Chromium",            version: _fpChromeMajor },
-                { brand: "Google Chrome",       version: _fpChromeMajor },
-              ],
-              fullVersionList: [
-                { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },
-                { brand: "Chromium",            version: _fpBuildInfo.full },
-                { brand: "Google Chrome",       version: _fpBuildInfo.full },
-              ],
-              platform:        "Android",
-              platformVersion: _androidVer,
-              architecture:    "arm",
-              model:           _deviceModel,
-              mobile:          true,
-              bitness:         "64",
-              wow64:           false,
-            },
-          } : {}),
+          platform: _fpIsMobile ? "Linux armv8l" : _desktopMeta2!.navigatorPlatform,
+          userAgentMetadata: {
+            brands: [
+              { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
+              { brand: "Chromium",            version: _fpChromeMajor },
+              { brand: "Google Chrome",       version: _fpChromeMajor },
+            ],
+            fullVersionList: [
+              { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },
+              { brand: "Chromium",            version: _fpBuildInfo.full },
+              { brand: "Google Chrome",       version: _fpBuildInfo.full },
+            ],
+            platform:        _fpIsMobile ? "Android" : _desktopMeta2!.platform,
+            platformVersion: _fpIsMobile ? _androidVer : _desktopMeta2!.platformVersion,
+            architecture:    _fpIsMobile ? "arm" : _desktopMeta2!.architecture,
+            model:           _fpIsMobile ? _deviceModel : "",
+            mobile:          _fpIsMobile,
+            bitness:         _fpIsMobile ? "64" : _desktopMeta2!.bitness,
+            wow64:           false,
+          },
         }),
         new Promise<void>(r => setTimeout(r, 1500)),
       ]);

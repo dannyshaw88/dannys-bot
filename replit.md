@@ -263,6 +263,19 @@ Root cause confirmed v1.1.344, 5 Jul 2026 — do not re-investigate.
 ### Current enforced rule
 - Do NOT reintroduce a desktop-UA (or any other identity-swapping) override for regular EB windows. An account's assigned browser/API user-agent and fingerprint must be presented identically everywhere that account's session cookies are used — human session, Mode-B silent windows, mobile API — with no exceptions for UI convenience.
 
+## Desktop Client-Hints Leak — FIXED (6 Jul 2026)
+
+### Diagnosis
+- **Symptom**: comparing two accounts' leak-test screenshots side by side — one with a Mac UA, one with a Linux UA — showed byte-for-byte identical `Sec-CH-UA-Platform` ("Windows"), `Architecture` ("arm"), and `Platform-Version` ("15.0.0") values on BOTH, despite neither account's UA string claiming to be Windows.
+- **Root cause**: every desktop (non-mobile) `Emulation.setUserAgentOverride` CDP call in `ebManager.ts` (main `openEbWindow()`, `armSilentWindowAntiDetection()` for Mode-B temp windows, and `doAutoLogin()`'s login-flow override) only built a full `userAgentMetadata` object on the mobile branch. Desktop UAs got no metadata override at all, so Chromium computed `navigator.userAgentData`/`Sec-CH-UA-*` from the real host machine instead of the account's assigned identity — identical across every desktop-UA account on the same machine, and inconsistent with each account's own declared UA string (a real browser always keeps Client Hints in sync with its UA).
+
+### Fix
+- Added `buildDesktopUAMetadata(browserUA)` in `ebManager.ts`: derives `platform`/`navigatorPlatform`/`architecture`/`platformVersion`/`bitness` from the declared UA string (Mac → `macOS` + realistic macOS version; Linux → `Linux`; Windows → `Windows` + a Win10/Win11-realistic platform version), varied per-account via a hash of the UA string so different accounts don't collide with each other either. Applied at all three desktop CDP override call sites.
+
+### Current enforced rule
+- Any CDP `Emulation.setUserAgentOverride` call for a **desktop** (non-mobile) UA must pass a full `userAgentMetadata` object derived from that account's own declared `browserUA` via `buildDesktopUAMetadata()` — never omit it and let Chromium fall back to the real host machine's Client Hints. Only the mobile branch is exempt because it already builds full metadata from the Android UA.
+- This does not retroactively fix canvas/audio noise already stored on profiles created before the v1.1.370 entropy fix — those need **Reset Device IDs** to get a fresh full-entropy fingerprint if a leak test shows a collision on those specific signals.
+
 ## Leak-Test Page Hang — FIXED (6 Jul 2026)
 
 ### Diagnosis
@@ -377,7 +390,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.1.371**
+75. Current version: **v1.1.372**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.1.360` → `1.1.361`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
