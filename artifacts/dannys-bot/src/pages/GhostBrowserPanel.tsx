@@ -375,24 +375,11 @@ function calcStepProgress(
   log: string[],
   stepName: string,
   settings: {
-    websitesMin: number; websitesMax: number; websitesCount: number;
     youtubeMin: number; youtubeMax: number;
   },
 ): number | null {
   if (log.length === 0) return null;
   const joined = "\n" + log.join("\n") + "\n";
-
-  if (stepName === "Visiting Sites") {
-    if (joined.includes("✅ Website warm-up complete")) return 100;
-    // The server relay emits the actual site count it picked — use that as the total.
-    const startMatch = joined.match(/Warm-up: visiting (\d+) website/);
-    const total = startMatch
-      ? parseInt(startMatch[1], 10)
-      : Math.max(1, Math.ceil((settings.websitesMin + settings.websitesMax) / 2));
-    const done = log.filter(l => l.includes("🌐 Warm-up: navigating to")).length;
-    if (done === 0 || total === 0) return null;
-    return Math.min(99, Math.round((done / total) * 100));
-  }
 
   if (stepName === "YouTube Warm-up") {
     if (joined.includes("✅ YouTube warm-up complete")) return 100;
@@ -483,17 +470,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const [imapPort, setImapPort]     = useState(() => _ls.imapPort    ?? "993");
   const [imapSecure, setImapSecure] = useState(() => (_ls.imapSecure ?? "true") === "true");
 
-  // Website warmup fields
-  const [websitesToVisit, setWebsitesToVisit]       = useState(() => _ls.websitesToVisit ?? "");
-  const [websitesMin, setWebsitesMin]               = useState(() => _ls.websitesMin ?? "1");
-  const [websitesMax, setWebsitesMax]               = useState(() => _ls.websitesMax ?? "3");
-  const [internalLinksMin, setInternalLinksMin]     = useState(() => _ls.internalLinksMin ?? "2");
-  const [internalLinksMax, setInternalLinksMax]     = useState(() => _ls.internalLinksMax ?? "5");
-  const [timeOnSiteMin, setTimeOnSiteMin]           = useState(() => _ls.timeOnSiteMin ?? "1");
-  const [timeOnSiteMax, setTimeOnSiteMax]           = useState(() => _ls.timeOnSiteMax ?? "3");
-  const [timeOnLinksMin, setTimeOnLinksMin]         = useState(() => _ls.timeOnLinksMin ?? "1");
-  const [timeOnLinksMax, setTimeOnLinksMax]         = useState(() => _ls.timeOnLinksMax ?? "2");
-
   // YouTube warm-up fields
   const [youtubeVideosMin, setYoutubeVideosMin]     = useState(() => _ls.youtubeVideosMin ?? "1");
   const [youtubeVideosMax, setYoutubeVideosMax]     = useState(() => _ls.youtubeVideosMax ?? "3");
@@ -550,10 +526,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         usernameSpin, password, dob, bioSpin,
         emailAddr, emailPass, imapHost, imapPort,
         imapSecure: String(imapSecure),
-        websitesToVisit, websitesMin, websitesMax,
-        internalLinksMin, internalLinksMax,
-        timeOnSiteMin, timeOnSiteMax,
-        timeOnLinksMin, timeOnLinksMax,
         youtubeVideosMin, youtubeVideosMax,
         youtubeWatchMin, youtubeWatchMax,
         skipWarmup: String(skipWarmup),
@@ -567,9 +539,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   }, [
     usernameSpin, password, dob, bioSpin,
     emailAddr, emailPass, imapHost, imapPort, imapSecure,
-    websitesToVisit, websitesMin, websitesMax,
-    internalLinksMin, internalLinksMax,
-    timeOnSiteMin, timeOnSiteMax, timeOnLinksMin, timeOnLinksMax,
     youtubeVideosMin, youtubeVideosMax, youtubeWatchMin, youtubeWatchMax,
     skipWarmup, skipYoutubePercentMin, skipYoutubePercentMax,
     runEveryMin, runEveryMax, execAfterRunsMin, execAfterRunsMax,
@@ -736,11 +705,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     proxySelection.kind !== "manual" ||
     (manualHost.trim() !== "" && /^\d+$/.test(manualPort) && parseInt(manualPort, 10) > 0 && parseInt(manualPort, 10) <= 65535);
 
-  const firstWebsiteUrl = (): string | undefined => {
-    const urls = websitesToVisit.split("\n").map(s => s.trim()).filter(s => s.startsWith("http"));
-    return urls[0];
-  };
-
   const typeIntoField = (text: string) => {
     fetch(`/api/signup/browser/input?slot=${slot}`, {
       method: "POST",
@@ -766,7 +730,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         proxyPassword: resolvedProxy?.password,
         proxyType: resolvedProxy?.proxyType,
         fingerprint,
-        initialUrl: firstWebsiteUrl(),
       }),
     }).catch(() => {});
     setBrowserState("open");
@@ -898,7 +861,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             proxyPassword: resolvedProxy?.password,
             proxyType: resolvedProxy?.proxyType,
             fingerprint,
-            initialUrl: firstWebsiteUrl(),
           }),
         });
       } catch {
@@ -919,11 +881,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     setCodePending(false);
     setFetchCodeMsg("");
 
-    const websiteUrls = websitesToVisit
-      .split("\n")
-      .map(s => s.trim())
-      .filter(s => s.startsWith("http"));
-
     const signupPayload = {
       slot,
       email: emailAddr.trim(),
@@ -931,15 +888,15 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       password: password.trim(),
       dob: dob.trim(),
       skipWarmup,
-      websitesToVisit: skipWarmup ? [] : websiteUrls,
-      websitesMin: skipWarmup ? 0 : (parseInt(websitesMin, 10) || 1),
-      websitesMax: skipWarmup ? 0 : (parseInt(websitesMax, 10) || 3),
-      internalLinksMin: skipWarmup ? 0 : (parseInt(internalLinksMin, 10) || 2),
-      internalLinksMax: skipWarmup ? 0 : (parseInt(internalLinksMax, 10) || 5),
-      timeOnSiteMin: skipWarmup ? 0 : (parseInt(timeOnSiteMin, 10) || 1),
-      timeOnSiteMax: skipWarmup ? 0 : (parseInt(timeOnSiteMax, 10) || 3),
-      timeOnLinksMin: skipWarmup ? 0 : (parseInt(timeOnLinksMin, 10) || 1),
-      timeOnLinksMax: skipWarmup ? 0 : (parseInt(timeOnLinksMax, 10) || 2),
+      websitesToVisit: [],
+      websitesMin: 0,
+      websitesMax: 0,
+      internalLinksMin: 0,
+      internalLinksMax: 0,
+      timeOnSiteMin: 0,
+      timeOnSiteMax: 0,
+      timeOnLinksMin: 0,
+      timeOnLinksMax: 0,
       youtubeVideosMin: skipWarmup ? 0 : (parseInt(youtubeVideosMin, 10) || 1),
       youtubeVideosMax: skipWarmup ? 0 : (parseInt(youtubeVideosMax, 10) || 3),
       youtubeWatchMin: skipWarmup ? 0 : (parseInt(youtubeWatchMin, 10) || 2),
@@ -1165,32 +1122,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
           {!skipWarmup && (
             <>
-          {/* ── ROW 2: Website warm-up URL list ── */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Warm-up Websites</p>
-            </div>
-            <textarea
-              rows={5}
-              className="flex w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-              placeholder={"https://example.com\nhttps://news.ycombinator.com"}
-              value={websitesToVisit}
-              onChange={e => setWebsitesToVisit(e.target.value)}
-              spellCheck={false}
-            />
-          </div>
-
-          {/* ── ROW 3: Website warm-up XY fields ── */}
-          <div className="desktop-card p-2.5">
-            <div className="flex gap-4 flex-wrap">
-              <XYField label="Websites to Visit" min={websitesMin} max={websitesMax} onMin={setWebsitesMin} onMax={setWebsitesMax} />
-              <XYField label="Internal Links per Site" min={internalLinksMin} max={internalLinksMax} onMin={setInternalLinksMin} onMax={setInternalLinksMax} />
-              <XYField label="Time Spent on Website (minutes)" min={timeOnSiteMin} max={timeOnSiteMax} onMin={setTimeOnSiteMin} onMax={setTimeOnSiteMax} />
-              <XYField label="Spent Time on Internal Links (minutes)" min={timeOnLinksMin} max={timeOnLinksMax} onMin={setTimeOnLinksMin} onMax={setTimeOnLinksMax} />
-            </div>
-          </div>
-
           {/* ── ROW 3b: YouTube warm-up ── */}
           <div className="desktop-card p-2.5 flex items-center">
             <div className="flex gap-4 flex-wrap items-center w-full">
@@ -1411,17 +1342,13 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           {(signupRunning || signupLog.length > 0) && (() => {
             const steps = skipWarmup
               ? ["Instagram Signup"]
-              : ["Visiting Sites", "YouTube Warm-up", "Instagram Signup"];
+              : ["YouTube Warm-up", "Instagram Signup"];
             const s = signupStatus.toLowerCase();
             const cur = skipWarmup ? 0
-              : s.includes("youtube") ? 1
-              : (s.includes("instagram") || s.includes("signup") || s.includes("creating") || s.includes("registration")) ? 2
+              : s.includes("youtube") ? 0
+              : (s.includes("instagram") || s.includes("signup") || s.includes("creating") || s.includes("registration")) ? 1
               : 0;
-            const websitesCount = websitesToVisit.split("\n").filter(u => u.trim().startsWith("http")).length;
             const progressSettings = {
-              websitesMin: parseInt(websitesMin, 10) || 1,
-              websitesMax: parseInt(websitesMax, 10) || 3,
-              websitesCount,
               youtubeMin: parseInt(youtubeVideosMin, 10) || 0,
               youtubeMax: parseInt(youtubeVideosMax, 10) || 0,
             };

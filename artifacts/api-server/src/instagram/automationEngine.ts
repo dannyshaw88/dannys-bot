@@ -5579,6 +5579,36 @@ class AutomationEngine {
       );
     }
 
+    // ── Web Browsing — visits external websites to build genuine browser history ─
+    enqueue("webBrowsing",
+      s.webBrowsingEnabled === true,
+      "webBrowsingSkipMin", "webBrowsingSkipMax",
+      "webBrowsingOrderMin", "webBrowsingOrderMax",
+      async () => {
+        const cbSettings = {
+          sites: s.webBrowsingSites ?? "",
+          sitesMin: Number(s.webBrowsingSitesMin ?? 3),
+          sitesMax: Number(s.webBrowsingSitesMax ?? 5),
+          visitRandom: s.webBrowsingVisitRandom !== false,
+          internalLinksMin: Number(s.webBrowsingInternalLinksMin ?? 2),
+          internalLinksMax: Number(s.webBrowsingInternalLinksMax ?? 5),
+          scrollDelayMin: Number(s.webBrowsingTimeOnSiteMin ?? 1),
+          scrollDelayMax: Number(s.webBrowsingTimeOnSiteMax ?? 3),
+          internalScrollDelayMin: Number(s.webBrowsingTimeOnLinksMin ?? 1),
+          internalScrollDelayMax: Number(s.webBrowsingTimeOnLinksMax ?? 2),
+        };
+        try {
+          await this.runCookieBakerSession(profile, cbSettings, { stop: { stopped: false } });
+          this.logAction(profile.id, tool.id, "web_browsing", "", "", "", "ok", "Web browsing session completed");
+          this.logGhostBrowserCall(profile.id, profile.username, "web_browsing", "Web browsing session completed");
+          console.log(`[engine] @${profile.username}: 🌐 web browsing session complete`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: web browsing error: ${e?.message}`);
+          this.logAction(profile.id, tool.id, "web_browsing", "", "", "", "fail", e?.message ?? "web browsing error");
+        }
+      },
+    );
+
     // Sort descending by order value (higher order = runs first — ties keep insertion order)
     queue.sort((a, b) => b.order - a.order);
 

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen, Bookmark,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft, Trash2,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft, Trash2, Globe,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -48,6 +48,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [spinSyntaxMsg, setSpinSyntaxMsg] = useState<string | null>(null);
   const [copyOpen, _setCopyOpen] = useState(false);
+  const [webBrowsingTab, setWebBrowsingTab] = useState<"settings"|"log">("settings");
   const _copyOpen = copyOpenProp ?? copyOpen;
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [repostingNow, setRepostingNow] = useState(false);
@@ -214,6 +215,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       { key: "hs_unfollowStopBlock", label: "Stop if Blocked", description: "Pause unfollow tool for a set time when Instagram blocks an unfollow action", subOptions: [
         { key: "uf_h_stopEnabled", label: "Enabled",              settingKeys: ["unfollow:stopOnBlockEnabled"] },
         { key: "uf_h_stopMinutes", label: "Stop duration", settingKeys: ["unfollow:stopOnBlockMinutes"] },
+      ]},
+    ]},
+    { label: "Web Browsing Settings", options: [
+      { key: "hs_webBrowsing", label: "Web Browsing", description: "Website browsing during Instagram sessions — run before, during, or after actions", subOptions: [
+        { key: "wb_enabled",     label: "Enabled",                           settingKeys: ["webBrowsingEnabled"] },
+        { key: "wb_order",       label: "Execution order",                   settingKeys: ["webBrowsingOrderMin","webBrowsingOrderMax"] },
+        { key: "wb_skip",        label: "Skip chance %",                     settingKeys: ["webBrowsingSkipMin","webBrowsingSkipMax"] },
+        { key: "wb_visitRandom", label: "Visit websites at random",          settingKeys: ["webBrowsingVisitRandom"] },
+        { key: "wb_sites",       label: "Website URLs (tick to copy URLs to other accounts)", settingKeys: ["webBrowsingSites"] },
+        { key: "wb_sitesRange",  label: "Sites to visit range",              settingKeys: ["webBrowsingSitesMin","webBrowsingSitesMax"] },
+        { key: "wb_links",       label: "Internal links range",              settingKeys: ["webBrowsingInternalLinksMin","webBrowsingInternalLinksMax"] },
+        { key: "wb_timeOnSite",  label: "Time on site (min) range",         settingKeys: ["webBrowsingTimeOnSiteMin","webBrowsingTimeOnSiteMax"] },
+        { key: "wb_timeOnLinks", label: "Time on internal links (min) range",settingKeys: ["webBrowsingTimeOnLinksMin","webBrowsingTimeOnLinksMax"] },
       ]},
     ]},
     { label: "Contact Tool Settings", options: [
@@ -597,6 +611,21 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelLikePercentMax: 0,
       repostMin: 1,
       repostMax: 1,
+      webBrowsingEnabled: false,
+      webBrowsingOrderMin: 0,
+      webBrowsingOrderMax: 0,
+      webBrowsingSkipMin: 0,
+      webBrowsingSkipMax: 0,
+      webBrowsingVisitRandom: true,
+      webBrowsingSites: "",
+      webBrowsingSitesMin: 3,
+      webBrowsingSitesMax: 5,
+      webBrowsingInternalLinksMin: 2,
+      webBrowsingInternalLinksMax: 5,
+      webBrowsingTimeOnSiteMin: 1,
+      webBrowsingTimeOnSiteMax: 3,
+      webBrowsingTimeOnLinksMin: 1,
+      webBrowsingTimeOnLinksMax: 2,
     };
     return { ...def, ...(tool.settings as Record<string, any> || {}) };
   });
@@ -669,6 +698,15 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       reelWatchCountMin: 1, reelWatchCountMax: 3,
       reelLikePercentMin: 0, reelLikePercentMax: 0,
       repostMin: 1, repostMax: 1,
+      webBrowsingEnabled: false,
+      webBrowsingOrderMin: 0, webBrowsingOrderMax: 0,
+      webBrowsingSkipMin: 0, webBrowsingSkipMax: 0,
+      webBrowsingVisitRandom: true,
+      webBrowsingSites: "",
+      webBrowsingSitesMin: 3, webBrowsingSitesMax: 5,
+      webBrowsingInternalLinksMin: 2, webBrowsingInternalLinksMax: 5,
+      webBrowsingTimeOnSiteMin: 1, webBrowsingTimeOnSiteMax: 3,
+      webBrowsingTimeOnLinksMin: 1, webBrowsingTimeOnLinksMax: 2,
     };
     setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
   }, [tool.id]);
@@ -730,6 +768,54 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
     refetchInterval: 15000,
   });
+
+  const { data: cbActivity } = useQuery<Array<{ sessionAt: number; sites: Array<{ url: string; visitedAt: number; scrollTimeSec: number; linksVisited: string[] }>; error?: string }>>({
+    queryKey: [`/api/profiles/${tool.profileId}/cookie-baker/activity`],
+    refetchInterval: 30000,
+  });
+
+  const handleSplitWebsites = async () => {
+    const allUrls = ((settings as any).webBrowsingSites ?? "")
+      .split("\n")
+      .map((u: string) => u.trim())
+      .filter((u: string) => u.startsWith("http"));
+    if (allUrls.length === 0) {
+      toast({ title: "No URLs", description: "Add website URLs to this account first, then split.", variant: "destructive" });
+      return;
+    }
+    // Include current profile in the distribution
+    const profileIds = [...new Set([tool.profileId, ...allProfiles.map(p => p.id)])];
+    if (profileIds.length === 0) return;
+    const chunkSize = Math.max(1, Math.floor(allUrls.length / profileIds.length));
+    try {
+      await Promise.all(profileIds.map(async (profileId, i) => {
+        const start = i * chunkSize;
+        const end = i === profileIds.length - 1 ? allUrls.length : start + chunkSize;
+        const chunk = allUrls.slice(start, end);
+        if (chunk.length === 0) return;
+        const chunkStr = chunk.join("\n");
+        if (profileId === tool.profileId) {
+          setSettings((prev: any) => ({ ...prev, webBrowsingSites: chunkStr }));
+          return; // will be saved automatically by the settings watcher
+        }
+        const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+        if (!res.ok) return;
+        const tools: { id: number; type: string; settings: any }[] = await res.json();
+        const hsTool = tools.find(t => t.type === "human_sessions");
+        if (!hsTool) return;
+        await fetch(`/api/tools/${hsTool.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ settings: { ...(hsTool.settings ?? {}), webBrowsingSites: chunkStr } }),
+          credentials: "include",
+        });
+      }));
+      toast({ title: "URLs split", description: `Distributed ${allUrls.length} URLs across ${profileIds.length} account${profileIds.length !== 1 ? "s" : ""} — no duplicates.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    } catch {
+      toast({ title: "Split failed", description: "Could not distribute URLs to all accounts.", variant: "destructive" });
+    }
+  };
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
   const engineStatus = useProfileEngineStatus(tool.profileId);
   const nextRunStatus: { label: string; executing: boolean } | null = (() => {
@@ -2094,6 +2180,203 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           </div>
         </div>
       )}
+
+      {/* ── Web Browsing (LAST — visits external sites to build browser history) ── */}
+      <div className="mt-[25px]">
+        <div className="border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center border-b border-border">
+            <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 w-[37.5%] shrink-0">
+              <Globe className="w-5 h-5 text-white shrink-0" />
+              <h4 className="font-bold text-[19px] shrink-0 text-white">Web Browsing</h4>
+              <input
+                type="checkbox"
+                id="webBrowsingEnabled"
+                checked={!!settings.webBrowsingEnabled}
+                onChange={(e) => setSettings({ ...settings, webBrowsingEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-white cursor-pointer"
+              />
+              <label htmlFor="webBrowsingEnabled" className="text-sm font-medium cursor-pointer select-none text-white">
+                {settings.webBrowsingEnabled ? "ACTIVE" : "STOPPED"}
+              </label>
+            </div>
+            <div className="ml-auto flex flex-col gap-1.5 shrink-0 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Order %</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).webBrowsingOrderMin ?? 0}
+                  onChange={(v) => setSettings({ ...settings, webBrowsingOrderMin: v } as any)}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).webBrowsingOrderMax ?? 0}
+                  onChange={(v) => setSettings({ ...settings, webBrowsingOrderMax: v } as any)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).webBrowsingSkipMin ?? 0}
+                  onChange={(v) => setSettings({ ...settings, webBrowsingSkipMin: v } as any)}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                  value={(settings as any).webBrowsingSkipMax ?? 0}
+                  onChange={(v) => setSettings({ ...settings, webBrowsingSkipMax: v } as any)}
+                />
+              </div>
+            </div>
+          </div>
+          {/* Tab bar */}
+          <div className="flex border-b border-border bg-muted/30">
+            <button
+              onClick={() => setWebBrowsingTab("settings")}
+              className={`px-4 py-2 text-xs font-semibold transition-colors ${webBrowsingTab === "settings" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Settings
+            </button>
+            <button
+              onClick={() => setWebBrowsingTab("log")}
+              className={`px-4 py-2 text-xs font-semibold transition-colors ${webBrowsingTab === "log" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Sites Visited
+            </button>
+          </div>
+          {webBrowsingTab === "settings" ? (
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="webBrowsingVisitRandom"
+                    checked={(settings as any).webBrowsingVisitRandom !== false}
+                    onChange={(e) => setSettings({ ...settings, webBrowsingVisitRandom: e.target.checked } as any)}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor="webBrowsingVisitRandom" className="text-sm cursor-pointer select-none">Visit websites at random</label>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto text-xs gap-1.5 border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
+                  onClick={handleSplitWebsites}
+                  title="Distribute all URLs evenly across every account — no duplicates"
+                >
+                  <Repeat2 className="w-3.5 h-3.5" />
+                  Split across accounts
+                </Button>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Website URLs (one per line)</Label>
+                <Textarea
+                  rows={6}
+                  placeholder={"https://example.com\nhttps://news.ycombinator.com\nhttps://reddit.com"}
+                  value={(settings as any).webBrowsingSites ?? ""}
+                  onChange={(e) => setSettings({ ...settings, webBrowsingSites: e.target.value } as any)}
+                  className="text-xs font-mono resize-none"
+                  spellCheck={false}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {((settings as any).webBrowsingSites ?? "").split("\n").filter((u: string) => u.trim().startsWith("http")).length} URL{((settings as any).webBrowsingSites ?? "").split("\n").filter((u: string) => u.trim().startsWith("http")).length !== 1 ? "s" : ""} · "Split across accounts" divides these evenly with no duplicates
+                </p>
+              </div>
+              <div className="flex gap-4 flex-wrap items-center">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Sites to Visit</Label>
+                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingSitesMin ?? 3}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingSitesMin: v } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingSitesMax ?? 5}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingSitesMax: v } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Internal Links</Label>
+                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingInternalLinksMin ?? 2}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingInternalLinksMin: v } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingInternalLinksMax ?? 5}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingInternalLinksMax: v } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Time on Site (min)</Label>
+                  <NumField min={0} max={60} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingTimeOnSiteMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingTimeOnSiteMin: v } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <NumField min={0} max={60} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingTimeOnSiteMax ?? 3}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingTimeOnSiteMax: v } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Time on Links (min)</Label>
+                  <NumField min={0} max={60} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingTimeOnLinksMin ?? 1}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingTimeOnLinksMin: v } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <NumField min={0} max={60} className="w-14 h-7 text-xs"
+                    value={(settings as any).webBrowsingTimeOnLinksMax ?? 2}
+                    onChange={(v) => setSettings({ ...settings, webBrowsingTimeOnLinksMax: v } as any)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4">
+              {!cbActivity || cbActivity.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No web browsing sessions recorded yet.</p>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {cbActivity.map((session, si) => (
+                    <div key={si} className="border border-border rounded-lg p-3 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                        <span className="text-[11px] font-semibold text-foreground">
+                          {new Date(session.sessionAt).toLocaleString()}
+                        </span>
+                        {session.error && (
+                          <span className="text-[10px] text-destructive ml-auto">⚠ {session.error}</span>
+                        )}
+                      </div>
+                      {session.sites.map((site, siteIdx) => (
+                        <div key={siteIdx} className="pl-4 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <ExternalLink className="w-3 h-3 text-blue-500 shrink-0" />
+                            <a href={site.url} target="_blank" rel="noopener noreferrer"
+                               className="text-[11px] text-blue-500 hover:underline truncate max-w-xs">{site.url}</a>
+                            <span className="text-[10px] text-muted-foreground ml-auto">{site.scrollTimeSec}s</span>
+                          </div>
+                          {site.linksVisited.length > 0 && (
+                            <div className="pl-4 space-y-0.5">
+                              {site.linksVisited.map((link, li) => (
+                                <div key={li} className="flex items-center gap-1">
+                                  <span className="text-[10px] text-muted-foreground">↳</span>
+                                  <a href={link} target="_blank" rel="noopener noreferrer"
+                                     className="text-[10px] text-muted-foreground hover:text-foreground hover:underline truncate max-w-xs">{link}</a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {session.sites.length === 0 && !session.error && (
+                        <p className="text-[10px] text-muted-foreground pl-4">No sites visited in this session.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <CopySettingsDialog
         key={_copyOpen ? "open" : "closed"}
