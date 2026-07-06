@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.377] — 2026-07-06
+
+### Fixed
+
+#### Human Session Tool (Disable API mode) — "Suggested for you" page no longer prevents Explore from firing
+
+**Root cause:** When an account follows no users, Instagram's home feed shows a full-page "Suggested for you" layout. These suggestion cards are wrapped in `<article>` elements — the same selector used by `waitFor('article')` — so the feed-detection check returned `feedHadPosts = true` even when no real posts were present. The Explore-page block (`followSuggestedUsersIfEmptyEnabled`) never fired because it depends on `feedHadPosts = false`.
+
+A second problem: a defensive post-scroll re-check at the end of the viewTimelineFeed block used `document.querySelector('article')` to recover from slow SPA renders. Since suggestion cards also match `article`, this re-check would silently restore `feedHadPosts = true` even after the suggestions page was correctly identified, cancelling the fix.
+
+**Fix (two coordinated parts):**
+1. **Detection** — after `waitFor('article')` succeeds, a new `page.evaluate()` check runs to distinguish real posts from suggestions. The check is intentionally conservative: it only triggers when (a) ALL article elements on the page lack a `<time>` child (real feed posts always contain a timestamp; suggestion cards never do) AND (b) a "Suggested for you" heading is found as a leaf text node. A mixed feed — one that contains both real posts and a suggestions section — will always have at least one `<time>`-containing article, so the check never false-positives there. If detected: `feedHadPosts = false`, `_ebSuggestionsPageDetected = true`.
+2. **Re-check guard** — the post-scroll defensive re-check is now skipped when `_ebSuggestionsPageDetected = true`, preventing suggestion-card `<article>` elements from undoing the detection. The re-check selector is also tightened to `article time` so it only counts articles with a real timestamp, not bare structural wrappers.
+
+---
+
+#### Human Session Tool (Disable API mode) — Execution Order fields now work
+
+**Root cause:** `runBrowserOnlyHumanSession` (the code path taken when **Disable API** is enabled on an account) was a flat sequential `if`-block. Every action always ran in the same hard-coded order regardless of the OrderMin/OrderMax values configured in the Human Session Tool settings. The order queue that the standard (API) path uses in `runHumanSessionTools` had never been ported to the browser-only path.
+
+**Fix:** `runBrowserOnlyHumanSession` now uses the same queue pattern as `runHumanSessionTools`:
+- `EbQueueEntry` type + `ebQueue` array + `ebEnqueue` helper that reads each action's `OrderMin`/`OrderMax` setting and assigns a random sort value in that range.
+- All ten major actions are enqueued: `humanJitter`, `viewTimelineFeed`, `viewReels`, `checkTimelineStories`, `checkDm`, `likeTimelinePosts`, `follow`, `unfollow`, `contact`, `repost`.
+- `ebQueue.sort((a, b) => b.order - a.order)` then executes them in descending order (higher order = runs first) — identical to the non-EB queue convention.
+- The resolved execution order is logged at session start: `[EB-only] session order: viewTimeline → likeTimeline → …`
+- `saveTimelinePosts`, `shareTimelinePosts`, and `explorePage` remain sequential after the queue — they have no order keys and depend on `feedCount` / `feedHadPosts` set by `viewTimelineFeed`.
+
+---
+
 ## [1.1.374] — 2026-07-06
 
 ### Fixed

@@ -2819,6 +2819,19 @@ class AutomationEngine {
         return false;
       };
 
+      // ── Execution-order queue — mirrors the non-EB (API) path's queue pattern ─────
+      // Each action is pushed with a random order score derived from its OrderMin/Max
+      // settings. After all enqueues, sort descending (higher order = runs first) and
+      // execute sequentially. saveTimelinePosts / shareTimelinePosts / explorePage are
+      // NOT queued — they depend on feedCount / feedHadPosts set by viewTimelineFeed
+      // and must always run after the queue finishes.
+      type EbQueueEntry = { key: string; run: () => Promise<void>; order: number };
+      const ebQueue: EbQueueEntry[] = [];
+      const ebEnqueue = (key: string, orderMinKey: string, orderMaxKey: string, fn: () => Promise<void>) => {
+        const order = randInt(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
+        ebQueue.push({ key, run: fn, order });
+      };
+
       // ── Human Jitter — home + own profile audit (respects skip chance) ──────
       // Uses the same humanSessionNotUsedMin/Max skip chance as the full jitter
       // enqueue block below. If the skip roll fires, neither the audit nav nor
@@ -2828,7 +2841,8 @@ class AutomationEngine {
       console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skip settings — humanSessionNotUsedMin=${JSON.stringify(s.humanSessionNotUsedMin)}, humanSessionNotUsedMax=${JSON.stringify(s.humanSessionNotUsedMax)}`);
       const _jitterSkipped = this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax");
       console.log(`[engine] @${profile.username}: [EB-only] Human Jitter _jitterSkipped=${_jitterSkipped}`);
-      if (s.humanSessionEnabled === true && !_jitterSkipped && !state.stop.stopped) {
+      ebEnqueue("humanJitter", "humanSessionOrderMin", "humanSessionOrderMax", async () => {
+      if (s.humanSessionEnabled === true && !_jitterSkipped) {
         try {
           await nav("https://www.instagram.com/", "home (jitter)");
           await sleep(actionDelay());
@@ -2843,18 +2857,25 @@ class AutomationEngine {
       } else if (_jitterSkipped) {
         console.log(`[engine] @${profile.username}: [EB-only] Human Jitter skipped (chance roll)`);
       }
+      });
 
       // Tracks whether the home feed actually served posts this session.
       // Defaults to true so the Explore page is NOT visited when viewTimelineFeed
       // is disabled (i.e. we never checked the feed, so we can't say it was empty).
       let feedHadPosts = true;
+      // _ebSuggestionsPageDetected: set true inside viewTimelineFeed when the
+      // home feed shows "Suggested for you" cards instead of real posts.
+      // Guards the post-scroll re-check so it can't wrongly restore feedHadPosts=true
+      // from suggestion card <article> elements (which have no <time> child).
+      let _ebSuggestionsPageDetected = false;
       // Hoisted so the saveTimelinePosts block below (a sibling, not nested,
       // block) can compute an expectation-based save count from the number of
       // posts actually scrolled this session, instead of guessing.
       let feedCount = 0;
 
       // ── viewTimelineFeed — navigate to home, scroll through posts ─────────
-      if (s.viewTimelineFeedEnabled === true && !state.stop.stopped) {
+      ebEnqueue("viewTimelineFeed", "viewTimelineFeedOrderMin", "viewTimelineFeedOrderMax", async () => {
+      if (s.viewTimelineFeedEnabled === true) {
         try {
           feedCount = randInt(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
           if (page.url() !== "https://www.instagram.com/" && !page.url().startsWith("https://www.instagram.com/?")) {
@@ -2909,6 +2930,34 @@ class AutomationEngine {
               challengeErr.__ebChallenge = true;
               challengeErr.__ebChallengeStatus = _challengeStatus;
               throw challengeErr;
+            }
+          }
+
+          // ── Suggestions-page detection ────────────────────────────────────────
+          // When the account follows no one, Instagram shows "Suggested for you"
+          // cards inside <article> elements — but those articles never contain a
+          // <time> element (real feed posts always do). waitFor('article') returns
+          // true even on the suggestions page, so we do a second check here and
+          // treat the page as empty (feedHadPosts=false) when we detect it.
+          if (feedHadPosts) {
+            const _isSuggestionsPage: boolean = await page.evaluate(() => {
+              // Structural check (primary): real feed posts always have a <time>
+              // element (post timestamp); suggestion cards never do. A MIXED feed
+              // (real posts + a "Suggested for you" section) will have at least
+              // one article WITH <time>, so this check won't false-positive there —
+              // it only fires when ALL articles lack a timestamp.
+              const articles = Array.from(document.querySelectorAll('article'));
+              if (articles.length === 0) return false;
+              if (!articles.every(a => !a.querySelector('time'))) return false;
+              // Corroborate with a heading check (exact leaf-text match) so we
+              // don't misclassify unusual non-feed pages that happen to lack timestamps.
+              const els = Array.from(document.querySelectorAll('span, div, h1, h2, h3'));
+              return els.some(el => el.children.length === 0 && (el.textContent ?? '').trim().toLowerCase() === 'suggested for you');
+            }).catch(() => false);
+            if (_isSuggestionsPage) {
+              console.log(`[engine] @${profile.username}: [EB-only] 📰 "Suggested for you" page detected — treating feed as empty (0 real posts)`);
+              feedHadPosts = false;
+              _ebSuggestionsPageDetected = true;
             }
           }
 
@@ -3016,8 +3065,11 @@ class AutomationEngine {
           // Re-check for `article` elements now that we've finished scrolling
           // (which itself gives the SPA more time to render) before trusting
           // a false result.
-          if (!feedHadPosts) {
-            const recheck: boolean = await page.evaluate(() => !!(document.querySelector('article') || document.querySelector('div[data-media-id]'))).catch(() => false);
+          // Re-check: skip when suggestions were detected — the page has <article>
+          // elements (suggestion cards) that would falsely restore feedHadPosts=true.
+          // Tightened selector to `article time` — only real feed posts have a timestamp.
+          if (!feedHadPosts && !_ebSuggestionsPageDetected) {
+            const recheck: boolean = await page.evaluate(() => !!(document.querySelector('article time') || document.querySelector('div[data-media-id]'))).catch(() => false);
             if (recheck) {
               console.log(`[engine] @${profile.username}: [EB-only] 📰 feed re-check found posts after all — not empty`);
               feedHadPosts = true;
@@ -3048,6 +3100,7 @@ class AutomationEngine {
           this.logGhostBrowserCall(profile.id, profile.username, "view_timeline_feed", e?.message ?? "error", true);
         }
       }
+      });
 
       // ── View Reels — independent tool, navigate to /reels/ and watch N reels ──
       // Uses reelWatchCountMin/Max, reelWatchPercentMin/Max. reelWatchChanceMin/Max
@@ -3056,7 +3109,8 @@ class AutomationEngine {
       // There is no mobile-API reel call available in browser-only mode, so we
       // navigate to instagram.com/reels/, wait for the video to load, dwell for
       // reelViewPct% of an estimated reel duration, then press ArrowDown to advance.
-      if (s.viewReelsEnabled === true && !state.stop.stopped) {
+      ebEnqueue("viewReels", "viewReelsOrderMin", "viewReelsOrderMax", async () => {
+      if (s.viewReelsEnabled === true) {
         // Normalize reel chance bounds to [0,100], swap if inverted.
         const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
         const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
@@ -3180,9 +3234,11 @@ class AutomationEngine {
           }
         }
       }
+      });
 
       // ── checkTimelineStories — click story circles then navigate through ──
-      if (s.checkTimelineStoriesEnabled === true && !state.stop.stopped) {
+      ebEnqueue("checkTimelineStories", "checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax", async () => {
+      if (s.checkTimelineStoriesEnabled === true) {
         try {
           const storyCount = randInt(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
           // Story circles live in the tray at the top of the home feed, always
@@ -3329,9 +3385,11 @@ class AutomationEngine {
           this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", e?.message ?? "error", true);
         }
       }
+      });
 
       // ── checkDm — open inbox, click threads ───────────────────────────────
-      if (s.checkDmEnabled === true && !state.stop.stopped) {
+      ebEnqueue("checkDm", "checkDmOrderMin", "checkDmOrderMax", async () => {
+      if (s.checkDmEnabled === true) {
         try {
           const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
@@ -3382,9 +3440,11 @@ class AutomationEngine {
           this.logGhostBrowserCall(profile.id, profile.username, "check_dm", e?.message ?? "error", true);
         }
       }
+      });
 
       // ── likeTimelinePosts — scroll feed, click Like (heart) buttons ───────
-      if (s.likeTimelinePostsEnabled === true && !state.stop.stopped) {
+      ebEnqueue("likeTimelinePosts", "likeTimelinePostsOrderMin", "likeTimelinePostsOrderMax", async () => {
+      if (s.likeTimelinePostsEnabled === true) {
         const likeCount = randInt(Number(s.likeTimelinePostsMin ?? 0), Number(s.likeTimelinePostsMax ?? 0));
         if (likeCount > 0) {
           try {
@@ -3435,6 +3495,155 @@ class AutomationEngine {
             this.logGhostBrowserCall(profile.id, profile.username, "like_timeline_post", e?.message ?? "error", true);
           }
         }
+      }
+      });
+
+      // ── follow / unfollow / contact / repost — queued for order-controlled execution ──
+      ebEnqueue("follow", "followOrderMin", "followOrderMax", async () => {
+        const _followTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "follow");
+        if (_followTool?.enabled === true) {
+          await this.runBrowserFollowSession(profile, _followTool, page, actionDelay, state).catch((e: any) => {
+            console.warn(`[engine] @${profile.username}: [EB-only] follow session error: ${e?.message}`);
+          });
+        }
+      });
+      ebEnqueue("unfollow", "unfollowOrderMin", "unfollowOrderMax", async () => {
+        const _unfollowTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "unfollow");
+        if (_unfollowTool?.enabled === true) {
+          await this.runBrowserUnfollowSession(profile, _unfollowTool, page, actionDelay, state).catch((e: any) => {
+            console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
+          });
+        }
+      });
+      ebEnqueue("contact", "contactOrderMin", "contactOrderMax", async () => {
+        const _contactTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "contact");
+        if (_contactTool?.enabled === true) {
+          await this.runBrowserContactSession(profile, _contactTool, page, actionDelay, state).catch((e: any) => {
+            console.warn(`[engine] @${profile.username}: [EB-only] contact session error: ${e?.message}`);
+          });
+        }
+      });
+      ebEnqueue("repost", "repostOrderMin", "repostOrderMax", async () => {
+        const repostSourceUsernameEb = String(s.repostSourceUsername ?? "").trim();
+        const repostLocalFolderPathEb = String(s.repostLocalFolderPath ?? "").trim();
+        const repostLocalFolderEnabledEb = !!(s.repostLocalFolderEnabled && repostLocalFolderPathEb);
+        const repostUsernameSourceActiveEb = !s.repostDisableUsernameSource && !!repostSourceUsernameEb;
+        const repostEnabledEb = !!(s.repostEnabled && (repostUsernameSourceActiveEb || repostLocalFolderEnabledEb));
+
+        if (!repostEnabledEb) {
+          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (disabled)`);
+        } else if (this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
+          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (chance roll)`);
+        } else if (!ebIpcPort) {
+          console.log(`[engine] @${profile.username}: [EB-only] repost skipped — browser-post requires the desktop app (not available in dev/Replit)`);
+        } else {
+          try {
+            if (repostLocalFolderEnabledEb) {
+              const entries = await fsPromises.readdir(repostLocalFolderPathEb);
+              const mediaFiles = entries.filter(f => isImageFile(nodePath.extname(f).toLowerCase()));
+              if (mediaFiles.length === 0) {
+                console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder repost — no image files found in "${repostLocalFolderPathEb}"`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "No image files found in local folder (video is not supported in Disable API mode)");
+              } else {
+                const targetCount = randInt(
+                  Math.max(1, Number(s.repostMin ?? 1)),
+                  Math.max(1, Number(s.repostMax ?? 1)),
+                );
+                const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+                const captionTemplate = String(s.repostCaptionText ?? "").trim();
+                const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
+                const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
+                const makeUnique = !!(s as any).repostMakeUnique;
+                const pickRandom = !!(s as any).repostLocalFolderRandom;
+
+                let filteredFiles = mediaFiles;
+                if (noRepeat) {
+                  const existingReposted = await storage.getRepostedPostsByProfile(profile.id, 10000);
+                  const postedLocalSet = new Set(
+                    existingReposted.filter(r => r.mediaId.startsWith("local:")).map(r => r.mediaId.slice(6)),
+                  );
+                  filteredFiles = mediaFiles.filter(f => !postedLocalSet.has(f));
+                  if (filteredFiles.length === 0) {
+                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 local folder — all media already reposted (noRepeat=true)`);
+                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "All local folder media already reposted (Do not repost same image is ON)");
+                    filteredFiles = [];
+                  }
+                }
+
+                const ordered = pickRandom
+                  ? [...filteredFiles].sort(() => Math.random() - 0.5)
+                  : [...filteredFiles].sort((a, b) => a.localeCompare(b));
+                const picked = ordered.slice(0, targetCount);
+
+                for (const fileName of picked) {
+                  if (state.stop.stopped) break;
+                  const filePath = nodePath.join(repostLocalFolderPathEb, fileName);
+                  let caption = captionTemplate ? captionTemplate.replace(/\{own_username\}/g, profile.username) : "";
+                  try {
+                    const rawBuffer = await fsPromises.readFile(filePath);
+                    let alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
+                    if (makeUnique) {
+                      try {
+                        alteredBuffer = await makeUniqueImage(alteredBuffer);
+                      } catch (uqErr: any) {
+                        console.warn(`[engine] @${profile.username}: [EB-only] makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
+                      }
+                    }
+                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost upload starting — file="${fileName}" level=${level} captionLen=${caption.length}`);
+                    const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
+                    if (bpResult.ok) {
+                      console.log(`[engine] @${profile.username}: [EB-only] 🔁 uploaded image from local folder: ${fileName}`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "ok", "Make a Post Successful");
+                      this.logGhostBrowserCall(profile.id, profile.username, "make_a_post", `EB: uploaded ${fileName}`);
+                      await storage.incrementStat(profile.id, "repost");
+                      storage.createInstagramApiCall({
+                        profileId: profile.id, username: profile.username,
+                        operationName: "PostMedia", date: new Date().toISOString(),
+                        source: "browser", transport: "browser", isError: false,
+                      }).catch(() => {});
+                      if (noRepeat) {
+                        await storage.createRepostedPost({
+                          profileId: profile.id, toolId: tool.id,
+                          sourceUsername: repostLocalFolderPathEb,
+                          mediaId: `local:${fileName}`, shortcode: "", caption: "",
+                          thumbnailUrl: "", repostedAt: new Date().toISOString(), postedShortcode: "",
+                        }).catch(() => {});
+                      }
+                      if (deleteAfterUpload) {
+                        try { await fsPromises.unlink(filePath); } catch (e: any) {
+                          console.warn(`[engine] @${profile.username}: [EB-only] could not delete ${filePath}: ${e?.message}`);
+                        }
+                      }
+                    } else {
+                      console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
+                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", "Make a Post Failed");
+                      break;
+                    }
+                  } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: [EB-only] repost error for ${fileName}: ${e?.message}`);
+                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", e?.message ?? "unknown error");
+                    break;
+                  }
+                }
+              }
+            } else if (repostUsernameSourceActiveEb) {
+              console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost skipped — @username source requires API access (not available in Disable API mode). Use "Source: Local PC Folder" instead.`);
+              this.logAction(profile.id, tool.id, "repost", repostSourceUsernameEb, "", "", "skip", "Username source repost is not supported in Disable API mode — use Local PC Folder instead");
+            }
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: [EB-only] repost session error: ${e?.message}`);
+            this.logAction(profile.id, tool.id, "repost", "", "", "", "fail", e?.message ?? "unknown error");
+          }
+        }
+      });
+
+      // ── Execute the ordered queue ─────────────────────────────────────────────
+      // Higher order = runs first (same convention as the non-EB Human Session queue).
+      ebQueue.sort((a, b) => b.order - a.order);
+      console.log(`[engine] @${profile.username}: [EB-only] session order: ${ebQueue.map(e => e.key).join(' → ')}`);
+      for (const entry of ebQueue) {
+        if (state.stop.stopped) break;
+        await entry.run();
       }
 
       // ── saveTimelinePosts — scroll feed, click the bookmark/Save icon ─────
@@ -3554,166 +3763,9 @@ class AutomationEngine {
         }
       }
 
-      // ── followTool / unfollowTool / contactTool — delegate to browser sub-sessions ──
-      if (!state.stop.stopped) {
-        const hsTools = await storage.getToolsByProfile(profile.id);
+      // follow / unfollow / contact: moved to ebQueue above (executed in order-sorted sequence)
 
-        const followTool = hsTools.find(t => t.type === "follow");
-        if (followTool?.enabled === true && !state.stop.stopped) {
-          const execFollowTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "follow");
-          if (execFollowTool?.enabled) {
-            await this.runBrowserFollowSession(profile, execFollowTool, page, actionDelay, state).catch((e: any) => {
-              console.warn(`[engine] @${profile.username}: [EB-only] follow session error: ${e?.message}`);
-            });
-          }
-        }
-
-        const unfollowTool = hsTools.find(t => t.type === "unfollow");
-        if (unfollowTool?.enabled === true && !state.stop.stopped) {
-          const execUnfollowTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "unfollow");
-          if (execUnfollowTool?.enabled) {
-            await this.runBrowserUnfollowSession(profile, execUnfollowTool, page, actionDelay, state).catch((e: any) => {
-              console.warn(`[engine] @${profile.username}: [EB-only] unfollow session error: ${e?.message}`);
-            });
-          }
-        }
-
-        const contactTool = hsTools.find(t => t.type === "contact");
-        if (contactTool?.enabled === true && !state.stop.stopped) {
-          const execContactTool = (await storage.getToolsByProfile(profile.id)).find(t => t.type === "contact");
-          if (execContactTool?.enabled) {
-            await this.runBrowserContactSession(profile, execContactTool, page, actionDelay, state).catch((e: any) => {
-              console.warn(`[engine] @${profile.username}: [EB-only] contact session error: ${e?.message}`);
-            });
-          }
-        }
-      }
-
-      // ── Make a Post (repost) — Disable API mode ──────────────────────────────
-      // Disable API accounts never reached this feature before: this session
-      // only ran follow/unfollow/contact via the browser and returned. Since
-      // there is no mobile-API client in this mode, uploading must go through
-      // postPhotoViaBrowser (EB IPC /eb/silent-post), the same helper used for
-      // "Do Actions Via Browser" accounts in the API path.
-      if (!state.stop.stopped) {
-        const repostSourceUsernameEb = String(s.repostSourceUsername ?? "").trim();
-        const repostLocalFolderPathEb = String(s.repostLocalFolderPath ?? "").trim();
-        const repostLocalFolderEnabledEb = !!(s.repostLocalFolderEnabled && repostLocalFolderPathEb);
-        const repostUsernameSourceActiveEb = !s.repostDisableUsernameSource && !!repostSourceUsernameEb;
-        const repostEnabledEb = !!(s.repostEnabled && (repostUsernameSourceActiveEb || repostLocalFolderEnabledEb));
-
-        if (!repostEnabledEb) {
-          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (disabled)`);
-        } else if (this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
-          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (chance roll)`);
-        } else if (!ebIpcPort) {
-          console.log(`[engine] @${profile.username}: [EB-only] repost skipped — browser-post requires the desktop app (not available in dev/Replit)`);
-        } else {
-          try {
-            if (repostLocalFolderEnabledEb) {
-              const entries = await fsPromises.readdir(repostLocalFolderPathEb);
-              const mediaFiles = entries.filter(f => isImageFile(nodePath.extname(f).toLowerCase()));
-              if (mediaFiles.length === 0) {
-                console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder repost — no image files found in "${repostLocalFolderPathEb}"`);
-                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "No image files found in local folder (video is not supported in Disable API mode)");
-              } else {
-                const targetCount = randInt(
-                  Math.max(1, Number(s.repostMin ?? 1)),
-                  Math.max(1, Number(s.repostMax ?? 1)),
-                );
-                const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
-                const captionTemplate = String(s.repostCaptionText ?? "").trim();
-                const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
-                const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
-                const makeUnique = !!(s as any).repostMakeUnique;
-                const pickRandom = !!(s as any).repostLocalFolderRandom;
-
-                let filteredFiles = mediaFiles;
-                if (noRepeat) {
-                  const existingReposted = await storage.getRepostedPostsByProfile(profile.id, 10000);
-                  const postedLocalSet = new Set(
-                    existingReposted.filter(r => r.mediaId.startsWith("local:")).map(r => r.mediaId.slice(6)),
-                  );
-                  filteredFiles = mediaFiles.filter(f => !postedLocalSet.has(f));
-                  if (filteredFiles.length === 0) {
-                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 local folder — all media already reposted (noRepeat=true)`);
-                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, "", "", "skip", "All local folder media already reposted (Do not repost same image is ON)");
-                    filteredFiles = [];
-                  }
-                }
-
-                const ordered = pickRandom
-                  ? [...filteredFiles].sort(() => Math.random() - 0.5)
-                  : [...filteredFiles].sort((a, b) => a.localeCompare(b));
-                const picked = ordered.slice(0, targetCount);
-
-                for (const fileName of picked) {
-                  if (state.stop.stopped) break;
-                  const filePath = nodePath.join(repostLocalFolderPathEb, fileName);
-                  let caption = captionTemplate ? captionTemplate.replace(/\{own_username\}/g, profile.username) : "";
-                  try {
-                    const rawBuffer = await fsPromises.readFile(filePath);
-                    let alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
-                    if (makeUnique) {
-                      try {
-                        alteredBuffer = await makeUniqueImage(alteredBuffer);
-                      } catch (uqErr: any) {
-                        console.warn(`[engine] @${profile.username}: [EB-only] makeUniqueImage failed for ${fileName}: ${uqErr?.message}`);
-                      }
-                    }
-
-                    console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost upload starting — file="${fileName}" level=${level} captionLen=${caption.length}`);
-                    const bpResult = await this.postPhotoViaBrowser(profile.id, alteredBuffer, caption);
-                    if (bpResult.ok) {
-                      console.log(`[engine] @${profile.username}: [EB-only] 🔁 uploaded image from local folder: ${fileName}`);
-                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "ok", "Make a Post Successful");
-                      this.logGhostBrowserCall(profile.id, profile.username, "make_a_post", `EB: uploaded ${fileName}`);
-                      await storage.incrementStat(profile.id, "repost");
-                      storage.createInstagramApiCall({
-                        profileId: profile.id, username: profile.username,
-                        operationName: "PostMedia", date: new Date().toISOString(),
-                        source: "browser", transport: "browser", isError: false,
-                      }).catch(() => {});
-                      if (noRepeat) {
-                        await storage.createRepostedPost({
-                          profileId: profile.id, toolId: tool.id,
-                          sourceUsername: repostLocalFolderPathEb,
-                          mediaId: `local:${fileName}`, shortcode: "", caption: "",
-                          thumbnailUrl: "", repostedAt: new Date().toISOString(), postedShortcode: "",
-                        }).catch(() => {});
-                      }
-                      if (deleteAfterUpload) {
-                        try { await fsPromises.unlink(filePath); } catch (e: any) {
-                          console.warn(`[engine] @${profile.username}: [EB-only] could not delete ${filePath}: ${e?.message}`);
-                        }
-                      }
-                    } else {
-                      console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
-                      this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", "Make a Post Failed");
-                      // Make 1 attempt only — do not keep cycling through more
-                      // images from the folder after a failure in the same run.
-                      break;
-                    }
-                  } catch (e: any) {
-                    console.warn(`[engine] @${profile.username}: [EB-only] repost error for ${fileName}: ${e?.message}`);
-                    this.logAction(profile.id, tool.id, "repost", repostLocalFolderPathEb, fileName, "", "fail", e?.message ?? "unknown error");
-                    break;
-                  }
-                }
-              }
-            } else if (repostUsernameSourceActiveEb) {
-              // ── @username source — requires an API-derived feed, which is not
-              // available in Disable API mode without a mobile-API client. Log a
-              // clear skip reason instead of silently doing nothing.
-              console.log(`[engine] @${profile.username}: [EB-only] 🔁 repost skipped — @username source requires API access (not available in Disable API mode). Use "Source: Local PC Folder" instead.`);
-              this.logAction(profile.id, tool.id, "repost", repostSourceUsernameEb, "", "", "skip", "Username source repost is not supported in Disable API mode — use Local PC Folder instead");
-            }
-          } catch (e: any) {
-            console.warn(`[engine] @${profile.username}: [EB-only] repost session error: ${e?.message}`);
-            this.logAction(profile.id, tool.id, "repost", "", "", "", "fail", e?.message ?? "unknown error");
-          }
-        }
-      }
+      // repost: moved to ebQueue above (executed in order-sorted sequence)
 
       console.log(`[engine] @${profile.username}: ✅ [EB-only] browser human session complete`);
     } catch (e: any) {
