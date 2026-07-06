@@ -1297,6 +1297,14 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       var _mf=null;
       for(var _fi=0;_fi<_FVAR.length;_fi++){if(fs.indexOf(_FVAR[_fi])>=0){_mf=_FVAR[_fi];break;}}
       if(_mf===null)return r;
+      // Guard: if OffscreenCanvas context failed to create (returns null in some
+      // Chromium sandbox configurations), fall back to passing the real measurement
+      // through unmodified rather than crashing the caller with a TypeError from
+      // _oMT.call(null,...). Without this, testFonts() in the leak-test page throws
+      // and crashes the entire runAll() async function, leaving every async card
+      // (IP, WebRTC, DNS, Battery, Media, Permissions, Hints) frozen in its initial
+      // "Fetching…" / "Running…" HTML state forever.
+      if(!_fpX)return r;
       // Extract font size (e.g. "72px") to use the same size on the helper canvas
       var _sz=(fs.match(/\d+(?:\.\d+)?(?:px|pt|em|rem)/)||['16px'])[0];
       _fpX.font=_sz+' monospace';

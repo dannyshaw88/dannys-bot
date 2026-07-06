@@ -1323,43 +1323,50 @@ function testFonts() {
     'Century Gothic','Bookman Old Style','Garamond','Gill Sans MT',
   ];
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const BASELINE_FONT = 'monospace';
-  const TEST_TEXT = 'mmmmmmmmmmlli';
-  ctx.font = '72px ' + BASELINE_FONT;
-  const baseW = ctx.measureText(TEST_TEXT).width;
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('getContext("2d") returned null');
+    const BASELINE_FONT = 'monospace';
+    const TEST_TEXT = 'mmmmmmmmmmlli';
+    ctx.font = '72px ' + BASELINE_FONT;
+    const baseW = ctx.measureText(TEST_TEXT).width;
 
-  const present = [];
-  for (const font of TEST_FONTS) {
-    ctx.font = '72px '+font+', '+BASELINE_FONT;
-    const w = ctx.measureText(TEST_TEXT).width;
-    if (w !== baseW) present.push(font);
-  }
+    const present = [];
+    for (const font of TEST_FONTS) {
+      ctx.font = '72px '+font+', '+BASELINE_FONT;
+      const w = ctx.measureText(TEST_TEXT).width;
+      if (w !== baseW) present.push(font);
+    }
 
-  let html = '';
-  html += row('Fonts Detected', present.length + ' / ' + TEST_FONTS.length, present.length > 5 ? 'green' : 'warn');
-  html += row('Sample', present.slice(0,5).join(', ')+(present.length>5?'…':''), 'muted');
-  html += '<div class="font-grid">';
-  for (const f of TEST_FONTS) {
-    const found = present.includes(f);
-    html += '<span class="font-tag'+(found?' present':'')+'">'+f+'</span>';
-  }
-  html += '</div>';
+    let html = '';
+    html += row('Fonts Detected', present.length + ' / ' + TEST_FONTS.length, present.length > 5 ? 'green' : 'warn');
+    html += row('Sample', present.slice(0,5).join(', ')+(present.length>5?'…':''), 'muted');
+    html += '<div class="font-grid">';
+    for (const f of TEST_FONTS) {
+      const found = present.includes(f);
+      html += '<span class="font-tag'+(found?' present':'')+'">'+f+'</span>';
+    }
+    html += '</div>';
 
-  if (present.length < 3) {
-    html += desc('Very few fonts detected. This is unusual and may indicate a sandboxed or headless environment — could be flagged by fingerprinting services.', 'warn');
+    if (present.length < 3) {
+      html += desc('Very few fonts detected. This is unusual and may indicate a sandboxed or headless environment — could be flagged by fingerprinting services.', 'warn');
+      setBadge('badge-fonts', 'warn', 'WARN');
+      setCardBorder('card-fonts', 'warn');
+      setResult('Fonts', 'warn', present.length+' fonts');
+    } else {
+      html += desc('Font list is within normal range for a real user browser.');
+      setBadge('badge-fonts', 'pass', 'PASS');
+      setCardBorder('card-fonts', 'pass');
+      setResult('Fonts', 'pass', present.length+' fonts');
+    }
+
+    if (body) body.innerHTML = html;
+  } catch (e) {
+    if (body) body.innerHTML = row('Status', 'Canvas API error — ' + (e && e.message ? e.message : String(e)), 'muted');
     setBadge('badge-fonts', 'warn', 'WARN');
-    setCardBorder('card-fonts', 'warn');
-    setResult('Fonts', 'warn', present.length+' fonts');
-  } else {
-    html += desc('Font list is within normal range for a real user browser.');
-    setBadge('badge-fonts', 'pass', 'PASS');
-    setCardBorder('card-fonts', 'pass');
-    setResult('Fonts', 'pass', present.length+' fonts');
+    setResult('Fonts', 'warn', 'Error');
   }
-
-  if (body) body.innerHTML = html;
 }
 
 // ── Test 14: Network Info ─────────────────────────────────────────────────────
@@ -1541,19 +1548,17 @@ async function runAll() {
   ['badge-ip','badge-ipmatch','badge-webrtc','badge-dns','badge-uamatch','badge-bot','badge-fonts','badge-battery','badge-media','badge-perms','badge-hints']
     .forEach(resetBadge);
 
-  // Instant sync tests
-  testIdentity();
-  testBot();
-  testUAMatch();
-  testTimezone();
-  testNavigator();
-  testHardware();
-  testCanvas();
-  testWebGL();
-  testNetwork();
-  testSpeech();
-  testTiming();
-  testFonts();
+  // Instant sync tests — each individually guarded so one failure cannot crash
+  // the whole runAll() async function and leave subsequent async cards frozen.
+  var _syncTests = [
+    ['Identity', testIdentity], ['Bot', testBot], ['UAMatch', testUAMatch],
+    ['Timezone', testTimezone], ['Navigator', testNavigator], ['Hardware', testHardware],
+    ['Canvas', testCanvas], ['WebGL', testWebGL], ['Network', testNetwork],
+    ['Speech', testSpeech], ['Timing', testTiming], ['Fonts', testFonts],
+  ];
+  for (var _si = 0; _si < _syncTests.length; _si++) {
+    try { _syncTests[_si][1](); } catch (e) { console.error('[leak-test] sync test "' + _syncTests[_si][0] + '" threw:', e); }
+  }
 
   // Async tests. Wrapped in withTimeout() as a belt-and-suspenders guard:
   // testIP() already has an internal 8s AbortController timeout, but a proxy
