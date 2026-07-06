@@ -1405,10 +1405,24 @@ app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
 // even when the hardware supports it. Android Chrome 128 supports WebGL 2 on
 // every supported device, so a missing WebGL 2 context is a visible fingerprint
 // mismatch detectable by Instagram's client-side probes.
+//
 // --ignore-gpu-blocklist overrides Chrome's denylist and allows hardware-
 // accelerated WebGL 2 on all GPUs, at the cost of potential rendering glitches
 // on genuinely buggy drivers. Acceptable trade-off for the EB's automation use.
+//
+// --use-gl=angle + --use-angle=swiftshader forces Chromium to use SwiftShader
+// as the ANGLE GL backend for ALL sessions. This is intentionally global:
+// the EB windows are automation-only and rendering performance is irrelevant.
+// SwiftShader is a pure-software rasterizer that unconditionally supports
+// WebGL 2 regardless of GPU driver. On some host GPU configurations (e.g.
+// Mali-G715 / ARH vendor), --ignore-gpu-blocklist alone is insufficient because
+// the driver itself does not expose WebGL 2, so canvas.getContext('webgl2')
+// still returns null. Instagram's client-side fingerprint probe detects this as
+// an invalid device (Android Chrome 128 always has WebGL 2) and flags the
+// account. Forcing SwiftShader globally is the only reliable fix.
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
+app.commandLine.appendSwitch("use-gl", "angle");
+app.commandLine.appendSwitch("use-angle", "swiftshader");
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,

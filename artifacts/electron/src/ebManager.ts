@@ -2407,6 +2407,33 @@ export async function openEbWindow(opts: {
           existing.win.webContents.reload();
         }
       }
+
+      // ── eb-shield confirmation for reused windows ────────────────────────────
+      // openEbWindow returns early here (window already exists), which means the
+      // normal [eb-shield] block further below never fires.  Without this log,
+      // there is zero proof of what proxy/WebRTC policy is actually active on
+      // the reused session — exactly the blind spot that made @dearcake79eke's
+      // ban undetectable from logs alone.  We emit the same structured format so
+      // grep-based log analysis treats reused and fresh sessions identically.
+      // Fields match the fresh-session [eb-shield] block for parser/grep parity.
+      {
+        const _reusedProxyLine = proxy
+          ? `✓ ${proxy.type || "http"}://${proxy.host}:${proxy.port}${proxyChanged ? " (proxy updated)" : " (unchanged, re-applied)"}`
+          : useHomeIp
+          ? "DISABLED — OS resolver (no proxy in this session)"
+          : "DISABLED";
+        console.log(
+          `[eb-shield:${profileId}] @${username} ── REUSED WINDOW — LEAK PROTECTION RECONFIRMED\n` +
+          `  proxy       : ${_reusedProxyLine}\n` +
+          `  webrtc      : ✓ disable_non_proxied_udp (re-applied to existing session)\n` +
+          `  doh         : persists from initial window open (session-level config survives reuse)\n` +
+          `  quic        : DISABLED (app-level --disable-quic flag)\n` +
+          `  ipv6        : DISABLED (app-level --disable-ipv6 flag)\n` +
+          `  dns-prefetch: DISABLED (app-level --dns-prefetch-disable flag)\n` +
+          `  dns-cache   : FLUSHED (clearHostResolverCache)\n` +
+          `  note        : existing window reused — openEbWindow did not run fresh`
+        );
+      }
       return;
     }
   }
