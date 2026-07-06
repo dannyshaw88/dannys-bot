@@ -4,6 +4,48 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.374] — 2026-07-06
+
+### Fixed
+
+#### Human Session Tool — View Reels: reel count now accurate + ArrowDown works reliably
+
+**Root cause:** The reels page was missing the `document.visibilityState = "visible"` override before the reel-watching loop. Without it, Instagram's SPA keeps the reel feed in a throttled / non-hydrated state when the EB window is off-screen, which means the video element is present but the reel player is not fully initialised. Separately, `page.keyboard.press("ArrowDown")` was firing without a preceding `document.body.focus()`, so the key event was silently dropped when no DOM element had focus.
+
+**What was happening:** The reel loop always incremented `watched` once per `ArrowDown` press regardless of whether the reel player actually advanced, so the session log could report e.g. 9 reels watched while the user watching the EB saw only 1 reel play.
+
+**Fix:**
+1. Applies the same `Object.defineProperty(visibilityState → "visible") + dispatchEvent(visibilitychange)` override already used by `viewTimelineFeed`, `likeTimelinePosts`, `checkTimelineStories`, and the Follow/story flows — now also applied right before the reel-watching loop starts.
+2. Calls `document.body.focus()` immediately before each `ArrowDown` press so the key event is always delivered to the document and reaches the reel player's keyboard handler.
+
+---
+
+#### Human Session Tool — View Reels: EB no longer stays parked on `/reels/` after the block finishes
+
+**Root cause:** The View Reels block navigated to `instagram.com/reels/` and left the EB there with no cleanup navigation. If `checkTimelineStories` was disabled (or skipped by chance), no subsequent block navigated away, so the EB finished the session — and started the next one — on `/reels/`. Users saw the EB jump unexpectedly to the Reels page immediately after the final action of the previous session.
+
+**Fix:** After the reel-watching loop (and after any reel-like logging), a `nav("https://www.instagram.com/", "home (after reels)")` call returns the EB to the home feed before proceeding to the next block. This is guarded by `!state.stop.stopped` so it is skipped on early session termination.
+
+---
+
+#### Human Session Tool — Watch Stories: removed gratuitous home-page reload between each story user
+
+**Root cause:** The story-watching loop called `nav("https://www.instagram.com/", ...)` at the **top of every iteration** — including iterations 2, 3, 4, etc. After pressing `Escape` to dismiss a story, Instagram's overlay closes and the browser is already on the home feed; a second full navigation to the same URL caused a complete page reload the user perceived as the EB "bouncing" back and forth between the home feed and the story viewer for every single user in the tray.
+
+Additionally, the original design comment ("always navigate home so the tray is in a clean state") was correct for iteration 0 only — the story tray's "first unseen" pointer already advances automatically after a story is fully dismissed via `Escape`, so subsequent iterations naturally see the next unread user without any navigation.
+
+**Fix:** The `nav(home)` call is now guarded by `if (i === 0)`. Iterations 1 through N skip the navigation entirely; the visibilityState override and tray-selector wait that follow immediately re-hydrate and query the already-loaded home feed. Net effect: N story-tray interactions now produce 1 home-feed navigation (at the start) instead of N, eliminating the bouncing behaviour.
+
+---
+
+#### Human Session Tool — Web Browsing block collapses when disabled
+
+**Root cause:** The Web Browsing section's tab bar ("Settings" / "Sites Visited") and the content panel below it were rendered unconditionally — they always appeared even when the `webBrowsingEnabled` checkbox was off. This differed from every other tool block in the Human Session panel, which hides its detail rows when unchecked.
+
+**Fix:** The tab bar and both content panels (Settings and Sites Visited log) are now wrapped in `{!!settings.webBrowsingEnabled && (...)}`. When the checkbox is off the header row alone is visible, matching the collapsed pattern used by all other tool blocks.
+
+---
+
 ## [1.1.373] — 2026-07-06
 
 ### Added

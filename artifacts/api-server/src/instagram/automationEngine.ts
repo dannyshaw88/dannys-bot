@@ -3105,6 +3105,14 @@ class AutomationEngine {
               let totalViewPct = 0;
               let reelLiked = 0;
               if (videoFound) {
+                // Force visibilityState=visible so Instagram's SPA keeps the
+                // reel hydrated when the EB window is off-screen (same fix
+                // applied to viewTimelineFeed, likeTimelinePosts, and stories).
+                await page.evaluate(() => {
+                  try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+                  try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+                  document.dispatchEvent(new Event('visibilitychange'));
+                }).catch(() => {});
                 for (let i = 0; i < reelCount && !state.stop.stopped; i++) {
                   // Dwell for reelViewPct% of an estimated 8–20s reel duration.
                   const reelViewPct = reelViewPctMin + Math.random() * Math.max(0, reelViewPctMax - reelViewPctMin);
@@ -3131,6 +3139,9 @@ class AutomationEngine {
                       await sleep(actionDelay());
                     }
                   }
+                  // Focus the body so the ArrowDown key event reaches Instagram's
+                  // reel player (keyboard events on an unfocused element are dropped).
+                  await page.evaluate(() => { try { document.body.focus(); } catch {} }).catch(() => {});
                   await page.keyboard.press("ArrowDown").catch(() => {});
                   await sleep(randInt(600, 1400));
                   watched++;
@@ -3154,6 +3165,15 @@ class AutomationEngine {
             } catch (e: any) {
               console.warn(`[engine] @${profile.username}: [EB-only] reels feed error: ${e?.message}`);
               this.logGhostBrowserCall(profile.id, profile.username, "view_reel_from_feed", e?.message ?? "error", true);
+            }
+            // Always navigate back to the home feed after the reels block so the
+            // EB does not stay parked on /reels/ for subsequent actions. Without
+            // this, if checkTimelineStories is disabled, the EB remains on /reels/
+            // for the rest of the session and the user sees a jarring jump when
+            // the next session starts.
+            if (!state.stop.stopped) {
+              await nav("https://www.instagram.com/", "home (after reels)").catch(() => {});
+              await sleep(actionDelay());
             }
           } else {
             console.log(`[engine] @${profile.username}: 🎲 [EB] View Reels chance ${reelChanceRoll.toFixed(1)}% ≥ ${reelChance.toFixed(1)}% — skipping`);
@@ -3202,9 +3222,15 @@ class AutomationEngine {
           let hasTray = false;
           for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
             try {
-              // Always return to the home feed so the tray is in a clean state.
-              await nav("https://www.instagram.com/", `home (stories ${i + 1}/${storyCount})`);
-              await sleep(actionDelay());
+              // Navigate to the home feed only on the first iteration.
+              // On subsequent iterations the Escape key already dismissed the story
+              // overlay and returned the browser to the home feed, so a second full
+              // nav() would cause a gratuitous page reload that the user sees as the
+              // EB "bouncing" back and forth between home and the story viewer.
+              if (i === 0) {
+                await nav("https://www.instagram.com/", `home (stories ${i + 1}/${storyCount})`);
+                await sleep(actionDelay());
+              }
               // Force visibilityState=visible so Instagram's SPA hydrates the
               // story tray even when the EB window is hidden/not shown to the
               // user. Same fix already applied to viewTimelineFeed and

@@ -2227,7 +2227,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
           </div>
-          {/* Tab bar */}
+          {/* Tab bar — only shown when enabled */}
+          {!!settings.webBrowsingEnabled && (
           <div className="flex border-b border-border bg-muted/30">
             <button
               onClick={() => setWebBrowsingTab("settings")}
@@ -2242,7 +2243,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               Sites Visited
             </button>
           </div>
-          {webBrowsingTab === "settings" ? (
+          )}
+          {!!settings.webBrowsingEnabled && (webBrowsingTab === "settings" ? (
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
@@ -2375,7 +2377,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
       </div>
 
