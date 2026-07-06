@@ -1233,9 +1233,17 @@ function testCanvas() {
     ctx.arc(180, 25, 18, 0, Math.PI * 2);
     ctx.stroke();
     const hash = hashStr(c.toDataURL());
+    // Detect whether HTMLCanvasElement.prototype.toDataURL/toBlob have actually been
+    // patched by the fingerprint-noise hook (armSilentWindowAntiDetection /
+    // buildFingerprintScript), rather than hardcoding a static label. A native,
+    // un-hooked implementation always stringifies to "[native code]"; our hook
+    // replaces it with a real function body, so the absence of "[native code]"
+    // is a reliable positive signal that the per-account canvas noise is active.
+    const canvasHooked = !/\[native code\]/.test(HTMLCanvasElement.prototype.toDataURL.toString())
+      || !/\[native code\]/.test(HTMLCanvasElement.prototype.toBlob.toString());
     let html = '';
     html += row('Canvas Hash', hash, 'muted');
-    html += row('Canvas Protection', 'No noise detected');
+    html += row('Canvas Protection', canvasHooked ? 'Noise active (hooked)' : 'No noise detected', canvasHooked ? 'green' : 'red');
     html += desc('Canvas hash is used to fingerprint browsers across sites. A consistent hash = normal browser. Randomized each reload = canvas noise is active.');
     if (body) body.innerHTML = html;
   } catch (e) {
@@ -1267,8 +1275,14 @@ async function testAudio() {
     const hash = hashStr(sample);
     osc.stop();
     ctx.close();
+    // Same detection approach as testCanvas(): a hooked AnalyserNode method no
+    // longer stringifies to "[native code]" once buildFingerprintScript()/
+    // armSilentWindowAntiDetection() has patched it with the per-account audio
+    // noise seed.
+    const audioHooked = !/\[native code\]/.test(AnalyserNode.prototype.getFloatFrequencyData.toString());
     let html = '';
     html += row('Audio Hash', hash, 'muted');
+    html += row('Audio Protection', audioHooked ? 'Noise active (hooked)' : 'No noise detected', audioHooked ? 'green' : 'red');
     html += row('Context State', ctx.state);
     html += row('Sample Rate', ctx.sampleRate + ' Hz');
     html += row('Channel Count', ctx.destination.channelCount || 'n/a');

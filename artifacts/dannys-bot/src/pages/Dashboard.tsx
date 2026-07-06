@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.371",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "The Leak Test screen's canvas fingerprint check always said \"No noise detected\" even when your protection was on and working correctly — it was a display bug, not a real problem with your accounts. It now correctly shows when protection is active, and a matching check was added for the audio fingerprint too.",
+      },
+    ],
+  },
+  {
     version: "1.1.370",
     date: "6 Jul 2026",
     items: [

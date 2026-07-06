@@ -4,6 +4,18 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.371] — 2026-07-06
+
+### Fixed — Leak-test "Canvas Protection" / added "Audio Protection" always showed a hardcoded label, never reflected real state
+
+**Symptom:** a user comparing leak-test screenshots noticed the Canvas Fingerprint card always read "Canvas Protection: No noise detected", even on accounts where the v1.1.370 full-entropy canvas noise fix was confirmed active in code. This looked like a regression, but was actually a pre-existing display bug: `testCanvas()` in `leaksPage.ts` had `row('Canvas Protection', 'No noise detected')` — a **hardcoded string literal**, not a real check. It never queried whether the canvas noise hook was actually installed; it always printed the same negative label regardless of the true state.
+
+**Fix:** `testCanvas()` now detects whether `HTMLCanvasElement.prototype.toDataURL`/`toBlob` have actually been patched by the fingerprint hook, by checking whether they still stringify to `"[native code]"` (an un-hooked native method always does; our hook replaces it with a real function body, so the absence of `"[native code]"` is a reliable positive signal). The card now correctly shows "Noise active (hooked)" in green when protection is genuinely running, and "No noise detected" in red only if it truly isn't. Added the same real check as a new "Audio Protection" row on the Audio Fingerprint card (previously had no protection-status row at all), checking `AnalyserNode.prototype.getFloatFrequencyData`.
+
+**Why this matters:** this was purely a reporting bug, not a protection bug — the canvas/audio noise from v1.1.370 was already active and working correctly on every account (confirmed via `toDataURL`/`toBlob` hook inspection). But a leak-test page that shows "No noise detected" unconditionally is worse than showing nothing, since it actively tells the operator their protection is off when it is not — undermining trust in every other (accurate) card on the same page.
+
+---
+
 ## [1.1.370] — 2026-07-06
 
 ### Fixed — Canvas/audio fingerprint noise collapsed to ~253 / ~9 distinct values at scale (thousands-of-accounts blocker)
