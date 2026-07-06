@@ -65,9 +65,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
     ]},
     { label: "Emulation", options: [
-      { key: "hs_forceEmulation", label: "Open Instagram Calls", description: "Fires Instagram app-open API calls at the start of every session, before any other action runs", subOptions: [
-        { key: "fe_enabled",   label: "Enabled",          settingKeys: ["forceEmulationEnabled"] },
-        { key: "fe_randomise", label: "Randomise order",  settingKeys: ["forceEmulationRandomise"] },
+      { key: "hs_emulationGroup", label: "Emulation Group", description: "Enable / disable the entire Emulation section", subOptions: [
+        { key: "emg_enabled", label: "Enabled", settingKeys: ["emulationGroupEnabled"] },
       ]},
       { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed + inline liking", subOptions: [
         { key: "vtf_enabled",    label: "Enabled",                                       settingKeys: ["viewTimelineFeedEnabled"] },
@@ -876,51 +875,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       {/* ── EMULATION GROUP ──────────────────────────────────────────── */}
       <div className="mt-[25px]">
         <div className="border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400 max-w-[37.5%]">
+          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400">
+            <input type="checkbox" id="emulationGroupEnabled"
+              checked={(settings as any).emulationGroupEnabled !== false}
+              onChange={(e) => setSettings({ ...settings, emulationGroupEnabled: e.target.checked } as any)}
+              className="w-3.5 h-3.5 cursor-pointer shrink-0"
+              style={{ accentColor: 'white' }}
+            />
             <Zap className="w-5 h-5 text-white shrink-0" />
             <h4 className="font-bold text-[17px] text-white">Emulation</h4>
           </div>
+          {(settings as any).emulationGroupEnabled !== false && (
           <div className="divide-y divide-border">
-
-            {/* ── Open Instagram Calls (was Force Emulation) ── */}
-            <div className="px-4 py-3 space-y-1.5">
-              <div className="flex items-center gap-3 flex-wrap">
-                <input type="checkbox" id="forceEmulationEnabled"
-                  checked={!!settings.forceEmulationEnabled}
-                  onChange={(e) => setSettings({ ...settings, forceEmulationEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="forceEmulationEnabled" className="font-semibold text-sm cursor-pointer select-none whitespace-nowrap shrink-0">
-                  Open Instagram Calls
-                </label>
-                <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" id="forceEmulationRandomise"
-                      checked={!!settings.forceEmulationRandomise}
-                      onChange={(e) => setSettings({ ...settings, forceEmulationRandomise: e.target.checked })}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor="forceEmulationRandomise" className="text-sm cursor-pointer select-none">Randomise order</label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Fire Chance %</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={(settings as any).forceEmulationChanceMin ?? 100}
-                      onChange={(v) => setSettings({ ...settings, forceEmulationChanceMin: v } as any)}
-                    />
-                    <span className="text-[10px] text-muted-foreground">–</span>
-                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                      value={(settings as any).forceEmulationChanceMax ?? 100}
-                      onChange={(v) => setSettings({ ...settings, forceEmulationChanceMax: v } as any)}
-                    />
-                    <span className="text-[10px] text-muted-foreground">% of executions</span>
-                  </div>
-                </div>
-              </div>
-              <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40' : ''}`}>
-                Fires Instagram app-open API calls at the start of every session, before any other action runs.
-              </p>
-            </div>
 
             {/* ── View Timeline Feed ── */}
             <div className="px-4 py-3 space-y-1.5">
@@ -2020,7 +1986,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         </div>
       </div>
 
-          </div>{/* end divide-y */}
+          </div>
+          )}{/* end emulationGroupEnabled conditional + divide-y */}
         </div>{/* end EMULATION rounded-xl */}
       </div>{/* end EMULATION outer */}
 
