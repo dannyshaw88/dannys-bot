@@ -217,19 +217,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "uf_h_stopMinutes", label: "Stop duration", settingKeys: ["unfollow:stopOnBlockMinutes"] },
       ]},
     ]},
-    { label: "Web Browsing Settings", options: [
-      { key: "hs_webBrowsing", label: "Web Browsing", description: "Website browsing during Instagram sessions — run before, during, or after actions", subOptions: [
-        { key: "wb_enabled",     label: "Enabled",                           settingKeys: ["webBrowsingEnabled"] },
-        { key: "wb_order",       label: "Execution order",                   settingKeys: ["webBrowsingOrderMin","webBrowsingOrderMax"] },
-        { key: "wb_skip",        label: "Skip chance %",                     settingKeys: ["webBrowsingSkipMin","webBrowsingSkipMax"] },
-        { key: "wb_visitRandom", label: "Visit websites at random",          settingKeys: ["webBrowsingVisitRandom"] },
-        { key: "wb_sites",       label: "Website URLs (tick to copy URLs to other accounts)", settingKeys: ["webBrowsingSites"] },
-        { key: "wb_sitesRange",  label: "Sites to visit range",              settingKeys: ["webBrowsingSitesMin","webBrowsingSitesMax"] },
-        { key: "wb_links",       label: "Internal links range",              settingKeys: ["webBrowsingInternalLinksMin","webBrowsingInternalLinksMax"] },
-        { key: "wb_timeOnSite",  label: "Time on site (min) range",         settingKeys: ["webBrowsingTimeOnSiteMin","webBrowsingTimeOnSiteMax"] },
-        { key: "wb_timeOnLinks", label: "Time on internal links (min) range",settingKeys: ["webBrowsingTimeOnLinksMin","webBrowsingTimeOnLinksMax"] },
-      ]},
-    ]},
     { label: "Contact Tool Settings", options: [
       { key: "hs_cnfEnabled",          label: "Contact New Followers Start / Stop",   description: "Copy the Contact New Followers enabled checkbox" },
       { key: "hs_autoReplyEnabled",    label: "Auto Reply Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
@@ -258,6 +245,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       { key: "hs_contactStopBlock", label: "Stop if Blocked", description: "Pause contact tool for a set time when Instagram blocks a contact action", subOptions: [
         { key: "ct_h_stopEnabled", label: "Enabled",              settingKeys: ["contact:stopOnBlockEnabled"] },
         { key: "ct_h_stopMinutes", label: "Stop duration", settingKeys: ["contact:stopOnBlockMinutes"] },
+      ]},
+    ]},
+    { label: "Web Browsing Settings", options: [
+      { key: "hs_webBrowsing", label: "Web Browsing", description: "Website browsing during Instagram sessions — builds genuine browser history", subOptions: [
+        { key: "wb_enabled",     label: "Enabled",                                          settingKeys: ["webBrowsingEnabled"] },
+        { key: "wb_order",       label: "Execution order",                                  settingKeys: ["webBrowsingOrderMin","webBrowsingOrderMax"] },
+        { key: "wb_skip",        label: "Skip chance %",                                    settingKeys: ["webBrowsingSkipMin","webBrowsingSkipMax"] },
+        { key: "wb_visitRandom", label: "Visit websites at random",                        settingKeys: ["webBrowsingVisitRandom"] },
+        { key: "wb_sites",       label: "Website URLs (tick to copy URLs to other accounts)", settingKeys: ["webBrowsingSites"] },
+        { key: "wb_sitesRange",  label: "Sites to visit range",                            settingKeys: ["webBrowsingSitesMin","webBrowsingSitesMax"] },
+        { key: "wb_links",       label: "Internal links range",                            settingKeys: ["webBrowsingInternalLinksMin","webBrowsingInternalLinksMax"] },
+        { key: "wb_timeOnSite",  label: "Time on site (min) range",                       settingKeys: ["webBrowsingTimeOnSiteMin","webBrowsingTimeOnSiteMax"] },
+        { key: "wb_timeOnLinks", label: "Time on internal links (min) range",              settingKeys: ["webBrowsingTimeOnLinksMin","webBrowsingTimeOnLinksMax"] },
       ]},
     ]},
   ];
@@ -783,15 +783,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       toast({ title: "No URLs", description: "Add website URLs to this account first, then split.", variant: "destructive" });
       return;
     }
-    // Include current profile in the distribution
+    // Deduplicate URLs first so split guarantees no cross-account duplicates
+    const uniqueUrls = [...new Set(allUrls)];
     const profileIds = [...new Set([tool.profileId, ...allProfiles.map(p => p.id)])];
     if (profileIds.length === 0) return;
-    const chunkSize = Math.max(1, Math.floor(allUrls.length / profileIds.length));
+    // Round-robin distribution: each URL goes to exactly one account
+    const buckets: string[][] = profileIds.map(() => []);
+    uniqueUrls.forEach((url, idx) => buckets[idx % profileIds.length].push(url));
     try {
       await Promise.all(profileIds.map(async (profileId, i) => {
-        const start = i * chunkSize;
-        const end = i === profileIds.length - 1 ? allUrls.length : start + chunkSize;
-        const chunk = allUrls.slice(start, end);
+        const chunk = buckets[i];
         if (chunk.length === 0) return;
         const chunkStr = chunk.join("\n");
         if (profileId === tool.profileId) {
@@ -810,7 +811,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           credentials: "include",
         });
       }));
-      toast({ title: "URLs split", description: `Distributed ${allUrls.length} URLs across ${profileIds.length} account${profileIds.length !== 1 ? "s" : ""} — no duplicates.` });
+      toast({ title: "URLs split", description: `Distributed ${uniqueUrls.length} URL${uniqueUrls.length !== 1 ? "s" : ""} across ${profileIds.length} account${profileIds.length !== 1 ? "s" : ""} — no duplicates.` });
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
     } catch {
       toast({ title: "Split failed", description: "Could not distribute URLs to all accounts.", variant: "destructive" });

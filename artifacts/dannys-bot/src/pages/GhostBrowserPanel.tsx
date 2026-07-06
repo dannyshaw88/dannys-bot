@@ -663,12 +663,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         if (j.msg) {
           setSignupStatus(j.msg);
           if (j.msg.includes("Waiting for verification code")) setCodePending(true);
-          setWebsitesToVisit(prev => {
-            const urls = prev.split("\n").map(s => s.trim()).filter(Boolean);
-            const remaining = urls.filter(url => !j.msg.includes(url));
-            if (remaining.length === urls.length) return prev;
-            return remaining.join("\n");
-          });
         }
         if (j.done) setSignupRunning(false);
       } catch {}
@@ -888,15 +882,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       password: password.trim(),
       dob: dob.trim(),
       skipWarmup,
-      websitesToVisit: [],
-      websitesMin: 0,
-      websitesMax: 0,
-      internalLinksMin: 0,
-      internalLinksMax: 0,
-      timeOnSiteMin: 0,
-      timeOnSiteMax: 0,
-      timeOnLinksMin: 0,
-      timeOnLinksMax: 0,
       youtubeVideosMin: skipWarmup ? 0 : (parseInt(youtubeVideosMin, 10) || 1),
       youtubeVideosMax: skipWarmup ? 0 : (parseInt(youtubeVideosMax, 10) || 3),
       youtubeWatchMin: skipWarmup ? 0 : (parseInt(youtubeWatchMin, 10) || 2),
