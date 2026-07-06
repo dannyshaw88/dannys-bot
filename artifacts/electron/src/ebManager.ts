@@ -2450,8 +2450,12 @@ export async function openEbWindow(opts: {
   // "disable_non_proxied_udp": WebRTC ICE only produces candidates that flow
   // through the configured proxy.  HTTP/SOCKS proxies don't forward UDP, so
   // in practice no ICE candidates are emitted and the real IP is never revealed.
+  // Track whether each session-level API applied successfully so the log
+  // below can report actual applied state rather than assumed state.
+  let _webrtcApplied = false;
   try {
     ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
+    _webrtcApplied = true;
   } catch { /* non-fatal — older Electron builds may not expose this API */ }
 
   // ── DNS-over-HTTPS DISABLED intentionally ─────────────────────────────────
@@ -2463,13 +2467,51 @@ export async function openEbWindow(opts: {
   // sends the target hostname via CONNECT and the proxy does the DNS resolution.
   // The client's real IP is never used for DNS lookups in that code path.
   // Disabling DoH removes the Cloudflare leak while keeping DNS leak-proof.
+  let _dohApplied = false;
   try {
     (ses as any).setDnsOverHttpsConfig?.({ enabled: false });
+    _dohApplied = true;
   } catch { /* non-fatal */ }
 
   // Flush any stale DNS cache that could route requests around the proxy
   try { await ses.clearHostResolverCache(); } catch {}
   _ebCrashLog(profileId, "STEP-6: DNS cache cleared, registering webRequest hooks");
+
+  // ── Leak-shield confirmation log ──────────────────────────────────────────
+  // Printed every time a session opens so the console confirms what protection
+  // is actually active for this account.  Cross-check against the Leak Check
+  // page — they should always agree.  Lines marked ⚠ mean the API call failed
+  // (non-fatal) and that layer of protection may not be enforced.
+  {
+    const proxyLine = proxy
+      ? `${proxy.type || "http"}://${proxy.host}:${proxy.port}`
+      : useHomeIp
+      ? "DIRECT (home broadband)"
+      : "⚠ NONE — session blocked before reaching here";
+    // For direct/home-IP sessions DNS goes through the OS resolver — DoH
+    // disabled is still correct but the reason differs from the proxy path.
+    const dohNote = proxy
+      ? "DISABLED — proxy handles DNS resolution"
+      : useHomeIp
+      ? "DISABLED — OS resolver (no proxy in this session)"
+      : "DISABLED";
+    const webrtcLine = _webrtcApplied
+      ? "✓ disable_non_proxied_udp (session-level + app-level flag)"
+      : "⚠ session-level API unavailable — app-level flag only";
+    const dohLine = _dohApplied
+      ? `✓ ${dohNote}`
+      : `⚠ setDnsOverHttpsConfig unavailable — ${dohNote}`;
+    console.log(
+      `[eb-shield:${profileId}] @${username} ── LEAK PROTECTION ACTIVE\n` +
+      `  proxy       : ${proxyLine}\n` +
+      `  webrtc      : ${webrtcLine}\n` +
+      `  doh         : ${dohLine}\n` +
+      `  quic        : DISABLED (app-level --disable-quic flag)\n` +
+      `  ipv6        : DISABLED (app-level --disable-ipv6 flag)\n` +
+      `  dns-prefetch: DISABLED (app-level --dns-prefetch-disable flag)\n` +
+      `  dns-cache   : FLUSHED (clearHostResolverCache)`
+    );
+  }
 
   // ── ig_nrcb pre-seed ───────────────────────────────────────────────────────
   // ig_nrcb (non-removable cookie backup) tells Instagram this device has
@@ -6604,8 +6646,54 @@ export function startEbIpcServer(
           leakWin.destroy();
           leakWin = null;
 
-          const results: Record<string, unknown> = JSON.parse(resultsJson);
-          console.log(`[run-leak-test:${pid}] done — ${Object.keys(results).length} tests captured`);
+          // Runtime-normalize: JSON.parse result is unknown — coerce each entry
+          // to a safe shape before trusting .status / .label.
+          const rawResults: unknown = JSON.parse(resultsJson);
+          const results: Record<string, { status: string; label: string }> = {};
+          if (rawResults && typeof rawResults === "object") {
+            for (const [k, v] of Object.entries(rawResults as Record<string, unknown>)) {
+              if (v && typeof v === "object") {
+                const entry = v as Record<string, unknown>;
+                results[k] = {
+                  status: typeof entry.status === "string" ? entry.status : "unknown",
+                  label:  typeof entry.label  === "string" ? entry.label  : String(entry.status ?? "?"),
+                };
+              }
+            }
+          }
+
+          // ── Leak-shield sync log ─────────────────────────────────────────────
+          // Shows exactly what this account's browser is exposing right now.
+          // Compare these lines against the Leak Check page — they must match.
+          // Statuses: pass=✓  fail=✗  warn=⚠  info=ℹ  (anything else = ?)
+          const ICON: Record<string, string> = { pass: "✓", fail: "✗", warn: "⚠", info: "ℹ" };
+          const KEY_ORDER = [
+            "IP", "IPMatch", "WebRTC", "DNS", "UAMatch", "Bot",
+            "Timezone", "Navigator", "Hardware", "Canvas", "Audio",
+            "WebGL", "Fonts", "Network", "Battery", "Media",
+            "Perms", "Speech", "Hints", "Timing",
+          ];
+          const missing = KEY_ORDER.filter(k => !results[k]);
+          const fails   = KEY_ORDER.filter(k => results[k]?.status === "fail");
+          const warns   = KEY_ORDER.filter(k => results[k]?.status === "warn");
+          const lines   = KEY_ORDER.map(k => {
+            const r = results[k];
+            if (!r) return `  ${k.padEnd(10)}: — (not captured)`;
+            const icon = ICON[r.status] ?? "?";
+            return `  ${k.padEnd(10)}: ${icon} ${r.label}`;
+          });
+          // Only claim ALL CLEAR when every expected key was captured and clean.
+          const headline = fails.length
+            ? `✗ ${fails.length} FAIL${fails.length > 1 ? "S" : ""} — ${fails.join(", ")}`
+            : warns.length
+            ? `⚠ ${warns.length} WARN — ${warns.join(", ")}`
+            : missing.length
+            ? `⚠ INCOMPLETE — ${missing.length} checks not captured (${missing.join(", ")})`
+            : `✓ ALL CLEAR (${KEY_ORDER.length}/${KEY_ORDER.length} checks)`;
+          console.log(
+            `[run-leak-test:${pid}] RESULTS — ${headline}\n` +
+            lines.join("\n")
+          );
           return send(res, 200, { ok: true, results });
         } catch (err: any) {
           if (leakWin && !leakWin.isDestroyed()) { try { leakWin.destroy(); } catch {} }
