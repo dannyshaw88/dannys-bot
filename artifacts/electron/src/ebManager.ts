@@ -1056,7 +1056,9 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
   // Android Chrome 129 removed Java-plugin support — javaEnabled() must return false.
   // Electron returns true by default, which is a hard desktop/bot signal.
-  try{navigator.javaEnabled=function(){return false;};}catch(e){}
+  // Direct assignment (navigator.javaEnabled = fn) silently fails — the Navigator
+  // instance is sealed/the property is non-writable.  Patching the prototype works.
+  try{Object.defineProperty(Navigator.prototype,'javaEnabled',{value:function(){return false;},writable:true,configurable:true});}catch(e){}
   if(_M){
     try{Object.defineProperty(screen,"width",{get:function(){return _SW;}});}catch(e){}
     try{Object.defineProperty(screen,"height",{get:function(){return _SH;}});}catch(e){}
@@ -1348,12 +1350,22 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     })();
     // Separate OffscreenCanvas for monospace baseline measurement — avoids
     // mutating this.font inside the hook which would be a detectable side-effect.
-    // Try OffscreenCanvas first; fall back to a detached document canvas if the
-    // GPU sandbox returns null for getContext('2d') (observed in some Electron
-    // configurations — causes a "Illegal invocation" WARN on the leak-test page).
+    // Helper canvas for monospace baseline measurement.
+    // IMPORTANT: save _fpMT BEFORE installing the hook so it captures the native
+    // (pre-hook) measureText bound to the correct context type.  Two failure modes:
+    //   (a) OffscreenCanvas.getContext('2d') returns null → _fpX stays null, fallback runs.
+    //   (b) OffscreenCanvas.getContext('2d') returns a NON-null OffscreenCanvasRenderingContext2D —
+    //       calling CanvasRenderingContext2D.prototype.measureText with that as 'this' throws
+    //       "Illegal invocation" because the two contexts are DIFFERENT prototype chains.
+    // Solution: bind _fpX.measureText directly to _fpX so the call always uses the
+    // native method for whatever context type was actually created (OffscreenCanvas OR
+    // document canvas).  _fpMT(text) then works regardless of which branch ran.
     var _fpX=null;
     try{var _fpC=new OffscreenCanvas(400,40);_fpX=_fpC.getContext('2d');}catch(_fe){}
     if(!_fpX){try{var _fpD=document.createElement('canvas');_fpD.width=400;_fpD.height=40;_fpX=_fpD.getContext('2d');}catch(_fe2){}}
+    // Capture the native measureText bound to _fpX NOW, before the hook replaces
+    // CanvasRenderingContext2D.prototype.measureText below.
+    var _fpMT=_fpX?_fpX.measureText.bind(_fpX):null;
     var _oMT=CanvasRenderingContext2D.prototype.measureText;
     CanvasRenderingContext2D.prototype.measureText=function(text){
       var r=_oMT.call(this,text);
@@ -1369,11 +1381,16 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       // and crashes the entire runAll() async function, leaving every async card
       // (IP, WebRTC, DNS, Battery, Media, Permissions, Hints) frozen in its initial
       // "Fetching…" / "Running…" HTML state forever.
-      if(!_fpX)return r;
+      if(!_fpX||!_fpMT)return r;
       // Extract font size (e.g. "72px") to use the same size on the helper canvas
       var _sz=(fs.match(/\d+(?:\.\d+)?(?:px|pt|em|rem)/)||['16px'])[0];
       _fpX.font=_sz+' monospace';
-      var _bw=_oMT.call(_fpX,text).width;
+      // Use _fpMT (pre-bound to _fpX) instead of _oMT.call(_fpX, text).
+      // _oMT is CanvasRenderingContext2D.prototype.measureText — calling it with an
+      // OffscreenCanvasRenderingContext2D as 'this' throws "Illegal invocation".
+      // _fpMT was bound to _fpX before hook installation, so it always uses the
+      // correct native method for whatever context type _fpX actually is.
+      var _bw=_fpMT(text).width;
       if(_FP[_mf]){
         // Font should appear present: width must differ from monospace baseline
         if(Math.abs(r.width-_bw)<0.01){
