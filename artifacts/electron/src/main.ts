@@ -1399,6 +1399,16 @@ app.commandLine.appendSwitch("disable-renderer-backgrounding");
 // Instagram checks navigator.webdriver (and its isTrusted event signals) to
 // detect automation and flag accounts on first login.
 app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
+// ── WebGL 2 on blocklisted GPUs ───────────────────────────────────────────────
+// Some GPU/driver combinations are on Chrome's built-in GPU blocklist, causing
+// Chromium to deny WebGL 2 context creation (canvas.getContext('webgl2') → null)
+// even when the hardware supports it. Android Chrome 128 supports WebGL 2 on
+// every supported device, so a missing WebGL 2 context is a visible fingerprint
+// mismatch detectable by Instagram's client-side probes.
+// --ignore-gpu-blocklist overrides Chrome's denylist and allows hardware-
+// accelerated WebGL 2 on all GPUs, at the cost of potential rendering glitches
+// on genuinely buggy drivers. Acceptable trade-off for the EB's automation use.
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,

@@ -4,6 +4,50 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.378] — 2026-07-06
+
+### Fixed
+
+#### EB Leak Test — Audio Context state always showed "closed" (false negative)
+
+**Root cause:** The `testAudio()` function in the leak test called `ctx.close()` on line 1277 and then read `ctx.state` on line 1286 — after the close. An AudioContext transitions to `"closed"` state when `.close()` is called, regardless of what state it was in before. So the field always displayed `"closed"` even on a fully healthy, running audio context, making it impossible to tell from the leak test whether the AudioContext was behaving normally.
+
+**Fix:** Capture `ctx.state` into `ctxStateCaptured` immediately before calling `ctx.close()`. The row now shows `"running"` (the correct value for a freshly created AudioContext) and is coloured green for `running`/`suspended`, amber for anything else.
+
+---
+
+#### EB Leak Test — Timer Precision falsely reported "No — full precision" despite 0.1ms quantisation being active
+
+**Root cause:** The old timing test sampled `performance.now()` 10 times in a tight synchronous loop and checked `Math.min(...diffs)`. With our 0.1ms quantisation override (`Math.round(t*10)/10`), all 10 calls happen within the same 100 µs bucket and return the **same** value — giving diffs of exactly `0`. The test's threshold `minDiff > 0.1` evaluated to `false`, so it reported "full precision" even though our clamp was working correctly. This was a false alarm: real Android Chrome with timer coarsening produces the same pattern.
+
+**Fix:** Replaced the brittle `minDiff` check with a `nonZeroDiffs`/`allSame` approach:
+- `allSame = true` (all diffs are zero) → timer is quantised, all calls fell in the same bucket → report "coarsened."
+- `minNonZeroDiff ≥ 0.099ms` (epsilon-adjusted for IEEE-754 rounding) → timer steps are coarse → report "coarsened."
+- Only if non-zero diffs exist AND the smallest is `< 0.001ms` → true full precision → report "full precision."
+The resolution label also now says `≤0.1ms (quantised — all same bucket)` for the common case, making it immediately clear what's happening.
+
+---
+
+#### EB Fingerprint — `navigator.doNotTrack` leaked as `"1"` (Electron default)
+
+**Root cause:** Electron's Chromium session has DNT (Do Not Track) enabled by default. Every EB window therefore exposed `navigator.doNotTrack === "1"` to Instagram. Real Android Chrome never sets DNT — the preference is buried in a rarely-visited settings page and the default is off — so `navigator.doNotTrack` on a real Android Chrome session returns `null`. Instagram and third-party fingerprinting scripts can detect this mismatch.
+
+**Fix:** Added an `Object.defineProperty` override to `buildFingerprintScript` immediately after the `performance.now` clamp:
+```javascript
+Object.defineProperty(navigator, 'doNotTrack', { get: function(){ return null; }, configurable: true });
+```
+This runs via `Page.addScriptToEvaluateOnNewDocument` on every page navigation in the EB, restoring the correct `null` value before any page script can read it.
+
+---
+
+#### EB Browser — WebGL 2 context unavailable on some GPU/driver configurations
+
+**Root cause:** Chrome maintains a GPU blocklist (a list of GPU/driver combinations with known rendering bugs) and denies `canvas.getContext('webgl2')` for GPUs on that list. On some Windows machines this caused WebGL 2 to be unavailable in the EB, even though Android Chrome 128 supports WebGL 2 on every supported Android device. The mismatch is detectable by Instagram's client-side fingerprinting probes.
+
+**Fix:** Added `app.commandLine.appendSwitch("ignore-gpu-blocklist")` to `main.ts`. This instructs Chromium to ignore the denylist and attempt hardware-accelerated WebGL 2 on all GPUs. Trade-off: may cause minor rendering glitches on genuinely buggy drivers, but the EB is automation-only (no user-visible rendering quality requirement) so this is acceptable.
+
+---
+
 ## [1.1.377] — 2026-07-06
 
 ### Fixed

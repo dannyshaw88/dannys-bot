@@ -1273,6 +1273,11 @@ async function testAudio() {
     analyser.getFloatFrequencyData(buf);
     const sample = Array.from(buf.slice(0, 20)).map(v => v.toFixed(2)).join(',');
     const hash = hashStr(sample);
+    // Capture AudioContext state BEFORE closing — ctx.state after ctx.close()
+    // ALWAYS returns "closed" regardless of what the context was doing, so the
+    // old code always showed "closed" even on a fully healthy audio context.
+    // A real browser AudioContext that was just created shows "running" here.
+    const ctxStateCaptured = ctx.state;
     osc.stop();
     ctx.close();
     // Same detection approach as testCanvas(): a hooked AnalyserNode method no
@@ -1283,7 +1288,7 @@ async function testAudio() {
     let html = '';
     html += row('Audio Hash', hash, 'muted');
     html += row('Audio Protection', audioHooked ? 'Noise active (hooked)' : 'No noise detected', audioHooked ? 'green' : 'red');
-    html += row('Context State', ctx.state);
+    html += row('Context State', ctxStateCaptured, ctxStateCaptured === 'running' || ctxStateCaptured === 'suspended' ? 'green' : 'warn');
     html += row('Sample Rate', ctx.sampleRate + ' Hz');
     html += row('Channel Count', ctx.destination.channelCount || 'n/a');
     html += desc('Audio fingerprint reflects hardware/OS audio processing differences. Consistent for the same device; varies between real devices.');
@@ -1533,15 +1538,32 @@ function testTiming() {
   const samples = [];
   for (let i = 0; i < 10; i++) samples.push(performance.now());
   const diffs = samples.slice(1).map((v,i) => v - samples[i]);
-  const minDiff = Math.min(...diffs);
-  const resolution = minDiff < 0.001 ? '<0.001ms (full precision)' : minDiff.toFixed(4)+'ms';
+  // OLD logic: const minDiff = Math.min(...diffs) — broken because our 0.1ms
+  // quantization makes rapid consecutive calls all return the SAME value
+  // (they all land in the same 100µs bucket), so minDiff = 0 → falsely reported
+  // as "full precision." 0 just means the calls were faster than one quantum.
+  // NEW logic: look at the minimum NON-ZERO diff. If all diffs are zero (allSame),
+  // the timer is clearly quantized — consecutive calls within one 0.1ms window
+  // all returned the same bucket value, which is exactly what real Android Chrome
+  // does with timer coarsening active.
+  const nonZeroDiffs = diffs.filter(d => d > 0);
+  const allSame = nonZeroDiffs.length === 0;
+  const minNonZeroDiff = nonZeroDiffs.length > 0 ? Math.min(...nonZeroDiffs) : null;
+  // Use 0.099 (not strict 0.1) to absorb IEEE-754 rounding: Math.round(x*10)/10
+  // can produce 0.09999...8 instead of exactly 0.1 for certain inputs.
+  const precisionReduced = allSame || (minNonZeroDiff !== null && minNonZeroDiff >= 0.099);
+  const resolution = allSame
+    ? '\u22640.1ms (quantized \u2014 all same bucket)'
+    : (minNonZeroDiff !== null && minNonZeroDiff < 0.001)
+      ? '<0.001ms (full precision)'
+      : (minNonZeroDiff !== null ? minNonZeroDiff.toFixed(4)+'ms' : 'n/a');
 
   let html = '';
   html += row('Timer Resolution', resolution);
   html += row('performance.now()', samples[0].toFixed(4)+'ms');
   html += row('Date.now()', Date.now()+'ms (Unix)');
-  html += row('Precision Reduced', minDiff > 0.1 ? 'Yes — coarsened for privacy' : 'No — full precision', minDiff > 0.1 ? 'green' : 'warn');
-  html += desc('High-resolution timers can be used for timing attacks and hardware fingerprinting. Reduced precision (100µs+) is better for privacy.');
+  html += row('Precision Reduced', precisionReduced ? 'Yes \u2014 coarsened for privacy' : 'No \u2014 full precision', precisionReduced ? 'green' : 'warn');
+  html += desc('High-resolution timers can be used for timing attacks and hardware fingerprinting. Reduced precision (100\u00b5s+) is better for privacy.');
   if (body) body.innerHTML = html;
   setBadge('badge-perf', 'info', 'INFO');
   setResult('Timing', 'info', resolution);

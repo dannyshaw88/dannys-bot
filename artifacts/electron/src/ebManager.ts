@@ -1378,6 +1378,14 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     performance.now=function(){return Math.round(_oPNow()*10)/10;};
   }catch(e){}
   try{
+    // Real Android Chrome does NOT set DNT — navigator.doNotTrack is null.
+    // Electron sets it to "1" by default (Chromium's built-in DNT preference
+    // is ON in the Electron session), which is a fingerprint mismatch: Instagram
+    // sees a "mobile Chrome" session with DNT=1 even though no Android user
+    // ever enables DNT through Chrome's hidden settings.
+    Object.defineProperty(navigator,'doNotTrack',{get:function(){return null;},configurable:true});
+  }catch(e){}
+  try{
     // Real behaviour was to CONCAT the fake device onto the host's real
     // enumerateDevices() result — meaning Instagram still saw the actual PC's
     // real camera/mic hardware (device count, group IDs) alongside the fake
