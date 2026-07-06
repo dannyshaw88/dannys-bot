@@ -2118,7 +2118,13 @@ class AutomationEngine {
   private async ensureClient(profile: Profile, state: ProfileState): Promise<InstagramWebClient | null> {
     // Disable API mode: block every mobile API call for this account.
     if ((profile.apiLimits as any)?.disableApi === true) {
-      console.log(`[engine] @${profile.username}: Disable API mode — all mobile API calls blocked`);
+      console.log(
+        `[api-shield:${profile.id}] @${profile.username} ── BROWSER-ONLY MODE\n` +
+        `  mobile-api  : ✗ BLOCKED (disableApi=true — ensureClient returns null)\n` +
+        `  eb          : EB session will be attempted for this account; proxy is\n` +
+        `                enforced there — look for [eb-shield:${profile.id}] in the log.\n` +
+        `                If no [eb-shield] line appears, the EB session did not open.`
+      );
       return null;
     }
 

@@ -574,6 +574,27 @@ export class InstagramWebClient {
     }
     this.proxyUrl = proxyUrl;
     this.profileId = profileId;
+    // ── API leak-shield confirmation log ─────────────────────────────────────
+    // Printed every time an API client is created so the console confirms the
+    // proxy in use for mobile API calls.  Cross-check against [eb-shield] for
+    // this account — both should show the same proxy host:port.
+    try {
+      const u = new URL(proxyUrl);
+      const scheme = u.protocol.replace(":", "");
+      const defaultPort = scheme === "https" ? "443" : scheme === "socks5" ? "1080" : "80";
+      const port = u.port || defaultPort;
+      console.log(
+        `[api-shield:${profileId}] ── MOBILE API LEAK PROTECTION ACTIVE\n` +
+        `  proxy       : ${scheme}://${u.hostname}:${port}\n` +
+        `  hard-gate   : ✓ constructor blocks if proxy absent\n` +
+        `  tls-gate    : ✓ tlsRequest blocks if proxy absent\n` +
+        `  cycleTLS    : ✓ patchIgClientTls throws if CycleTLS fails (no Node.js TLS fallback)`
+      );
+    } catch {
+      // malformed proxyUrl — hard gate above would have thrown already, but
+      // log defensively so it's visible before the geo-lookup also fails
+      console.warn(`[api-shield:${profileId}] ⚠ could not parse proxyUrl for shield log`);
+    }
     // Resolve timezone offset AND locale for this proxy asynchronously so
     // _buildMobileHeaders always sends the correct X-IG-Timezone-Offset and
     // X-IG-App-Locale for the proxy's exit region. Fire-and-forget — fields
