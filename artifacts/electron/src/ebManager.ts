@@ -1022,7 +1022,10 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   } else {
     fpVars = `var _WGPU=[["Qualcomm Technologies, Inc.","Adreno (TM) 750"],["Qualcomm Technologies, Inc.","Adreno (TM) 735"],["Qualcomm Technologies, Inc.","Adreno (TM) 720"],["ARM","Mali-G920 MC10"],["Google","Tensor G3"]];`
            + `var _gp=_WGPU[Math.floor(_r()*_WGPU.length)],_WV=_gp[0],_WR=_gp[1];`
-           + `var _CN=(_rI(2,254)),_AN=(_r()*0.0000008+0.0000001);`
+           // Full 32-bit entropy for canvas index / audio LCG seed — see generateEbFingerprint()
+           // in browserFingerprint.ts for why the old (2-254) / (1e-7 to 9e-7) ranges collapsed
+           // to ~253 / ~9 distinct fingerprints at scale.
+           + `var _CN=(Math.floor(_r()*4294967295)||1),_AN=(Math.floor(_r()*4294967295)||1);`
            + `var _hx=function(n){var s="";for(var i=0;i<n;i++){s+=("0"+Math.floor(_r()*256).toString(16)).slice(-2);}return s;};`
            + `var _MVID=_hx(16),_MAID=_hx(16),_MSID=_hx(16);`
            + `var _FN=_rI(1,99),_SP=_rI(0,7);`;
@@ -1252,17 +1255,17 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;
     AnalyserNode.prototype.getFloatFrequencyData=function(a){
       _oGFF.call(this,a);
-      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]+=(_as/0x100000000)*0.0001-0.00005;}}
+      if(a&&a.length>0){var _as=(_AN|1);for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]+=(_as/0x100000000)*0.0001-0.00005;}}
     };
     var _oGBF=AnalyserNode.prototype.getByteFrequencyData;
     AnalyserNode.prototype.getByteFrequencyData=function(a){
       _oGBF.call(this,a);
-      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;var v=a[i]+(_as/0x100000000>0.5?1:0);a[i]=Math.max(0,Math.min(255,v));}}
+      if(a&&a.length>0){var _as=(_AN|1);for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;var v=a[i]+(_as/0x100000000>0.5?1:0);a[i]=Math.max(0,Math.min(255,v));}}
     };
     var _oGFT=AnalyserNode.prototype.getFloatTimeDomainData;
     AnalyserNode.prototype.getFloatTimeDomainData=function(a){
       _oGFT.call(this,a);
-      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]=Math.max(-1,Math.min(1,a[i]+(_as/0x100000000)*0.0001-0.00005));}}
+      if(a&&a.length>0){var _as=(_AN|1);for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]=Math.max(-1,Math.min(1,a[i]+(_as/0x100000000)*0.0001-0.00005));}}
     };
   }catch(e){}
   try{
@@ -7156,8 +7159,10 @@ export function startEbIpcServer(
           // accounts by canvas fingerprint and bans in bulk. This patch generates
           // a fresh set of random values per signup session and re-overrides the
           // prototype methods the fp script already patched.
-          const _gpCN   = 2 + Math.floor(Math.random() * 252);
-          const _gpAN   = (Math.random() * 0.0000008 + 0.0000001).toFixed(16);
+          // Full 32-bit entropy — previously 2-254 / 1e-7-9e-7 collapsed to ~253 / ~9 distinct
+          // fingerprints at scale (see generateEbFingerprint() in browserFingerprint.ts).
+          const _gpCN   = (Math.floor(Math.random() * 4294967295) >>> 0) || 1;
+          const _gpAN   = (Math.floor(Math.random() * 4294967295) >>> 0) || 1;
           const _gpWGPU = [
             ["Qualcomm Technologies, Inc.", "Adreno (TM) 750"],
             ["Qualcomm Technologies, Inc.", "Adreno (TM) 735"],
@@ -7187,7 +7192,7 @@ export function startEbIpcServer(
     if(window.WebGL2RenderingContext){WebGL2RenderingContext.prototype.getParameter=function(p){if(p===0x9245)return _WV;if(p===0x9246)return _WR;return WebGL2RenderingContext.prototype.getParameter.call(this,p);};}
   }catch(e){}
   try{
-    var _S=Math.round(_AN*1e7)|1;
+    var _S=(_AN|1);
     AnalyserNode.prototype.getFloatFrequencyData=function(a){var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;_oGFF.call(this,a);if(a&&a.length>0){var s=_S;for(var i=0;i<a.length;i++){s=Math.imul(1664525,s)+1013904223>>>0;a[i]+=(s/0x100000000)*0.0001-0.00005;}}};
     AnalyserNode.prototype.getByteFrequencyData=function(a){var _oGBF=AnalyserNode.prototype.getByteFrequencyData;_oGBF.call(this,a);if(a&&a.length>0){var s=_S;for(var i=0;i<a.length;i++){s=Math.imul(1664525,s)+1013904223>>>0;var v=a[i]+(s/0x100000000>0.5?1:0);a[i]=Math.max(0,Math.min(255,v));}}};
   }catch(e){}

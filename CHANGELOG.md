@@ -4,6 +4,37 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.370] — 2026-07-06
+
+### Fixed — Canvas/audio fingerprint noise collapsed to ~253 / ~9 distinct values at scale (thousands-of-accounts blocker)
+
+**Symptom:** at low account counts the per-account browser fingerprint (canvas noise pixel-flip index, audio-context LCG noise seed) looked randomized enough to pass manual review. At the scale the platform is meant to run at — thousands of Instagram accounts — the noise generators were revealed to have far less entropy than they appeared to:
+
+- `canvasNoise` was generated as `(randomBytes(1)[0] % 253) + 2` — a **single byte** reduced mod 253, so only **253 distinct values** existed across the entire account base. Past ~253 accounts, canvas fingerprints necessarily started repeating.
+- `audioNoise` was generated as a tiny float in the range `1e-7`–`9e-7`, then downstream code did `Math.round(_AN * 1e7)` to turn it into an integer LCG seed before iterating the audio buffer. `Math.round` on values in that narrow a float range collapses to only **~9 distinct integer seeds** (1 through 9) — a catastrophic entropy loss on top of an already-narrow range. Every account fell into one of 9 audio-fingerprint buckets, independent of how many accounts existed.
+
+Both are the deep-fingerprint-surface signals Instagram's device-clustering can use to link accounts even when the sessionid, proxy, and user-agent are all otherwise correct and unique per account — a 253-value canvas index and a 9-value audio seed are a much stronger multi-account correlation signal than a shared desktop Chrome User-Agent string ever is.
+
+**Fix — full 32-bit entropy for both noise values, used directly (no lossy multiplier):**
+
+- `canvasNoise` and `audioNoise` are now both generated as full unsigned 32-bit integers (`randomBytes(4).readUInt32BE(0) >>> 0 || 1`, or the `Math.random() * 4294967295` equivalent in browser-context injected scripts where Node's `crypto` isn't available) — ~4.29 billion possible values each, applied identically across every fingerprint generation site.
+- The downstream `Math.round(_AN * 1e7)` multiplier step — the actual source of the 9-value collapse — was removed entirely. The stored 32-bit integer is now used directly as the audio LCG seed (`var _as = _AN|1`), matching how the canvas noise index (`_CN`) was already being used directly without a lossy transform.
+- Fixed in all four places this fingerprint is generated, so there is no remaining code path that can silently regress to the old low-entropy generator:
+  1. `artifacts/api-server/src/instagram/browserFingerprint.ts` — `generateEbFingerprint()`, the real per-account generator used for every profile's stored `ebFingerprint`.
+  2. `artifacts/electron/src/ebManager.ts` — the injected-script fallback fingerprint generator (used when a profile has no stored `ebFingerprint` yet) and all 3 call sites in the audio-fingerprint hook that previously did `Math.round(_AN*1e7)|1`.
+  3. `artifacts/electron/src/ebManager.ts` — the "ghost browser" per-signup fingerprint block (`_gpCN`/`_gpAN`), which re-randomizes canvas/audio noise fresh for every signup session inside the ghost-browser flow.
+  4. `artifacts/dannys-bot/src/pages/GhostBrowserPanel.tsx` — `generateGhostFingerprint()`, the frontend preview/generator used by the Ghost Browser panel UI.
+
+### Changed — Desktop Chrome User-Agent pool expanded from 26 to ~114 realistic combinations, generated programmatically
+
+The desktop UA pool (used for accounts with "Disable API" browser-only mode) previously hard-coded 26 entries: 13 Chrome major versions x 2 OSes (Windows, macOS). Expanded to a programmatically generated pool covering Chrome major versions 100–137 (~38 versions) x 3 OS platform strings (Windows, macOS, Linux) = ~114 combinations, built from a small generator function in `artifacts/api-server/src/shared/userAgents.ts` instead of a hand-maintained literal array.
+
+**Why this isn't pushed further, and why that's by design, not a limitation:** since Chrome's User-Agent freeze (Chrome 100+), the desktop UA string itself carries almost no real entropy — every genuine Windows Chrome install on a given major version sends the exact same string (`Chrome/136.0.0.0`, never a real build/patch number), and the same is true for macOS and Linux. The only way to list more "unique" desktop UAs than (Chrome major versions) x (OS platform strings) would be to fabricate UA strings that no real Chrome browser has ever actually sent — which is a *stronger* fingerprinting tell than reusing a real, common one, since it's a string that doesn't exist in the wild.
+
+For genuine uniqueness at thousand-and-up account scale, the UA string was never meant to be the differentiator — the fix above (32-bit canvas/audio entropy, applied per-account) plus the existing WebGL vendor/renderer rotation, per-account font seed, and per-account media-device IDs are what actually carry enough entropy (32–128 bits each) to keep accounts from colliding, independent of how many other real Chrome users share the same UA string.
+
+---
+
 ## [1.1.368] — 2026-07-06
 
 ### Fixed — Font fingerprint WARN: "Illegal invocation" root cause + javaEnabled override

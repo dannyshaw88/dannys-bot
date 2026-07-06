@@ -6,3 +6,4 @@
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
 - EB Mode-B silent-window fingerprint gap (fixed 6 Jul 2026) — full diagnosis/fix/rule lives in `replit.md` under "EB Mode-B Silent-Window Fingerprint Gap"; bulk-action temp windows lacked fingerprint spoof, likely ban cause
 - [Desktop UA for disableApi accounts](desktop-ua-disableapi.md) — when disableApi=true, accounts get desktop Chrome UA → full Instagram desktop layout, no mismatch risk
+- [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale

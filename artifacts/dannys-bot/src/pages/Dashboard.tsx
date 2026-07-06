@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.370",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed a bug where the invisible watermark each browser session leaves behind (its canvas and audio fingerprint) only had a few hundred possible canvas values and about 9 possible audio values across your entire account base. Past a couple hundred accounts, this meant unrelated accounts could end up looking identical to Instagram on this specific signal. Every account now gets one of over 4 billion possible values for each, so accounts stay unique from each other no matter how many thousands you run.",
+      },
+      {
+        category: "Improved",
+        text: "The pool of desktop browser identities (used for browser-only accounts) has been expanded from 26 to about 114 realistic combinations across Windows, macOS, and Linux, generated automatically instead of hand-typed.",
+      },
+    ],
+  },
+  {
     version: "1.1.369",
     date: "6 Jul 2026",
     items: [

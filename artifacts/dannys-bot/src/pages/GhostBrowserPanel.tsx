@@ -81,8 +81,10 @@ function randHex(bytes: number): string {
 
 function generateGhostFingerprint(): GhostFingerprint {
   const gpu = FP_GPUS[Math.floor(Math.random() * FP_GPUS.length)];
-  const canvasNoise = Math.floor(Math.random() * 253) + 2;
-  const audioNoise  = parseFloat((Math.random() * 0.0000008 + 0.0000001).toFixed(10));
+  // Full 32-bit entropy (~4.29B values) — previously 2-254 / 1e-7-9e-7 collapsed to ~253 / ~9
+  // distinct fingerprints at scale (see generateEbFingerprint() in browserFingerprint.ts).
+  const canvasNoise = (Math.floor(Math.random() * 4294967295) >>> 0) || 1;
+  const audioNoise  = (Math.floor(Math.random() * 4294967295) >>> 0) || 1;
   return {
     webglVendor:    gpu.vendor,
     webglRenderer:  gpu.renderer,

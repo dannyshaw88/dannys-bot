@@ -377,7 +377,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.1.366**
+75. Current version: **v1.1.370**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.1.360` → `1.1.361`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
@@ -392,3 +392,12 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 82. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
+
+## Fingerprint Noise Entropy Rule (non-negotiable, fixed 6 Jul 2026)
+
+**Every per-account fingerprint noise value (canvas pixel-flip index, audio LCG seed, or any future noise/salt value used to differentiate accounts) must be generated with full 32-bit entropy and used directly, with no lossy modulo/multiplier transform in between.**
+
+- Confirmed bug: `canvasNoise` was `(randomBytes(1)[0] % 253) + 2` (1 byte → 253 values total) and `audioNoise` was a tiny float (`1e-7`–`9e-7`) that a downstream `Math.round(_AN*1e7)` collapsed to ~9 distinct integer seeds. At low account counts this was invisible; at thousands of accounts it meant many accounts shared an identical canvas/audio fingerprint — a stronger cross-account correlation signal than a shared desktop UA string.
+- Fix: generate as a full unsigned 32-bit integer (`randomBytes(4).readUInt32BE(0) >>> 0 || 1` in Node, `Math.floor(Math.random()*4294967295) || 1` in injected browser-context scripts) and use it directly as the index/seed — never re-derive it through `% smallNumber` or `Math.round(tinyFloat * multiplier)`.
+- This must be applied consistently everywhere the fingerprint is generated: `browserFingerprint.ts` (`generateEbFingerprint()`), `ebManager.ts`'s injected-script fallback generator AND its "ghost browser" per-signup block, and `GhostBrowserPanel.tsx`'s `generateGhostFingerprint()`. All four must stay in sync — fixing only one silently reintroduces the collision at scale via the other three.
+- Desktop Chrome UA strings are frozen post-Chrome-100 (major version + OS is the only real variation) — do not try to manufacture "more unique" UA strings than realistic (Chrome version) x (OS) combinations allow; that itself is a stronger fingerprinting tell. True per-account uniqueness at scale must come from the deep fingerprint surface (canvas/audio/WebGL/font/media-device IDs), not the UA string.

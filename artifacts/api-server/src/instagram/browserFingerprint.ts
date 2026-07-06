@@ -3,7 +3,9 @@ import { randomBytes } from "crypto";
 export interface EbFingerprint {
   webglVendor:    string;
   webglRenderer:  string;
+  /** Full 32-bit random integer — used directly as the canvas pixel-flip index (mod buffer length). ~4.29B possible values. */
   canvasNoise:    number;
+  /** Full 32-bit random integer — used directly as the audio-noise LCG seed. ~4.29B possible values. */
   audioNoise:     number;
   mediaVideoId:   string;
   mediaAudioId:   string;
@@ -112,14 +114,21 @@ export function generateEbFingerprint(userAgentApi?: string | null, desktopMode?
   const gpu = desktopMode
     ? DESKTOP_GPU_POOL[randomBytes(1)[0] % DESKTOP_GPU_POOL.length]
     : pickGpu(userAgentApi);
-  const canvasNoise = (randomBytes(1)[0] % 253) + 2; // 2-254 (avoid 0 = no-op XOR)
-  // Tiny float: 0.0000001 – 0.0000009 — imperceptible to ears, changes the hash
-  const audioNoise = (randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF) * 0.0000008 + 0.0000001;
+  // Full 32-bit entropy (~4.29B values) — previously (randomBytes(1)[0] % 253) + 2 gave only
+  // 253 possible pixel-flip positions, so at thousand/million-account scale many accounts
+  // shared the exact same canvas hash. `|| 1` avoids the degenerate 0 = no-op case.
+  const canvasNoise = (randomBytes(4).readUInt32BE(0) >>> 0) || 1;
+  // Full 32-bit entropy used directly as the audio-noise LCG seed. Previously stored as a
+  // tiny float (1e-7–9e-7) and consumers did Math.round(_AN*1e7), which only ever produced
+  // the single leading digit (1-9) — effectively 9 shared audio fingerprints across every
+  // account. Storing the seed directly and using it with `|1` (no multiplier) restores the
+  // full 32-bit seed space.
+  const audioNoise = (randomBytes(4).readUInt32BE(0) >>> 0) || 1;
   return {
     webglVendor:    gpu.vendor,
     webglRenderer:  gpu.renderer,
     canvasNoise,
-    audioNoise:     parseFloat(audioNoise.toFixed(10)),
+    audioNoise,
     mediaVideoId:   rndHex(16),
     mediaAudioId:   rndHex(16),
     mediaSpeakerId: rndHex(16),
