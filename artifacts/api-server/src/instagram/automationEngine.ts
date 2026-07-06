@@ -3643,6 +3643,120 @@ class AutomationEngine {
         }
       });
 
+      // ── explorePage — visit Explore page as an independent queued action ─────
+      // Previously ran inline only when feedHadPosts=false (tied to the feed block).
+      // Now a standalone queued tool with its own Order % and Skip Chance % so it
+      // runs like every other emulation feature — independent of whether the feed
+      // had posts or not.
+      ebEnqueue("explorePage", "explorePageOrderMin", "explorePageOrderMax", async () => {
+        if (s.followSuggestedUsersIfEmptyEnabled !== true) return;
+        // Skip-chance roll (same pattern as all other ebQueue entries)
+        const epSkipMin = Math.min(100, Math.max(0, Number(s.explorePageSkipMin ?? 0)));
+        const epSkipMax = Math.min(100, Math.max(0, Number(s.explorePageSkipMax ?? 0)));
+        const epSkipLo = Math.min(epSkipMin, epSkipMax);
+        const epSkipHi = Math.max(epSkipMin, epSkipMax);
+        if (epSkipHi > 0) {
+          const skipChance = epSkipLo + Math.random() * (epSkipHi - epSkipLo);
+          if (Math.random() * 100 < skipChance) {
+            console.log(`[engine] @${profile.username}: [EB-only] 🧭 explorePage skipped (skip chance roll)`);
+            return;
+          }
+        }
+        try {
+          const scrollMin = Math.max(1, Number(s.exploreScrollMin ?? 5));
+          const scrollMax = Math.max(scrollMin, Number(s.exploreScrollMax ?? 15));
+          const clickMin  = Math.max(0, Number(s.exploreClickMin ?? 1));
+          const clickMax  = Math.max(clickMin, Number(s.exploreClickMax ?? 3));
+          const likePctMin = Math.min(100, Math.max(0, Number(s.exploreLikePctMin ?? 0)));
+          const likePctMax = Math.min(100, Math.max(likePctMin, Number(s.exploreLikePctMax ?? 30)));
+          const visitProfPctMin = Math.min(100, Math.max(0, Number(s.exploreVisitProfilePctMin ?? 0)));
+          const visitProfPctMax = Math.min(100, Math.max(visitProfPctMin, Number(s.exploreVisitProfilePctMax ?? 20)));
+          const profScrollMin = Math.max(1, Number(s.exploreProfileScrollMin ?? 3));
+          const profScrollMax = Math.max(profScrollMin, Number(s.exploreProfileScrollMax ?? 8));
+          const profClickMin  = Math.max(0, Number(s.exploreProfileClickMin ?? 1));
+          const profClickMax  = Math.max(profClickMin, Number(s.exploreProfileClickMax ?? 3));
+
+          await nav("https://www.instagram.com/explore/", "explore page");
+          await sleep(actionDelay());
+
+          // Scroll through explore grid
+          const scrolls = randInt(scrollMin, scrollMax);
+          for (let i = 0; i < scrolls && !state.stop.stopped; i++) {
+            await page.evaluate(() => window.scrollBy(0, 400 + Math.random() * 300)).catch(() => {});
+            await sleep(actionDelay());
+          }
+
+          // Click into posts
+          const clickCount = randInt(clickMin, clickMax);
+          let clicked = 0;
+          for (let attempt = 0; clicked < clickCount && attempt < clickCount * 4 && !state.stop.stopped; attempt++) {
+            const opened: boolean = await page.evaluate(() => {
+              const links = Array.from(document.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]'));
+              const a = links[Math.floor(Math.random() * Math.min(links.length, 12))] as HTMLElement | undefined;
+              if (!a) return false;
+              a.click();
+              return true;
+            }).catch(() => false);
+            if (opened) {
+              await sleep(randInt(1500, 3500));
+              // Like roll
+              const likePct = likePctMin + Math.random() * (likePctMax - likePctMin);
+              if (likePct > 0 && Math.random() * 100 < likePct) {
+                await page.evaluate(() => {
+                  const btn = document.querySelector('svg[aria-label="Like"]')?.closest('button') as HTMLElement | null;
+                  btn?.click();
+                }).catch(() => {});
+                await sleep(randInt(400, 900));
+              }
+              // Visit author profile roll
+              const visitPct = visitProfPctMin + Math.random() * (visitProfPctMax - visitProfPctMin);
+              if (visitPct > 0 && Math.random() * 100 < visitPct) {
+                const navigatedToProfile: boolean = await page.evaluate(() => {
+                  const profileLink = document.querySelector('header a[href^="/"]') as HTMLElement | null;
+                  if (!profileLink) return false;
+                  profileLink.click();
+                  return true;
+                }).catch(() => false);
+                if (navigatedToProfile) {
+                  await sleep(randInt(1200, 2500));
+                  const profScrolls = randInt(profScrollMin, profScrollMax);
+                  for (let ps = 0; ps < profScrolls && !state.stop.stopped; ps++) {
+                    await page.evaluate(() => window.scrollBy(0, 350 + Math.random() * 250)).catch(() => {});
+                    await sleep(randInt(600, 1400));
+                  }
+                  const profClicks = randInt(profClickMin, profClickMax);
+                  for (let pc = 0; pc < profClicks && !state.stop.stopped; pc++) {
+                    await page.evaluate(() => {
+                      const posts = Array.from(document.querySelectorAll('a[href^="/p/"]'));
+                      const p = posts[Math.floor(Math.random() * Math.min(posts.length, 9))] as HTMLElement | undefined;
+                      p?.click();
+                    }).catch(() => {});
+                    await sleep(randInt(1000, 2500));
+                    await page.keyboard.press("Escape").catch(() => {});
+                    await sleep(randInt(400, 800));
+                  }
+                  // Return to explore
+                  await nav("https://www.instagram.com/explore/", "explore page (after profile)");
+                  await sleep(actionDelay());
+                }
+              }
+              await page.keyboard.press("Escape").catch(() => {});
+              await sleep(randInt(400, 900));
+              clicked++;
+            }
+          }
+
+          this.logAction(profile.id, tool.id, "explore_page", "", "", "", "ok",
+            `EB browsed Explore (${scrolls} scrolls, ${clicked} posts opened)`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page",
+            `EB browsed Explore (${scrolls} scrolls, ${clicked} posts opened)`);
+          console.log(`[engine] @${profile.username}: [EB-only] 🧭 browsed Explore page (${scrolls} scrolls, ${clicked} posts opened)`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: [EB-only] explorePage error: ${e?.message}`);
+          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", e?.message ?? "error", true);
+        }
+      });
+
       // ── Execute the ordered queue ─────────────────────────────────────────────
       // Higher order = runs first (same convention as the non-EB Human Session queue).
       ebQueue.sort((a, b) => b.order - a.order);
@@ -3734,38 +3848,6 @@ class AutomationEngine {
             console.warn(`[engine] @${profile.username}: [EB-only] shareTimelinePosts error: ${e?.message}`);
             this.logGhostBrowserCall(profile.id, profile.username, "share_timeline_post", e?.message ?? "error", true);
           }
-        }
-      }
-
-      // ── explorePage — visit Explore only when the feed was genuinely empty ──
-      // feedHadPosts is set by the viewTimelineFeed block above. If that block
-      // was skipped (disabled), feedHadPosts stays true so we never visit Explore.
-      if (s.followSuggestedUsersIfEmptyEnabled === true && !feedHadPosts && !state.stop.stopped) {
-        try {
-          await nav("https://www.instagram.com/explore/", "explore page");
-          await sleep(actionDelay());
-          const scrolls = randInt(2, 6);
-          for (let i = 0; i < scrolls && !state.stop.stopped; i++) {
-            await page.evaluate(() => window.scrollBy(0, 400 + Math.random() * 300)).catch(() => {});
-            await sleep(actionDelay());
-          }
-          const clicked: boolean = await page.evaluate(() => {
-            const links = Array.from(document.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]'));
-            const a = links[Math.floor(Math.random() * Math.min(links.length, 9))] as HTMLElement | undefined;
-            if (!a) return false;
-            a.click();
-            return true;
-          }).catch(() => false);
-          if (clicked) {
-            await sleep(randInt(1500, 3500));
-            await page.keyboard.press("Escape").catch(() => {});
-          }
-          this.logAction(profile.id, tool.id, "explore_page", "", "", "", "ok", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
-          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", `EB browsed Explore (${scrolls} scrolls${clicked ? ", opened 1 post" : ""})`);
-          console.log(`[engine] @${profile.username}: [EB-only] 🧭 browsed Explore page`);
-        } catch (e: any) {
-          console.warn(`[engine] @${profile.username}: [EB-only] explorePage error: ${e?.message}`);
-          this.logGhostBrowserCall(profile.id, profile.username, "explore_page", e?.message ?? "error", true);
         }
       }
 
@@ -4709,106 +4791,6 @@ class AutomationEngine {
             }
           }
 
-          // ── Visit Explore Page if timeline was empty ────────────────────────
-          if (viewed === 0 && s.followSuggestedUsersIfEmptyEnabled === true) {
-            try {
-              const exploreScrollCount = randInt(
-                Number((s as any).exploreScrollMin ?? 5),
-                Number((s as any).exploreScrollMax ?? 15)
-              );
-              const exploreItems = await client.visitExplorePage(exploreScrollCount);
-              console.log(`[engine] @${profile.username}: 🔭 explore page — fetched ${exploreItems.length} item(s) (timeline was empty)`);
-              this.logAction(profile.id, tool.id, "visit_explore_page", "", "", "", "ok", `Visited explore page, fetched ${exploreItems.length} posts`);
-
-              const exploreClickMin = Number((s as any).exploreClickMin ?? 1);
-              const exploreClickMax = Number((s as any).exploreClickMax ?? 3);
-              const exploreClickCount = randInt(exploreClickMin, exploreClickMax);
-              const toClick = [...exploreItems].sort(() => 0.5 - Math.random()).slice(0, exploreClickCount);
-
-              for (const item of toClick) {
-                try {
-                  await client.viewFeedPost(item.mediaId);
-                  console.log(`[engine] @${profile.username}: 🔍 opened explore post ${item.shortcode} by @${item.username}`);
-                  this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from explore page");
-                } catch (e: any) {
-                  if (await checkSessionErr(e, "explore_view_post")) return;
-                  console.warn(`[engine] @${profile.username}: explore view post error: ${e?.message}`);
-                  continue;
-                }
-
-                // Like this explore post?
-                const exploreLikePctMin = Number((s as any).exploreLikePctMin ?? 0);
-                const exploreLikePctMax = Number((s as any).exploreLikePctMax ?? 30);
-                if (exploreLikePctMax > 0 && item.mediaId) {
-                  const likePct = randInt(exploreLikePctMin, exploreLikePctMax);
-                  if (Math.random() * 100 < likePct) {
-                    try {
-                      await client.likeMedia(item.mediaId, item.username);
-                      await storage.incrementStat(profile.id, "like");
-                      console.log(`[engine] @${profile.username}: ❤️ liked explore post ${item.shortcode} by @${item.username}`);
-                      this.logAction(profile.id, tool.id, "like_post", item.username, item.shortcode, "post", "ok", "Liked explore post");
-                    } catch (e: any) {
-                      console.warn(`[engine] @${profile.username}: explore like post error: ${e?.message}`);
-                    }
-                  }
-                }
-
-                // Visit the post author's profile?
-                const exploreVisitPctMin = Number((s as any).exploreVisitProfilePctMin ?? 0);
-                const exploreVisitPctMax = Number((s as any).exploreVisitProfilePctMax ?? 20);
-                if (exploreVisitPctMax > 0 && item.userId) {
-                  const visitPct = randInt(exploreVisitPctMin, exploreVisitPctMax);
-                  if (Math.random() * 100 < visitPct) {
-                    try {
-                      await client.visitUserProfile(item.userId, "explore_popular");
-                      console.log(`[engine] @${profile.username}: 👤 visited profile of @${item.username} from explore`);
-                      this.logAction(profile.id, tool.id, "visit_profile", item.username, "", "profile", "ok", `Visited @${item.username}'s profile from explore`);
-                    } catch (e: any) {
-                      if (await checkSessionErr(e, "explore_visit_profile")) return;
-                      console.warn(`[engine] @${profile.username}: explore visit profile error: ${e?.message}`);
-                      continue;
-                    }
-
-                    // Scroll their profile feed
-                    const expProfileScrollMin = Number((s as any).exploreProfileScrollMin ?? 3);
-                    const expProfileScrollMax = Number((s as any).exploreProfileScrollMax ?? 8);
-                    const profileScrollCount = randInt(expProfileScrollMin, expProfileScrollMax);
-                    let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
-                    try {
-                      profilePosts = useHikerHumanSessionFeed
-                        ? await hikerClient!.getUserFeedByUserId(item.userId, profileScrollCount)
-                        : await client.viewUserFeed(item.userId, profileScrollCount);
-                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile (from explore)${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
-                      this.logAction(profile.id, tool.id, "view_profile_feed", item.username, "", "profile", "ok", `Scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
-                    } catch (e: any) {
-                      if (await checkSessionErr(e, "explore_profile_feed")) return;
-                      console.warn(`[engine] @${profile.username}: explore profile feed error: ${e?.message}`);
-                    }
-
-                    // Click posts on their profile
-                    const expProfileClickMin = Number((s as any).exploreProfileClickMin ?? 1);
-                    const expProfileClickMax = Number((s as any).exploreProfileClickMax ?? 3);
-                    const profileClickMax = randInt(expProfileClickMin, expProfileClickMax);
-                    let profilePostsOpened = 0;
-                    for (const profilePost of profilePosts) {
-                      if (profilePostsOpened >= profileClickMax) break;
-                      try {
-                        await client.viewFeedPost(profilePost.mediaId);
-                        console.log(`[engine] @${profile.username}: 🖼 opened post ${profilePost.shortcode} from @${item.username}'s profile (explore)`);
-                        this.logAction(profile.id, tool.id, "view_profile_post", item.username, profilePost.shortcode, "post", "ok", `Opened post from @${item.username}'s profile (explore)`);
-                        profilePostsOpened++;
-                      } catch (e: any) {
-                        if (await checkSessionErr(e, "explore_profile_post")) return;
-                        console.warn(`[engine] @${profile.username}: explore profile post error: ${e?.message}`);
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (se: any) {
-              console.warn(`[engine] @${profile.username}: visit explore page error: ${se?.message}`);
-            }
-          }
         } catch (e: any) {
           if (await checkSessionErr(e, "view_timeline_feed")) return;
           console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
@@ -5691,6 +5673,116 @@ class AutomationEngine {
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: web browsing error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "web_browsing", "", "", "", "fail", e?.message ?? "web browsing error");
+        }
+      },
+    );
+
+    // ── explorePage — independent queued action (no longer tied to empty feed) ─
+    // Previously fired inline inside viewTimelineFeed only when viewed===0.
+    // Now a first-class queued feature with its own Order % and Skip Chance %,
+    // running regardless of whether the timeline had posts.
+    enqueue("explorePage",
+      s.followSuggestedUsersIfEmptyEnabled === true,
+      "explorePageSkipMin", "explorePageSkipMax",
+      "explorePageOrderMin", "explorePageOrderMax",
+      async () => {
+        const c = await this.ensureClient(profile, state);
+        if (!c) return;
+        try {
+          const scrollMin = Math.max(1, Number((s as any).exploreScrollMin ?? 5));
+          const scrollMax = Math.max(scrollMin, Number((s as any).exploreScrollMax ?? 15));
+          const exploreScrollCount = randInt(scrollMin, scrollMax);
+          const exploreItems = await c.visitExplorePage(exploreScrollCount);
+          console.log(`[engine] @${profile.username}: 🔭 explore page — fetched ${exploreItems.length} item(s)`);
+          this.logAction(profile.id, tool.id, "visit_explore_page", "", "", "", "ok", `Visited explore page, fetched ${exploreItems.length} posts`);
+
+          const exploreClickMin = Math.max(0, Number((s as any).exploreClickMin ?? 1));
+          const exploreClickMax = Math.max(exploreClickMin, Number((s as any).exploreClickMax ?? 3));
+          const exploreClickCount = randInt(exploreClickMin, exploreClickMax);
+          const toClick = [...exploreItems].sort(() => 0.5 - Math.random()).slice(0, exploreClickCount);
+
+          for (const item of toClick) {
+            try {
+              await c.viewFeedPost(item.mediaId);
+              console.log(`[engine] @${profile.username}: 🔍 opened explore post ${item.shortcode} by @${item.username}`);
+              this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from explore page");
+            } catch (e: any) {
+              if (await checkSessionErr(e, "explore_view_post")) return;
+              console.warn(`[engine] @${profile.username}: explore view post error: ${e?.message}`);
+              continue;
+            }
+
+            // Like this explore post?
+            const exploreLikePctMin = Number((s as any).exploreLikePctMin ?? 0);
+            const exploreLikePctMax = Number((s as any).exploreLikePctMax ?? 30);
+            if (exploreLikePctMax > 0 && item.mediaId) {
+              const likePct = randInt(exploreLikePctMin, exploreLikePctMax);
+              if (Math.random() * 100 < likePct) {
+                try {
+                  await c.likeMedia(item.mediaId, item.username);
+                  await storage.incrementStat(profile.id, "like");
+                  console.log(`[engine] @${profile.username}: ❤️ liked explore post ${item.shortcode} by @${item.username}`);
+                  this.logAction(profile.id, tool.id, "like_post", item.username, item.shortcode, "post", "ok", "Liked explore post");
+                } catch (e: any) {
+                  console.warn(`[engine] @${profile.username}: explore like post error: ${e?.message}`);
+                }
+              }
+            }
+
+            // Visit the post author's profile?
+            const exploreVisitPctMin = Number((s as any).exploreVisitProfilePctMin ?? 0);
+            const exploreVisitPctMax = Number((s as any).exploreVisitProfilePctMax ?? 20);
+            if (exploreVisitPctMax > 0 && item.userId) {
+              const visitPct = randInt(exploreVisitPctMin, exploreVisitPctMax);
+              if (Math.random() * 100 < visitPct) {
+                try {
+                  await c.visitUserProfile(item.userId, "explore_popular");
+                  console.log(`[engine] @${profile.username}: 👤 visited profile of @${item.username} from explore`);
+                  this.logAction(profile.id, tool.id, "visit_profile", item.username, "", "profile", "ok", `Visited @${item.username}'s profile from explore`);
+                } catch (e: any) {
+                  if (await checkSessionErr(e, "explore_visit_profile")) return;
+                  console.warn(`[engine] @${profile.username}: explore visit profile error: ${e?.message}`);
+                  continue;
+                }
+
+                // Scroll their profile feed
+                const expProfileScrollMin = Number((s as any).exploreProfileScrollMin ?? 3);
+                const expProfileScrollMax = Number((s as any).exploreProfileScrollMax ?? 8);
+                const profileScrollCount = randInt(expProfileScrollMin, expProfileScrollMax);
+                let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
+                try {
+                  profilePosts = useHikerHumanSessionFeed
+                    ? await hikerClient!.getUserFeedByUserId(item.userId, profileScrollCount)
+                    : await c.viewUserFeed(item.userId, profileScrollCount);
+                  console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile (from explore)${useHikerHumanSessionFeed ? " [HikerAPI]" : ""}`);
+                  this.logAction(profile.id, tool.id, "view_profile_feed", item.username, "", "profile", "ok", `Scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
+                } catch (e: any) {
+                  if (await checkSessionErr(e, "explore_profile_feed")) return;
+                  console.warn(`[engine] @${profile.username}: explore profile feed error: ${e?.message}`);
+                }
+
+                // Click posts on their profile
+                const expProfileClickMin = Number((s as any).exploreProfileClickMin ?? 1);
+                const expProfileClickMax = Number((s as any).exploreProfileClickMax ?? 3);
+                const profileClickMax = randInt(expProfileClickMin, expProfileClickMax);
+                let profilePostsOpened = 0;
+                for (const profilePost of profilePosts) {
+                  if (profilePostsOpened >= profileClickMax) break;
+                  try {
+                    await c.viewFeedPost(profilePost.mediaId);
+                    console.log(`[engine] @${profile.username}: 🖼 opened post ${profilePost.shortcode} from @${item.username}'s profile (explore)`);
+                    this.logAction(profile.id, tool.id, "view_profile_post", item.username, profilePost.shortcode, "post", "ok", `Opened post from @${item.username}'s profile (explore)`);
+                    profilePostsOpened++;
+                  } catch (e: any) {
+                    if (await checkSessionErr(e, "explore_profile_post")) return;
+                    console.warn(`[engine] @${profile.username}: explore profile post error: ${e?.message}`);
+                  }
+                }
+              }
+            }
+          }
+        } catch (se: any) {
+          console.warn(`[engine] @${profile.username}: visit explore page error: ${se?.message}`);
         }
       },
     );
