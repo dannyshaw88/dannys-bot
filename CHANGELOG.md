@@ -4,6 +4,92 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.379] — 2026-07-06
+
+### Added
+
+#### Leak Protection — Console shield logs for EB sessions, API client, and browser-only accounts
+
+Three new structured log lines now fire at the critical points in every account session so you can confirm leak protection is active in real time and cross-check it against the Leak Check page.
+
+---
+
+##### `[eb-shield:ID]` — fires every time an Embedded Browser session opens (`ebManager.ts › openEbWindow`)
+
+Printed immediately after the proxy, WebRTC policy, DoH, and DNS-cache setup steps complete. Reports the **actual applied state** of each protection layer — not assumed state — so any layer that failed to apply (e.g. `setWebRTCIPHandlingPolicy` unavailable on an older Electron build) shows `⚠` instead of `✓`.
+
+```
+[eb-shield:123] @username ── LEAK PROTECTION ACTIVE
+  proxy       : http://p.host:8080
+  webrtc      : ✓ disable_non_proxied_udp (session-level + app-level flag)
+  doh         : ✓ DISABLED — proxy handles DNS resolution
+  quic        : DISABLED (app-level --disable-quic flag)
+  ipv6        : DISABLED (app-level --disable-ipv6 flag)
+  dns-prefetch: DISABLED (app-level --dns-prefetch-disable flag)
+  dns-cache   : FLUSHED (clearHostResolverCache)
+```
+
+- `webrtc` and `doh` lines carry `✓` when the session-level API applied, `⚠` when it threw (non-fatal; app-level flag still applies).
+- `doh` note adapts: proxy sessions say "proxy handles DNS resolution"; home-IP (`useHomeIp=true`) sessions say "OS resolver (no proxy in this session)".
+
+---
+
+##### `[run-leak-test:ID]` — fires after every leak test (`ebManager.ts › /eb/run-leak-test handler`)
+
+Replaces the previous single-line count log with a per-field breakdown that mirrors all 20 checks on the Leak Check page. The headline summarises the worst finding; each check line shows the same status icon and label the UI shows.
+
+```
+[run-leak-test:123] RESULTS — ✓ ALL CLEAR (20/20 checks)
+  IP        : ✓ 185.x.x.x (proxy)
+  IPMatch   : ✓ Matched
+  WebRTC    : ✓ No leak
+  DNS       : ✓ No leak
+  UAMatch   : ✓ Match
+  Bot       : ✓ Not detected
+  Timezone  : ✓ ...
+  ...
+```
+
+Headline rules (in priority order):
+- `✗ N FAIL(S) — key1, key2` — one or more `fail` results
+- `⚠ N WARN — key1, key2` — warnings with no failures
+- `⚠ INCOMPLETE — N checks not captured (key1, …)` — test page timed out or crashed before all 20 keys were written; **never shows ALL CLEAR when checks are missing** (previous behaviour was a false green)
+- `✓ ALL CLEAR (20/20 checks)` — only when all 20 keys are present and none are `fail`/`warn`
+
+Result JSON is runtime-normalised before logging (`unknown → { status, label }`) so a partial or malformed RESULTS object degrades gracefully rather than throwing.
+
+**Cross-check rule:** `[eb-shield]` proxy host and `[run-leak-test]` IP result must agree. Any discrepancy means a request bypassed the proxy.
+
+---
+
+##### `[api-shield:ID]` — fires when an API client is created and when disableApi mode blocks it (`instagramWebClient.ts`, `automationEngine.ts`)
+
+**Mobile API active path** (printed in `InstagramWebClient` constructor after the hard-gate check):
+
+```
+[api-shield:123] ── MOBILE API LEAK PROTECTION ACTIVE
+  proxy       : http://p.host:8080
+  hard-gate   : ✓ constructor blocks if proxy absent
+  tls-gate    : ✓ tlsRequest blocks if proxy absent
+  cycleTLS    : ✓ patchIgClientTls throws if CycleTLS fails (no Node.js TLS fallback)
+```
+
+Port is normalised — if the proxy URL has no explicit port, the scheme default is used (`http→80`, `https→443`, `socks5→1080`) so the log never shows `host:`.
+
+**Browser-only / Disable API path** (printed in `ensureClient` when `disableApi=true`):
+
+```
+[api-shield:123] @username ── BROWSER-ONLY MODE
+  mobile-api  : ✗ BLOCKED (disableApi=true — ensureClient returns null)
+  eb          : EB session will be attempted for this account; proxy is
+                enforced there — look for [eb-shield:123] in the log.
+                If no [eb-shield] line appears, the EB session did not open.
+```
+
+The note is intentionally conditional: `disableApi=true` suppresses all API calls but does not guarantee an EB session — if the EB fails to open (e.g. `ensureSilentEbOpen` error) no `[eb-shield]` line appears, making the gap immediately visible in the log.
+
+---
+
 ## [1.1.378] — 2026-07-06
 
 ### Fixed
