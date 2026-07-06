@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.375",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed 4 fingerprint leaks that were detectable on the Leak Test page even when all other protection was active. Desktop accounts (Windows/Mac/Linux) were reporting the wrong device type in browser Client Hints — they all showed \"Windows/arm\" in JavaScript regardless of their actual assigned identity, while the HTTP headers correctly showed their real identity. These are now in sync. Six additional browser permissions (location, camera, microphone, and motion sensors) were incorrectly showing \"granted\" instead of the correct \"prompt\" that a real phone would show. The performance timer was running at full precision instead of the reduced precision real Chrome uses — this is now fixed. Mac and Linux desktop accounts were being reported as \"Windows\" to any site that checked the platform — they now correctly report their actual OS.",
+      },
+    ],
+  },
+  {
     version: "1.1.372",
     date: "6 Jul 2026",
     items: [

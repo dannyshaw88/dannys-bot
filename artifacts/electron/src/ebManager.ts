@@ -544,7 +544,7 @@ async function armSilentWindowAntiDetection(
     const isMobile = !!browserUA && (browserUA.includes("Mobile") || isApiFormatUA(browserUA));
     const chromeMajor = browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
     const buildInfo = getChromeBuildInfo(chromeMajor);
-    const fpScript = buildFingerprintScript(isMobile, apiUA, fp, buildInfo.full, buildInfo.grease, buildInfo.greaseVer, null);
+    const fpScript = buildFingerprintScript(isMobile, apiUA, fp, buildInfo.full, buildInfo.grease, buildInfo.greaseVer, null, browserUA);
 
     try { win.webContents.debugger.attach("1.3"); } catch { /* already attached */ }
     await Promise.race([
@@ -562,33 +562,34 @@ async function armSilentWindowAntiDetection(
       try { win.webContents.setUserAgent(browserUA); } catch {}
       try {
         const desktopMeta = isMobile ? null : buildDesktopUAMetadata(browserUA);
+        // Mobile metadata — extract Android version and device model from UA string
+        const mobileAndroidVer = isMobile ? (browserUA.match(/Android\s+([0-9]+)/i)?.[1] ?? "14") + ".0.0" : "";
+        const mobileModel = isMobile ? (browserUA.match(/Android [0-9]+;\s*([^)]+)\)/)?.[1]?.trim() ?? "") : "";
         await Promise.race([
           win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
             userAgent: browserUA,
             acceptLanguage: "en-US,en;q=0.9",
             platform: isMobile ? "Linux armv8l" : (desktopMeta!.navigatorPlatform),
-            ...(desktopMeta ? {
-              userAgentMetadata: {
-                brands: [
-                  { brand: buildInfo.grease,  version: buildInfo.greaseVer },
-                  { brand: "Chromium",         version: chromeMajor },
-                  { brand: "Google Chrome",    version: chromeMajor },
-                ],
-                fullVersionList: [
-                  { brand: buildInfo.grease,  version: buildInfo.greaseVer + ".0.0.0" },
-                  { brand: "Chromium",         version: buildInfo.full },
-                  { brand: "Google Chrome",    version: buildInfo.full },
-                ],
-                fullVersion: buildInfo.full,
-                platform: desktopMeta.platform,
-                platformVersion: desktopMeta.platformVersion,
-                architecture: desktopMeta.architecture,
-                model: "",
-                mobile: false,
-                bitness: desktopMeta.bitness,
-                wow64: false,
-              },
-            } : {}),
+            userAgentMetadata: {
+              brands: [
+                { brand: buildInfo.grease,  version: buildInfo.greaseVer },
+                { brand: "Chromium",         version: chromeMajor },
+                { brand: "Google Chrome",    version: chromeMajor },
+              ],
+              fullVersionList: [
+                { brand: buildInfo.grease,  version: buildInfo.greaseVer + ".0.0.0" },
+                { brand: "Chromium",         version: buildInfo.full },
+                { brand: "Google Chrome",    version: buildInfo.full },
+              ],
+              fullVersion: buildInfo.full,
+              platform:        isMobile ? "Android"                   : desktopMeta!.platform,
+              platformVersion: isMobile ? mobileAndroidVer            : desktopMeta!.platformVersion,
+              architecture:    isMobile ? "arm"                       : desktopMeta!.architecture,
+              model:           isMobile ? mobileModel                 : "",
+              mobile:          isMobile,
+              bitness:         isMobile ? "64"                        : desktopMeta!.bitness,
+              wow64:           false,
+            },
           }),
           new Promise<void>(r => setTimeout(r, 1500)),
         ]);
@@ -1091,7 +1092,7 @@ async function cdpTapGesture(
   }
 }
 
-function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null, timezone?: string | null): string {
+function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null, chromeFullVer?: string | null, greaseBrand?: string | null, greaseBrandVer?: string | null, timezone?: string | null, browserUA?: string | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
   // Bake real Client Hints values as literals so the injected script can use them
@@ -1099,6 +1100,16 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   const _cfv  = JSON.stringify(chromeFullVer  ?? null);  // e.g. "131.0.6778.260" or null
   const _gbr  = JSON.stringify(greaseBrand    ?? null);  // e.g. " Not A;Brand"   or null
   const _gbv  = JSON.stringify(greaseBrandVer ?? null);  // e.g. "8"              or null
+
+  // Bake desktop Client Hints values so JS navigator.userAgentData.getHighEntropyValues()
+  // returns architecture/platformVersion that MATCHES the CDP Emulation.setUserAgentOverride
+  // metadata — without these, getHighEntropyValues('architecture') always returned "arm" for
+  // desktop accounts while CDP correctly sent "x86" for Windows/Linux.
+  const _dm = (!isMobile && browserUA) ? buildDesktopUAMetadata(browserUA) : null;
+  const _daLiteral  = JSON.stringify(_dm?.architecture   ?? null);  // e.g. "x86" or null (mobile falls back to "arm" in-script)
+  // Linux platformVersion is "" (empty string) — inject null so the JS fallback uses "" not "10.0.0".
+  // truthy non-empty values (Windows/Mac) are injected as-is.
+  const _dpvLiteral = JSON.stringify(_dm ? (_dm.platformVersion || null) : null);  // e.g. "10.0.0" | null
 
   // Per-account fingerprint values — baked in as literals when available so every
   // account has unique WebGL/canvas/audio/media-device data in the leak test.
@@ -1124,6 +1135,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   const _tzLiteral = timezone ? JSON.stringify(timezone) : 'null';
   const _ebFpSrc = `(function(){try{
   var _M=${mf},_A=${af},_TZ=${_tzLiteral};
+  var _da=${_daLiteral},_dpv=${_dpvLiteral};
   var _ua=navigator.userAgent,_s=5381;
   for(var i=0;i<_ua.length;i++){_s=(((_s<<5)+_s)^_ua.charCodeAt(i))>>>0;}
   _s=_s||1;
@@ -1288,7 +1300,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       // Expand to all permissions that should be "prompt" on a real Android Chrome session.
       // Previously only "notifications" was overridden; clipboard-read/write, midi, and
       // payment-handler were returning "granted" (Electron defaults), which is a bot signal.
-      var _PPROMPT=['notifications','clipboard-read','clipboard-write','midi','payment-handler','background-sync'];
+      var _PPROMPT=['notifications','clipboard-read','clipboard-write','midi','payment-handler','background-sync','geolocation','camera','microphone','accelerometer','gyroscope','magnetometer'];
       navigator.permissions.query=function(p){
         return _PPROMPT.indexOf(p.name)>=0?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};
     }}catch(e){}
@@ -1359,6 +1371,13 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     };
   }catch(e){}
   try{
+    // Real Chrome reduces performance.now() resolution to ~0.1 ms to mitigate
+    // Spectre timing attacks. Electron/Chromium in debug mode returns
+    // full-microsecond precision — a clear non-browser signal. Clamp to 0.1 ms.
+    var _oPNow=performance.now.bind(performance);
+    performance.now=function(){return Math.round(_oPNow()*10)/10;};
+  }catch(e){}
+  try{
     // Real behaviour was to CONCAT the fake device onto the host's real
     // enumerateDevices() result — meaning Instagram still saw the actual PC's
     // real camera/mic hardware (device count, group IDs) alongside the fake
@@ -1381,7 +1400,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   try{
     var _chm=_ua.match(/Chrome\\/([0-9]+)/);
     var _chv=_chm?_chm[1]:"131";
-    var _chp=_ua.indexOf("Android")>=0?"Android":"Windows";
+    var _chp=_ua.indexOf("Android")>=0?"Android":_ua.indexOf("Macintosh")>=0?"macOS":_ua.indexOf("Linux")>=0?"Linux":"Windows";
     var _chmo=_ua.indexOf("Android")>=0&&_ua.indexOf("Mobile")>=0;
     // Real greased brand + version baked in from CHROME_BUILD_INFO at injection time.
     // Falls back to UA-derived values so old profiles without the info still work.
@@ -1399,8 +1418,8 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
           brands:_chb,mobile:_chmo,platform:_chp,
           getHighEntropyValues:function(h){
             var rv={brands:_chb,mobile:_chmo,platform:_chp};
-            if(h.indexOf("platformVersion")>=0)rv.platformVersion=_chav;
-            if(h.indexOf("architecture")>=0)rv.architecture="arm";
+            if(h.indexOf("platformVersion")>=0)rv.platformVersion=_M?_chav:(_dpv!=null?_dpv:"");
+            if(h.indexOf("architecture")>=0)rv.architecture=_M?"arm":(_da||"x86");
             if(h.indexOf("bitness")>=0)rv.bitness="64";
             if(h.indexOf("model")>=0)rv.model=_chmdl;
             if(h.indexOf("uaFullVersion")>=0)rv.uaFullVersion=_CFV;
@@ -2867,7 +2886,7 @@ export async function openEbWindow(opts: {
   // Build the fingerprint injection script NOW — after timezone resolution —
   // so the resolved timezone can be baked into the Intl.DateTimeFormat override.
   // The timezone is null for no-proxy accounts, leaving Intl behaviour unchanged.
-  _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer, _resolvedTz);
+  _fpScript = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null, _fpBuildInfo.full, _fpBuildInfo.grease, _fpBuildInfo.greaseVer, _resolvedTz, _browserUA);
 
   // ── Fire-and-forget: script injection (Page commands CAN hang in packaged build) ─
   // Page.enable and addScriptToEvaluateOnNewDocument are kept fire-and-forget
