@@ -2094,7 +2094,10 @@ export async function getOrCreateSession(
     // This ensures every account has unique WebGL/canvas/audio/media-device seeds from first open.
     let ebFp = profile?.ebFingerprint ?? null;
     if (!ebFp && profile) {
-      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined));
+      // Desktop UA accounts (disableApi=true / browser-only) need desktop GPU fingerprints.
+      // Detect by UA: desktop Chrome has no "Mobile" keyword.
+      const isDesktopUA = !!profile.userAgentEmbedded && !profile.userAgentEmbedded.includes("Mobile");
+      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA));
       await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
     }
     await ebIpc("POST", "/eb/open", {

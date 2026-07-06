@@ -2541,7 +2541,9 @@ export async function openEbWindow(opts: {
   // Declared here so it's in scope for the fire-and-forget injection block.
   let _resolvedTz: string | null = null;
   let _fpScript: string; // assigned after timezone fetch
-  // Mobile profile — only for ghost/verify windows (regular windows are now desktop).
+  // Mobile viewport profile — only applied when the account's UA is actually mobile.
+  // Desktop UA accounts (_fpIsMobile=false) open at the full 1280×820 window size
+  // and Instagram serves its desktop layout naturally — no viewport override needed.
   const _mobileProfile = (!isGhostBrowser && !verifyMode && _fpIsMobile)
     ? getMobileDeviceProfile(_browserUA, _resolvedApiUA ?? null)
     : null;
@@ -2858,9 +2860,9 @@ export async function openEbWindow(opts: {
   // ── Touch emulation (ghost/verify windows only) ───────────────────────────
   // setDeviceMetricsOverride is NOT used — it causes a SIGSEGV crash in
   // Electron 33 on Windows regardless of call serialisation.
-  // Regular account EB windows use a desktop UA (see above), so _fpIsMobile is
-  // false for them and this block never runs.  Ghost/verify windows may still
-  // have a mobile UA and receive touch emulation only.
+  // Touch emulation only applies when the account's UA is actually mobile.
+  // Accounts with disableApi=true are assigned desktop UAs (_fpIsMobile=false)
+  // and never reach this block.  Ghost/verify windows may still use a mobile UA.
   if (_fpIsMobile && !win.isDestroyed()) {
     _ebCrashLog(profileId, `STEP-20: setTouchEmulationEnabled (mobile ghost/verify window)`);
     try {
