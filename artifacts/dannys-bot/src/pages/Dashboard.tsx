@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.369",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Improved",
+        text: "Accounts with Disable API enabled now automatically get a real desktop Chrome identity (Windows or macOS) instead of a mobile Android one. When you open the browser for these accounts, Instagram serves its full desktop layout with the sidebar, navigation bar, and all desktop features — no more mobile web view. This only affects browser-only accounts; accounts using both browser and API keep their existing mobile identity.",
+      },
+      {
+        category: "Security",
+        text: "Desktop browser-only accounts now receive a matching desktop GPU fingerprint — NVIDIA GeForce, AMD Radeon, Intel UHD/Iris, or Apple Silicon Metal — so the WebGL hardware identity the browser reports is consistent with the claimed Windows or macOS device. Previously every account got Android GPU values (Adreno, Mali, Tensor) regardless of the declared operating system, which was a fingerprint mismatch.",
+      },
+      {
+        category: "Security",
+        text: "Fixed a gap where the fingerprint auto-generated on first browser open could assign Android GPU values to a desktop-UA account. The auto-generation path now detects whether the account's browser agent is desktop or mobile and picks the correct GPU pool.",
+      },
+      {
+        category: "Improved",
+        text: "26 distinct desktop Chrome UAs are now available in the pool (Windows 10/11 and macOS, Chrome versions 124–136). Each account is deterministically assigned one based on its username, so the same account always gets the same desktop identity across resets and re-imports.",
+      },
+    ],
+  },
+  {
     version: "1.1.366",
     date: "6 Jul 2026",
     items: [
