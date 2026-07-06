@@ -3945,12 +3945,14 @@ class AutomationEngine {
         const reelsPct = randInt(injectBrowsingReelsPctMin, injectBrowsingReelsPctMax);
         if (Math.random() * 100 < reelsPct) {
           try {
-            const wentToReelsTab = await page.evaluate(() => {
-              const link = document.querySelector('a[href$="/reels/"]') as HTMLElement | null;
+            const wentToReelsTab = await page.evaluate((username: string) => {
+              // Use the exact profile-specific href so we never accidentally
+              // click the global Reels nav link in the left sidebar (/reels/).
+              const link = document.querySelector(`a[href="/${username}/reels/"]`) as HTMLElement | null;
               if (!link) return false;
               link.click();
               return true;
-            }).catch(() => false);
+            }, candidate.username).catch(() => false);
             if (wentToReelsTab) {
               await sleep(randInt(1500, 2500));
               const opened = await page.evaluate(() => {
@@ -5971,7 +5973,7 @@ class AutomationEngine {
       // Visible marker so the user always sees the browse start in the activity log,
       // even when individual sub-actions fail silently.
       engineLog("INFO", `@${profile.username}: [${label}] starting profile browse of @${targetUser.username} (pk=${targetUser.pk})`);
-      this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "profile", "ok", `[${label}] Profile browsing started`);
+      this.logAction(profile.id, tool.id, "browse_profile", targetUser.username, "", "profile", "ok", `Profile browsing started`);
 
       // 1. Visit profile — always first, not in queue
       try {
@@ -6531,9 +6533,9 @@ class AutomationEngine {
       console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
 
       // Post-follow profile browsing — browse the target's profile after successfully following them.
-      // This is the primary injection point: the pre-follow browse (above) handles the "before" case;
-      // this handles the expected "after follow" behaviour where the bot visits the profile it just followed.
-      if (injectProfileBrowsingEnabled) {
+      // Skipped when Browse Before Follow already ran for this slot (followed - 1 is the pre-increment
+      // index) — no need to browse the same profile twice in one session.
+      if (injectProfileBrowsingEnabled && !injectBrowseSlots.has(followed - 1)) {
         const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
         if (Math.random() * 100 < threshold) {
           engineLog("INFO", `@${profile.username}: post-follow profile browsing for @${user.username}`);
