@@ -4,6 +4,75 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.367] — 2026-07-06
+
+### Fixed — Leak-test page: async cards frozen in "Fetching…" / "Running…" forever
+
+**Symptom (visible):** Opening the leak-test page left five cards permanently stuck:
+- **Public IP** — "Fetching…" spinner, never resolves
+- **WebRTC Leak** — "ICE Gathering: Running…", never resolves
+- **DNS Leak** — "Status: Running…", never resolves
+- **Battery API / Media Devices / Permissions / Client Hints** — never even start; badge stays on the initial "Pending" spinner from the static HTML
+
+Three other dependent cards (Proxy IP Match, also shown waiting) were similarly stuck because they feed from the IP result.
+
+Cards that always worked correctly (User Agent Match, Bot Detection, Timezone, Navigator, Screen & Hardware, Canvas Fingerprint, Audio Fingerprint, WebGL / GPU, Network Info, Speech Synthesis, Timing Precision) were unaffected — these are the synchronous tests that run before the async section.
+
+**Root cause — two-part:**
+
+**Part 1 (ebManager.ts — stealth font hook):**
+The font-fingerprint spoof installed by `applyStealthScripts()` hooks `CanvasRenderingContext2D.prototype.measureText` and, when it sees a call with a controlled font string, uses a private `OffscreenCanvas` context (`_fpX`) to measure the monospace baseline width so it can decide whether to pass the real width through or spoof it.
+
+`_fpX` is created once at hook-install time with:
+```js
+var _fpC = new OffscreenCanvas(400, 40), _fpX = _fpC.getContext('2d');
+```
+In some Chromium sandbox configurations (e.g. certain Electron session contexts), `getContext('2d')` returns `null`. The hook stored that `null` in `_fpX` but never checked for it. On the first call with a controlled font, the hook tried:
+```js
+var _bw = _oMT.call(_fpX, text).width;  // _fpX is null → TypeError: Illegal invocation
+```
+This `TypeError` propagated out of `measureText`, up through `testFonts()` (which had no try/catch), and — because `testFonts()` is called inside `runAll()`, an `async` function — the uncaught synchronous throw converted into a rejected promise. The async function stopped executing at that point.
+
+**Part 2 (leaksPage.ts — runAll() crash kills entire async tail):**
+`runAll()` runs all synchronous tests first (lines 1–11), then starts the async section with `await withTimeout(() => testIP(), …)`. `testFonts()` was the 12th and last synchronous test called. Its throw at step 12 killed `runAll()` before it ever reached `testIP()`, `testWebRTC()`, or the `Promise.all([testDNS, testAudio, testBattery, testMedia, testPermissions, testClientHints])` block. Every card in those groups stayed frozen in its initial static-HTML state — exactly what was seen.
+
+The font card itself showed: badge reset to "PENDING" text (the reset block ran successfully at the top of `runAll()`), but body left blank (the throw happened inside `testFonts()` before `body.innerHTML` was set), and no completion badge.
+
+**Fixes applied — three layers:**
+
+**1. ebManager.ts — null guard on `_fpX` in the `measureText` hook:**
+```js
+// Before (crashes if OffscreenCanvas context unavailable):
+_fpX.font = _sz + ' monospace';
+var _bw = _oMT.call(_fpX, text).width;
+
+// After (falls back gracefully):
+if (!_fpX) return r;   // ← new guard
+_fpX.font = _sz + ' monospace';
+var _bw = _oMT.call(_fpX, text).width;
+```
+When `_fpX` is null, the hook now returns the real (unmodified) measurement result instead of crashing. The font fingerprint spoof is effectively disabled for that account session, which is the safest possible degradation — the alternative was breaking the entire leak test.
+
+**2. leaksPage.ts — try/catch inside `testFonts()`:**
+Wrapped the entire canvas-creation + font-measurement block in a try/catch. If the canvas API throws for any reason, the font card now shows a "Canvas API error — \<message\>" row with a WARN badge and calls `setResult('Fonts', 'warn', 'Error')` so the overall score still finalises. No exception escapes the function.
+
+**3. leaksPage.ts — per-test try/catch in `runAll()` sync block:**
+Changed the bare list of sync test calls into a guarded loop:
+```js
+// Before — one uncaught throw kills everything after it:
+testFonts();
+
+// After — each test isolated; one failure logs to console, suite continues:
+var _syncTests = [['Fonts', testFonts], …];
+for (var _si = 0; _si < _syncTests.length; _si++) {
+  try { _syncTests[_si][1](); }
+  catch (e) { console.error('[leak-test] sync test "' + _syncTests[_si][0] + '" threw:', e); }
+}
+```
+This ensures that even if a future sync test regresses, the async tests (IP, WebRTC, DNS, Battery, Media, Permissions, Client Hints) always run.
+
+---
+
 ## [1.1.366] — 2026-07-06
 
 ### Security — Critical: regular EB window forced a fake desktop device on top of the account's real mobile identity
