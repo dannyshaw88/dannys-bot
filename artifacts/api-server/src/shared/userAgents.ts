@@ -1,6 +1,10 @@
 // ── Desktop Chrome UA pool ────────────────────────────────────────────────────
-// Used when an account has Disable API enabled (browser-only mode).
-// api field is "" — the mobile API client is never invoked for these accounts.
+// NOTE: Desktop UAs are NO LONGER assigned to disableApi=true accounts.
+// All accounts now use mobile Android Chrome UAs (see UA_POOL below).
+// Desktop UAs caused hardware-mismatch fingerprint signals on the ARM Mac server
+// (Architecture: arm / Apple Silicon GPU leaked even with Intel Mac UA).
+// This pool is retained for any legacy callers and future use.
+// api field is "" — the mobile API client is never invoked for desktop-UA sessions.
 //
 // IMPORTANT — why this is generated, not hand-listed:
 // Since Chrome's UA-string freeze (Chrome 100+), the desktop User-Agent header itself

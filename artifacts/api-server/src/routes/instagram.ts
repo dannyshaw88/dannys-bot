@@ -845,14 +845,13 @@ export async function registerInstagramRoutes(
       }
 
       // Auto-assign paired UAs when the user leaves them blank on manual add.
-      // Accounts with disableApi=true (browser-only mode) get a desktop Windows/macOS
-      // Chrome UA so the EB renders Instagram's full desktop layout — there is no
-      // mobile API client that could create a device-identity mismatch.
+      // All accounts — including disableApi=true (browser-only) — get a mobile
+      // Android Chrome UA.  The EB fingerprint stack (GPU pool, client hints,
+      // viewport, canvas/audio noise) was built for mobile and is most coherent
+      // there.  Desktop UAs on an ARM Mac server leak real hardware signals
+      // (Architecture: arm, Apple Silicon GPU) that contradict an Intel Mac UA.
       if (!input.userAgentEmbedded || !input.userAgentApi) {
-        const isDesktopMode = (input.apiLimits as any)?.disableApi === true;
-        const autoUA = isDesktopMode
-          ? pickDesktopUAForAccount(input.username || "")
-          : pickUAForAccount(input.username || "");
+        const autoUA = pickUAForAccount(input.username || "");
         if (!input.userAgentEmbedded) input.userAgentEmbedded = autoUA.embedded;
         if (!input.userAgentApi)      input.userAgentApi      = autoUA.api;
       }
@@ -972,17 +971,15 @@ export async function registerInstagramRoutes(
     // Accept an optional specific UA from the body (device-picker flow).
     // Falls back to a random pool entry when no UA is supplied (existing Reset button flow).
     const { userAgentApi, userAgentEmbedded } = (req.body ?? {}) as { userAgentApi?: string; userAgentEmbedded?: string };
-    // When the caller doesn't supply a specific UA, auto-pick based on the account's
-    // mode: desktop UA for disableApi=true (browser-only), mobile UA otherwise.
+    // When the caller doesn't supply a specific UA, always pick a mobile Android
+    // Chrome UA — even for disableApi=true accounts.  The EB fingerprint stack is
+    // built for mobile and desktop UAs cause hardware-mismatch signals on the ARM
+    // Mac server (Architecture: arm leaks through Sec-CH-UA when UA claims Intel).
     let ua: { api: string; embedded: string };
     if (userAgentApi && userAgentEmbedded) {
       ua = { api: userAgentApi, embedded: userAgentEmbedded };
     } else {
-      const profile = await storage.getProfile(id);
-      const isDesktopMode = (profile?.apiLimits as any)?.disableApi === true;
-      ua = isDesktopMode
-        ? pickDesktopUAForAccount(profile?.username || "")
-        : UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+      ua = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
     }
     const isDesktopUA = !ua.embedded.includes("Mobile");
     await storage.updateProfile(id, {
@@ -992,12 +989,41 @@ export async function registerInstagramRoutes(
       igApiCookies: null,
       accountStatus: "pending",
       credentialsDirty: true,
-      ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api, isDesktopUA)),
+      ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api, isDesktopUA, ua.embedded)),
     });
     // Clear any in-flight verify lock so the next Verify doesn't get a 429
     // "already in progress" if the previous verify was still running when reset was clicked.
     verifyInFlight.delete(id);
     res.json({ ok: true });
+  });
+
+  // Migration: reset all disableApi accounts that still carry a desktop Chrome UA
+  // (no "Mobile" in the UA string) back to a mobile Android Chrome UA + fresh fingerprint.
+  // Credentials (cookies, device state) are NOT cleared so active sessions survive.
+  // This is a one-time repair for accounts assigned desktop UAs before the policy change.
+  app.post("/api/admin/migrate-desktop-to-mobile-uas", async (req, res) => {
+    const all = await storage.getProfiles();
+    const targets = all.filter(p =>
+      (p.apiLimits as any)?.disableApi === true &&
+      p.userAgentEmbedded &&
+      !p.userAgentEmbedded.includes("Mobile"),
+    );
+    const results: { id: number; username: string; ok: boolean; error?: string }[] = [];
+    for (const p of targets) {
+      try {
+        const ua = pickUAForAccount(p.username || "");
+        const fp = JSON.stringify(generateEbFingerprint(ua.api, false, ua.embedded));
+        await storage.updateProfile(p.id, {
+          userAgentApi:      ua.api,
+          userAgentEmbedded: ua.embedded,
+          ebFingerprint:     fp,
+        });
+        results.push({ id: p.id, username: p.username || String(p.id), ok: true });
+      } catch (err: any) {
+        results.push({ id: p.id, username: p.username || String(p.id), ok: false, error: String(err?.message) });
+      }
+    }
+    res.json({ migrated: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results });
   });
 
   // Bulk-update: apply one patch to many profiles in a single request.
@@ -2648,17 +2674,13 @@ export async function registerInstagramRoutes(
             proxyPort: impPort || null,
             proxyUsername: (p.proxyUsername || null) as string | null,
             proxyPassword: (p.proxyPassword || null) as string | null,
-            // Auto-assign a paired UA when the import source doesn't supply one.
-            // Deterministic so the same username always gets the same device profile —
-            // stable across re-imports.  disableApi accounts get a desktop Chrome UA.
-            userAgentApi: p.userAgentApi || (() => {
-              const isDesktop = (p.apiLimits as any)?.disableApi === true;
-              return isDesktop ? pickDesktopUAForAccount(p.username || "").api : pickUAForAccount(p.username || "").api;
-            })(),
-            userAgentEmbedded: p.userAgentEmbedded || (() => {
-              const isDesktop = (p.apiLimits as any)?.disableApi === true;
-              return isDesktop ? pickDesktopUAForAccount(p.username || "").embedded : pickUAForAccount(p.username || "").embedded;
-            })(),
+            // Auto-assign a paired mobile Android Chrome UA when the import source
+            // doesn't supply one.  Deterministic so the same username always gets the
+            // same device profile — stable across re-imports.  All accounts (including
+            // disableApi=true) get mobile UAs; desktop UAs cause hardware-mismatch
+            // fingerprint signals on the ARM Mac server.
+            userAgentApi: p.userAgentApi || pickUAForAccount(p.username || "").api,
+            userAgentEmbedded: p.userAgentEmbedded || pickUAForAccount(p.username || "").embedded,
             tags: p.tags || "",
             dateOfBirth: p.dateOfBirth || null,
             notes: p.notes || null,
@@ -5397,12 +5419,9 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
 
       // Auto-assign UAs if the EQX file was exported before UAs were tracked
       // (older exports) or if the account never had one assigned.
-      // disableApi accounts get a desktop Chrome UA.
+      // All accounts (including disableApi=true) get mobile Android Chrome UAs.
       if (!cleanProfile.userAgentEmbedded || !cleanProfile.userAgentApi) {
-        const isDesktop = (cleanProfile.apiLimits as any)?.disableApi === true;
-        const autoUA = isDesktop
-          ? pickDesktopUAForAccount(cleanProfile.username || "")
-          : pickUAForAccount(cleanProfile.username || "");
+        const autoUA = pickUAForAccount(cleanProfile.username || "");
         if (!cleanProfile.userAgentEmbedded) cleanProfile.userAgentEmbedded = autoUA.embedded;
         if (!cleanProfile.userAgentApi)      cleanProfile.userAgentApi      = autoUA.api;
       }
@@ -5682,8 +5701,8 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       for (const ja of jarveeAccounts) {
         try {
           // Jarvee imports don't carry an apiLimits field, so they always get
-          // a mobile UA here — disableApi can be set via settings after import,
-          // at which point Reset Device IDs will assign the correct desktop UA.
+          // a mobile UA here.  All accounts (including disableApi=true after import)
+          // stay on mobile UAs — Reset Device IDs will assign a fresh mobile UA.
           const autoUA = pickUAForAccount(ja.username);
           const igDeviceState = ja.deviceString
             ? JSON.stringify({ deviceString: ja.deviceString })
