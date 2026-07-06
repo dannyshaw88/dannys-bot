@@ -1561,7 +1561,7 @@ async function runAll() {
     } catch {}
   }
   // Signal completion so Puppeteer/Electron silent capture can detect when all tests are done
-  try { (window as any)._leakTestDone = true; } catch {}
+  try { window._leakTestDone = true; } catch {}
 }
 
 window.addEventListener('DOMContentLoaded', runAll);
