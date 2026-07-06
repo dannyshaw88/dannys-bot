@@ -3271,10 +3271,12 @@ export class InstagramWebClient {
   // ── View reels from the user's feed ─────────────────────────────────────
   // Returns the first reel URL on success, false on failure.
   // Marks ALL fetched reels as seen (up to count=6).
-  async viewReels(userId: string, username?: string): Promise<string | false> {
+  async viewReels(userId: string, username?: string, fromProfile = false): Promise<string | false> {
     return this.timed("ViewReels", async () => {
-      // Nav chain: user navigated Home → Reels tab before viewing clips.
-      this._navChainScreen = "reels";
+      // Nav chain: when called from a profile browse (fromProfile=true) the user
+      // tapped the Reels tab on the target's profile page.  When called standalone
+      // (e.g. the human-session "View Reels" tool) the user navigated Home → Reels.
+      this._navChainScreen = fromProfile ? "profile" : "reels";
       // clips/user requires POST
       const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/user/`, body);

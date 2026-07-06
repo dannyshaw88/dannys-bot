@@ -6481,7 +6481,29 @@ export function startEbIpcServer(
             new Promise<boolean>(r => setTimeout(() => r(false), 3_000)),
           ]);
 
-          _ipcLog(`[eb:silent-search:${pid}] search complete — clicked=${ssClicked}, restoring URL`);
+          _ipcLog(`[eb:silent-search:${pid}] search complete — clicked=${ssClicked}; waiting for profile page to load before restoring URL`);
+          // Wait up to 6 s for the URL to change to a profile page (the click
+          // triggers an SPA navigation to instagram.com/<username>/).  Only then
+          // start the dwell so the account genuinely registers a profile-page
+          // visit in Instagram's session telemetry.
+          if (ssClicked) {
+            const navDeadline = Date.now() + 6_000;
+            while (Date.now() < navDeadline) {
+              await new Promise(r => setTimeout(r, 300));
+              const currentHref: string = await Promise.race([
+                ssWin.webContents.executeJavaScript(`window.location.href`, true).catch(() => ""),
+                new Promise<string>(r => setTimeout(() => r(""), 500)),
+              ]);
+              // SPA navigation landed when the URL is no longer the search or
+              // home page — any /username/ path counts as a profile page.
+              if (currentHref && !/\/search\/|instagram\.com\/?$/.test(currentHref)) {
+                _ipcLog(`[eb:silent-search:${pid}] navigated to profile: ${currentHref}`);
+                break;
+              }
+            }
+            // Dwell on the profile page for 3–5 s (human-like read time).
+            await new Promise(r => setTimeout(r, 3000 + Math.floor(Math.random() * 2000)));
+          }
           ssCleanup();
           return ssRespond(200, { ok: true });
 

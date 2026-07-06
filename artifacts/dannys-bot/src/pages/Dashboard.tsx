@@ -78,6 +78,40 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.376",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Inject Search now properly dwells on the target's profile page for 3–6 seconds after clicking the result from the search bar dropdown before restoring the previous view — previously it snapped back immediately, making the search signal invisible in the EB window.",
+      },
+      {
+        category: "Fixed",
+        text: "Browse Before Follow: the engagement queue now logs when it starts and when it completes (or when it has no actions configured), so you can confirm in the activity log that all configured actions ran — even when individual actions didn't trigger due to their probability settings.",
+      },
+      {
+        category: "Improved",
+        text: "Scroll Feed now has editable Amount fields (min–max) in the Inject Browsing Settings dialog. Previously the amount was controlled by the old Feed Posts row; it is now clearly labelled and placed on the Scroll Feed row where it belongs.",
+      },
+      {
+        category: "Improved",
+        text: "Feed Posts row has been renamed to Click Feed Posts and now controls a count (not a per-post probability) of how many scrolled posts to click and individually view. Set Amount to 0 to disable clicking.",
+      },
+      {
+        category: "Fixed",
+        text: "Likes are now wired to post clicks: when a post is clicked and viewed via Click Feed Posts, the configured Like % is applied at that moment. Likes no longer run as a separate parallel action.",
+      },
+      {
+        category: "Fixed",
+        text: "View Reels row in the Inject Browsing Settings dialog is now aligned horizontally with all other rows (was wrapping to a second line due to a flex-col layout).",
+      },
+      {
+        category: "Fixed",
+        text: "View Reels (inject browsing) now sets the correct navigation chain context — profile page → Reels tab — instead of the home feed → Reels nav chain that was being used before.",
+      },
+    ],
+  },
+  {
     version: "1.1.375",
     date: "6 Jul 2026",
     items: [

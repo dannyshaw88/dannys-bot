@@ -5840,8 +5840,8 @@ class AutomationEngine {
     const injectProfileBrowsingFeedChanceMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingFeedChanceMax ?? 100));
     const injectProfileBrowsingFeedMin            = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
     const injectProfileBrowsingFeedMax            = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
-    const injectProfileBrowsingPostPctMin         = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
-    const injectProfileBrowsingPostPctMax         = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
+    // injectProfileBrowsingPostPctMin/Max removed — post clicking is now controlled
+    // by injectProfileBrowsingClickPostMin/Max (count-based, not per-post chance).
     // Abandon-follow after browsing
     const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
     const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
@@ -5855,6 +5855,9 @@ class AutomationEngine {
     const injectProfileBrowsingLikePctMax         = Math.max(0, s.injectProfileBrowsingLikePctMax ?? 0);
     const injectProfileBrowsingLikeScrollMin      = Math.max(0, s.injectProfileBrowsingLikeScrollMin ?? 0);
     const injectProfileBrowsingLikeScrollMax      = Math.max(0, s.injectProfileBrowsingLikeScrollMax ?? 0);
+    // Click Feed Posts — how many scrolled posts to click and individually view (likes fire inside each clicked post).
+    const injectProfileBrowsingClickPostMin       = Math.max(0, s.injectProfileBrowsingClickPostMin ?? 0);
+    const injectProfileBrowsingClickPostMax       = Math.max(injectProfileBrowsingClickPostMin, s.injectProfileBrowsingClickPostMax ?? 0);
     const injectProfileBrowsingSaveMediaPctMin    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMin ?? 0);
     const injectProfileBrowsingSaveMediaPctMax    = Math.max(0, s.injectProfileBrowsingSaveMediaPctMax ?? 0);
     const injectProfileBrowsingSaveMediaScrollMin = Math.max(0, s.injectProfileBrowsingSaveMediaScrollMin ?? 0);
@@ -6010,44 +6013,42 @@ class AutomationEngine {
         queue.push({ order: randInt(orderMin, orderMax), actionLabel, run: fn });
       };
 
-      // Open individual posts
-      if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
-        enqueue("open posts",
+      // Click Feed Posts — pick N random posts from the scrolled list, open each one,
+      // and optionally like it while viewing. Likes are wired to the post-click view
+      // (not a separate queue action) so they fire only when a post is actually opened.
+      if (injectProfileBrowsingClickPostMax > 0 && profilePosts.length > 0) {
+        enqueue("click feed posts",
           Number(s.injectProfileBrowsingFeedOrderMin ?? 0), Number(s.injectProfileBrowsingFeedOrderMax ?? 0),
           async () => {
-            const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
-            for (const post of profilePosts) {
-              if (Math.random() * 100 < postPct) {
-                try {
-                  await client.viewFeedPost(post.mediaId);
-                  engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
-                  this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Opened post from profile`);
-                } catch { /* non-critical */ }
-              }
-            }
-          },
-        );
-      }
-
-      // Like posts
-      if (injectProfileBrowsingLikePctMax > 0 && profilePosts.length > 0) {
-        enqueue("like posts",
-          Number(s.injectProfileBrowsingLikePctOrderMin ?? 0), Number(s.injectProfileBrowsingLikePctOrderMax ?? 0),
-          async () => {
-            const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
-            const likeScrollCap = injectProfileBrowsingLikeScrollMax > 0 ? randInt(injectProfileBrowsingLikeScrollMin, injectProfileBrowsingLikeScrollMax) : profilePosts.length;
-            const likePosts = profilePosts.slice(0, likeScrollCap);
-            for (const post of likePosts) {
-              if (Math.random() * 100 < likePct) {
-                try {
-                  const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
-                  if (likeResult && likeResult !== "blocked") {
-                    engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
-                    this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
-                    await storage.incrementStat(profile.id, "like");
+            const clickCount = Math.min(
+              randInt(injectProfileBrowsingClickPostMin, injectProfileBrowsingClickPostMax),
+              profilePosts.length,
+            );
+            if (clickCount <= 0) return;
+            // Pick a random sample of posts without replacement.
+            const shuffled = [...profilePosts].sort(() => Math.random() - 0.5);
+            const toClick = shuffled.slice(0, clickCount);
+            engineLog("INFO", `@${profile.username}: [${label}] clicking ${clickCount} post(s) from @${targetUser.username}'s profile`);
+            for (const post of toClick) {
+              try {
+                await client.viewFeedPost(post.mediaId);
+                engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
+                this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `Clicked post from profile`);
+                // Apply like inside the clicked post view if configured.
+                if (injectProfileBrowsingLikePctMax > 0) {
+                  const likePct = randInt(injectProfileBrowsingLikePctMin, injectProfileBrowsingLikePctMax);
+                  if (Math.random() * 100 < likePct) {
+                    try {
+                      const likeResult = await client.likeMedia(post.mediaId, targetUser.username);
+                      if (likeResult && likeResult !== "blocked") {
+                        engineLog("INFO", `@${profile.username}: [${label}] liked post ${post.shortcode} from @${targetUser.username}`);
+                        this.logAction(profile.id, tool.id, "like", targetUser.username, post.shortcode, "post", "ok", `Liked post from profile browse`);
+                        await storage.incrementStat(profile.id, "like");
+                      }
+                    } catch { /* non-critical */ }
                   }
-                } catch { /* non-critical */ }
-              }
+                }
+              } catch { /* non-critical */ }
             }
           },
         );
@@ -6141,7 +6142,7 @@ class AutomationEngine {
             const reelsPct = randInt(injectProfileBrowsingViewReelsPctMin, injectProfileBrowsingViewReelsPctMax);
             if (Math.random() * 100 < reelsPct) {
               try {
-                const ok = await client.viewReels(targetUser.pk, targetUser.username);
+                const ok = await client.viewReels(targetUser.pk, targetUser.username, true);
                 if (ok) {
                   engineLog("INFO", `@${profile.username}: [${label}] viewed reels of @${targetUser.username}`);
                   this.logAction(profile.id, tool.id, "view_reels", targetUser.username, "", "reel", "ok", `Viewed reels from profile browse`);
@@ -6205,10 +6206,13 @@ class AutomationEngine {
       // Sort descending by order (higher = runs first), then execute sequentially
       queue.sort((a, b) => b.order - a.order);
       if (queue.length > 0) {
-        engineLog("INFO", `@${profile.username}: [${label}] engagement order for @${targetUser.username}: ${queue.map(e => e.actionLabel).join(" → ")}`);
-      }
-      for (const entry of queue) {
-        await entry.run();
+        engineLog("INFO", `@${profile.username}: [${label}] engagement queue for @${targetUser.username}: ${queue.map(e => e.actionLabel).join(" → ")}`);
+        for (const entry of queue) {
+          await entry.run();
+        }
+        engineLog("INFO", `@${profile.username}: [${label}] engagement queue complete for @${targetUser.username}`);
+      } else {
+        engineLog("INFO", `@${profile.username}: [${label}] no engagement actions configured (all counts/chances are 0) for @${targetUser.username}`);
       }
     };
 
