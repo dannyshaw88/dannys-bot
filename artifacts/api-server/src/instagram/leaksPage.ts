@@ -609,6 +609,33 @@ function hashStr(str) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+// Safety-net wrapper: guarantees a hung fetch/test (e.g. a proxy that accepts
+// a TCP connection but never completes the 407 handshake) can never block the
+// rest of the test suite forever. Internal per-test AbortController timeouts
+// (e.g. testIP's 8s fetch timeout) are not always enough — some proxy hangs
+// occur before the abort signal has any effect. This is a belt-and-suspenders
+// outer timeout so every card always resolves to a definite state.
+function withTimeout(promiseFactory, ms, onTimeoutLabel) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn('[leak-test] ' + onTimeoutLabel + ' exceeded ' + ms + 'ms — forcing timeout so the rest of the suite can continue.');
+      resolve();
+    }, ms);
+    Promise.resolve()
+      .then(promiseFactory)
+      .catch((e) => console.warn('[leak-test] ' + onTimeoutLabel + ' threw:', e))
+      .finally(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      });
+  });
+}
+
 // Collect results for summary
 const RESULTS = {};
 const TOTAL_SCORED = 7; // IP, WebRTC, DNS, UAMatch, Bot, IPMatch, Fonts
@@ -1528,18 +1555,25 @@ async function runAll() {
   testTiming();
   testFonts();
 
-  // Async tests
-  await testIP();
+  // Async tests. Wrapped in withTimeout() as a belt-and-suspenders guard:
+  // testIP() already has an internal 8s AbortController timeout, but a proxy
+  // that accepts a TCP connection and then never completes the 407 handshake
+  // can leave the underlying fetch() promise unsettled past that point in
+  // some Electron/Chromium builds — which used to hang this ENTIRE sequential
+  // chain forever, leaving Battery/Media/Permissions/Client Hints stuck on
+  // their initial "PENDING" badge since they're never even called. The outer
+  // timeout guarantees runAll() always reaches the later tests.
+  await withTimeout(() => testIP(), 12000, 'testIP');
   testIPMatch();  // needs IP result
   testWebRTC();   // async but fire-and-forget (resolved internally)
 
   await Promise.all([
-    testDNS(),
-    testAudio(),
-    testBattery(),
-    testMediaDevices(),
-    testPermissions(),
-    testClientHints(),
+    withTimeout(() => testDNS(), 12000, 'testDNS'),
+    withTimeout(() => testAudio(), 12000, 'testAudio'),
+    withTimeout(() => testBattery(), 12000, 'testBattery'),
+    withTimeout(() => testMediaDevices(), 12000, 'testMediaDevices'),
+    withTimeout(() => testPermissions(), 12000, 'testPermissions'),
+    withTimeout(() => testClientHints(), 12000, 'testClientHints'),
   ]);
 
   // Auto-save snapshot for the account if this leak page is associated with a profile

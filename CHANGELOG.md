@@ -4,6 +4,41 @@ All notable changes to Danny's Bot (Equinox) are documented here.
 
 ---
 
+## [1.1.366] — 2026-07-06
+
+### Security — Critical: regular EB window forced a fake desktop device on top of the account's real mobile identity
+
+**This was a live, ongoing ban cause confirmed via the in-app leak test.**
+
+#### Root cause
+`openEbWindow()` in `artifacts/electron/src/ebManager.ts` — the function behind the main, regular account EB window used for every human session and manual browsing action — contained a blanket rule: whenever an account's assigned identity was a mobile user agent, the window silently swapped it for a generic Windows desktop Chrome user agent instead, so Instagram would render its full desktop web UI (sidebar, Make-a-Post "Next" button, etc).
+
+This ran on every regular window open — the majority of an account's live session time — while three other surfaces continued using the account's REAL assigned mobile identity (e.g. an Android 13 OnePlus CPH2449 device) for the exact same session cookies:
+- `verifyInstagramCredentials()` — the mobile API verification call
+- The mobile API client used for automated follow/unfollow/DM actions
+- The Mode-B silent background windows (`/eb/silent-follow`, `/eb/silent-post`, `/eb/silent-search`)
+
+Instagram therefore saw ONE session token being presented from two completely different devices depending on which part of the app touched it in a given moment — a strong automated-abuse / session-hijack signal that Instagram's systems are specifically built to detect and act on with bans, independent of whether the proxy and IP were correct.
+
+#### Fix
+Removed the desktop-UA override entirely. Regular EB windows now always present the account's real assigned device identity, matching every other surface that uses that account's session. The window itself is unchanged in size — only the identity it reports to Instagram no longer gets swapped.
+
+**Trade-off, accepted deliberately:** the regular EB window will now show Instagram's mobile web layout (not desktop) for accounts assigned a mobile identity. The automated Make-a-Post flow's primary path (the off-screen background window) was never affected by this bug and is unchanged; its click-detection already tolerates different Instagram UI layouts.
+
+### Fixed — Leak-test page could hang indefinitely on some cards
+
+**Symptom:** on the leak-test screen, Public IP / Proxy IP Match / WebRTC Leak / DNS Leak could get stuck on "Fetching…/Running…" forever, and Battery API / Media Devices / Permissions / Client Hints would never even start (stuck on the initial "Pending" badge).
+
+**Root cause:** the test runner checks Public IP first, then runs the rest of the tests together afterward. The Public IP check already had its own 8-second timeout, but if the assigned proxy accepted a connection and then never finished authenticating, that timeout could fail to actually cancel the request in some cases — leaving the whole test run stuck waiting on it forever, so none of the later tests ever ran.
+
+**Fix:** added a second, independent 12-second safety timer around every test in the run sequence. Even if a test's own internal timeout fails to fire, the safety timer now forces the suite to move on so every card always finishes with a real result instead of hanging forever.
+
+### Maintenance — Consolidated duplicate GitHub Actions workflows
+
+Four nearly-identical Windows-installer build workflows (`build.yml`, `build-windows-installer.yml`, `release.yml`, `windows-installer.yml`) had accumulated over time, with `build.yml` triggering on every push to `main` — meaning every push kicked off duplicate, redundant installer builds. Consolidated into a single canonical workflow, `build-windows-installer.yml` (triggers on push to `main` and manual dispatch). The other three are kept as inert, trigger-less stubs (this environment could not delete tracked files) pointing back to the canonical workflow — do not add triggers back to them.
+
+---
+
 ## [1.1.365] — 2026-07-05
 
 ### Security — Hard abort if no proxy configured on mode-B automation windows

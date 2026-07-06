@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.366",
+    date: "6 Jul 2026",
+    items: [
+      {
+        category: "Security",
+        text: "Fixed a critical bug where the main browser window was quietly presenting a fake desktop computer identity on top of an account's real phone identity, even though every other part of the app (verification, automated actions) was using that account's real phone. Instagram could see the same login being used from two different-looking devices at once, which is exactly the kind of thing that gets accounts banned. The browser window now always shows the account's real, consistent device identity.",
+      },
+      {
+        category: "Fixed",
+        text: "The leak-test screen could get stuck showing \"Fetching...\" or \"Pending\" forever on some checks if a proxy connection stalled. It now always finishes and shows a result for every check within a few seconds.",
+      },
+      {
+        category: "Fixed",
+        text: "Cleaned up duplicate build pipelines that were causing multiple redundant installer builds to run every time an update was pushed.",
+      },
+    ],
+  },
+  {
     version: "1.1.365",
     date: "5 Jul 2026",
     items: [

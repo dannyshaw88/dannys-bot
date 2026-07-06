@@ -2411,23 +2411,40 @@ export async function openEbWindow(opts: {
   }
   let _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
   const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
-  // ── Desktop UA override for regular account EB windows ────────────────────
-  // Regular account EBs always use a Windows desktop Chrome UA so Instagram
-  // serves the full desktop web experience with the full sidebar, all features,
-  // and the create-post Next button — identical to what Chrome on a PC shows.
+  // ── DEVICE FINGERPRINT CONTINUITY: no forced desktop-UA override ──────────
+  // REMOVED (6 Jul 2026, ban-fix): this block used to force EVERY regular
+  // (non-ghost, non-verify) account EB window into a shared, generic Windows
+  // desktop Chrome UA whenever the account's assigned identity was mobile —
+  // regardless of what device the account was actually verified/assigned as.
   //
-  // The stored user_agent_embedded (mobile Android UA) is used only by the
-  // mobile API client, not by the EB browser display.
+  // Root cause of the "USER AGENT MISMATCH" leak-test FAIL and the reported
+  // bans: this override ran on every human-session / manually-opened EB
+  // window (the majority of an account's live browsing time), while
+  // `verifyInstagramCredentials()`, the mobile API client, and the Mode-B
+  // silent windows (`armSilentWindowAntiDetection` for follow/post/search)
+  // all continued to use the account's REAL assigned mobile identity
+  // (e.g. Android 13, OnePlus CPH2449) for the exact same sessionid/cookies.
+  // Instagram therefore saw ONE session token presented from two wildly
+  // different devices (Windows desktop vs Android phone) — a strong
+  // automated-abuse / session-hijack signal, independent of proxy/IP
+  // correctness. This directly violates the DEVICE FINGERPRINT CONTINUITY
+  // RULE in replit.md (an account's assigned identity must never be swapped
+  // for an unrelated one on any code path).
   //
   // Emulation.setDeviceMetricsOverride is intentionally NOT used — it causes a
   // SIGSEGV crash in Electron 33 on Windows regardless of call serialisation.
-  // A desktop UA + real 1280×820 window means Chromium's CSS engine already
-  // sees a desktop viewport and Instagram renders the full desktop UI without
-  // any CDP viewport override at all.
-  if (!isGhostBrowser && !verifyMode && _fpIsMobile) {
-    _browserUA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_fpChromeMajor}.0.0.0 Safari/537.36`;
-    _fpIsMobile = false;
-  }
+  // Regular EB windows now always render at the account's real device
+  // viewport (see `_mobileProfile` below), so Chromium's CSS engine sees a
+  // real mobile viewport and Instagram renders its mobile web UI — which the
+  // EB-driven Make a Post click flow (see make-a-post-log.md) already
+  // handles via UI-variation-tolerant selectors, and which is also what the
+  // Mode-B silent-post window (`/eb/silent-post`, fresh temp window) has
+  // always used successfully.
+  //
+  // Do NOT reintroduce a desktop-UA override for regular windows. If a
+  // desktop-only UI is ever required again, it must be scoped to a single
+  // short-lived action (not the account's persistent identity) and must not
+  // touch `_browserUA`/`_fpIsMobile` used for the account's real session.
   const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
   // _fpScript is built AFTER timezone resolution below so the resolved timezone
   // can be baked into the Intl.DateTimeFormat override inside the injected script.

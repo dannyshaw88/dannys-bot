@@ -250,6 +250,31 @@ Root cause confirmed v1.1.344, 5 Jul 2026 — do not re-investigate.
 - Any NEW Mode-B (on-demand, off-screen) temp window created in `ebManager.ts` for a silent/background action MUST call `armSilentWindowAntiDetection()` with the profile's real `browserUA`/`apiUA`/`ebFingerprint` before its first navigation. A temp window that runs with Electron's default fingerprint while reusing an account's real `igApiCookies`/sessionid is a device-mismatch signal to Instagram, independent of whether the proxy/IP is correct.
 - Any caller in `automationEngine.ts` that invokes a `/eb/silent-*` IPC route for an existing profile must forward that profile's `userAgentEmbedded`/`userAgentApi`/`ebFingerprint` in the request body — never call a silent-action route with only `proxy`/`igApiCookies` and no fingerprint data.
 
+## Regular EB Window Desktop-UA Override — REMOVED (non-negotiable, fixed 6 Jul 2026)
+
+### Diagnosis
+- **Symptom**: the leak-test page reported a device/user-agent mismatch, and accounts continued getting banned even after the Mode-B silent-window fingerprint gap (above) was fixed — meaning the leak was happening somewhere outside the Mode-B bulk-action path, i.e. during ordinary manual/human-session browsing.
+- **Root cause**: `openEbWindow()` in `ebManager.ts` (the function behind the main, regular account EB window used for human sessions and manual browsing) contained a blanket override: whenever an account's assigned identity was a mobile UA, the function silently swapped it for a generic Windows desktop Chrome UA, reasoning that Instagram's desktop web UI has more features (e.g. the full sidebar and Make-a-Post "Next" button). This ran on every regular window open — the majority of an account's live session time — while `verifyInstagramCredentials()`, the mobile API client, and the Mode-B silent windows all continued to use the account's REAL assigned mobile identity (e.g. Android 13, OnePlus CPH2449) for the exact same sessionid/cookies. Instagram therefore saw one session token presented from two completely different devices depending on which code path touched it — a strong automated-abuse / session-hijack signal, and a direct violation of the DEVICE FINGERPRINT CONTINUITY RULE (an account's assigned identity must never be swapped for an unrelated one on any code path).
+
+### Fix (v1.1.366)
+- Removed the desktop-UA override entirely from `openEbWindow()`. Regular EB windows now always render with the account's real assigned identity (mobile UA when the account is assigned a mobile UA), matching what the mobile API client and Mode-B silent windows already use. The window's physical size (1280×820) is unchanged — only the reported identity (`_browserUA`/`_fpIsMobile`) is no longer swapped.
+- Trade-off accepted: Instagram will now serve its mobile web layout (not the desktop sidebar UI) inside the regular EB window for mobile-assigned accounts. The EB-driven Make a Post click flow (`.agents/memory/make-a-post-log.md`) already has UI-variation-tolerant selectors, and the primary automated posting path (`/eb/silent-post` Mode B, fresh temp window) was never affected by this override in the first place — it already used the account's real identity via `armSilentWindowAntiDetection()`. Stopping an active, ongoing account-ban cause takes priority over a cosmetic desktop-layout convenience.
+
+### Current enforced rule
+- Do NOT reintroduce a desktop-UA (or any other identity-swapping) override for regular EB windows. An account's assigned browser/API user-agent and fingerprint must be presented identically everywhere that account's session cookies are used — human session, Mode-B silent windows, mobile API — with no exceptions for UI convenience.
+
+## Leak-Test Page Hang — FIXED (6 Jul 2026)
+
+### Diagnosis
+- **Symptom**: on the leak-test page, Public IP / Proxy IP Match / WebRTC Leak / DNS Leak cards stayed on "Fetching…/Running…" indefinitely, and Battery API / Media Devices / Permissions / Client Hints never left their initial "PENDING" badge at all.
+- **Root cause**: `runAll()` in `leaksPage.ts` runs `await testIP()` BEFORE the `Promise.all([testDNS, testAudio, testBattery, testMediaDevices, testPermissions, testClientHints])` block. `testIP()` has an internal 8s `AbortController` timeout on its `fetch()` call, but when the assigned proxy accepts a TCP connection and then never completes the 407 auth handshake, the underlying fetch promise can remain unsettled past that point in some Electron/Chromium builds — so `await testIP()` never resolved, and every test after it (including the entire `Promise.all` block) never even got called.
+
+### Fix
+- Added a `withTimeout()` belt-and-suspenders wrapper (12s) around `testIP()` and each test in the `Promise.all` block in `leaksPage.ts`. Even if a test's own internal timeout/abort mechanism fails to settle the promise, `withTimeout()` forces `runAll()` to move on so every card always reaches a definite state instead of hanging forever.
+
+### Current enforced rule
+- Any new async test added to the leak-test page's `runAll()` sequence must be wrapped in `withTimeout()` (or otherwise guaranteed to settle) before being awaited or added to the `Promise.all` block — a single stalled fetch must never be able to block the rest of the suite.
+
 ## Image Upload (Make-a-Post / Repost) — current rules
 
 See `.agents/memory/make-a-post-log.md` for the EB-click-driven posting flow's bug history (clicks, visibility, Escape-key, recycling) — that log is separate from the image-upload API path below.
@@ -352,7 +377,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.1.360**
+75. Current version: **v1.1.366**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.1.360` → `1.1.361`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files

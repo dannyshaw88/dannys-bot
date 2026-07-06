@@ -1,6 +1,8 @@
-name: Build Windows Installer (Manual)
+name: Build Windows Installer
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -86,6 +88,7 @@ jobs:
             foreach ($rel in $releases) {
               foreach ($asset in $rel.assets) {
                 if ($asset.name -match "\.ipa$") {
+                  Write-Host "Found IPA via API: $($asset.browser_download_url)"
                   $apiUrls += $asset.browser_download_url
                 }
               }
@@ -104,6 +107,7 @@ jobs:
           $ok = $false
           foreach ($url in $urls) {
             try {
+              Write-Host "Trying $url"
               Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 60 -ErrorAction Stop
               $bytes = [System.IO.File]::ReadAllBytes($dest)
               if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4b) {
@@ -111,6 +115,7 @@ jobs:
                 $ok = $true
                 break
               } else {
+                Write-Host "Not a valid ZIP/IPA — skipping"
                 Remove-Item $dest -Force -ErrorAction SilentlyContinue
               }
             } catch {
@@ -118,6 +123,7 @@ jobs:
             }
           }
           if (-not $ok) {
+            Write-Host "No WDA IPA found — creating placeholder so electron-builder does not fail"
             Set-Content -Path $dest -Value "PLACEHOLDER_NO_IPA" -NoNewline
           }
 
