@@ -2092,13 +2092,34 @@ export async function getOrCreateSession(
     const profile = await storage.getProfile(profileId).catch(() => null);
     // Auto-generate and persist a browser fingerprint if the account doesn't have one yet.
     // This ensures every account has unique WebGL/canvas/audio/media-device seeds from first open.
+    const ebUAStr = profile?.userAgentEmbedded ?? "";
+    const isDesktopUA = !!ebUAStr && !ebUAStr.includes("Mobile");
     let ebFp = profile?.ebFingerprint ?? null;
     if (!ebFp && profile) {
       // Desktop UA accounts (disableApi=true / browser-only) need desktop GPU fingerprints.
-      // Detect by UA: desktop Chrome has no "Mobile" keyword.
-      const isDesktopUA = !!profile.userAgentEmbedded && !profile.userAgentEmbedded.includes("Mobile");
-      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA));
+      // Pass the EB UA so the GPU pool selection is coherent with the claimed platform.
+      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA, ebUAStr));
       await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+    } else if (ebFp && profile && isDesktopUA) {
+      // Coherence check: regenerate if the stored GPU contradicts the EB UA.
+      // e.g. Apple Silicon Metal renderer stored for an Intel Mac UA — Intel Macs
+      // cannot have M-series chips; any fingerprinting service flags this instantly.
+      try {
+        const fp = JSON.parse(ebFp);
+        const r: string = fp.webglRenderer ?? "";
+        const isAppleSiliconRenderer = /Apple M\d/.test(r);
+        const isD3DRenderer = r.includes("Direct3D11");
+        const isIntelMacUA  = ebUAStr.includes("Intel Mac OS X");
+        const isWindowsUA   = ebUAStr.includes("Windows NT");
+        const incoherent =
+          (isIntelMacUA && isAppleSiliconRenderer) || // Intel UA + ARM chip
+          (isWindowsUA  && !isD3DRenderer && r.includes("ANGLE (Apple")); // Windows UA + macOS Metal
+        if (incoherent) {
+          console.log(`[fingerprint] @${profile.username}: regenerating incoherent GPU fingerprint (UA=${ebUAStr.slice(0, 60)} renderer=${r})`);
+          ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA, ebUAStr));
+          await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+        }
+      } catch { /* non-fatal — parse error on malformed stored fingerprint */ }
     }
     await ebIpc("POST", "/eb/open", {
       profileId,
@@ -7090,12 +7111,16 @@ export async function openSignupBrowser(opts?: {
         const _gS = ${_ghostSalt};
         const _frac = (_gS & 0xFFFF) / 0x10000; // 0 – 0.9999…
 
-        // ── Performance timing jitter ──────────────────────────────────────
-        // Adds a fixed sub-millisecond offset to performance.now() so that
-        // timing-based fingerprinting produces a session-unique distribution.
+        // ── Performance timing precision reduction ─────────────────────────
+        // Headless Puppeteer exposes full sub-microsecond timer precision
+        // (<0.001 ms), a clear bot signal that leak-check pages report as
+        // "Precision Reduced: No".  Real browsers round performance.now()
+        // to ~1 ms.  We round to nearest ms here, then add a small
+        // per-session bias (0–0.5 ms) so every session gets a unique
+        // distribution without restoring the high-precision tell.
         const _origNow = performance.now.bind(performance);
-        const _jitter  = _frac * 0.05; // 0 – 0.05 ms per session
-        performance.now = () => _origNow() + _jitter;
+        const _bias    = _frac * 0.5; // 0 – 0.5 ms per-session offset
+        performance.now = () => Math.round(_origNow()) + _bias;
 
         // ── Audio fingerprint noise ────────────────────────────────────────
         // The OscillatorNode → AnalyserNode fingerprinting technique reads

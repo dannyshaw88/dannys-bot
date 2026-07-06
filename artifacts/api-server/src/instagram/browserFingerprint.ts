@@ -54,10 +54,12 @@ const FALLBACK_GPU = [
   { vendor: "Google",                      renderer: "Tensor G3" },
 ];
 
-// Desktop GPU pool — used when desktopMode is true (Disable API / browser-only accounts).
-// Values match real Chrome ANGLE renderer strings reported on Windows/macOS.
-const DESKTOP_GPU_POOL = [
-  // NVIDIA (most common on Windows gaming/enthusiast machines)
+// Desktop GPU pools — split by platform so the renderer always matches the UA.
+// Mixing platforms (e.g. Apple Silicon GPU on an Intel Mac UA, or D3D11 on macOS)
+// creates an instant hardware-inconsistency fingerprint signal.
+
+// Windows — Direct3D11 ANGLE strings. Only valid with Windows NT UAs.
+const WINDOWS_GPU_POOL = [
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti Direct3D11 vs_5_0 ps_5_0, D3D11)" },
@@ -70,20 +72,33 @@ const DESKTOP_GPU_POOL = [
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 2080 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (NVIDIA)", renderer: "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Super Direct3D11 vs_5_0 ps_5_0, D3D11)" },
-  // AMD Radeon
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 7900 XTX Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 7800 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 7700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 6900 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (AMD)",    renderer: "ANGLE (AMD, AMD Radeon RX 6600 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" },
-  // Intel (common on laptops / integrated)
   { vendor: "Google Inc. (Intel)",  renderer: "ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (Intel)",  renderer: "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (Intel)",  renderer: "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (Intel)",  renderer: "ANGLE (Intel, Intel(R) UHD Graphics 730 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
   { vendor: "Google Inc. (Intel)",  renderer: "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)" },
-  // macOS Metal (Apple Silicon) — Chrome on macOS reports ANGLE Metal renderer
+];
+
+// Intel Mac — Chrome on Intel macOS reports Metal ANGLE with Intel GPU names.
+// These match the "Macintosh; Intel Mac OS X" UA family.
+const INTEL_MAC_GPU_POOL = [
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) UHD Graphics 630, Unspecified Version)" },
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) Iris(R) Plus Graphics, Unspecified Version)" },
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) Iris(R) Pro Graphics 5200, Unspecified Version)" },
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) HD Graphics 6000, Unspecified Version)" },
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) UHD Graphics 617, Unspecified Version)" },
+  { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Intel(R) Iris(R) Plus Graphics 640, Unspecified Version)" },
+];
+
+// Apple Silicon Mac — Chrome on ARM macOS reports Metal ANGLE with M-series chip names.
+// These match the "Macintosh" UA without an "Intel" qualifier.
+const APPLE_SILICON_GPU_POOL = [
   { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)" },
   { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)" },
   { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Max, Unspecified Version)" },
@@ -92,6 +107,9 @@ const DESKTOP_GPU_POOL = [
   { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)" },
   { vendor: "Google Inc. (Apple)", renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)" },
 ];
+
+// Legacy alias so any remaining callers compile without change.
+const DESKTOP_GPU_POOL = [...WINDOWS_GPU_POOL, ...INTEL_MAC_GPU_POOL, ...APPLE_SILICON_GPU_POOL];
 
 function pickGpu(ua: string | null | undefined): { vendor: string; renderer: string } {
   if (ua) {
@@ -108,12 +126,28 @@ function rndHex(bytes: number): string {
   return randomBytes(bytes).toString("hex");
 }
 
-export function generateEbFingerprint(userAgentApi?: string | null, desktopMode?: boolean): EbFingerprint {
+export function generateEbFingerprint(userAgentApi?: string | null, desktopMode?: boolean, ebUA?: string | null): EbFingerprint {
   // Desktop accounts (Disable API / browser-only) use real desktop GPU strings
-  // so the WebGL fingerprint matches the claimed Windows/macOS identity.
-  const gpu = desktopMode
-    ? DESKTOP_GPU_POOL[randomBytes(1)[0] % DESKTOP_GPU_POOL.length]
-    : pickGpu(userAgentApi);
+  // so the WebGL fingerprint matches the claimed platform identity.
+  // Select pool based on the EB UA to ensure hardware coherence:
+  //   Intel Mac UA  → Intel Mac Metal renderer  (never Apple Silicon)
+  //   Windows UA    → Direct3D11 renderer        (never macOS Metal)
+  //   ARM Mac / unknown desktop → Apple Silicon Metal renderer
+  let gpu: { vendor: string; renderer: string };
+  if (desktopMode) {
+    const ua = ebUA ?? "";
+    let pool: typeof WINDOWS_GPU_POOL;
+    if (ua.includes("Windows NT")) {
+      pool = WINDOWS_GPU_POOL;
+    } else if (ua.includes("Intel Mac OS X")) {
+      pool = INTEL_MAC_GPU_POOL;
+    } else {
+      pool = APPLE_SILICON_GPU_POOL;
+    }
+    gpu = pool[randomBytes(1)[0] % pool.length];
+  } else {
+    gpu = pickGpu(userAgentApi);
+  }
   // Full 32-bit entropy (~4.29B values) — previously (randomBytes(1)[0] % 253) + 2 gave only
   // 253 possible pixel-flip positions, so at thousand/million-account scale many accounts
   // shared the exact same canvas hash. `|| 1` avoids the degenerate 0 = no-op case.
