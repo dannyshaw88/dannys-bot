@@ -883,40 +883,41 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <div className="divide-y divide-border">
 
             {/* ── Open Instagram Calls (was Force Emulation) ── */}
-            <div className="px-4 py-3">
+            <div className="px-4 py-3 space-y-1.5">
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="font-semibold text-sm whitespace-nowrap">Open Instagram Calls</span>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="forceEmulationEnabled"
-                    checked={!!settings.forceEmulationEnabled}
-                    onChange={(e) => setSettings({ ...settings, forceEmulationEnabled: e.target.checked })}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor="forceEmulationEnabled" className="text-sm font-medium cursor-pointer select-none">Enabled</label>
-                </div>
-                <div className={`flex items-center gap-2 transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <input type="checkbox" id="forceEmulationRandomise"
-                    checked={!!settings.forceEmulationRandomise}
-                    onChange={(e) => setSettings({ ...settings, forceEmulationRandomise: e.target.checked })}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor="forceEmulationRandomise" className="text-sm cursor-pointer select-none">Randomise order</label>
-                </div>
-                <div className={`flex items-center gap-2 transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Fire Chance %</span>
-                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                    value={(settings as any).forceEmulationChanceMin ?? 100}
-                    onChange={(v) => setSettings({ ...settings, forceEmulationChanceMin: v } as any)}
-                  />
-                  <span className="text-[10px] text-muted-foreground">–</span>
-                  <NumField min={0} max={100} className="w-14 h-7 text-xs"
-                    value={(settings as any).forceEmulationChanceMax ?? 100}
-                    onChange={(v) => setSettings({ ...settings, forceEmulationChanceMax: v } as any)}
-                  />
-                  <span className="text-[10px] text-muted-foreground">% of executions</span>
+                <input type="checkbox" id="forceEmulationEnabled"
+                  checked={!!settings.forceEmulationEnabled}
+                  onChange={(e) => setSettings({ ...settings, forceEmulationEnabled: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor="forceEmulationEnabled" className="font-semibold text-sm cursor-pointer select-none whitespace-nowrap shrink-0">
+                  Open Instagram Calls
+                </label>
+                <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="forceEmulationRandomise"
+                      checked={!!settings.forceEmulationRandomise}
+                      onChange={(e) => setSettings({ ...settings, forceEmulationRandomise: e.target.checked })}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor="forceEmulationRandomise" className="text-sm cursor-pointer select-none">Randomise order</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Fire Chance %</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).forceEmulationChanceMin ?? 100}
+                      onChange={(v) => setSettings({ ...settings, forceEmulationChanceMin: v } as any)}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <NumField min={0} max={100} className="w-14 h-7 text-xs"
+                      value={(settings as any).forceEmulationChanceMax ?? 100}
+                      onChange={(v) => setSettings({ ...settings, forceEmulationChanceMax: v } as any)}
+                    />
+                    <span className="text-[10px] text-muted-foreground">% of executions</span>
+                  </div>
                 </div>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40' : ''}`}>
                 Fires Instagram app-open API calls at the start of every session, before any other action runs.
               </p>
             </div>
