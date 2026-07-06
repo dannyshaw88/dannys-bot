@@ -1106,6 +1106,19 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       if(/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q))return Object.assign({},_mql,{matches:true});
       if(/(hover:\s*none|any-hover:\s*none)/.test(q))return Object.assign({},_mql,{matches:true});
       if(/(pointer:\s*fine|any-pointer:\s*fine|hover:\s*hover|any-hover:\s*hover)/.test(q))return _mql;
+      // prefers-color-scheme / prefers-reduced-motion: only intercept simple single-
+      // feature queries. Compound queries (containing "and", "or", "not", commas) fall
+      // through to native matchMedia — substring matching would misfire on e.g.
+      // "not (prefers-color-scheme: light)" or "(prefers-color-scheme: dark) and (...)".
+      // Android dark-mode is the majority default on modern devices; a server Electron
+      // process returns "light" (no system dark mode), leaking host-OS identity.
+      if(!/\band\b|\bor\b|\bnot\b|,/.test(q)){
+        if(/prefers-color-scheme:\s*dark/.test(q))return Object.assign({},_mql,{matches:true});
+        if(/prefers-color-scheme:\s*light/.test(q))return _mql;
+        // prefers-reduced-motion: Android Chrome default is no-preference.
+        if(/prefers-reduced-motion:\s*no-preference/.test(q))return Object.assign({},_mql,{matches:true});
+        if(/prefers-reduced-motion:\s*reduce/.test(q))return _mql;
+      }
       try{return _oMM(q);}catch(e2){return _mql;}
     };}catch(e){}
     try{if(window.visualViewport){
@@ -1128,6 +1141,17 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       Object.defineProperty(_em2,'length',{get:function(){return 0;},configurable:true});
       Object.defineProperty(navigator,'mimeTypes',{get:function(){return _em2;},configurable:true});
     }catch(e){}
+    // performance.memory is a non-standard Chrome extension absent on Android Chrome.
+    // Instagram's device classifier checks "typeof performance.memory" to distinguish
+    // mobile from desktop. The ghost-signup patch already does this — keep in sync.
+    try{if(window.performance&&'memory' in window.performance){
+      Object.defineProperty(performance,'memory',{get:function(){return undefined;},configurable:true});
+    }}catch(e){}
+    // navigator.keyboard (Keyboard Lock / Keyboard Map API) is desktop-only Chrome.
+    // Present in Electron; absent on Android Chrome. Another clear desktop signal.
+    try{if(navigator.keyboard!==undefined){
+      Object.defineProperty(navigator,'keyboard',{get:function(){return undefined;},configurable:true});
+    }}catch(e){}
   }else{
     try{Object.defineProperty(screen,"width",{get:function(){return 1920;}});}catch(e){}
     try{Object.defineProperty(screen,"height",{get:function(){return 1080;}});}catch(e){}
