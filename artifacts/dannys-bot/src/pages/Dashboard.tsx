@@ -78,12 +78,12 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
-    version: "1.1.380",
+    version: "1.1.381",
     date: "7 Jul 2026",
     items: [
       {
         category: "Security",
-        text: "Fixed WebGL 2 still showing as unsupported on Qualcomm/Adreno (ARM Windows) machines even after the previous fix. The earlier attempt forced a software renderer but Chrome was silently ignoring it without a required companion flag — the hardware GPU kept being used and WebGL 2 stayed broken. The missing flag is now added, so Chrome's software renderer actually activates and WebGL 2 is guaranteed to be available on every machine regardless of GPU.",
+        text: "Fixed WebGL 2 showing as unsupported — third and final attempt. Previous fixes tried to activate a software renderer called SwiftShader via command-line flags, but it was silently ignored because the file it needs isn't included in the Windows build of the app. This version takes a completely different approach: the browser's GPU is disabled entirely, forcing it to use Windows' own built-in software renderer (WARP) which always supports WebGL 2. Instagram now sees a working WebGL 2 context, same as every real Android phone.",
       },
       {
         category: "Fixed",
