@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.387] — 2026-07-07
+
+### New — Stage Bootstrap added to Copy Settings
+
+Stage Bootstrap (`stageBootstrapEnabled`, `stageBootstrapDelayMin`, `stageBootstrapDelayMax`) is now a named option in the Copy Account Settings dialog under **API & Performance**. Selecting it merges the enabled toggle and the Min/Max delay window from the source account into each target account's existing `apiLimits` blob without touching any other rate-limit fields.
+
+**File:** `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — `ACCOUNT_COPY_GROUPS` and `handleAccountCopy`
+
+---
+
 ## [1.1.386] — 2026-07-07
 
 ### Fixed

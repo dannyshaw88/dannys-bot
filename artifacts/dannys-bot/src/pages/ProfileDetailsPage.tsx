@@ -389,6 +389,7 @@ export function ProfileDetailsPage() {
       label: "API & Performance",
       options: [
         { key: "apiLimits", label: "API Limits & Control", description: "Min/max calls and interval settings" },
+        { key: "stageBootstrap", label: "Stage Bootstrap", description: "Enabled state and Min/Max delay — merged into each target's existing API limits without overwriting their rate settings" },
         { key: "loginRandomEndpoints", label: "Fire Random Endpoints at Login", description: "Fire random endpoints to each login sequence — enabled state and min/max endpoint count merged into each target's existing API limits without overwriting their rate settings" },
         { key: "loginMakePostChance", label: "Chance of Making a Post", description: "Enabled state, min/max % chance — merged into each target's existing API limits without overwriting their rate settings" },
         { key: "variationSettings", label: "Variation %", description: "Enabled state, lower/upper chance % and seconds — merged into each target's existing API limits without overwriting their rate settings" },
@@ -482,7 +483,7 @@ export function ProfileDetailsPage() {
     // existing apiLimits (in a single pass) so the rest of their rate limit
     // settings are never overwritten and concurrent merges can't clobber each other.
     const needsLimitsMerge =
-      (expandedKeys.includes("disableApi") || expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift") || expandedKeys.includes("fatigueSettings"))
+      (expandedKeys.includes("disableApi") || expandedKeys.includes("stageBootstrap") || expandedKeys.includes("loginRandomEndpoints") || expandedKeys.includes("loginMakePostChance") || expandedKeys.includes("variationSettings") || expandedKeys.includes("momentumSettings") || expandedKeys.includes("attentionDrift") || expandedKeys.includes("fatigueSettings"))
       && !expandedKeys.includes("apiLimits");
 
     if (needsLimitsMerge) {
@@ -493,6 +494,11 @@ export function ProfileDetailsPage() {
         const merged: Record<string, any> = { ...existing };
         if (expandedKeys.includes("disableApi")) {
           merged.disableApi = srcLimits.disableApi ?? false;
+        }
+        if (expandedKeys.includes("stageBootstrap")) {
+          merged.stageBootstrapEnabled  = srcLimits.stageBootstrapEnabled ?? false;
+          merged.stageBootstrapDelayMin = srcLimits.stageBootstrapDelayMin ?? 5;
+          merged.stageBootstrapDelayMax = srcLimits.stageBootstrapDelayMax ?? 15;
         }
         if (expandedKeys.includes("loginRandomEndpoints")) {
           merged.loginRandomEndpointsEnabled = srcLimits.loginRandomEndpointsEnabled ?? false;
