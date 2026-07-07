@@ -901,8 +901,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             <Zap className="w-5 h-5 text-white shrink-0" />
             <h4 className="font-bold text-[17px] text-white">Emulation</h4>
           </div>
-          {(settings as any).emulationGroupEnabled !== false && (
-          <div className="divide-y divide-border">
+          <div className={`divide-y divide-border transition-opacity ${(settings as any).emulationGroupEnabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
 
             {/* ── View Timeline Feed ── */}
             <div className="px-4 py-3 space-y-1.5">
@@ -2037,8 +2036,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         </div>
       </div>
 
-          </div>
-          )}{/* end emulationGroupEnabled conditional + divide-y */}
+          </div>{/* end divide-y (always rendered; dimmed when emulationGroupEnabled=false) */}
         </div>{/* end EMULATION rounded-xl */}
       </div>{/* end EMULATION outer */}
 

@@ -2849,7 +2849,7 @@ class AutomationEngine {
       const _jitterSkipped = this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax");
       console.log(`[engine] @${profile.username}: [EB-only] Human Jitter _jitterSkipped=${_jitterSkipped}`);
       ebEnqueue("humanJitter", "humanSessionOrderMin", "humanSessionOrderMax", async () => {
-      if (s.humanSessionEnabled === true && !_jitterSkipped) {
+      if (s.humanSessionEnabled === true && (s as any).emulationGroupEnabled !== false && !_jitterSkipped) {
         try {
           await nav("https://www.instagram.com/", "home (jitter)");
           await sleep(actionDelay());
@@ -2882,7 +2882,7 @@ class AutomationEngine {
 
       // ── viewTimelineFeed — navigate to home, scroll through posts ─────────
       ebEnqueue("viewTimelineFeed", "viewTimelineFeedOrderMin", "viewTimelineFeedOrderMax", async () => {
-      if (s.viewTimelineFeedEnabled === true) {
+      if (s.viewTimelineFeedEnabled === true && (s as any).emulationGroupEnabled !== false) {
         try {
           feedCount = randInt(Number(s.viewTimelineFeedMin ?? 3), Number(s.viewTimelineFeedMax ?? 8));
           if (page.url() !== "https://www.instagram.com/" && !page.url().startsWith("https://www.instagram.com/?")) {
@@ -3117,7 +3117,7 @@ class AutomationEngine {
       // navigate to instagram.com/reels/, wait for the video to load, dwell for
       // reelViewPct% of an estimated reel duration, then press ArrowDown to advance.
       ebEnqueue("viewReels", "viewReelsOrderMin", "viewReelsOrderMax", async () => {
-      if (s.viewReelsEnabled === true) {
+      if (s.viewReelsEnabled === true && (s as any).emulationGroupEnabled !== false) {
         // Normalize reel chance bounds to [0,100], swap if inverted.
         const reelChanceRaw0 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMin ?? 100)));
         const reelChanceRaw1 = Math.min(100, Math.max(0, Number(s.reelWatchChanceMax ?? 100)));
@@ -3245,7 +3245,7 @@ class AutomationEngine {
 
       // ── checkTimelineStories — click story circles then navigate through ──
       ebEnqueue("checkTimelineStories", "checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax", async () => {
-      if (s.checkTimelineStoriesEnabled === true) {
+      if (s.checkTimelineStoriesEnabled === true && (s as any).emulationGroupEnabled !== false) {
         try {
           const storyCount = randInt(Number(s.checkTimelineStoriesMin ?? 2), Number(s.checkTimelineStoriesMax ?? 6));
           // Story circles live in the tray at the top of the home feed, always
@@ -3433,7 +3433,7 @@ class AutomationEngine {
 
       // ── checkDm — open inbox, click threads ───────────────────────────────
       ebEnqueue("checkDm", "checkDmOrderMin", "checkDmOrderMax", async () => {
-      if (s.checkDmEnabled === true) {
+      if (s.checkDmEnabled === true && (s as any).emulationGroupEnabled !== false) {
         try {
           const dmCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
           await nav("https://www.instagram.com/direct/inbox/", "DM inbox");
@@ -3488,7 +3488,7 @@ class AutomationEngine {
 
       // ── likeTimelinePosts — scroll feed, click Like (heart) buttons ───────
       ebEnqueue("likeTimelinePosts", "likeTimelinePostsOrderMin", "likeTimelinePostsOrderMax", async () => {
-      if (s.likeTimelinePostsEnabled === true) {
+      if (s.likeTimelinePostsEnabled === true && (s as any).emulationGroupEnabled !== false) {
         const likeCount = randInt(Number(s.likeTimelinePostsMin ?? 0), Number(s.likeTimelinePostsMax ?? 0));
         if (likeCount > 0) {
           try {
@@ -3574,8 +3574,8 @@ class AutomationEngine {
         const repostUsernameSourceActiveEb = !s.repostDisableUsernameSource && !!repostSourceUsernameEb;
         const repostEnabledEb = !!(s.repostEnabled && (repostUsernameSourceActiveEb || repostLocalFolderEnabledEb));
 
-        if (!repostEnabledEb) {
-          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (disabled)`);
+        if (!repostEnabledEb || (s as any).emulationGroupEnabled === false) {
+          console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (${!repostEnabledEb ? 'disabled' : 'emulation group disabled'})`);
         } else if (this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
           console.log(`[engine] @${profile.username}: [EB-only] HS queue — repost skipped (chance roll)`);
         } else if (!ebIpcPort) {
@@ -3687,7 +3687,7 @@ class AutomationEngine {
       // runs like every other emulation feature — independent of whether the feed
       // had posts or not.
       ebEnqueue("explorePage", "explorePageOrderMin", "explorePageOrderMax", async () => {
-        if (s.followSuggestedUsersIfEmptyEnabled !== true) return;
+        if (s.followSuggestedUsersIfEmptyEnabled !== true || (s as any).emulationGroupEnabled === false) return;
         // Skip-chance roll (same pattern as all other ebQueue entries)
         const epSkipMin = Math.min(100, Math.max(0, Number(s.explorePageSkipMin ?? 0)));
         const epSkipMax = Math.min(100, Math.max(0, Number(s.explorePageSkipMax ?? 0)));
@@ -4645,7 +4645,7 @@ class AutomationEngine {
 
     // ── Human Session ────────────────────────────────────────────────────────
     enqueue("humanSession",
-      s.humanSessionEnabled === true,
+      s.humanSessionEnabled === true && (s as any).emulationGroupEnabled !== false,
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
@@ -4781,7 +4781,7 @@ class AutomationEngine {
 
     // ── View Timeline Feed ───────────────────────────────────────────────────
     enqueue("viewTimelineFeed",
-      s.viewTimelineFeedEnabled === true,
+      s.viewTimelineFeedEnabled === true && (s as any).emulationGroupEnabled !== false,
       "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax",
       "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
       async () => {
@@ -5004,7 +5004,7 @@ class AutomationEngine {
     // from View Timeline Feed. Fetches its own timeline page(s) and watches
     // only the reels found, ignoring regular feed posts.
     enqueue("viewReels",
-      s.viewReelsEnabled === true,
+      s.viewReelsEnabled === true && (s as any).emulationGroupEnabled !== false,
       "viewReelsNotUsedMin", "viewReelsNotUsedMax",
       "viewReelsOrderMin",   "viewReelsOrderMax",
       async () => {
@@ -5056,7 +5056,7 @@ class AutomationEngine {
 
     // ── Watch Timeline Stories ───────────────────────────────────────────────
     enqueue("checkTimelineStories",
-      s.checkTimelineStoriesEnabled === true,
+      s.checkTimelineStoriesEnabled === true && (s as any).emulationGroupEnabled !== false,
       "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax",
       "checkTimelineStoriesOrderMin",   "checkTimelineStoriesOrderMax",
       async () => {
@@ -5145,7 +5145,7 @@ class AutomationEngine {
 
     // ── Check Direct Messages ────────────────────────────────────────────────
     enqueue("checkDm",
-      s.checkDmEnabled === true,
+      s.checkDmEnabled === true && (s as any).emulationGroupEnabled !== false,
       "checkDmNotUsedMin", "checkDmNotUsedMax",
       "checkDmOrderMin",   "checkDmOrderMax",
       async () => {
@@ -5189,7 +5189,7 @@ class AutomationEngine {
 
     // ── Like Posts from Timeline ─────────────────────────────────────────────
     enqueue("likeTimelinePosts",
-      s.likeTimelinePostsEnabled === true,
+      s.likeTimelinePostsEnabled === true && (s as any).emulationGroupEnabled !== false,
       "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax",
       "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
       async () => {
@@ -5263,7 +5263,7 @@ class AutomationEngine {
         : null;
 
     enqueue("repost",
-      !!(s.repostEnabled && (repostUsernameSourceActive || repostLocalFolderEnabled)),
+      !!(s.repostEnabled && (repostUsernameSourceActive || repostLocalFolderEnabled)) && (s as any).emulationGroupEnabled !== false,
       "repostNotUsedMin", "repostNotUsedMax",
       "repostOrderMin",   "repostOrderMax",
       async () => {
@@ -5720,7 +5720,7 @@ class AutomationEngine {
     // Now a first-class queued feature with its own Order % and Skip Chance %,
     // running regardless of whether the timeline had posts.
     enqueue("explorePage",
-      s.followSuggestedUsersIfEmptyEnabled === true,
+      s.followSuggestedUsersIfEmptyEnabled === true && (s as any).emulationGroupEnabled !== false,
       "explorePageSkipMin", "explorePageSkipMax",
       "explorePageOrderMin", "explorePageOrderMax",
       async () => {
