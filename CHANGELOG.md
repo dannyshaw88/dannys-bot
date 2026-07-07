@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.383] — 2026-07-07
+
+### Fixed
+
+#### Critical — Mobile UA + stale desktop GPU fingerprint causing instant bans (root cause of 3-day ban wave)
+
+**Root cause:** When accounts had desktop UAs (v1.1.291–v1.1.365), `generateEbFingerprint()` was called with `desktopMode=true`, storing a desktop GPU renderer string (e.g. `"ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)"`) in the `ebFingerprint` DB column. When v1.1.366 reverted the UA back to mobile Android, only `userAgentEmbedded`/`userAgentApi` were updated — the stored `ebFingerprint` was NOT regenerated. From that point, every EB open and every Mode-B silent-window action sent Instagram a physically impossible hardware combination: Android 14 mobile UA + NVIDIA RTX Direct3D11 WebGL renderer. Instagram detects this as an immediate device-mismatch/session-hijack signal → instant ban.
+
+The coherence check in `browserSession.ts` (introduced to catch desktop-GPU mismatches within the desktop-UA era) only ran when `isDesktopUA = true`. It completely missed the reverse case: mobile UA + stale desktop GPU in DB.
+
+**Two-part fix:**
+
+1. **Startup migration** (`routes/instagram.ts`): on every server start, scans all profiles with a mobile UA and regenerates any `ebFingerprint` that contains a desktop GPU string (`Direct3D11`, `ANGLE (Apple`, `ANGLE (NVIDIA`, `ANGLE (AMD`, `ANGLE (Intel`). Fixes all affected accounts immediately — without waiting for each EB to be opened manually. Logged as `[startup:fp-fix]`.
+
+2. **Per-session coherence check** (`browserSession.ts`): extended the existing desktop-coherence guard to also catch Case B (mobile UA + any desktop GPU string). Now runs on every EB open for both desktop and mobile UA accounts, covering any account that slips through the startup migration.
+
+---
+
 ## [1.1.379] — 2026-07-06
 
 ### Added

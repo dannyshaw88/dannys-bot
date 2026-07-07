@@ -6325,6 +6325,48 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
     }
   })();
 
+  // ── Startup migration: fix mobile-UA accounts with stale desktop GPU fingerprints ──
+  // Root cause: when accounts had desktop UAs (v1.1.291–v1.1.365), their ebFingerprint
+  // was generated with ANGLE/Direct3D11/Metal GPU strings.  When v1.1.366 reverted the
+  // UA back to mobile, the stored fingerprint was NOT regenerated — so every EB open
+  // and every Mode-B silent-window action sent Instagram: Android mobile UA + NVIDIA RTX
+  // Direct3D11 WebGL renderer.  That hardware combination is physically impossible and
+  // is an instant ban signal.  This migration corrects all affected accounts at startup
+  // so the fix takes effect immediately — without waiting for each account's EB to be
+  // opened manually (which would trigger the per-session fix in browserSession.ts).
+  (async () => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      let fixed = 0;
+      for (const p of allProfiles) {
+        const ebUA = p.userAgentEmbedded ?? "";
+        const isMobileUA = ebUA.includes("Mobile");
+        if (!isMobileUA) continue; // desktop UA accounts are handled separately
+        if (!p.ebFingerprint) continue; // no fingerprint stored — will be generated on first open
+        try {
+          const fp = JSON.parse(p.ebFingerprint as string);
+          const r: string = fp.webglRenderer ?? "";
+          const hasDesktopGpu =
+            r.includes("Direct3D11") ||
+            r.includes("ANGLE (Apple") ||
+            r.includes("ANGLE (NVIDIA") ||
+            r.includes("ANGLE (AMD") ||
+            r.includes("ANGLE (Intel");
+          if (!hasDesktopGpu) continue; // already a mobile GPU — no action needed
+          const newFp = JSON.stringify(generateEbFingerprint(p.userAgentApi ?? undefined, false, ebUA));
+          await storage.updateProfile(p.id, { ebFingerprint: newFp });
+          console.log(`[startup:fp-fix] @${p.username ?? p.id}: replaced desktop GPU renderer "${r.slice(0, 60)}" with mobile GPU`);
+          fixed++;
+        } catch { /* skip malformed fingerprint — will be regenerated on first EB open */ }
+      }
+      if (fixed > 0) {
+        console.log(`[startup:fp-fix] Fixed desktop GPU fingerprint on ${fixed} mobile-UA account(s)`);
+      }
+    } catch (e) {
+      console.warn("[startup:fp-fix] GPU fingerprint migration failed (non-fatal):", e);
+    }
+  })();
+
   // ── Trust Score Templates ────────────────────────────────────────────────────
   const TRUST_SCORE_IDS = [
     "noob", "warmup", "snail", "slug", "slow", "sloth", "tortoise", "turtle",

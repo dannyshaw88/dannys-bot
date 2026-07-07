@@ -2100,24 +2100,46 @@ export async function getOrCreateSession(
       // Pass the EB UA so the GPU pool selection is coherent with the claimed platform.
       ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA, ebUAStr));
       await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
-    } else if (ebFp && profile && isDesktopUA) {
-      // Coherence check: regenerate if the stored GPU contradicts the EB UA.
-      // e.g. Apple Silicon Metal renderer stored for an Intel Mac UA — Intel Macs
-      // cannot have M-series chips; any fingerprinting service flags this instantly.
+    } else if (ebFp && profile) {
+      // Coherence check: regenerate if the stored GPU contradicts the current EB UA.
+      // Two cases must be caught:
+      //   A) Desktop UA  + wrong desktop GPU (e.g. Apple Silicon renderer on an Intel Mac UA)
+      //   B) Mobile UA   + any desktop GPU   (e.g. NVIDIA RTX Direct3D11 on Android UA)
+      //      — this is the common failure mode after reverting from desktop→mobile UA: the
+      //        stored fingerprint still has the old desktop ANGLE/D3D11 renderer but the UA
+      //        string now says Android, so Instagram sees an impossible hardware combination
+      //        and flags the session immediately.
       try {
         const fp = JSON.parse(ebFp);
         const r: string = fp.webglRenderer ?? "";
-        const isAppleSiliconRenderer = /Apple M\d/.test(r);
-        const isD3DRenderer = r.includes("Direct3D11");
-        const isIntelMacUA  = ebUAStr.includes("Intel Mac OS X");
-        const isWindowsUA   = ebUAStr.includes("Windows NT");
-        const incoherent =
-          (isIntelMacUA && isAppleSiliconRenderer) || // Intel UA + ARM chip
-          (isWindowsUA  && !isD3DRenderer && r.includes("ANGLE (Apple")); // Windows UA + macOS Metal
-        if (incoherent) {
-          console.log(`[fingerprint] @${profile.username}: regenerating incoherent GPU fingerprint (UA=${ebUAStr.slice(0, 60)} renderer=${r})`);
-          ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, isDesktopUA, ebUAStr));
-          await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+        if (isDesktopUA) {
+          // Case A: desktop UA — check desktop-GPU coherence
+          const isAppleSiliconRenderer = /Apple M\d/.test(r);
+          const isD3DRenderer = r.includes("Direct3D11");
+          const isIntelMacUA  = ebUAStr.includes("Intel Mac OS X");
+          const isWindowsUA   = ebUAStr.includes("Windows NT");
+          const incoherent =
+            (isIntelMacUA && isAppleSiliconRenderer) || // Intel UA + ARM chip
+            (isWindowsUA  && !isD3DRenderer && r.includes("ANGLE (Apple")); // Windows UA + macOS Metal
+          if (incoherent) {
+            console.log(`[fingerprint] @${profile.username}: regenerating incoherent desktop GPU fingerprint (UA=${ebUAStr.slice(0, 60)} renderer=${r})`);
+            ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, true, ebUAStr));
+            await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+          }
+        } else {
+          // Case B: mobile UA — stored fingerprint must NOT contain desktop GPU strings.
+          // Direct3D11 = Windows, ANGLE (Apple/NVIDIA/AMD/Intel = macOS/Windows Metal/D3D
+          const hasDesktopGpu =
+            r.includes("Direct3D11") ||
+            r.includes("ANGLE (Apple") ||
+            r.includes("ANGLE (NVIDIA") ||
+            r.includes("ANGLE (AMD") ||
+            r.includes("ANGLE (Intel");
+          if (hasDesktopGpu) {
+            console.log(`[fingerprint] @${profile.username}: regenerating desktop GPU fingerprint stored for mobile UA — UA=${ebUAStr.slice(0, 60)} renderer=${r.slice(0, 80)}`);
+            ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined, false, ebUAStr));
+            await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+          }
         }
       } catch { /* non-fatal — parse error on malformed stored fingerprint */ }
     }

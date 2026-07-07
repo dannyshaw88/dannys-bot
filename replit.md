@@ -390,7 +390,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.1.382**
+75. Current version: **v1.1.383**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.1.360` → `1.1.361`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
@@ -405,6 +405,24 @@ Every push **must** also include a new entry at the top of the `CHANGELOG` array
 82. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
 83. One item per visible change. Keep each `text` to a single concise sentence.
 84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
+
+## Mobile UA + Stale Desktop GPU Fingerprint — ban root cause (fixed 7 Jul 2026, non-negotiable, do not regress)
+
+**Confirmed cause of the 3-day instant-ban wave starting ~4 Jul 2026.**
+
+### Root cause chain
+When accounts had desktop UAs (v1.1.291–v1.1.365), `generateEbFingerprint()` was called with `desktopMode=true`, which stored a desktop GPU renderer string (e.g. `"ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)"`) in the `ebFingerprint` DB column. When v1.1.366 reverted UAs to mobile Android, **only** `userAgentEmbedded`/`userAgentApi` were updated — the stored `ebFingerprint` was NOT regenerated. Every subsequent EB open and every Mode-B silent-window action sent Instagram a physically impossible hardware combination: Android 14 mobile UA + NVIDIA RTX Direct3D11 WebGL renderer. Instagram flags this as a device-mismatch/session-hijack signal → instant ban.
+
+The existing coherence check in `browserSession.ts` only fired when `isDesktopUA = true`. It completely missed the reverse case: mobile UA with a stale desktop GPU in the DB.
+
+### Two-part fix (v1.1.383)
+1. **Startup migration** (`routes/instagram.ts`): on every server start, scans all mobile-UA profiles, detects any `ebFingerprint` containing a desktop GPU string (`Direct3D11`, `ANGLE (Apple`, `ANGLE (NVIDIA`, `ANGLE (AMD`, `ANGLE (Intel`), and regenerates it with a mobile GPU pool. Fixes all accounts immediately — no manual EB open needed. Logged as `[startup:fp-fix]`.
+2. **Per-session coherence check extension** (`browserSession.ts`): the existing coherence guard was extended to catch Case B (mobile UA + desktop GPU string). Now runs on every EB open for both UA types.
+
+### What is FORBIDDEN
+- Calling `generateEbFingerprint()` with `desktopMode=true` for any account that has a mobile UA string.
+- Changing `userAgentEmbedded`/`userAgentApi` for an account without also regenerating its `ebFingerprint` to match the UA's platform (mobile vs desktop). These two values must always be internally consistent.
+- Assuming that updating the UA field is sufficient — the stored `ebFingerprint` GPU pool must be regenerated any time the UA's platform class changes.
 
 ## Fingerprint Noise Entropy Rule (non-negotiable, fixed 6 Jul 2026)
 

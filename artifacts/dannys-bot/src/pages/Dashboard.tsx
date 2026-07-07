@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.383",
+    date: "7 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Accounts that previously had desktop browser identities now have their hardware fingerprint corrected automatically on startup. When the app switched back to mobile browser identities, the stored hardware fingerprint (graphics card info) was not updated to match — so Instagram was seeing a mobile phone identity paired with a desktop PC graphics card, which is physically impossible and triggers an immediate ban. The app now detects and fixes this mismatch automatically every time it starts, for every account.",
+      },
+    ],
+  },
+  {
     version: "1.1.382",
     date: "7 Jul 2026",
     items: [
