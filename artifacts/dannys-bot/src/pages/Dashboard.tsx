@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.385",
+    date: "7 Jul 2026",
+    items: [
+      {
+        category: "New",
+        text: "Stage Bootstrap: after the browser logs in and harvests cookies, the API cold-start can now be intentionally delayed by a random X–Y minute window before it fires. The account shows an orange 'Staging' status with a live countdown during the wait. If the app restarts mid-wait, the remaining time is recalculated from the saved fire timestamp and the timer resumes automatically — no action needed. Enable it per-account in Settings next to the Verify button.",
+      },
+      {
+        category: "Improved",
+        text: "Every individual Instagram endpoint is now visible in the API Calls export. Previously, operations like 'View Timeline Feed' appeared as a single grouped entry, hiding the individual URLs hit inside it. Now every endpoint is logged separately, so you have a complete picture of every request sent to Instagram's servers.",
+      },
+    ],
+  },
+  {
     version: "1.1.384",
     date: "7 Jul 2026",
     items: [

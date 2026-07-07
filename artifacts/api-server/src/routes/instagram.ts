@@ -226,6 +226,75 @@ async function resumeStuckVerifyingAccounts(): Promise<void> {
   }
 }
 
+// ── Stage Bootstrap — deferred API cold-start after EB login ─────────────────
+// Accounts with stageBootstrapEnabled sit in "staging" status after the browser
+// login harvests cookies.  A per-account timer fires verifyInstagramCredentials
+// after a random delay (stageBootstrapDelayMin–Max minutes) so the EB session
+// has time to "settle" before the mobile API cold-start runs.
+// The fire timestamp (stagingBootstrapFiresAt) is persisted in the DB so the
+// timer survives server restarts — on startup, remaining delay is recomputed.
+
+const stagingTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+async function runStagedBootstrap(profileId: number): Promise<void> {
+  stagingTimers.delete(profileId);
+  let profile: Awaited<ReturnType<typeof storage.getProfile>>;
+  try { profile = await storage.getProfile(profileId); } catch { return; }
+  if (!profile || profile.accountStatus !== "staging") return; // cancelled or re-verified
+
+  console.log(`[staging:${profileId}] @${profile.username} — delay expired, running API bootstrap`);
+  await storage.updateProfile(profileId, { accountStatus: "verifying" } as any).catch(() => {});
+
+  try {
+    // Resolve proxy (same as verify route)
+    let effectiveProfile: any = { ...profile };
+    if (profile.proxyId) {
+      const allProxies = await storage.getProxies().catch(() => [] as any[]);
+      const linked = allProxies.find((p: any) => p.id === profile!.proxyId);
+      if (linked) {
+        effectiveProfile = {
+          ...effectiveProfile,
+          proxyHost: linked.host,
+          proxyPort: linked.port,
+          proxyUsername: linked.username ?? "",
+          proxyPassword: linked.password ?? "",
+        };
+      }
+    }
+
+    await acquireSilentVerifySlot();
+    let apiResult: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+    try {
+      apiResult = await verifyInstagramCredentials(effectiveProfile);
+    } finally {
+      releaseSilentVerifySlot();
+    }
+
+    await storage.updateProfile(profileId, {
+      accountStatus: apiResult.accountStatus ?? (apiResult.ok ? "valid" : "pending"),
+      statusMessage: apiResult.message,
+      stagingBootstrapFiresAt: null,
+      ...(apiResult.igApiCookies ? { igApiCookies: apiResult.igApiCookies } : {}),
+      ...(apiResult.igDeviceState ? { igDeviceState: apiResult.igDeviceState } : {}),
+      ...(apiResult.ok ? { credentialsDirty: false, validSince: new Date().toISOString() } : {}),
+    } as any);
+
+    sendLoginDone(profileId, apiResult.ok, apiResult.message ?? "");
+    console.log(`[staging:${profileId}] @${profile.username} — bootstrap complete → ${apiResult.accountStatus ?? (apiResult.ok ? "valid" : "pending")}`);
+  } catch (e: any) {
+    console.error(`[staging:${profileId}] @${profile.username} — bootstrap threw:`, e?.message);
+    await storage.updateProfile(profileId, { accountStatus: "pending", statusMessage: `Stage bootstrap failed: ${e?.message ?? "unknown"}`, stagingBootstrapFiresAt: null } as any).catch(() => {});
+  }
+}
+
+function scheduleStagingBootstrap(profileId: number, delayMs: number): void {
+  const existing = stagingTimers.get(profileId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => runStagedBootstrap(profileId), Math.max(0, delayMs));
+  stagingTimers.set(profileId, timer);
+  console.log(`[staging:${profileId}] bootstrap scheduled in ${Math.round(delayMs / 60_000)}m`);
+}
+
 // Persisted across restarts within the same calendar day so the dashboard
 // always shows when the bot was FIRST started today, not the latest restart.
 let SERVER_START = new Date().toISOString();
@@ -2346,6 +2415,21 @@ export async function registerInstagramRoutes(
           const disableApiMsg = `@${profile.username} — EB login confirmed (Disable API mode — browser-only)`;
           sendLoginDone(profileId, true, disableApiMsg);
           await storage.updateProfile(profile.id, { accountStatus: "valid", statusMessage: disableApiMsg, credentialsDirty: false });
+          verifyInFlight.delete(profileId);
+          return;
+        }
+
+        // Stage Bootstrap: if enabled, put the account in "staging" and schedule
+        // the API cold-start after a random delay so the fresh EB session settles
+        // before mobile API calls begin.  Survives restarts via stagingBootstrapFiresAt.
+        if ((effectiveProfile.apiLimits as any)?.stageBootstrapEnabled === true) {
+          const _stMinMs = Math.max(1, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMin ?? 5)) * 60_000;
+          const _stMaxMs = Math.max(_stMinMs, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMax ?? 15)) * 60_000;
+          const _stDelayMs = _stMinMs + Math.floor(Math.random() * (_stMaxMs - _stMinMs + 1));
+          const _stFiresAt = new Date(Date.now() + _stDelayMs).toISOString();
+          await storage.updateProfile(profile.id, { accountStatus: "staging", stagingBootstrapFiresAt: _stFiresAt } as any);
+          console.log(`[verify:${profileId}] @${profile.username} — Stage Bootstrap: API cold-start in ${Math.round(_stDelayMs / 60_000)} min (fires at ${_stFiresAt})`);
+          scheduleStagingBootstrap(profileId, _stDelayMs);
           verifyInFlight.delete(profileId);
           return;
         }
@@ -6364,6 +6448,32 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       }
     } catch (e) {
       console.warn("[startup:fp-fix] GPU fingerprint migration failed (non-fatal):", e);
+    }
+  })();
+
+  // ── Startup: reschedule staging accounts whose bootstrap timer was lost on restart ──
+  (async () => {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 4000)); // let other migrations finish first
+      const allProfiles = await storage.getProfiles();
+      let rescheduled = 0;
+      for (const p of allProfiles) {
+        if (p.accountStatus !== "staging") continue;
+        const firesAt = (p as any).stagingBootstrapFiresAt as string | null;
+        if (!firesAt) {
+          // No fire timestamp — run immediately (shouldn't normally happen)
+          scheduleStagingBootstrap(p.id, 0);
+          rescheduled++;
+          continue;
+        }
+        const remainingMs = Math.max(0, new Date(firesAt).getTime() - Date.now());
+        scheduleStagingBootstrap(p.id, remainingMs);
+        console.log(`[startup:staging] @${p.username} — rescheduled bootstrap in ${Math.round(remainingMs / 60_000)}m`);
+        rescheduled++;
+      }
+      if (rescheduled > 0) console.log(`[startup:staging] Rescheduled ${rescheduled} staging account(s)`);
+    } catch (e) {
+      console.warn("[startup:staging] Staging recovery failed (non-fatal):", e);
     }
   })();
 

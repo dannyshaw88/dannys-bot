@@ -34,6 +34,7 @@ export const ACCOUNT_STATUSES = [
   'upload',
   'review',
   'automated_behaviour_detected',
+  'staging',
 ] as const;
 
 export type AccountStatus = typeof ACCOUNT_STATUSES[number];
@@ -94,6 +95,7 @@ export type Profile = {
   locked: boolean | null;
   isTemplate: boolean | null;
   cookieBakerSettings: Record<string, unknown> | null;
+  stagingBootstrapFiresAt: string | null;
 };
 
 export type InsertProfile = Pick<Profile, 'username' | 'password'> & Partial<Omit<Profile, 'id' | 'status' | 'username' | 'password'>>;

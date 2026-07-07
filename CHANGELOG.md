@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.385] — 2026-07-07
+
+### New — Stage Bootstrap (deferred API cold-start)
+
+After the browser logs in and harvests the session cookies, the API cold-start sequence can now be intentionally delayed by a configurable random window (X–Y minutes, set per-account in Settings → Stage Bootstrap).
+
+**Why:** Running the browser login and the mobile API cold-start back-to-back on the same account within seconds hits multiple endpoint families in a short burst, which reduces trust score and puts the account on a tightrope from the start. The staged delay lets the EB session settle naturally before any mobile API traffic begins.
+
+**Account status during wait:** A new orange **Staging** pill is shown in the Accounts list with a live countdown timer displaying the remaining minutes until the API bootstrap fires.
+
+**Restart-safe:** The fire timestamp (`stagingBootstrapFiresAt`) is persisted in the database. On server restart, any account still in staging has its remaining delay recomputed from the saved timestamp and the timer is rescheduled automatically — no manual intervention needed.
+
+**Implementation:** `artifacts/api-server/src/routes/instagram.ts` — `scheduleStagingBootstrap()` / `runStagedBootstrap()` / startup recovery IIFE. DB column: `staging_bootstrap_fires_at`. Frontend: orange pill in `ProfilesPage.tsx`, Setting controls in `ProfileDetailsPage.tsx`.
+
+### Improved — Full endpoint visibility in API Calls export
+
+Previously, all HTTP requests made inside a named timed operation (e.g. `ViewTimelineFeedSeen`, `LikeMedia`, `FollowedUser`) were suppressed from the individual log — only the outer named entry appeared in the export. This meant that for every operation, the actual endpoints hit were invisible.
+
+**Fix:** Removed the `_inTimedCall` early-return guard from `_logTransport()` in `instagramWebClient.ts`. Every individual endpoint call now logs its own row regardless of whether it runs inside a `timed()` wrapper. Error propagation to the outer named entry is preserved via `_lastTimedCallIsError`.
+
+---
+
 ## [1.1.384] — 2026-07-07
 
 ### Fixed

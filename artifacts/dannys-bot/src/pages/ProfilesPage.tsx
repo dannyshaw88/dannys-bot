@@ -18,7 +18,7 @@ import {
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock, Monitor, Flag,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
-  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images, BarChart2,
+  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images, BarChart2, Hourglass,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -74,6 +74,7 @@ const STATUS_META: Record<AccountStatus, {
   review:               { label: "Review",               icon: Eye,         pill: "bg-slate-100 text-slate-600  border-slate-200"  },
   automated_behaviour_detected: { label: "Auto Behav.", icon: ShieldAlert, pill: "bg-orange-50 text-orange-700 border-orange-200" },
   resuming: { label: "Resuming", icon: RefreshCw, pill: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  staging: { label: "Staging", icon: Hourglass, pill: "bg-orange-500 text-white border-orange-600" },
 };
 
 function ResumingCountdown({ until, onExpired }: { until: string | null | undefined; onExpired?: () => void }) {
@@ -102,7 +103,7 @@ function ResumingCountdown({ until, onExpired }: { until: string | null | undefi
   return <span className="text-[8px] font-mono tabular-nums">{h > 0 ? `${h}:` : ""}{pad(m)}:{pad(s)}</span>;
 }
 
-function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingExpired }: { status: string; statusMessage?: string | null; resumingUntil?: string | null; onResumingExpired?: () => void }) {
+function AccountStatusBadge({ status, statusMessage, resumingUntil, stagingBootstrapFiresAt, onResumingExpired }: { status: string; statusMessage?: string | null; resumingUntil?: string | null; stagingBootstrapFiresAt?: string | null; onResumingExpired?: () => void }) {
   const isResuming = status === "stopped" && !!resumingUntil && new Date(resumingUntil).getTime() > Date.now();
   const displayStatus = isResuming ? "resuming" : status;
   const meta = STATUS_META[displayStatus as AccountStatus] ?? STATUS_META.pending;
@@ -116,6 +117,7 @@ function AccountStatusBadge({ status, statusMessage, resumingUntil, onResumingEx
       <Icon className={`w-2.5 h-2.5${(isResuming || displayStatus === "verifying") ? " animate-spin" : ""}`} />
       <span className="uppercase">{meta.label}</span>
       {isResuming && <ResumingCountdown until={resumingUntil} onExpired={onResumingExpired} />}
+      {displayStatus === "staging" && stagingBootstrapFiresAt && <ResumingCountdown until={stagingBootstrapFiresAt} />}
     </span>
   );
 }
@@ -1537,7 +1539,7 @@ export function ProfilesPage() {
                     if (key === "status") return (
                       <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-center gap-1.5 shrink-0">
                         {hasProxy
-                          ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} resumingUntil={profile.resumingUntil} onResumingExpired={() => queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] })} />
+                          ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} resumingUntil={profile.resumingUntil} stagingBootstrapFiresAt={(profile as any).stagingBootstrapFiresAt} onResumingExpired={() => queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] })} />
                           : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
                               <Globe className="w-2.5 h-2.5" />No Proxy
                             </span>

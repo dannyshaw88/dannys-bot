@@ -1186,13 +1186,10 @@ export class InstagramWebClient {
   // human-readable description for both success and error cases.
   private _logTransport(path: string, method: string, durationMs: number, isError: boolean, msg?: string): void {
     if (!this.logCallFn) return;
-    // When inside a timed() wrapper, suppress the inner per-request log entry —
-    // the outer timed() will produce a single named entry (e.g. ViewTimelineFeedSeen)
-    // instead of the raw URL-derived name (e.g. MediaSeen).
-    if (this._inTimedCall) {
-      if (isError) this._lastTimedCallIsError = true;
-      return;
-    }
+    // Track errors inside timed() wrappers so the outer named entry reports correctly.
+    // Do NOT suppress individual endpoint calls — every hit to Instagram servers must
+    // be logged regardless of whether it is wrapped in a timed() operation.
+    if (this._inTimedCall && isError) this._lastTimedCallIsError = true;
 
     if (!msg) {
       // Strip query string then trailing slashes.

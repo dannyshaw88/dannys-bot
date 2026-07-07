@@ -1314,6 +1314,46 @@ export function ProfileDetailsPage() {
                             </Button>
                           )}
                         </div>
+                        {/* Stage Bootstrap — delay API cold-start after browser login */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`stageBootstrapEnabled-${profile.id}`}
+                              checked={!!(formData.apiLimits as any).stageBootstrapEnabled}
+                              onChange={e => updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapEnabled: e.target.checked } })}
+                              className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                            />
+                            <Label htmlFor={`stageBootstrapEnabled-${profile.id}`} className="text-xs font-medium cursor-pointer whitespace-nowrap">Stage Bootstrap</Label>
+                          </div>
+                          {(formData.apiLimits as any).stageBootstrapEnabled && (
+                            <>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={120}
+                                className="h-7 text-xs w-14"
+                                value={(formData.apiLimits as any).stageBootstrapDelayMin ?? 5}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMin: Math.max(1, Number(e.target.value)) } })}
+                              />
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={120}
+                                className="h-7 text-xs w-14"
+                                value={(formData.apiLimits as any).stageBootstrapDelayMax ?? 15}
+                                onChange={e => {
+                                  const v = Math.max(1, Number(e.target.value));
+                                  const min = (formData.apiLimits as any).stageBootstrapDelayMin ?? 5;
+                                  updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMax: Math.max(min, v) } });
+                                }}
+                              />
+                              <p className="text-[10px] text-muted-foreground whitespace-nowrap">min delay</p>
+                            </>
+                          )}
+                        </div>
                         {/* Fire Unique Endpoints on Login — all controls on one row */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="flex items-center gap-2">

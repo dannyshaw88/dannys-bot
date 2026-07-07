@@ -51,6 +51,7 @@ export const ACCOUNT_STATUSES = [
   'upload',
   'review',
   'resuming',
+  'staging',
 ] as const;
 
 export type AccountStatus = typeof ACCOUNT_STATUSES[number];
@@ -116,6 +117,7 @@ export const profiles = sqliteTable("profiles", {
   templateId: text("template_id"),
   createdAt: text("created_at"),
   validSince: text("valid_since"),
+  stagingBootstrapFiresAt: text("staging_bootstrap_fires_at"),
 });
 
 export const tools = sqliteTable("tools", {
