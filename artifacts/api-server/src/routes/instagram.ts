@@ -2433,8 +2433,11 @@ export async function registerInstagramRoutes(
           // Clamp raw DB values to [1, 9999] minutes before converting to ms.
           // A corrupted value (e.g. 1,185,334 min) would produce >2^31 ms and
           // overflow Node's setTimeout to 1 ms, firing the bootstrap instantly.
-          const _rawMin = Math.min(9999, Math.max(1, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMin ?? 5)));
-          const _rawMax = Math.min(9999, Math.max(_rawMin, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMax ?? 15)));
+          // Also guard against NaN/Infinity from non-numeric stored values.
+          const _parseMin = Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMin ?? 5);
+          const _parseMax = Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMax ?? 15);
+          const _rawMin = Math.min(9999, Math.max(1, Number.isFinite(_parseMin) ? _parseMin : 5));
+          const _rawMax = Math.min(9999, Math.max(_rawMin, Number.isFinite(_parseMax) ? _parseMax : 15));
           const _stMinMs = _rawMin * 60_000;
           const _stMaxMs = _rawMax * 60_000;
           const _stDelayMs = _stMinMs + Math.floor(Math.random() * (_stMaxMs - _stMinMs + 1));
@@ -6478,7 +6481,15 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
           rescheduled++;
           continue;
         }
-        const remainingMs = Math.max(0, new Date(firesAt).getTime() - Date.now());
+        const firesAtMs = new Date(firesAt).getTime();
+        if (!Number.isFinite(firesAtMs)) {
+          // Malformed timestamp — run immediately and clear the bad value
+          console.warn(`[startup:staging] @${p.username} — stagingBootstrapFiresAt is malformed ("${firesAt}"), running bootstrap immediately`);
+          scheduleStagingBootstrap(p.id, 0);
+          rescheduled++;
+          continue;
+        }
+        const remainingMs = Math.max(0, firesAtMs - Date.now());
         // If the stored timestamp is > 7 days in the future it is almost certainly
         // an overflow artifact (the old overflowed setTimeout stored a fire time
         // years from now).  Treat it as "run immediately" rather than re-scheduling
