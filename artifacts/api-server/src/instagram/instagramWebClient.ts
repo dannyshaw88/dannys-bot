@@ -2437,6 +2437,17 @@ export class InstagramWebClient {
     }
     if (j?.status === "fail") {
       const msg: string = j?.message || "Instagram declined (status: fail)";
+      // When auth=MISSING and Instagram returns the generic "something went wrong" fail,
+      // the HMAC-signed Android body itself (device_id: android-..., radio_type: wifi-none,
+      // Android nav_chain) is the contradiction — no amount of header stripping fixes it
+      // because the body format irrevocably identifies the client as the native Android app,
+      // which Instagram gates behind a Bearer token regardless of TLS fingerprint.
+      // Fall back to the web endpoint (www.instagram.com, plain web cookies + CSRF, no signed
+      // body) only when: auth still missing + "something went wrong" + web session available.
+      if (!this._deviceAuthorization && /something went wrong/i.test(msg)) {
+        console.log(`[webClient] follow ${userId}: mobile API "something went wrong" with no Bearer — trying web endpoint fallback`);
+        return this._followViaWebEndpoint(userId);
+      }
       return { ok: false, status: "follow_blocked", reason: `api_error: ${msg}` };
     }
     if (j?.status === "ok") return { ok: true, status: "following" };
@@ -2444,6 +2455,63 @@ export class InstagramWebClient {
     return { ok: false, status: "follow_blocked", reason: "unexpected response: " + JSON.stringify(j).slice(0, 200) };
   }
 
+  // ── Web-endpoint follow fallback ──────────────────────────────────────────
+  // Used when _followViaMobileSession returns "something went wrong" with no Bearer
+  // token. The HMAC-signed Android body (device_id, radio_type, nav_chain) that
+  // _followViaMobileSession sends cannot be de-Androidified without removing the
+  // signature itself — Instagram verifies the HMAC and requires those fields.
+  // The web endpoint at www.instagram.com accepts plain web cookies + CSRF token
+  // and does NOT require a Bearer token or a signed body, so it succeeds for EB
+  // sessions that have never issued a Bearer token.
+  //
+  // Guards: only called when (1) auth is MISSING, (2) mobile returned "something
+  // went wrong", and (3) this.cookieJar contains a valid sessionid (web session).
+  private async _followViaWebEndpoint(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
+    const webSession = this.cookieJar.find(c => c.startsWith("sessionid="));
+    if (!webSession) {
+      console.warn(`[webClient] follow ${userId}: _followViaWebEndpoint — no web session in cookieJar, cannot fall back`);
+      return { ok: false, status: "follow_blocked", reason: "api_error: We're sorry, but something went wrong (no web session for fallback)" };
+    }
+
+    console.log(`[webClient] follow ${userId}: _followViaWebEndpoint — web session present, POST www.instagram.com/api/v1/web/friendships/${userId}/follow/`);
+    const res = await this.webPost(`/api/v1/web/friendships/${userId}/follow/`);
+    const j = res?.json as any;
+
+    if (!j) {
+      console.warn(`[webClient] follow ${userId}: _followViaWebEndpoint no JSON response (status=${res?.status})`);
+      return { ok: false, status: "follow_blocked", reason: `web-endpoint fallback: no JSON response (status=${res?.status})` };
+    }
+
+    console.log(`[webClient] follow ${userId} (_followViaWebEndpoint):`, JSON.stringify(j).slice(0, 400));
+
+    if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
+      return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: j?.checkpoint_url ?? "" };
+    }
+    if (j?.spam === true) return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
+    if (j?.feedback_required === true || /feedback_required|ActionBlocked/i.test(j?.message ?? "")) {
+      return { ok: false, status: "follow_blocked", reason: j?.message ?? "feedback_required" };
+    }
+    if (j?.require_login || j?.message === "login_required") {
+      return { ok: false, status: "follow_blocked", reason: "web session expired — re-verify account" };
+    }
+    if (j?.message && /please wait/i.test(String(j.message))) {
+      return { ok: false, status: "follow_blocked", reason: j.message };
+    }
+    if (j?.friendship_status) {
+      const fs = j.friendship_status;
+      return { ok: true, status: fs.following ? "following" : "requested" };
+    }
+    if (j?.following !== undefined || j?.outgoing_request !== undefined) {
+      if (j.following || j.outgoing_request) return { ok: true, status: j.following ? "following" : "requested" };
+      return { ok: false, status: "follow_blocked", reason: "web-endpoint: Instagram silently declined (following=false, outgoing_request=false)" };
+    }
+    if (j?.status === "ok") return { ok: true, status: "following" };
+    if (j?.status === "fail") {
+      return { ok: false, status: "follow_blocked", reason: `web-endpoint api_error: ${j?.message ?? "Instagram declined (status: fail)"}` };
+    }
+    console.warn(`[webClient] follow ${userId} web-endpoint unexpected response:`, JSON.stringify(j));
+    return { ok: false, status: "follow_blocked", reason: "web-endpoint unexpected: " + JSON.stringify(j).slice(0, 200) };
+  }
 
   // ── Programmatic consent acceptance ──────────────────────────────────────
   // When Instagram's mobile API returns consent_required, it means the account

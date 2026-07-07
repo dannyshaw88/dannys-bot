@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.393] — 2026-07-07
+
+### Fixed
+
+#### Follow failing with "something went wrong" — Android HMAC-signed body triggers Bearer gate regardless of headers
+
+**Root cause (confirmed from WIRE log):** v1.1.392 stripped all Android-specific HTTP headers when the Bearer token was absent, but the HMAC-signed request body sent to `i.instagram.com/api/v1/friendships/create/{userId}/` is irrevocably Android-native in format:
+
+```
+device_id=android-a9490ca72c983130&radio_type=wifi-none&nav_chain=com.bloks.www.ig.na.home:…
+```
+
+Instagram verifies the HMAC signature and parses the body. Seeing `device_id: android-…` and `radio_type: wifi-none` in the payload (regardless of what headers accompany it) causes it to treat the request as originating from the Android app — which Instagram gates behind a `Authorization: Bearer IGT:2:…` token. The header stripping in v1.1.392 was necessary but not sufficient: the body itself carries the Android identity.
+
+**Fix:** `_followViaMobileSession` now includes a web-endpoint fallback. When the mobile API returns `{"status":"fail","message":"We're sorry, but something went wrong"}` **and** no Bearer token is present (`auth=MISSING`) **and** the account has a valid EB web session (`cookieJar` contains a `sessionid` cookie), the follow is retried via `_followViaWebEndpoint`:
+
+- Hits `POST www.instagram.com/api/v1/web/friendships/{userId}/follow/`
+- Uses `webPost` — plain `WEB_UA` (Chrome), `cookieJar` (EB web cookies), `X-CSRFToken` header
+- **No signed Android body** — the web endpoint accepts a plain POST from a web client
+- Instagram does **not** apply the Bearer-token gate to web-session requests
+
+The mobile-first path is fully preserved: `_bootstrapWwwClaim` still runs before every follow attempt, so accounts that can recover a Bearer token (fresh EB login → cold-start sequence) will use the mobile path successfully. The web fallback only fires on the specific failure + no-auth combination.
+
+**When auth IS present:** all existing behaviour is unchanged — the signed Android body + all Android headers + Bearer token is the correct payload for a fully verified account.
+
+**Files:**
+- `artifacts/api-server/src/instagram/instagramWebClient.ts` — `_followViaMobileSession` status=fail branch + new `_followViaWebEndpoint` method
+
+---
+
 ## [1.1.392] — 2026-07-07
 
 ### Fixed
