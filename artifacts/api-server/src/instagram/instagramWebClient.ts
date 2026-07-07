@@ -2348,23 +2348,32 @@ export class InstagramWebClient {
 
     const followHeaders = this._buildMobileHeaders(csrf, "application/x-www-form-urlencoded; charset=UTF-8");
 
-    // When auth is MISSING and we are using Chrome120 JA3, strip the two headers
-    // that contradict the Chrome fingerprint:
+    // When auth is MISSING and we are using Chrome120 JA3, strip ALL headers that
+    // identify this as an Android client.  Instagram checks BOTH the TLS JA3 fingerprint
+    // AND the HTTP headers when deciding whether to apply the Bearer-token gate.
+    // Sending Chrome JA3 + Android headers = detectable contradiction → Bearer gate still fires.
+    // Stripping ALL Android-specific headers makes the request look like a pure Chrome/web
+    // client, which eliminates the contradiction and bypasses the Bearer gate.
     //
-    //   X-IG-WWW-Claim: "0"   — real Chrome browsers never send this header at all.
-    //                            Sending "0" signals "Android client with no claim yet",
-    //                            which triggers Instagram's Android Bearer-token gate
-    //                            even when the JA3 says Chrome.
+    // Headers stripped when auth=MISSING:
+    //   X-IG-Android-ID       — Android device ID, Chrome browsers never send this
+    //   X-Bloks-Version-Id    — Android Bloks framework version, Chrome-only inconsistency
+    //   X-Bloks-Is-Layout-RTL — Android Bloks RTL flag
+    //   X-Pigeon-Session-Id   — Android/app session tracker, absent in real Chrome traffic
+    //   X-Pigeon-Rawclienttime — Android app timing metric
+    //   X-FB-HTTP-Engine: Liger — OkHttp4/Android transport identifier
+    //   X-IG-WWW-Claim: "0"   — "0" signals "Android client without claim yet"
     //
-    //   X-FB-HTTP-Engine: Liger — OkHttp4/Android-specific header not present in any
-    //                              Chrome/browser traffic.  Its presence alongside a
-    //                              Chrome JA3 is a detectable inconsistency.
-    //
-    // When Authorization IS present the claim header is meaningful (real value) and
-    // these headers should be kept — real Android app v431+ sends both on follow calls.
+    // When Authorization IS present these headers are kept — real Android app v431+
+    // sends all of them and the Bearer token together on every authenticated call.
     if (!this._deviceAuthorization) {
       if (followHeaders["X-IG-WWW-Claim"] === "0") delete followHeaders["X-IG-WWW-Claim"];
       delete followHeaders["X-FB-HTTP-Engine"];
+      delete followHeaders["X-IG-Android-ID"];
+      delete followHeaders["X-Bloks-Version-Id"];
+      delete followHeaders["X-Bloks-Is-Layout-RTL"];
+      delete followHeaders["X-Pigeon-Session-Id"];
+      delete followHeaders["X-Pigeon-Rawclienttime"];
     }
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"}, claim=${followHeaders["X-IG-WWW-Claim"] ?? "omitted"})`);
@@ -2373,13 +2382,9 @@ export class InstagramWebClient {
     // Instagram's backend requires a Bearer token for write calls from Android-JA3
     // clients — because real Android apps always carry one.  EB sessions use Chrome
     // web cookies and never issue a Bearer token, so the Android fingerprint always
-    // fails on friendships/create.  Chrome JA3 removes that Bearer requirement:
-    // Instagram accepts the write call on cookies alone, matching the pre-CycleTLS
-    // behaviour where Node.js OpenSSL JA3 also didn't trigger the Android gate.
-    //
-    // Combined with stripping X-IG-WWW-Claim/"0" and X-FB-HTTP-Engine when auth is
-    // missing, this eliminates the Android-vs-Chrome contradiction that was causing
-    // Instagram to still apply the Bearer gate despite the Chrome JA3.
+    // fails on friendships/create.  Chrome JA3 removes that Bearer requirement when
+    // combined with stripping ALL Android-specific headers above — making the request
+    // look like a pure Chrome/web client that Instagram doesn't apply the Bearer gate to.
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,

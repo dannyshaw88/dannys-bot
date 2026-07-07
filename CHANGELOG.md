@@ -4,6 +4,39 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.392] — 2026-07-07
+
+### Fixed
+
+#### Follow failing with "something went wrong" — Chrome JA3 + Android headers contradiction triggers Bearer gate
+
+**Root cause (confirmed from WIRE log):** The no-Bearer Chrome-JA3 follow path was only stripping two Android headers (`X-IG-WWW-Claim: "0"` and `X-FB-HTTP-Engine: Liger`) but leaving five more Android-specific headers in the request:
+
+- `X-IG-Android-ID: android-<deviceId>` — Android device ID (Chrome never sends this)
+- `X-Bloks-Version-Id: ce555e5500…` — Android Bloks framework version
+- `X-Bloks-Is-Layout-RTL: false` — Android Bloks RTL flag
+- `X-Pigeon-Session-Id: <uuid>` — Android/app session tracker
+- `X-Pigeon-Rawclienttime: <timestamp>` — Android app timing metric
+
+Instagram checks **both** the TLS JA3 fingerprint AND the HTTP headers when deciding whether to apply the Bearer-token gate. Sending Chrome 120 JA3 with Android HTTP headers is a detectable contradiction — Instagram applies the Bearer gate anyway, returning `HTTP 200 {"message":"We're sorry, but something went wrong","status":"fail"}`.
+
+The account was not follow-blocked. The session cookies (`sessionid`) were valid — Phase 2e `users/{id}/info` returned HTTP 200 with the real user object. The only issue was the missing Bearer token, which caused Instagram to reject the write action.
+
+**Fix:** When `auth=MISSING` (no Bearer token in `igDeviceState`), strip ALL headers that identify the client as Android — not just the two that were already stripped. The full stripped set is now:
+- `X-IG-WWW-Claim: "0"` (was already stripped)
+- `X-FB-HTTP-Engine: Liger` (was already stripped)
+- `X-IG-Android-ID` ← **new**
+- `X-Bloks-Version-Id` ← **new**
+- `X-Bloks-Is-Layout-RTL` ← **new**
+- `X-Pigeon-Session-Id` ← **new**
+- `X-Pigeon-Rawclienttime` ← **new**
+
+When `Authorization: Bearer IGT:2:…` IS present, all headers are kept — real Android app v431+ sends the full set together with the Bearer token on every authenticated call.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — `_followViaMobileSession`, no-Bearer header stripping block (~line 2354)
+
+---
+
 ## [1.1.391] — 2026-07-07
 
 ### Fixed
