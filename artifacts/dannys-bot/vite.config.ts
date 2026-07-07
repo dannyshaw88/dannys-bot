@@ -29,6 +29,11 @@ const outDir = isReplit
 
 export default defineConfig({
   base: basePath,
+  // Each dev server gets its own cache directory so two simultaneous Vite
+  // processes (e.g. "Start application" on 5000 and the artifact workflow on
+  // 22393) don't race each other writing pre-bundled dep chunks and produce an
+  // inconsistent cache that breaks React hook resolution.
+  cacheDir: path.resolve(import.meta.dirname, `node_modules/.vite-${port}`),
   plugins: [
     react(),
     tailwindcss(),
