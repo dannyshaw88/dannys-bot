@@ -2487,6 +2487,10 @@ export class InstagramWebClient {
     if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
       return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: j?.checkpoint_url ?? "" };
     }
+    // Web endpoint returns challenge_required (not checkpoint_required) for security challenges.
+    if (j?.message === "challenge_required" || j?.challenge_url) {
+      return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security challenge", checkpointUrl: j?.challenge_url ?? "" };
+    }
     if (j?.spam === true) return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
     if (j?.feedback_required === true || /feedback_required|ActionBlocked/i.test(j?.message ?? "")) {
       return { ok: false, status: "follow_blocked", reason: j?.message ?? "feedback_required" };
@@ -2497,6 +2501,10 @@ export class InstagramWebClient {
     if (j?.message && /please wait/i.test(String(j.message))) {
       return { ok: false, status: "follow_blocked", reason: j.message };
     }
+    // Web endpoint may return result: "following" | "requested" at the top level
+    // (as opposed to the nested friendship_status object the mobile endpoint returns).
+    if (j?.result === "following") return { ok: true, status: "following" };
+    if (j?.result === "requested") return { ok: true, status: "requested" };
     if (j?.friendship_status) {
       const fs = j.friendship_status;
       return { ok: true, status: fs.following ? "following" : "requested" };
