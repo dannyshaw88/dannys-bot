@@ -366,6 +366,9 @@ if (!colNames.has("created_at")) {
 if (!colNames.has("valid_since")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN valid_since TEXT;`);
 }
+if (!colNames.has("staging_bootstrap_fires_at")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN staging_bootstrap_fires_at TEXT;`);
+}
 if (!colNames.has("follow_via_browser")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN follow_via_browser INTEGER DEFAULT 0;`);
 }
