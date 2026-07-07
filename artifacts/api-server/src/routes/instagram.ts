@@ -290,9 +290,15 @@ async function runStagedBootstrap(profileId: number): Promise<void> {
 function scheduleStagingBootstrap(profileId: number, delayMs: number): void {
   const existing = stagingTimers.get(profileId);
   if (existing) clearTimeout(existing);
-  const timer = setTimeout(() => runStagedBootstrap(profileId), Math.max(0, delayMs));
+  // Node.js setTimeout uses a 32-bit signed integer internally; anything above
+  // 2,147,483,647 ms (~24.8 days) overflows to 1 ms and fires immediately.
+  // Clamp to the safe maximum so a corrupted DB value can never trigger an
+  // instant bootstrap.
+  const MAX_SAFE_TIMEOUT_MS = 2_147_483_647;
+  const safeDelay = Math.min(Math.max(0, delayMs), MAX_SAFE_TIMEOUT_MS);
+  const timer = setTimeout(() => runStagedBootstrap(profileId), safeDelay);
   stagingTimers.set(profileId, timer);
-  console.log(`[staging:${profileId}] bootstrap scheduled in ${Math.round(delayMs / 60_000)}m`);
+  console.log(`[staging:${profileId}] bootstrap scheduled in ${Math.round(safeDelay / 60_000)}m (raw=${Math.round(delayMs / 60_000)}m)`);
 }
 
 // Persisted across restarts within the same calendar day so the dashboard
@@ -2424,8 +2430,13 @@ export async function registerInstagramRoutes(
         // the API cold-start after a random delay so the fresh EB session settles
         // before mobile API calls begin.  Survives restarts via stagingBootstrapFiresAt.
         if ((effectiveProfile.apiLimits as any)?.stageBootstrapEnabled === true) {
-          const _stMinMs = Math.max(1, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMin ?? 5)) * 60_000;
-          const _stMaxMs = Math.max(_stMinMs, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMax ?? 15)) * 60_000;
+          // Clamp raw DB values to [1, 9999] minutes before converting to ms.
+          // A corrupted value (e.g. 1,185,334 min) would produce >2^31 ms and
+          // overflow Node's setTimeout to 1 ms, firing the bootstrap instantly.
+          const _rawMin = Math.min(9999, Math.max(1, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMin ?? 5)));
+          const _rawMax = Math.min(9999, Math.max(_rawMin, Number((effectiveProfile.apiLimits as any)?.stageBootstrapDelayMax ?? 15)));
+          const _stMinMs = _rawMin * 60_000;
+          const _stMaxMs = _rawMax * 60_000;
           const _stDelayMs = _stMinMs + Math.floor(Math.random() * (_stMaxMs - _stMinMs + 1));
           const _stFiresAt = new Date(Date.now() + _stDelayMs).toISOString();
           await storage.updateProfile(profile.id, { accountStatus: "staging", stagingBootstrapFiresAt: _stFiresAt } as any);
@@ -6468,6 +6479,17 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
           continue;
         }
         const remainingMs = Math.max(0, new Date(firesAt).getTime() - Date.now());
+        // If the stored timestamp is > 7 days in the future it is almost certainly
+        // an overflow artifact (the old overflowed setTimeout stored a fire time
+        // years from now).  Treat it as "run immediately" rather than re-scheduling
+        // a 2+ year wait.
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        if (remainingMs > SEVEN_DAYS_MS) {
+          console.warn(`[startup:staging] @${p.username} — stagingBootstrapFiresAt is ${Math.round(remainingMs / 86_400_000)}d away (overflow artifact?), running bootstrap immediately`);
+          scheduleStagingBootstrap(p.id, 0);
+          rescheduled++;
+          continue;
+        }
         scheduleStagingBootstrap(p.id, remainingMs);
         console.log(`[startup:staging] @${p.username} — rescheduled bootstrap in ${Math.round(remainingMs / 60_000)}m`);
         rescheduled++;

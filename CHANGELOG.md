@@ -4,6 +4,27 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.390] — 2026-07-07
+
+### Fixed
+
+#### Stage Bootstrap fires instantly when delay value is corrupted in the database — Node.js 32-bit setTimeout overflow
+
+**Root cause:** Node.js's `setTimeout` uses a 32-bit signed integer internally. Any delay value above 2,147,483,647 ms (~24.8 days) wraps around and is treated as 1 ms, firing the callback almost immediately. The stored `stageBootstrapDelayMin` in the database was 1,185,334 minutes (cause unknown — likely a UI input that was accepted without bounds-checking), which produced a delay of 71,120,068,753 ms — well above the 32-bit limit. The overflow caused the Stage Bootstrap timer to fire in ~1 ms, triggering the full API cold-start immediately after every verify even though the user expected a delayed warm-up.
+
+**Three-layer fix — all in `artifacts/api-server/src/routes/instagram.ts`:**
+
+1. **`scheduleStagingBootstrap` — hard clamp to 32-bit safe max:**  
+   Before calling `setTimeout`, the delay is now clamped to `Math.min(delayMs, 2_147_483_647)`. Any corrupted DB value can never cause an overflow-triggered instant fire. The log line now shows both the clamped and raw delay in minutes for visibility.
+
+2. **Verify path — clamp raw DB minutes to [1, 9999] before converting to ms:**  
+   `stageBootstrapDelayMin` and `stageBootstrapDelayMax` are now clamped to a maximum of 9,999 minutes (≈7 days) before multiplication by 60,000. This prevents a corrupted value from even reaching the `scheduleStagingBootstrap` call with an overflowing number.
+
+3. **Startup recovery — detect and heal overflow-corrupted `stagingBootstrapFiresAt` timestamps:**  
+   On server startup the staging recovery loop re-schedules accounts still in "staging" state by computing `remainingMs = firesAt - now`. If a previous overflow set `stagingBootstrapFiresAt` to a date years in the future, `remainingMs` would be enormous and the account would be stuck in staging indefinitely. The loop now detects any remaining time > 7 days, logs a warning identifying it as an overflow artifact, and runs the bootstrap immediately instead.
+
+---
+
 ## [1.1.389] — 2026-07-07
 
 ### Fixed
