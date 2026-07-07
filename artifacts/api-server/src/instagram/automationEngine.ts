@@ -744,8 +744,9 @@ class AutomationEngine {
           continue;
         }
         if (Date.now() < nextAt) continue;
-        // Time to sync
-        this.runProfileSync(profile).catch((e: any) =>
+        // Time to sync — use syncProfile (re-reads from DB) instead of runProfileSync
+        // so we always honour the latest syncUseHiker value, not the reconcile snapshot.
+        this.syncProfile(profile.id).catch((e: any) =>
           console.warn(`[engine] @${profile.username}: profile sync error: ${e?.message}`)
         );
         const intervalMs = randInt(

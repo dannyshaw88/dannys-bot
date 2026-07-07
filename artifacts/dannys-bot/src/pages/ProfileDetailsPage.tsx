@@ -646,6 +646,9 @@ export function ProfileDetailsPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus("saving");
     saveTimerRef.current = setTimeout(() => {
+      // Null out ref first so _executeVerify can tell the timer already fired
+      // and won't issue a duplicate save.
+      saveTimerRef.current = null;
       updateProfileMutation.mutate(
         { id: profileId, ...data, proxyPort: data.proxyPort ? Number(data.proxyPort) : null },
         {
@@ -721,6 +724,36 @@ export function ProfileDetailsPage() {
   };
 
   const _executeVerify = async (bypassProxy = false) => {
+    // Flush any pending autosave BEFORE verify reads from DB.
+    // Without this, settings changed within the 800ms debounce window (e.g.
+    // enabling Stage Bootstrap, toggling syncUseHiker off) are not yet
+    // persisted and the verify route reads stale values.
+    // saveTimerRef.current is null-ed out when the timer fires naturally (see
+    // scheduleAutoSave), so this block only runs when a save is genuinely pending.
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      if (formData) {
+        let flushOk = false;
+        await new Promise<void>((resolve) => {
+          updateProfileMutation.mutate(
+            { id: profileId, ...formData, proxyPort: formData.proxyPort ? Number(formData.proxyPort) : null },
+            {
+              onSuccess: () => { flushOk = true; resolve(); },
+              onError:   () => resolve(),
+            }
+          );
+        });
+        if (!flushOk) {
+          toast({
+            title: "Save warning",
+            description: "Could not save account settings before verifying — some settings (e.g. Stage Bootstrap) may not be reflected in this verify run.",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+
     setVerifyStatus("pending");
     const host: string | null = profile?.proxyHost ?? null;
     const port: number | null = profile?.proxyPort ?? null;
