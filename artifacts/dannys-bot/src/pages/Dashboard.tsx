@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.384",
+    date: "7 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Clicking Verify on an account that is already logged in and browsing could silently overwrite the live session cookie with an older saved value. Instagram detected this cookie change mid-session and flagged it as a security violation (__coig_ufac=1), causing an instant ban. The fix: Verify now checks for a live active session first — if one exists, it leaves all cookies completely untouched and returns immediately.",
+      },
+    ],
+  },
+  {
     version: "1.1.383",
     date: "7 Jul 2026",
     items: [

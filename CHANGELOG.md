@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.384] — 2026-07-07
+
+### Fixed
+
+#### Critical — Verify overwrites live sessionid with stale file value → __coig_ufac=1 ban
+
+**Root cause:** In `/eb/silent-verify` (`ebManager.ts`), `loadCookiesFromFile()` was called **before** the existing-session check. Instagram rotates the `sessionid` cookie during active browsing. If the `cookies-{id}.json` file held the original login-time sessionid (30+ minutes old), the file-load silently overwrote the live, current sessionid in the Electron session partition. Any subsequent request from the browser then carried the stale sessionid value — Instagram's cookie origin integrity guard (`__coig_ufac=1`) detects this as a cookie being replayed from a different device/time and triggers an instant suspension.
+
+**Confirmed by log:** The ban URL always contained `?__coig_ufac=1`. Verify completed with `"Using existing EB session"` (no Instagram HTTP calls) — but `loadCookiesFromFile` had already run and the overwrite had already happened before the early return.
+
+**Fix:** Check for a live `sessionid` in the Electron session **before** calling `loadCookiesFromFile`. If a live session exists, return immediately without touching any cookies at all. Only call `loadCookiesFromFile` when there is no active session (i.e. the EB needs to be bootstrapped from the saved cookie file for a fresh login).
+
+---
+
 ## [1.1.383] — 2026-07-07
 
 ### Fixed

@@ -6756,14 +6756,19 @@ export function startEbIpcServer(
           console.log(`[silent-verify:${pid}] @${body.username} — direct proxy set done`);
         }
         try { ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
-        console.log(`[silent-verify:${pid}] @${body.username} — loading cookies from file`);
-        await loadCookiesFromFile(pid, ses);
-        console.log(`[silent-verify:${pid}] @${body.username} — cookies loaded`);
 
         // ── Skip auto-login if already logged in ─────────────────────────────
-        const existingSession = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-        if (existingSession.length > 0) {
-          console.log(`[silent-verify:${pid}] @${body.username} — sessionid found in Electron session, skipping auto-login`);
+        // IMPORTANT: check for an existing live sessionid BEFORE calling
+        // loadCookiesFromFile.  Instagram rotates the sessionid during active
+        // browsing.  If we load the file first, we silently overwrite the live
+        // (current) sessionid with the stale value from the last save —
+        // Instagram then sees the old sessionid value arrive mid-session and
+        // fires __coig_ufac=1 (cookie integrity violation → instant ban).
+        // If there is already a live session, return immediately without
+        // touching any cookies at all.
+        const _preCheck = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        if (_preCheck.length > 0) {
+          console.log(`[silent-verify:${pid}] @${body.username} — live sessionid found BEFORE file load — skipping loadCookiesFromFile to preserve live session`);
           const c1 = await ses.cookies.get({ domain: ".instagram.com" });
           const c2 = await ses.cookies.get({ domain: "instagram.com" });
           const seen = new Set<string>();
@@ -6772,9 +6777,13 @@ export function startEbIpcServer(
             seen.add(c.name);
             return true;
           }).map(c => ({ name: c.name, value: c.value }));
-          // Return synchronously — no login needed, no long wait.
           return send(res, 200, { ok: true, message: "Using existing EB session", cookies });
         }
+
+        // No live session — safe to load cookies from file (no live session to overwrite).
+        console.log(`[silent-verify:${pid}] @${body.username} — no live sessionid — loading cookies from file`);
+        await loadCookiesFromFile(pid, ses);
+        console.log(`[silent-verify:${pid}] @${body.username} — cookies loaded`);
 
         // ── Pick the window to run verify in ─────────────────────────────────
         // The verify route calls /eb/open before hitting this endpoint, so the
