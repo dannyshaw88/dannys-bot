@@ -2440,7 +2440,11 @@ export async function getOrCreateSession(
     await dismissInstagramPopups(page);
     // Extra pass after another short delay (some popups appear with animation)
     await new Promise(r => setTimeout(r, 1500));
+    await dismissCookieBanner(page);
     await dismissInstagramPopups(page);
+    // Third pass with a longer delay for slow-rendering Meta cookie consent
+    // dialogs (React-controlled, may take 3–4 s to mount after navigation).
+    setTimeout(() => { dismissCookieBanner(page).catch(() => {}); }, 3000);
     // If we've navigated to Instagram and are NOT on the login page,
     // save cookies so the session persists across restarts
     if (

@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.386",
+    date: "7 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Stage Bootstrap Min/Max delay inputs no longer have an artificial 120-minute cap, and no longer force a minimum value when you type a number — you can now set any value freely.",
+      },
+      {
+        category: "Fixed",
+        text: "Cookie consent banners shown by Instagram in the embedded browser are now auto-dismissed more reliably. A third dismissal pass now fires 3 seconds after each page navigation to catch slow-rendering Meta consent dialogs that appear after the initial load.",
+      },
+      {
+        category: "Fixed",
+        text: "Human Session background browser actions (EB jitter: notifications, own profile, settings, activity) no longer run when the API is active (Disable API is off). These browser-only actions are only needed in Disable API mode — in API mode the session is managed through Instagram's mobile API and background browser navigation is unnecessary.",
+      },
+    ],
+  },
+  {
     version: "1.1.385",
     date: "7 Jul 2026",
     items: [

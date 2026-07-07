@@ -4,6 +4,40 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.386] — 2026-07-07
+
+### Fixed
+
+#### Stage Bootstrap inputs — removed artificial 120-minute cap and forced-minimum clamping
+
+**Problem:** The Stage Bootstrap Min and Max delay number inputs in Account Settings had `max={120}` attributes hard-coded in the JSX, silently preventing the user from entering any value above 120 minutes. Additionally, the `onChange` handlers used `Math.max(1, ...)` on Min and `Math.max(min, v)` on Max, which forced values up to 1 and to `min` respectively on every keystroke — making it impossible to type a lower number without the field jumping back up.
+
+**Fix:** Removed both `max={120}` attributes. Removed the `Math.max` clamping from both onChange handlers. Values are now accepted exactly as typed — no hidden floors or ceilings imposed by the UI. The user is free to set any delay range they choose.
+
+**File:** `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx`
+
+---
+
+#### Cookie consent banner auto-dismissal — third retry pass for slow React renders
+
+**Problem:** Instagram's cookie consent banner is React-controlled and may take 3–4 seconds to mount into the DOM after a page navigation commits. The existing `framenavigated` handler ran two dismissal passes at 1.5 s gaps, but that window was too tight for the slowest-rendering dialogs on first load — the banner could survive both passes and remain visible.
+
+**Fix:** Added a third `dismissCookieBanner()` pass via `setTimeout` at 3 000 ms after each `framenavigated` event. This ensures the consent dialog is caught even if React takes longer than usual to render it after navigation, without any risk of interfering with mid-redirect flows (the delay is safely after any typical 3xx redirect chain).
+
+**File:** `artifacts/api-server/src/instagram/browserSession.ts`
+
+---
+
+#### Human Session EB browser jitter — gated on Disable API mode
+
+**Problem:** The Human Session tool's EB browser jitter block (notifications visit, own-profile visit, Settings via hamburger, Your Activity via hamburger, and other EB-driven actions) was enqueued and executed regardless of whether the API was active or disabled. When the API is enabled, the account's session is fully managed via Instagram's mobile API — background browser navigation is not needed, burns unnecessary request budget, and can create confusing behavioral signals.
+
+**Fix:** Added an early return at the top of the `humanSession` enqueue async function: if `disableApi` is `false` (API is active), the entire EB jitter block is skipped with a log line (`HS queue — humanSession EB skipped (API active)`). The EB jitter path only runs when `Disable API` is explicitly enabled in Account Settings, which is its intended use case.
+
+**File:** `artifacts/api-server/src/instagram/automationEngine.ts`
+
+---
+
 ## [1.1.385] — 2026-07-07
 
 ### New — Stage Bootstrap (deferred API cold-start)

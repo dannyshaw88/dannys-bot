@@ -1332,22 +1332,18 @@ export function ProfileDetailsPage() {
                               <Input
                                 type="number"
                                 min={1}
-                                max={120}
                                 className="h-7 text-xs w-14"
                                 value={(formData.apiLimits as any).stageBootstrapDelayMin ?? 5}
-                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMin: Math.max(1, Number(e.target.value)) } })}
+                                onChange={e => updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMin: Number(e.target.value) } })}
                               />
                               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max</span>
                               <Input
                                 type="number"
                                 min={1}
-                                max={120}
                                 className="h-7 text-xs w-14"
                                 value={(formData.apiLimits as any).stageBootstrapDelayMax ?? 15}
                                 onChange={e => {
-                                  const v = Math.max(1, Number(e.target.value));
-                                  const min = (formData.apiLimits as any).stageBootstrapDelayMin ?? 5;
-                                  updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMax: Math.max(min, v) } });
+                                  updateField({ apiLimits: { ...formData.apiLimits, stageBootstrapDelayMax: Number(e.target.value) } });
                                 }}
                               />
                               <p className="text-[10px] text-muted-foreground whitespace-nowrap">min delay</p>
