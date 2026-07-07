@@ -891,7 +891,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       {/* ── EMULATION GROUP ──────────────────────────────────────────── */}
       <div className="mt-[25px]">
         <div className="border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400 w-fit">
+          <div className="flex items-center gap-2 px-4 py-3 bg-cyan-500 border-b border-cyan-400">
             <input type="checkbox" id="emulationGroupEnabled"
               checked={(settings as any).emulationGroupEnabled !== false}
               onChange={(e) => setSettings({ ...settings, emulationGroupEnabled: e.target.checked } as any)}
