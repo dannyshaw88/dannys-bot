@@ -1406,25 +1406,16 @@ app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
 // every supported device, so a missing WebGL 2 context is a visible fingerprint
 // mismatch detectable by Instagram's client-side probes.
 //
-// --disable-gpu tells Chromium to completely ignore the host machine's GPU and
-// use Windows' built-in software renderer (WARP) instead. This is intentionally
-// global — EB windows are automation-only and rendering speed is irrelevant.
+// No GPU override flags. The host GPU (e.g. NVIDIA GTX 1050, Intel UHD) handles
+// WebGL natively and supports WebGL 2 without any intervention. The real GPU
+// name is hidden from Instagram by the getParameter() spoof in
+// buildFingerprintScript, which returns the account's assigned mobile renderer
+// string (Adreno, Mali, etc.) regardless of what hardware is actually present.
 //
-// WHY: Android Chrome 128 supports WebGL 2 on every supported device. When the
-// EB reports WebGL 2 as "Not Supported", Instagram's fingerprint probe sees
-// through the Android disguise immediately. Two previous approaches tried to
-// activate Chromium's SwiftShader software renderer via command-line flags
-// (--use-gl=angle --use-angle=swiftshader, then --enable-unsafe-swiftshader),
-// but both were silently ignored because Electron's Windows ARM64 build does
-// not ship the SwiftShader DLL — there is nothing to back those flags.
-//
-// --disable-gpu works differently: it forces Chromium to use WARP, which is
-// built into Windows itself and always present. WARP supports WebGL 2. The
-// existing getParameter() spoof in buildFingerprintScript already masks the
-// real renderer string, so Instagram still sees the spoofed mobile GPU name —
-// all that changes from its perspective is WebGL 2 goes from broken to working.
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("ignore-gpu-blocklist");
+// History: v1.1.379–1.1.381 added SwiftShader / --disable-gpu flags in an
+// attempt to fix "WebGL 2 Not Supported" — but that symptom was caused by those
+// very flags interfering with WebGL initialisation on hardware that already
+// supported WebGL 2. Removing them restores correct behaviour.
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,

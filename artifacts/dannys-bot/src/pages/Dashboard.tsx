@@ -78,12 +78,12 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
-    version: "1.1.381",
+    version: "1.1.382",
     date: "7 Jul 2026",
     items: [
       {
         category: "Security",
-        text: "Fixed WebGL 2 showing as unsupported — third and final attempt. Previous fixes tried to activate a software renderer called SwiftShader via command-line flags, but it was silently ignored because the file it needs isn't included in the Windows build of the app. This version takes a completely different approach: the browser's GPU is disabled entirely, forcing it to use Windows' own built-in software renderer (WARP) which always supports WebGL 2. Instagram now sees a working WebGL 2 context, same as every real Android phone.",
+        text: "Removed all GPU override flags added in v1.1.379–1.1.381. Those flags were the cause of WebGL 2 showing as unsupported — they interfered with how the browser initialises graphics on hardware (like NVIDIA GTX) that already supports WebGL 2 perfectly. Without the flags, WebGL 2 works correctly again. The GPU name your PC actually uses is still hidden from Instagram — it sees the account's assigned mobile GPU identity (Adreno, Mali, etc.) as before.",
       },
       {
         category: "Fixed",
