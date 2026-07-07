@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.391] — 2026-07-07
+
+### Fixed
+
+#### Follow failing with "BLOCKED / api_error: something went wrong" — missing Authorization Bearer token after all bootstrap phases
+
+**Root cause:** When an account's EB session had expired (stale or never fully bootstrapped cookies), every bootstrap phase in `_bootstrapWwwClaim` (2a `get_account_family` → 2b `qe/sync` → 2c `banyan/banyan` → 2c' `launcher/sync` → 2d multi-probe → 2e `igReq` direct) returned `claim=none, auth=none`. Instagram app v431+ requires the `Authorization: Bearer IGT:2:…` header on every `friendships/create` write call — without it, the server returns HTTP 200 `{"message":"We're sorry, but something went wrong","status":"fail"}`, which the code correctly catches but labels as `follow_blocked`, making it look like the account is action-blocked when it isn't at all.
+
+**Why Bootstrap phases returned no tokens:** The account's session was stale — the stored `igApiCookies` had either expired or the session had never gone through a complete EB-first cold-start that includes the `ig-set-authorization` token exchange. All bootstrap phases ran against a dead session and received no `ig-set-www-claim` or `ig-set-authorization` response headers.
+
+**The fix the agent applied for the affected account:** Forced a manual re-verify through the EB (open browser → fresh EB login → full Jarvee cold-start sequence → `ig-set-authorization` Bearer token written to `igDeviceState`). After re-verify, `auth=present` appears in the follow log and follows go through correctly.
+
+#### Stage Bootstrap re-schedules manual Verify — re-verify now always runs immediately
+
+**Root cause (the harder problem):** The `POST /api/profiles/:id/verify` route contained a `stageBootstrapEnabled` guard that fired unconditionally whenever a fresh EB session was found — regardless of whether the account already had a working mobile session from a previous verify. Any account with Stage Bootstrap enabled would be sent back into the "staging" (delayed) state every single time the user clicked Verify, even when they explicitly wanted to run the bootstrap immediately to refresh an expired Bearer token. The only workaround was to temporarily disable `stageBootstrapEnabled` in the DB, run verify, then re-enable it.
+
+**Fix:** The verify route now checks whether the account already had `igApiCookies` containing a `sessionid` *before* this verify run started (using the `profile` snapshot loaded at the top of the route, before fresh cookies are written). If `igApiCookies` already had a session, this is a **re-verify of an existing account** — not a brand-new first-time EB login. In that case the `stageBootstrapEnabled` staging gate is bypassed and the bootstrap runs immediately. Stage Bootstrap delay continues to apply only to genuinely new accounts being verified for the first time (where `igApiCookies` is empty before the EB login).
+
+**File:** `artifacts/api-server/src/routes/instagram.ts` — Stage Bootstrap block inside `POST /api/profiles/:id/verify`
+
+**Invariant added:**
+```
+_hadPreviousSession = !!(profile.igApiCookies ?? "").includes("sessionid=")
+stageBootstrapEnabled gate: only fires when !_hadPreviousSession
+```
+
+---
+
 ## [1.1.390] — 2026-07-07
 
 ### Fixed

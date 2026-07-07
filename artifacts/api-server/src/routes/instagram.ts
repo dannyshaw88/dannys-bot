@@ -2429,7 +2429,15 @@ export async function registerInstagramRoutes(
         // Stage Bootstrap: if enabled, put the account in "staging" and schedule
         // the API cold-start after a random delay so the fresh EB session settles
         // before mobile API calls begin.  Survives restarts via stagingBootstrapFiresAt.
-        if ((effectiveProfile.apiLimits as any)?.stageBootstrapEnabled === true) {
+        //
+        // BYPASS for re-verify: if the account already had igApiCookies before this
+        // verify run, it is a manual re-verify of an existing session (not a brand-new
+        // first-time EB login).  Staging delay is intended for fresh cold-starts only —
+        // forcing a re-verify through the staging gate means the user has to wait 5–15
+        // minutes just to get fresh Bearer tokens after the previous session expired.
+        // Skip staging and run the bootstrap immediately in that case.
+        const _hadPreviousSession = !!(profile.igApiCookies ?? "").includes("sessionid=");
+        if ((effectiveProfile.apiLimits as any)?.stageBootstrapEnabled === true && !_hadPreviousSession) {
           // Clamp raw DB values to [1, 9999] minutes before converting to ms.
           // A corrupted value (e.g. 1,185,334 min) would produce >2^31 ms and
           // overflow Node's setTimeout to 1 ms, firing the bootstrap instantly.
