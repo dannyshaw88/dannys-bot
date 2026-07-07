@@ -2804,6 +2804,9 @@ export class InstagramWebClient {
             if (this._deviceAuthorization) break; // already captured
             try {
               await ig2d.request.send({ url: probe.url, method: probe.method, ...(probe.extra ?? {}) });
+              // Absorb state from successful responses — ig-set-authorization arrives
+              // on HTTP 200 responses too, and must not be discarded on success.
+              this._absorbIgClientState(ig2d);
             } catch (innerErr: any) {
               // Absorb state even from error responses — ig-set-authorization can
               // arrive on any authenticated response, including 4xx.
