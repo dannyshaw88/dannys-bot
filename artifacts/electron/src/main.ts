@@ -1415,14 +1415,23 @@ app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
 // the EB windows are automation-only and rendering performance is irrelevant.
 // SwiftShader is a pure-software rasterizer that unconditionally supports
 // WebGL 2 regardless of GPU driver. On some host GPU configurations (e.g.
-// Mali-G715 / ARH vendor), --ignore-gpu-blocklist alone is insufficient because
-// the driver itself does not expose WebGL 2, so canvas.getContext('webgl2')
-// still returns null. Instagram's client-side fingerprint probe detects this as
-// an invalid device (Android Chrome 128 always has WebGL 2) and flags the
-// account. Forcing SwiftShader globally is the only reliable fix.
+// Qualcomm Adreno on ARM Windows, Mali-G715 / ARH vendor), --ignore-gpu-
+// blocklist alone is insufficient because the driver itself does not expose
+// WebGL 2, so canvas.getContext('webgl2') still returns null. Instagram's
+// client-side fingerprint probe detects this as an invalid device (Android
+// Chrome 128 always has WebGL 2) and flags the account.
+//
+// CRITICAL: --enable-unsafe-swiftshader is required since Chromium 117+.
+// Without it, Chromium silently ignores --use-angle=swiftshader and falls
+// back to the hardware GPU — which is why the WebGL renderer was still
+// showing "Qualcomm Adreno (TM) 720" (hardware) instead of the expected
+// "ANGLE (SwiftShader Device...)" after the first fix attempt. The flag is
+// named "unsafe" because SwiftShader bypasses GPU driver security checks,
+// but that is an acceptable trade-off for automation-only EB windows.
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 app.commandLine.appendSwitch("use-gl", "angle");
 app.commandLine.appendSwitch("use-angle", "swiftshader");
+app.commandLine.appendSwitch("enable-unsafe-swiftshader");
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,
