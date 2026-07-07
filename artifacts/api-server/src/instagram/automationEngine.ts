@@ -3282,71 +3282,107 @@ class AutomationEngine {
           // index 0 avoids this entirely — the tray advances its own "first unseen"
           // pointer after each fully-dismissed story.
           let hasTray = false;
+          let escapeSent = false;
           for (let i = 0; i < storyCount && !state.stop.stopped; i++) {
             try {
-              // Navigate to the home feed only on the first iteration.
-              // On subsequent iterations the Escape key already dismissed the story
-              // overlay and returned the browser to the home feed, so a second full
-              // nav() would cause a gratuitous page reload that the user sees as the
-              // EB "bouncing" back and forth between home and the story viewer.
               if (i === 0) {
+                // ── First user: navigate to home feed, open the story tray ────────
                 await nav("https://www.instagram.com/", `home (stories ${i + 1}/${storyCount})`);
                 await sleep(actionDelay());
+                // Force visibilityState=visible so Instagram's SPA hydrates the
+                // story tray even when the EB window is hidden/not shown to the
+                // user. Same fix already applied to viewTimelineFeed and
+                // likeTimelinePosts — was missing here, which is why the tray
+                // selector never matched and every run logged "0 story tray item(s)".
+                await page.evaluate(() => {
+                  try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
+                  try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
+                  document.dispatchEvent(new Event('visibilitychange'));
+                }).catch(() => {});
+                const trayPresent = await waitFor(storySelector, 6000);
+                if (!trayPresent) {
+                  // Debug: dump page DOM state so we can see what selector IS present
+                  const _storyDebug = await page.evaluate(() => {
+                    const url = location.href.slice(0, 100);
+                    const ulLi = document.querySelectorAll('ul li').length;
+                    const canvases = document.querySelectorAll('canvas').length;
+                    const imgs = document.querySelectorAll('ul li img').length;
+                    const btnRole = document.querySelectorAll('[role="button"]').length;
+                    const ariaStory = document.querySelectorAll('[aria-label*="story"]').length;
+                    return `url="${url}" ul-li=${ulLi} canvas=${canvases} ul-li-img=${imgs} role-btn=${btnRole} aria-story=${ariaStory}`;
+                  }).catch(() => "eval failed");
+                  console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i} — ${_storyDebug}`);
+                  break;
+                }
+                hasTray = true;
+                // Click index 0 — the first item in the tray — to open the story viewer.
+                const clicked: boolean = await page.evaluate((sel: string) => {
+                  const matches = Array.from(document.querySelectorAll(sel));
+                  const el = matches[0] as HTMLElement | undefined;
+                  if (!el) return false;
+                  // The matched element may be a button itself (new selectors) OR
+                  // a canvas/img inside a button wrapper (old selectors).
+                  const btn = (el.closest('button, [role="button"], a, div[tabindex]') ?? el) as HTMLElement;
+                  btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                  btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                  btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+                  btn.click();
+                  return true;
+                }, storySelector).catch(() => false);
+                if (!clicked) break;
+                await sleep(randInt(1200, 2500));
+              } else {
+                // ── Subsequent users: stay inside the story viewer ────────────────
+                // Press ArrowRight until the live location.href username segment
+                // changes. We use page.evaluate(() => location.href) rather than
+                // page.url() because in the EB IPC shim page.url() is only updated
+                // by explicit goto() calls — click/ArrowRight transitions do not
+                // flush it, so it would always look stale and advanced would never
+                // become true.
+                // Guard: if the viewer closed unexpectedly, bail out cleanly.
+                const viewerOpen = await page.evaluate(() =>
+                  !!(document.querySelector('section[role="dialog"], div[role="dialog"], div[aria-label="Story"]'))
+                ).catch(() => false);
+                if (!viewerOpen) {
+                  console.log(`[engine] @${profile.username}: [EB-only] story viewer closed unexpectedly before user ${i + 1}`);
+                  escapeSent = true; // viewer already gone, no Escape needed
+                  break;
+                }
+                const prevHref = await page.evaluate(() => location.href).catch(() => '');
+                const prevUser = (prevHref.match(/\/stories\/([^/]+)\//) ?? [])[1] ?? '';
+                let advanced = false;
+                for (let attempt = 0; attempt < 10 && !advanced && !state.stop.stopped; attempt++) {
+                  await page.keyboard.press("ArrowRight");
+                  await sleep(450);
+                  const newHref = await page.evaluate(() => location.href).catch(() => '');
+                  const newUser = (newHref.match(/\/stories\/([^/]+)\//) ?? [])[1] ?? '';
+                  // Accept advancement if: username changed, OR URL left the /stories/
+                  // path entirely (viewer closed after last user in tray).
+                  if (newUser && newUser !== prevUser) { advanced = true; break; }
+                  if (!newHref.includes('/stories/')) {
+                    console.log(`[engine] @${profile.username}: [EB-only] story viewer exited (tray exhausted at user ${i})`);
+                    escapeSent = true;
+                    break;
+                  }
+                }
+                if (escapeSent) break;
+                if (!advanced) {
+                  // Still on the same user after 10 ArrowRight presses — no more
+                  // users in the tray. Exit the viewer cleanly.
+                  console.log(`[engine] @${profile.username}: [EB-only] story viewer ended at user ${i}/${storyCount} (no next user)`);
+                  await page.keyboard.press("Escape").catch(() => {});
+                  await sleep(randInt(800, 1600));
+                  escapeSent = true;
+                  break;
+                }
+                await sleep(randInt(800, 1500));
               }
-              // Force visibilityState=visible so Instagram's SPA hydrates the
-              // story tray even when the EB window is hidden/not shown to the
-              // user. Same fix already applied to viewTimelineFeed and
-              // likeTimelinePosts — was missing here, which is why the tray
-              // selector never matched and every run logged "0 story tray item(s)".
-              await page.evaluate(() => {
-                try { Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true }); } catch {}
-                try { Object.defineProperty(document, 'hidden', { get: () => false, configurable: true }); } catch {}
-                document.dispatchEvent(new Event('visibilitychange'));
-              }).catch(() => {});
-              const trayPresent = await waitFor(storySelector, 6000);
-              if (!trayPresent) {
-                // Debug: dump page DOM state so we can see what selector IS present
-                const _storyDebug = await page.evaluate(() => {
-                  const url = location.href.slice(0, 100);
-                  const ulLi = document.querySelectorAll('ul li').length;
-                  const canvases = document.querySelectorAll('canvas').length;
-                  const imgs = document.querySelectorAll('ul li img').length;
-                  const btnRole = document.querySelectorAll('[role="button"]').length;
-                  const ariaStory = document.querySelectorAll('[aria-label*="story"]').length;
-                  return `url="${url}" ul-li=${ulLi} canvas=${canvases} ul-li-img=${imgs} role-btn=${btnRole} aria-story=${ariaStory}`;
-                }).catch(() => "eval failed");
-                console.log(`[engine] @${profile.username}: [EB-only] no story tray on iteration ${i} — ${_storyDebug}`);
-                break;
-              }
-              hasTray = true;
-              // Always click index 0 — the first item in the current tray state.
-              // After the previous story was dismissed this will be the next user.
-              const clicked: boolean = await page.evaluate((sel: string) => {
-                const matches = Array.from(document.querySelectorAll(sel));
-                const el = matches[0] as HTMLElement | undefined;
-                if (!el) return false;
-                // The matched element may be a button itself (new selectors) OR
-                // a canvas/img inside a button wrapper (old selectors).
-                // Walk up to find the nearest clickable ancestor; if none found,
-                // click the element itself.
-                const btn = (el.closest('button, [role="button"], a, div[tabindex]') ?? el) as HTMLElement;
-                // scrollIntoView + full pointer event sequence — same fix as
-                // likeTimelinePosts. Plain .click() on a hidden window is
-                // silently swallowed; getBoundingClientRect returns zeros so
-                // Chrome's hit-testing before dispatching the click can no-op.
-                btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-                btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-                btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-                btn.click();
-                return true;
-              }, storySelector).catch(() => false);
-              if (!clicked) break;
-              await sleep(randInt(1200, 2500));
-              // How many slides to advance within this user's story.
+
+              // ── Watch N slides for the current user ───────────────────────────
               // Uses checkTimelineStoriesSlideMin/Max from settings (defaults 2-5).
-              // Capped to avoid bleeding into the next user — each click targets
-              // the right half of the story overlay (same gesture as a real user)
-              // rather than ArrowRight which auto-advances to the next user.
+              // Right-half click advances one slide at a time within the current
+              // user's story — it does NOT auto-advance to the next user the way
+              // ArrowRight can when on the last slide.
               const slides = randInt(
                 Math.max(1, Number(s.checkTimelineStoriesSlideMin ?? 2)),
                 Math.max(1, Number(s.checkTimelineStoriesSlideMax ?? 5)),
@@ -3357,15 +3393,10 @@ class AutomationEngine {
               const watchPctMin = Math.min(100, Math.max(0, Number(s.checkTimelineStoriesWatchPctMin ?? 0)));
               const watchPctMax = Math.max(watchPctMin, Math.min(100, Number(s.checkTimelineStoriesWatchPctMax ?? 0)));
               const watchPct = watchPctMin + Math.random() * (watchPctMax - watchPctMin);
-              // Instagram stories are typically 15s each. Dwell for watchPct% of that,
-              // minimum 1.5s, before advancing to the next slide.
               const slideDwellMs = watchPct > 0
                 ? Math.max(1500, Math.round((watchPct / 100) * 15000))
                 : randInt(1500, 3500);
               for (let s2 = 0; s2 < slides && !state.stop.stopped; s2++) {
-                // Click the right half of the story area to advance one slide
-                // (same gesture a real user makes). This does NOT auto-advance
-                // to the next user the way ArrowRight can when on the last slide.
                 await page.evaluate(() => {
                   const overlay = document.querySelector<HTMLElement>(
                     'section[role="dialog"], div[role="dialog"], div[aria-label="Story"]'
@@ -3378,10 +3409,16 @@ class AutomationEngine {
                 }).catch(() => {});
                 await sleep(slideDwellMs);
               }
-              await page.keyboard.press("Escape");
-              await sleep(randInt(800, 1600));
               storiesViewed++;
             } catch {}
+          }
+          // Exit the story viewer after the last user (or if the loop completed
+          // normally). Skip if the in-loop early-break already sent Escape
+          // (tracked by escapeSent) to prevent a double-Escape that could
+          // misfire on whatever page is active after the viewer closed.
+          if (storiesViewed > 0 && !escapeSent) {
+            await page.keyboard.press("Escape").catch(() => {});
+            await sleep(randInt(800, 1600));
           }
           this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", storiesViewed > 0 ? "ok" : "skipped", `EB viewed ${storiesViewed} story tray item(s)`);
           this.logGhostBrowserCall(profile.id, profile.username, "check_timeline_stories", `EB viewed ${storiesViewed} story tray item(s)`, storiesViewed === 0 && hasTray);
