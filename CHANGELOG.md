@@ -4,6 +4,38 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.389] — 2026-07-07
+
+### Fixed
+
+#### HikerAPI Sync Profile toggle ignored — per-account setting now always respected
+
+**Root cause:** The automation engine's reconcile loop loaded all profiles into memory once at the start of each reconcile cycle (`storage.getProfiles()`), then passed those snapshot objects directly to `runProfileSync(profile)`. Any change the user made to the per-account **HikerAPI** sync toggle (`syncUseHiker`) in Account Settings was written to the database by the 800 ms debounce autosave — but if the reconcile happened to fire between when the user toggled the setting and when the autosave completed, `runProfileSync` received the stale snapshot value (`syncUseHiker = true`) and called HikerAPI regardless of what the user had set.
+
+**Fix:** The reconcile loop now calls `this.syncProfile(profile.id)` (the public method) instead of the private `this.runProfileSync(profile)` directly. `syncProfile` always re-reads the profile from the database as its first step before making any HikerAPI / account-sync decision. This guarantees the freshest `syncUseHiker` value is used on every sync, regardless of reconcile timing.
+
+**File:** `artifacts/api-server/src/instagram/automationEngine.ts` — reconcile loop, profile sync timer block
+
+---
+
+#### Stage Bootstrap and other settings ignored when Verify is clicked immediately after changing them
+
+**Root cause:** Account Settings uses an 800 ms debounce autosave: every field change schedules a PATCH to the server 800 ms later. The Verify button reads settings fresh from the database. If the user enabled **Stage Bootstrap** (or toggled off the HikerAPI sync toggle, or changed any other account setting) and clicked Verify within those 800 ms, the database still held the old values — the verify route saw `stageBootstrapEnabled = false` and ran the full API cold-start immediately instead of entering the delayed staging flow.
+
+**Fix — synchronous pre-verify flush:** `_executeVerify` now checks whether a debounce save is pending (via `saveTimerRef.current !== null`). If so, it:
+1. Cancels the pending timer
+2. Immediately fires `updateProfileMutation` with the current `formData` and awaits its completion
+3. Only then calls the verify endpoint
+
+This guarantees the database reflects the user's latest settings before the verify route runs. If the flush save fails (e.g. a transient network error), a destructive toast warns the user that some settings may not be reflected in this verify run — verify still proceeds rather than silently blocking.
+
+**Fix — double-save prevention:** The `scheduleAutoSave` timer callback now nulls out `saveTimerRef.current` before firing its mutation. Previously the ref held a stale timer ID even after the timer fired, causing `_executeVerify` to treat an already-completed save as "pending" and issue a duplicate PATCH on every verify call. With the ref correctly cleared, the explicit flush only fires when there is genuinely an unsaved change in flight.
+
+**Files:**
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — `scheduleAutoSave` (timer callback cleanup) + `_executeVerify` (pre-verify flush with error toast)
+
+---
+
 ## [1.1.388] — 2026-07-07
 
 ### Fixed
