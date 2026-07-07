@@ -4648,15 +4648,6 @@ class AutomationEngine {
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
-        // EB browser jitter only runs when the API is disabled (disableApi=true).
-        // When the API is active the account's session is managed via mobile API
-        // calls — background browser navigation is unnecessary and wastes the
-        // account's request budget.
-        if (!disableApi) {
-          console.log(`[engine] @${profile.username}: HS queue — humanSession EB skipped (API active; only runs when Disable API is enabled)`);
-          return;
-        }
-
         // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.
         const willRun = (minKey: string, maxKey: string) => {
           const lo = Number((s as any)[minKey] ?? 100);
