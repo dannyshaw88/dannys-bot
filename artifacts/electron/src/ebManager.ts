@@ -2304,8 +2304,17 @@ export async function openEbWindow(opts: {
    * normal partition, so it shares cookies/session with the regular EB.
    */
   silentMode?: boolean;
+  /**
+   * Whether this account has "Disable API" enabled in settings.
+   * When true (API disabled) the close handler parks the window off-screen so
+   * the automation engine can keep using the live EB session in the background.
+   * When false (API active) the close handler allows the window to actually
+   * close — no background browser session is needed, so the user gets a normal
+   * maximised window on next open instead of restoring an off-screen one.
+   */
+  disableApi?: boolean;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp, silentMode } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp, silentMode, disableApi } = opts;
   const isGhostBrowser = profileId === -1;
   _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
@@ -3121,6 +3130,16 @@ export async function openEbWindow(opts: {
   // setSkipTaskbar(true) removes the window from the taskbar / alt-tab so the
   // user cannot accidentally click it back into view while it is off-screen.
   win.on("close", (event) => {
+    // When Disable API is active the automation engine keeps using this EB
+    // session in the background (silent follows, DMs, human jitter, etc.).
+    // Park the window off-screen instead of closing so Chromium's compositor
+    // keeps running and the live session stays warm.
+    //
+    // When Disable API is NOT active the automation engine uses the mobile API
+    // for all actions — no background browser session is needed.  Allow the
+    // window to close normally so the next manual open creates a fresh,
+    // maximised window instead of restoring a hidden off-screen one.
+    if (!disableApi) return; // let the window close naturally
     event.preventDefault();
     try {
       const bounds = win.getBounds();

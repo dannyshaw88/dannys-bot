@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.388",
+    date: "7 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "When Disable API is off and you manually open the embedded browser for an account, the window now opens maximised normally. Previously it was being parked off-screen (minimised, hidden from taskbar) by the same close-handler logic used for Disable API accounts — which need the browser session to stay alive in the background for automation. That background-parking is now only applied when Disable API is actually enabled.",
+      },
+    ],
+  },
+  {
     version: "1.1.387",
     date: "7 Jul 2026",
     items: [

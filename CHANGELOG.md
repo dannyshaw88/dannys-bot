@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.388] — 2026-07-07
+
+### Fixed
+
+#### EB window opens off-screen when Disable API is off — close handler now account-aware
+
+**Root cause:** The `close` event handler in `openEbWindow()` (`ebManager.ts`) unconditionally called `event.preventDefault()` and repositioned every EB window off-screen (`setPosition(sw+10, ...)` + `setSkipTaskbar(true)`) when the user clicked the close button. This behaviour exists so that accounts running in **Disable API** mode keep their Chromium compositor alive for background automation (silent follows, DMs, human jitter, etc.). For non-Disable-API accounts the automation engine uses the mobile API — no live background session is needed — but the window was still being parked off-screen. On the next manual open the reuse path in `openEbWindow` found the hidden window and called `setBounds(workArea)` to restore it, but users reported the window still appearing minimised/off-screen.
+
+**Fix:** Added `disableApi?: boolean` to the `openEbWindow` opts. The close handler now checks: if `disableApi` is false, `return` immediately (native close proceeds — window actually closes). If `disableApi` is true, the existing off-screen parking logic runs as before.
+
+**Call chain updated:**
+- `/api/profiles/:id/eb-proxy` (`routes/instagram.ts`) — now includes `disableApi` in its response.
+- `open-browser-window` IPC handler (`main.ts`) — reads `disableApi` from `/eb-proxy` and passes it to `openEbWindow`.
+- `openEbWindow` opts type and destructure (`ebManager.ts`) — adds `disableApi` field.
+
+---
+
 ## [1.1.387] — 2026-07-07
 
 ### New — Stage Bootstrap added to Copy Settings
