@@ -39,14 +39,14 @@ const CONFIGS: Record<AlterationLevel, AlterationConfig> = {
     brightness: { min: 5,   max: 50  },
     noise:      { min: 5,   max: 8   },
     sharpen:    { min: 1.0, max: 1.3 },
-    pixelate:   { min: 0.3, max: 0.7 },
+    pixelate:   { min: 0,   max: 0   },
   },
   medium: {
     contrast:   { min: 5,   max: 150 },
     brightness: { min: 5,   max: 150 },
     noise:      { min: 5,   max: 12  },
     sharpen:    { min: 1.0, max: 1.7 },
-    pixelate:   { min: 0.3, max: 1.2 },
+    pixelate:   { min: 0,   max: 0   },
   },
   high: {
     contrast:   { min: 5,   max: 250 },
