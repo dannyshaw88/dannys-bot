@@ -3082,7 +3082,37 @@ export class InstagramWebClient {
     // treat the warm-up as succeeded — we're connected, inbox just errored.
     // Only when BOTH calls fail at the network level do we return null (broken
     // proxy) so the warm-up is NOT cached and the next sendDM attempt retries it.
-    // ── Phase 2: Authenticated warm-up via mobileSessionGet ─────────────────
+    // ── Phase 2a: users/{uid}/info — establish "active user" signal ─────────
+    // Instagram requires the client to prove it knows the account's profile
+    // before granting DM inbox access.  The full Jarvee Phase 2 sequence is:
+    //   user.info → news.inbox → qe.syncLoginExperiments
+    // Without user.info first, direct_v2/inbox returns 4415001 "Prompt has
+    // contribution" even for accounts with NO pending in-app prompt, because
+    // Instagram treats the session as having insufficient activity context.
+    // Uses mobileSessionGet (not IgApiClient) for the same proxy-compatibility
+    // reason as Phase 2b below.
+    if (ownUserId) {
+      try {
+        await this.mobileSessionGet(`/api/v1/users/${ownUserId}/info/`);
+        console.log(`[webClient] _buildWarmedIgClient: Phase 2a — users/${ownUserId}/info OK`);
+      } catch (e: any) {
+        if (e?.logoutReason !== undefined) {
+          console.error(`[webClient] _buildWarmedIgClient: users/info SESSION KILLED (logout_reason:${e.logoutReason}) — propagating session_expired`);
+          throw e;
+        }
+        // Non-fatal — Instagram-level 4xx or transport error.  Log and proceed
+        // to Phase 2b; a failed user.info is better than no warm-up at all.
+        console.warn(`[webClient] _buildWarmedIgClient: Phase 2a users/info failed (non-fatal, continuing): ${e?.message}`);
+      }
+    } else {
+      // ownUserId could not be parsed from igApiCookies (no ds_user_id or sessionid).
+      // Phase 2a is skipped — direct_v2/inbox may still return 4415001 without the
+      // user.info signal.  This should not happen for verified accounts (ds_user_id
+      // is always present after a successful Verify Credentials run).
+      console.warn(`[webClient:${this.profileId}] _buildWarmedIgClient: Phase 2a skipped — could not parse ownUserId from igApiCookies (direct_v2/inbox may still gate)`);
+    }
+
+    // ── Phase 2b: news/inbox — notifications badge warm-up ───────────────────
     // Previously this called ig.news.inbox() through patchIgClientTls, but the
     // CycleTLS Go subprocess returns status 0 (no response) for authenticated
     // IgApiClient calls through certain proxies — while mobileSessionGet (which
@@ -3099,7 +3129,7 @@ export class InstagramWebClient {
         if (j === null) throw new Error("news/inbox: no mobile session available");
         return true;
       }, "Cold-start warm-up");
-      console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
+      console.log("[webClient] _buildWarmedIgClient: Phase 2b — news/inbox (notifications badge) OK");
       warmupOk = true;
     } catch (e: any) {
       // A real, server-side session kill (logout_reason present) is NEVER a

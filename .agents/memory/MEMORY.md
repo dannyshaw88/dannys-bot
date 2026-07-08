@@ -9,3 +9,4 @@
 - [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale
 - [Artifact auto-creation duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — Replit can auto-create artifact-managed workflows that run a second live copy of a stateful backend; must gate with a cross-process lock, not assume one instance
 - [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills
+- [DM warm-up sequence](dm-warmup-sequence.md) — user.info MUST come before news.inbox in Phase 2; without it direct_v2/inbox returns 4415001 even with no real pending prompt
