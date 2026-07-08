@@ -1169,79 +1169,22 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           ? (() => { try { return JSON.parse(profile.apiLimits as string); } catch { return null; } })()
           : (profile.apiLimits as any) ?? null;
 
-        // ── Full Jarvee cold-start sequence ────────────────────────────────
+        // ── Cold-start verify sequence ─────────────────────────────────────
         //
-        // Phase 0 — Pre-auth calls with CLEAN cookie jar (no session loaded yet)
-        //   Jarvee fires GetTokenResult → SendMobileConfig → GetTokenResult
-        //   BEFORE loading the session cookie.  Running them here means Instagram
-        //   sees a fresh device probe, not a checkpointed session — so these calls
-        //   return 200 even when the account is in checkpoint.
+        // Accounts always go through the embedded browser first to harvest cookies,
+        // so by the time we reach this path there is already a live session.
+        // There is no reason to fire anonymous pre-auth probes (GetTokenResult,
+        // anonymous launcher/sync) — those were modelled on a Jarvee flow that
+        // starts from zero cookies.  Starting directly at Phase 1 eliminates the
+        // duplicated endpoints the user saw in the API call log.
         //
         // Phase 1 — Load the session cookie
-        //   Only after the pre-auth calls does Jarvee inject the sessionid.
-        //
+        // Phase 1.5 — Authenticated launcher/sync with _uid → captures Bearer token
         // Phase 2 — Authenticated session validation
-        //   GetAccountFamily (fixed first) → ABD probe (fixed second)
-        //   → FetchConfig + Banyan in SHUFFLED order → random pool (Phase 2d)
-        //   Checkpoint errors here are genuine.
-        //
-        // loginApiThrottle is called before every Phase 0b+ and Phase 2 call so the
-        // account's API Control delay setting governs the entire sequence.
-
-        // ── Phase 0a: GetTokenResult (/api/v1/zr/token/result/) ──────────
-        // First call in Jarvee's session-restore sequence — no cookies needed.
-        // This is the zero-rating token endpoint (anonymous, pre-auth device probe).
-        // NOT accounts/tokens/keyed — that is GetKeyedTokens, a different authenticated
-        // account endpoint. Calling the wrong one flags as suspicious pre-auth account access.
-        // No throttle before the very first call (nothing to space from).
-        try {
-          await ig.request.send({
-            url: "/api/v1/zr/token/result/",
-            method: "GET",
-            qs: {
-              token_hash_method: "TokenHashMethodHmacSHA256",
-              identifier: "WeakStringAuth",
-            },
-          });
-          console.error(`[instagramLogin] @${profile.username} — zr/token/result (GetTokenResult) OK`);
-        } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — zr/token/result failed (non-fatal): ${e?.message}`);
-        }
-
-        // ── Phase 0b: SendMobileConfig (launcher/sync) ────────────────────
-        // Called with clean jar — Instagram sees anonymous device probe, not checkpoint.
-        // Hard cap at 20 s: this is a large config download that can take 90+ seconds
-        // on high-latency proxies, starving the session probe (users/{id}/info) of time.
-        // It is non-fatal so we race it against a timeout and move on either way.
-        await Promise.race([
-          ig.launcher.preLoginSync()
-            .then(() => console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`))
-            .catch((e: any) => console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`)),
-          new Promise<void>(r => setTimeout(() => {
-            console.error(`[instagramLogin] @${profile.username} — launcher/sync capped at 20 s (slow proxy), moving on`);
-            r();
-          }, 20_000)),
-        ]);
-
-        // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────
-        // Jarvee calls GetTokenResult a second time right after launcher/sync.
-        try {
-          await ig.request.send({
-            url: "/api/v1/zr/token/result/",
-            method: "GET",
-            qs: {
-              token_hash_method: "TokenHashMethodHmacSHA256",
-              identifier: "WeakStringAuth",
-            },
-          });
-          console.error(`[instagramLogin] @${profile.username} — zr/token/result #2 (GetTokenResult) OK`);
-        } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — zr/token/result #2 failed (non-fatal): ${e?.message}`);
-        }
+        //   GetAccountFamily → ABD probe → FetchConfig + Banyan (shuffled) → random pool
+        //   loginApiThrottle is called before every Phase 1.5+ call.
 
         // ── Phase 1: Load session cookie ──────────────────────────────────
-        // Session is injected AFTER the unauthenticated Phase 0 calls —
-        // this matches Jarvee exactly and avoids false checkpoints on pre-auth calls.
         await restoreSessionCookies(ig, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
 
