@@ -27,8 +27,15 @@ const outDir = isReplit
   ? path.resolve(import.meta.dirname, "dist/public")
   : path.resolve(import.meta.dirname, "..", "..", "dist", "public");
 
+const apiPort = process.env.API_PORT ?? "8082";
+
 export default defineConfig({
   base: basePath,
+  define: {
+    // Expose the API port so client code can build absolute URLs for Puppeteer
+    // navigation (page.goto requires an absolute URL, not a Vite-proxy path).
+    __API_PORT__: JSON.stringify(apiPort),
+  },
   // Each dev server gets its own cache directory so two simultaneous Vite
   // processes (e.g. "Start application" on 5000 and the artifact workflow on
   // 22393) don't race each other writing pre-bundled dep chunks and produce an

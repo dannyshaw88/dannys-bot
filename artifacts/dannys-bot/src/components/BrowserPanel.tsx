@@ -958,10 +958,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               disabled={!connected}
               title="Run an in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more"
               onClick={() => {
-                const { protocol, hostname, port } = window.location;
-                const apiOrigin = port === "5000"
-                  ? `${protocol}//${hostname}:8080`
-                  : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+                // Puppeteer's page.goto() needs an absolute URL — use the
+                // Replit proxy hostname with the API port injected at build time.
+                const { protocol, hostname } = window.location;
+                const apiOrigin = `${protocol}//${hostname}:${__API_PORT__}`;
                 const url = `${apiOrigin}/api/browser/leaks?profileId=${profileId}`;
                 send({ type: "navigate", url });
               }}
@@ -1366,11 +1366,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 setAiResult(null);
                 const timer = setInterval(() => setAiElapsed(s => s + 1), 1000);
                 try {
-                  const { protocol, hostname, port } = window.location;
-                  const apiOrigin = port === "5000"
-                    ? `${protocol}//${hostname}:8080`
-                    : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
-                  const res = await fetch(`${apiOrigin}/api/ai/generate-selfie`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+                  const res = await fetch(`/api/ai/generate-selfie`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
                   const data = await res.json();
                   if (!res.ok) { setAiError(data.error ?? "Generation failed"); }
                   else { setAiResult(data); }
@@ -1418,11 +1414,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                     title={connected ? "Upload this selfie to the active Instagram file chooser" : "Open Instagram in the browser first"}
                     onClick={async () => {
                       try {
-                        const { protocol, hostname, port } = window.location;
-                        const apiOrigin = port === "5000"
-                          ? `${protocol}//${hostname}:8080`
-                          : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
-                        await fetch(`${apiOrigin}/api/browser/${profileId}/files`, {
+                        await fetch(`/api/browser/${profileId}/files`, {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ fileName: aiResult.fileName, data: aiResult.imageBase64 }),

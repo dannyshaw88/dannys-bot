@@ -4,8 +4,8 @@ An Instagram automation platform for managing multiple accounts with tools for f
 
 ## Run & Operate
 
-1. `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
-2. `pnpm --filter @workspace/dannys-bot run dev` — run the frontend (port 22393)
+1. `PORT=8082 pnpm --filter @workspace/api-server run dev` — run the API server (port 8082)
+2. `PORT=5000 API_PORT=8082 pnpm --filter @workspace/dannys-bot run dev` — run the frontend (port 5000)
 3. `pnpm run typecheck` — full typecheck across all packages
 4. `pnpm run build` — typecheck + build all packages
 5. `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
