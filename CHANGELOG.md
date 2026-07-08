@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.404] — 2026-07-08
+
+### Fixed
+
+#### API Checks tab now appears on the correct profile detail page
+
+The API Leak Check tab (introduced in v1.1.403) was wired into `ProfileDetail.tsx` — a legacy component that exists in the codebase but is **not** the file the Wouter router renders for `/profiles/:id`. The router imports and renders `ProfileDetailsPage.tsx`. As a result, the "API Checks" tab was invisible in the running app despite the backend endpoint and frontend component being fully functional.
+
+**Root cause:** Two similarly-named files exist in `src/pages/`:
+- `ProfileDetail.tsx` — older/legacy version, not rendered by any active route
+- `ProfileDetailsPage.tsx` — the live file, used by `App.tsx`'s route for `/profiles/:id`
+
+The tab import, tab button entry, and `Tabs.Content` panel were all added to the wrong file.
+
+**Fix:** Added the three required changes to `ProfileDetailsPage.tsx`:
+1. `import { ApiLeakCheck } from "@/components/ApiLeakCheck"` at the top
+2. `{ value: "api-checks", label: "API CHECKS", icon: Shield }` entry in the horizontal tab bar array (alongside ACCOUNT SETTINGS and HUMAN SESSION TOOL)
+3. `<Tabs.Content value="api-checks">` panel rendering `<ApiLeakCheck profileId={profile.id} />` after the existing session-log panel
+
+The tab is now visible and functional on every profile's detail page.
+
+**Files:**
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — import, tab button, and content panel added
+
+---
+
 ## [1.1.403] — 2026-07-08
 
 ### Added
@@ -50,7 +76,7 @@ Warns if any are missing (account not yet verified or device state cleared), fai
 - `artifacts/api-server/src/routes/instagram.ts` — new `GET /api/profiles/:id/api-leak-check` endpoint (~190 lines)
 - `artifacts/api-server/src/instagram/tlsTransport.ts` — `OKHTTP4_JA3` exported (was `const`, now `export const`)
 - `artifacts/dannys-bot/src/components/ApiLeakCheck.tsx` — new frontend component (idle → run → 4 cards + summary bar)
-- `artifacts/dannys-bot/src/pages/ProfileDetail.tsx` — "API Checks" tab added
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — "API Checks" tab added (note: earlier in this session the tab was mistakenly wired to `ProfileDetail.tsx`, which is not the file the router renders — corrected in v1.1.404)
 
 ---
 
