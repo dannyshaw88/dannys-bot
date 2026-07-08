@@ -39,13 +39,13 @@ export default function ProfileDetail() {
       </div>
 
       <Tabs defaultValue="follow" className="w-full">
-        <TabsList className="h-14 w-full justify-start bg-white border border-slate-200 p-1 mb-8 rounded-xl overflow-x-auto flex-nowrap hide-scrollbar shadow-sm">
-          <TabsTrigger value="dashboard" disabled className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Dashboard</TabsTrigger>
-          <TabsTrigger value="follow" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Follow</TabsTrigger>
-          <TabsTrigger value="unfollow" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Unfollow</TabsTrigger>
-          <TabsTrigger value="like" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Like</TabsTrigger>
-          <TabsTrigger value="dm" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Direct Messages</TabsTrigger>
-          <TabsTrigger value="api-leak" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">API Checks</TabsTrigger>
+        <TabsList className="h-auto w-full justify-start bg-white border border-slate-200 p-1 mb-8 rounded-xl flex-wrap shadow-sm">
+          <TabsTrigger value="dashboard" disabled className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Dashboard</TabsTrigger>
+          <TabsTrigger value="follow" className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Follow</TabsTrigger>
+          <TabsTrigger value="unfollow" className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Unfollow</TabsTrigger>
+          <TabsTrigger value="like" className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Like</TabsTrigger>
+          <TabsTrigger value="dm" className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Direct Messages</TabsTrigger>
+          <TabsTrigger value="api-leak" className="text-sm px-5 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">API Checks</TabsTrigger>
         </TabsList>
         
         <TabsContent value="follow" className="m-0 focus-visible:outline-none">
