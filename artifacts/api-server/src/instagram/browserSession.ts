@@ -351,7 +351,7 @@ interface ProxyGeo {
  * Plain HTTP proxies forward the full request without CONNECT.
  * Returns null fields on any error or timeout (caller falls back to PRNG timezone / en_US locale).
  */
-function resolveProxyGeo(
+export function resolveProxyGeo(
   proxyHost: string,
   proxyPort: number,
   proxyUser?: string | null,
@@ -423,7 +423,7 @@ const COUNTRY_TO_IG_LOCALE: Record<string, string> = {
   IL: "he_IL",
 };
 
-function countryToIgLocale(cc: string): string {
+export function countryToIgLocale(cc: string): string {
   return COUNTRY_TO_IG_LOCALE[cc.toUpperCase()] ?? "en_US";
 }
 
@@ -2437,7 +2437,12 @@ export async function getOrCreateSession(
         // This updates the local copy used by applyStealthScripts for JS-level
         // fingerprinting; the session object stores the patched version so the
         // automation engine picks it up for API requests via setDeviceInfo.
-        if (userAgentApi) userAgentApi = patchApiUALocale(userAgentApi, locale);
+        if (userAgentApi) {
+          userAgentApi = patchApiUALocale(userAgentApi, locale);
+          // Persist the corrected locale back to DB so the UI and all other code
+          // paths immediately reflect the right locale without a second launch.
+          storage.updateProfile(profileId, { userAgentApi }).catch(() => {});
+        }
         log(`Proxy locale for profile ${profileId}: ${geo.countryCode} → ${locale} (Accept-Language: ${resolvedAcceptLang})`, "browser");
       }
     } catch { /* non-fatal — fall back to defaults */ }

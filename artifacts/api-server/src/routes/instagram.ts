@@ -84,12 +84,36 @@ import {
 
   storePendingAutomateSession,
   consumePendingAutomateSession,
+  resolveProxyGeo,
+  countryToIgLocale,
+  patchApiUALocale,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
 import { proxySlotManager } from "../instagram/proxySlotManager";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 import { userAgents as UA_POOL, desktopUserAgents as DESKTOP_UA_POOL } from "../shared/userAgents";
+
+// ── Proxy locale helper ──────────────────────────────────────────────────────
+// Looks up the proxy for proxyId, resolves the exit-IP country via ip-api.com,
+// and replaces the locale suffix in the API UA string (e.g. "en_IN" → "en_GB").
+// Returns the original string unchanged on any error or missing proxy.
+async function patchUALocaleForProxy(apiUA: string, proxyId: number | null | undefined): Promise<string> {
+  if (!proxyId) return apiUA;
+  try {
+    const allProxies = await storage.getProxies();
+    const proxy = allProxies.find(p => p.id === proxyId);
+    if (!proxy?.host || !proxy?.port) return apiUA;
+    const geo = await resolveProxyGeo(proxy.host, proxy.port, proxy.username, proxy.password);
+    if (!geo.countryCode) return apiUA;
+    const locale = countryToIgLocale(geo.countryCode);
+    const patched = patchApiUALocale(apiUA, locale);
+    console.log(`[ua-locale] proxy ${proxyId} → ${geo.countryCode} → ${locale}`);
+    return patched;
+  } catch {
+    return apiUA; // non-fatal
+  }
+}
 
 // ── Deterministic UA picker ─────────────────────────────────────────────────
 // Picks a paired { api, embedded } UA from the pool based on the account's
@@ -952,7 +976,11 @@ export async function registerInstagramRoutes(
       if (!input.userAgentEmbedded || !input.userAgentApi) {
         const autoUA = pickUAForAccount(input.username || "");
         if (!input.userAgentEmbedded) input.userAgentEmbedded = autoUA.embedded;
-        if (!input.userAgentApi)      input.userAgentApi      = autoUA.api;
+        if (!input.userAgentApi) {
+          // Patch the locale suffix immediately from the proxy country so the
+          // pool's baked-in locale (e.g. en_IN) is never persisted to the DB.
+          input.userAgentApi = await patchUALocaleForProxy(autoUA.api, input.proxyId);
+        }
       }
       const created = await storage.createProfile(input);
       // Seed browser cookie file if cookies were provided — same as bulk/EQX import
@@ -1080,15 +1108,20 @@ export async function registerInstagramRoutes(
     } else {
       ua = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
     }
+    // Immediately patch the locale suffix to match the account's proxy country.
+    // Without this the pool entry's baked-in locale (e.g. en_IN) ends up stored
+    // in the DB and visible in the UI even when the proxy is a UK or US exit node.
+    const profile = await storage.getProfile(id).catch(() => null);
+    const patchedApiUA = await patchUALocaleForProxy(ua.api, profile?.proxyId);
     const isDesktopUA = !ua.embedded.includes("Mobile");
     await storage.updateProfile(id, {
-      userAgentApi: ua.api,
+      userAgentApi: patchedApiUA,
       userAgentEmbedded: ua.embedded,
       igDeviceState: null,
       igApiCookies: null,
       accountStatus: "pending",
       credentialsDirty: true,
-      ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api, isDesktopUA, ua.embedded)),
+      ebFingerprint: JSON.stringify(generateEbFingerprint(patchedApiUA, isDesktopUA, ua.embedded)),
     });
     // Clear any in-flight verify lock so the next Verify doesn't get a 429
     // "already in progress" if the previous verify was still running when reset was clicked.
