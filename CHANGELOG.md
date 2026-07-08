@@ -4,6 +4,71 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.397] — 2026-07-08
+
+### Fixed
+
+#### DM inbox permanently returning 4415001 "Prompt has contribution" even on accounts with empty DM inboxes and no pending prompts
+
+**Root cause:** All `direct_v2/inbox` and `direct_v2/threads` calls were routed through `mobileSessionGet`, which targets `i.instagram.com` using the mobile API cookie jar (`mobileCookieJar`). Instagram's `i.instagram.com` mobile API applies a device-level DM registration gate: accounts whose `ig_did` has not been through Instagram's native mobile DM onboarding flow return 4415001 "Prompt has contribution" on `direct_v2/inbox`, even when the session is fully valid and the EB (embedded browser) can access DMs without any issue. This is identical in nature to the follow/repost `i.instagram.com` vs `www.instagram.com` host mismatch fixed in earlier versions — the mobile API path is stricter about unregistered device IDs for DM-specific endpoints, while the web session path bypasses the device-registration gate entirely.
+
+The bug was confirmed by observing that:
+- `GET /api/v1/users/{uid}/info/` via `mobileSessionGet` → HTTP 200 ✓
+- `GET /api/v1/news/inbox/` via `mobileSessionGet` → HTTP 200 ✓
+- `GET /api/v1/direct_v2/inbox/` via `mobileSessionGet` → HTTP 400, 4415001 ✗
+- DM inbox in the EB (instagram.com/direct/inbox/) → fully accessible, empty, zero prompts ✓
+
+All three API calls used identical cookies, headers, and proxy. The gate is endpoint-specific and device-identity-specific, not session-specific.
+
+**Fix:** All `direct_v2/inbox` and `direct_v2/threads` fetches now check `this.isLoggedIn` (web EB session present in `cookieJar`) and route through `webGet` (`www.instagram.com` + EB web cookies) when a web session is available, falling back to `mobileSessionGet` only when no web session exists. This is the same pattern used by `_followViaWebEndpoint` and `_configureViaWebEndpoint`.
+
+**Call sites updated:**
+- `getDirectMessages()` — simple inbox check used by the EB-only DM emulation path
+- `getDirectMessagesInternal()` Step 2 (inbox overview fetch) and Step 3 (individual thread opens)
+- `getDMThreadsWithContent()` — full inbox fetch used by the auto-reply scanner
+- `shareStoryViaDm()` — inbox fetch used to find an existing thread to share a story into
+- `getThreadIdWithUser()` inbox scan — fallback thread-ID lookup after `get_by_participants`
+
+**Result confirmed in log:** `[webClient] getDirectMessagesInternal: Step 2 — webGet (www.instagram.com)` → `inbox OK — 0 thread(s)` — no gate, no 4415001.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — `getDirectMessages`, `getDirectMessagesInternal`, `getDMThreadsWithContent`, `shareStoryViaDm`, `getThreadIdWithUser`
+
+---
+
+#### `persistentBadging=true` query parameter removed from all `direct_v2/inbox` URLs
+
+**Reason:** The `persistentBadging=true` parameter explicitly asks Instagram to evaluate whether any interactive "contribution" is pending for the DM feature and return 4415001 if so. Removed from all six call sites as a secondary hygiene fix. The primary fix (host switch above) is what resolved the gate; this removal prevents any future regression where the parameter re-triggers the gate even on accounts where the web session is unavailable.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts`
+
+---
+
+#### Phase 2a `users/{uid}/info` warm-up added to `_buildWarmedIgClient` before `news/inbox`
+
+**Context:** The documented Jarvee Phase 2 warm-up sequence for DM access is `user.info → news.inbox`. The implementation only called `news/inbox`. Added `GET /api/v1/users/{uid}/info/` via `mobileSessionGet` as Phase 2a immediately before the Phase 2b `news/inbox` call, matching the documented spec. Error handling: propagate if `logoutReason` is present (real session kill), swallow all other errors non-fatally. An explicit warning is logged when `ownUserId` is unavailable and Phase 2a must be skipped. Note: this warm-up change did not resolve the 4415001 gate (that required the host switch above), but it correctly implements the documented sequence for completeness.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — `_buildWarmedIgClient`
+
+---
+
+#### Vite dev server API proxy target hardcoded to port 8080 instead of reading from environment
+
+**Root cause:** `artifacts/dannys-bot/vite.config.ts` hardcoded the API reverse-proxy target as `http://localhost:8080`, but the API server runs on port 8082. The frontend's `/api/` requests were being proxied to the wrong port in development, causing all API calls from the Vite dev server to fail with connection refused.
+
+**Fix:** Proxy target now reads from the `API_PORT` environment variable (default `8082`): `` `http://localhost:${process.env.API_PORT ?? 8082}` ``.
+
+**File:** `artifacts/dannys-bot/vite.config.ts`
+
+---
+
+#### `.replit` legacy workflow port alignment
+
+**Fix:** Updated the pre-existing hand-configured "API Server" and "Start application" workflow run commands in `.replit` to use `PORT=8082` and `PORT=5000 API_PORT=8082` respectively, matching the port contract established by the API server's actual binding.
+
+**File:** `.replit`
+
+---
+
 ## [1.1.396] — 2026-07-08
 
 ### Fixed
