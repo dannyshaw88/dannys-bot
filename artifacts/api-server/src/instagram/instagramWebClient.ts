@@ -6267,9 +6267,7 @@ export class InstagramWebClient {
             imageBuffer = await encodeJpeg(sharpMod(imageBuffer).extract({ left, top: 0, width: newW, height: h }));
             console.log(`${TAG}   After crop: ${imageBuffer.length}B`);
           } else {
-            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed. Re-encoding to baseline JPEG (no ICC profile)…`);
-            imageBuffer = await encodeJpeg(sharpMod(imageBuffer));
-            console.log(`${TAG}   After re-encode: ${imageBuffer.length}B`);
+            console.log(`${TAG}   Aspect ratio ${ratio.toFixed(3)} ✓ — no crop needed, skipping re-encode to preserve quality.`);
           }
         } else {
           console.warn(`${TAG}   ⚠ sharp not available — skipping aspect ratio check`);

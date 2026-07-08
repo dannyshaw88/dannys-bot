@@ -92,7 +92,7 @@ function buildConfig(level: AlterationLevel, custom?: ImageFilterSettings): Alte
                   : { min: 1.0, max: 1.0 },
     pixelate:   custom.pixelate.enabled
                   ? { min: custom.pixelate.min,   max: custom.pixelate.max   }
-                  : { min: 0.3, max: 0.3 },
+                  : { min: 0, max: 0 },
   };
 }
 
@@ -165,8 +165,10 @@ export async function alterJpegBuffer(
     // ── 4. Sharpen sigma ───────────────────────────────────────────────────
     const sharpenSigma = Math.max(0, randInRange(cfg.sharpen.min, cfg.sharpen.max) - 1.0);
 
-    // ── 5. Pixelate (blur sigma) ───────────────────────────────────────────
-    const blurSigma = Math.max(0.3, randInRange(cfg.pixelate.min, cfg.pixelate.max));
+    // ── 5. Pixelate (blur sigma) — only applied when pixelate is enabled ──
+    const blurSigma = cfg.pixelate.max > 0
+      ? Math.max(0.3, randInRange(cfg.pixelate.min, cfg.pixelate.max))
+      : 0;
 
     // ── Chain sharp operations ─────────────────────────────────────────────
     let pipeline = sharp(rawPixels, {
@@ -179,7 +181,9 @@ export async function alterJpegBuffer(
       pipeline = pipeline.sharpen({ sigma: Math.min(sharpenSigma, 10) });
     }
 
-    pipeline = pipeline.blur(blurSigma);
+    if (blurSigma > 0) {
+      pipeline = pipeline.blur(blurSigma);
+    }
 
     const processed = await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
 
