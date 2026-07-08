@@ -4,6 +4,51 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.396] — 2026-07-08
+
+### Fixed
+
+#### Duplicate live automation engine — Replit auto-added a second "API Server" workflow that ran a full second `AutomationEngine` against the same live Instagram account concurrently
+
+**Root cause:** The platform auto-registered artifacts for the project, which created its own managed workflow (`artifacts/api-server: API Server`) running the exact same `pnpm --filter @workspace/api-server run dev` script as the pre-existing hand-configured `API Server` workflow. Both processes ran independent `AutomationEngine` instances polling and mutating the same live `@miguelsilvayq84` Instagram session at once — a genuine concurrent-session ban risk, not just wasted compute. The two processes also had different `process.cwd()` values, so each wrote to its own separate `database.db` file, but almost certainly shared the underlying session/cookie state on disk, compounding the race. `removeWorkflow` cannot remove artifact-managed workflows, so the duplicate could not simply be deleted — it had to be neutralized at the code level.
+
+**Fix:** Added a cross-process single-instance lock to `AutomationEngine`:
+- Atomic acquire via `fs.link()` (test-and-set) against a lock file in `os.tmpdir()` (not `process.cwd()`-relative, since the two duplicate processes have different working directories but share the same container filesystem).
+- Stale-lock takeover after 30s of no renewal, so a crashed owner never permanently starves the other process.
+- Periodic renewal every 10s with token verification, so a process that loses the lock notices within one renewal cycle and stops its automation loops (`reconcile()`/`restoreResumingAccounts()` intervals).
+- Graceful lock release on `SIGTERM`/`SIGINT`/`exit`, so a normal workflow restart hands the lock to the new process immediately instead of making it wait out the full 30s staleness window.
+- `reconcile()` itself now checks lock ownership and no-ops if this process is not the owner — closing a gap where a manual UI action (e.g. toggling a tool on) could otherwise trigger `reconcile()` on the non-owner process and launch a duplicate runner even though its periodic loop was stopped.
+
+The losing process now serves HTTP only (still fully functional for reads/dashboard) and never touches the live Instagram session.
+
+**Files:** `artifacts/api-server/src/instagram/automationEngine.ts` — new lock fields/methods (`LOCK_PATH`, `_tryAcquireOrTakeover`, `_renewLock`, `_startLoops`, `_stopLoops`, `_releaseLockSync`, `_beginAcquireLoop`), rewritten `start()`, lock guard added to `reconcile()`.
+
+---
+
+#### CycleTLS sidecar crash-loop when two API server processes run at once — both hard-coded to the same fixed port 9119
+
+**Root cause:** Each `AutomationEngine` process spawns its own CycleTLS Go sidecar for TLS/JA3 fingerprinting, and the library defaults to a fixed port (9119). With two API server processes running (see above), the second one to start always crash-looped with `bind: address already in use`.
+
+**Fix:** Added `findFreeTcpPort()` in `tlsTransport.ts` — binds a throwaway socket to port 0, reads back the OS-assigned free port, then passes `{ port }` into `initCycleTLS()`. Each process now gets its own free port at startup instead of racing for a shared fixed one.
+
+**File:** `artifacts/api-server/src/instagram/tlsTransport.ts`
+
+---
+
+#### DM check silently masked real session kills as a soft "gated" skip instead of surfacing them as session-expired
+
+**Root cause:** `_buildWarmedIgClient()`'s warm-up step (`news/inbox` call) classified errors using `isNetworkErr = !e?.response`, under the documented assumption that `mobileSessionGet()` "returns null on Instagram-level 4xx errors, throws only on network failure." That assumption no longer matched the actual implementation: `mobileSessionGet()` throws on **every** HTTP status ≥ 400, including genuine session-kill responses (HTTP 403 with `logout_reason`), and its thrown errors never carried a `.response` property. As a result, `isNetworkErr` was always `true`, so every real session kill fell through to a `currentUser()` fallback. That fallback had its own bug — it only checked `cuJ !== null`, not the response body's `status` field — so a `200 OK` response carrying `{status:"fail"}` (a genuine Instagram-level rejection, observed live) was incorrectly read as a successful warm-up. Net effect: a dead session was reported as "warmed up," the actual `direct_v2/inbox/` call then failed with an unrelated `4415001` error, and that got mislabeled as a soft, skippable "gate" — completely hiding the real session-expiry root cause from account-health monitoring.
+
+**Fix:**
+- `mobileSessionGet()` now attaches structured `.httpStatus` and `.logoutReason` metadata to every thrown error, so callers can reliably tell "Instagram responded with a real HTTP status" apart from a genuine transport/network failure.
+- `_buildWarmedIgClient()`'s catch block now classifies on that metadata: a real `logoutReason` is treated as a genuine session kill and rethrown immediately (propagating as `session_expired`, which the existing `checkSessionErr`/`applyAccountLevelError` pipeline already handles correctly) instead of being papered over by the `currentUser()` fallback; only a truly response-less error (no `.httpStatus` at all) triggers that fallback; any other real HTTP error (e.g. `4415001`) is still treated as "connected, warm" as before.
+- The `currentUser()` fallback now also requires `cuJ?.status !== "fail"` before considering the warm-up successful.
+- `_sendDmViaIgClient()` now catches a session-kill throw from the warm-up step and returns its existing `"session_expired"` sentinel instead of letting the error propagate uncaught.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — `mobileSessionGet`, `_buildWarmedIgClient`, `_sendDmViaIgClient`
+
+---
+
 ## [1.1.395] — 2026-07-08
 
 ### Fixed
