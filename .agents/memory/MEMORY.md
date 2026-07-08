@@ -7,3 +7,5 @@
 - EB Mode-B silent-window fingerprint gap (fixed 6 Jul 2026) — full diagnosis/fix/rule lives in `replit.md` under "EB Mode-B Silent-Window Fingerprint Gap"; bulk-action temp windows lacked fingerprint spoof, likely ban cause
 - Mobile UA + stale desktop GPU fingerprint = instant ban (fixed v1.1.383, 7 Jul 2026) — full root cause + enforced rule in `replit.md` under "Mobile UA + Stale Desktop GPU Fingerprint". Changing UA platform class must ALWAYS regenerate ebFingerprint.
 - [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale
+- [Artifact auto-creation duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — Replit can auto-create artifact-managed workflows that run a second live copy of a stateful backend; must gate with a cross-process lock, not assume one instance
+- [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills

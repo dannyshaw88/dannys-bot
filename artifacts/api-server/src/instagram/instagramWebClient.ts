@@ -2057,7 +2057,13 @@ export class InstagramWebClient {
       if (errorCode === 4415001) {
         console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (prompt_required_4415001 — soft gate, not a logout): ${res.rawBody.slice(0, 200)}`);
         this._logTransport(path, "GET", Date.now() - _t0, true);
-        throw new Error("prompt_required_4415001");
+        const softGateErr: any = new Error("prompt_required_4415001");
+        // Attach structured metadata so callers (e.g. _buildWarmedIgClient) can
+        // tell "Instagram responded with a real HTTP status" apart from a true
+        // network/transport failure, instead of relying on `!e.response` — an
+        // IgApiClient-shaped field this hand-rolled path never sets.
+        softGateErr.httpStatus = res.status;
+        throw softGateErr;
       }
       // Extract the message Instagram sent (may be empty for plain session-expired 400s).
       // Fall back to "login_required" so getAccountLevelStatus() classifies it as
@@ -2078,7 +2084,15 @@ export class InstagramWebClient {
         : errMsg;
       console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (${errMsg}${logoutReason !== undefined ? ` [SESSION-KILL logout_reason:${logoutReason}]` : ""}): ${res.rawBody.slice(0, 200)}`);
       this._logTransport(path, "GET", Date.now() - _t0, true);
-      throw new Error(throwMsg);
+      const httpErr: any = new Error(throwMsg);
+      // Structured metadata (see prompt_required_4415001 branch above for why):
+      // httpStatus lets callers distinguish "Instagram answered with an error
+      // body" from a genuine transport failure; logoutReason flags a real,
+      // server-side session kill that must never be treated as a soft/skippable
+      // condition.
+      httpErr.httpStatus = res.status;
+      if (logoutReason !== undefined) httpErr.logoutReason = logoutReason;
+      throw httpErr;
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     this._logTransport(path, "GET", Date.now() - _t0, false, msgFn?.(res.json));
@@ -3079,30 +3093,55 @@ export class InstagramWebClient {
     try {
       await this.timed("NotificationsBadge", async () => {
         const j = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
-        // mobileSessionGet returns null only on connection failure (not on 4xx body errors).
-        // Any non-null response means Instagram replied — gate is lifted regardless of body status.
-        if (j === null) throw new Error("news/inbox: connection failed (null response)");
+        // mobileSessionGet returns null only when there was no mobile session to
+        // use at all (see the hasMobileSession guard) — real HTTP errors (4xx)
+        // throw instead (see the httpStatus/logoutReason metadata attached there).
+        if (j === null) throw new Error("news/inbox: no mobile session available");
         return true;
       }, "Cold-start warm-up");
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
       warmupOk = true;
     } catch (e: any) {
-      // mobileSessionGet throws only on network-level failures (no HTTP response).
-      // Instagram-level errors (4xx body) return null from mobileSessionGet, not a throw —
-      // the null check above converts them to a throw with "connection failed" message.
-      const isNetworkErr = e?.message?.includes("connection failed") || !e?.response || ((e?.response?.statusCode ?? 0) === 0);
+      // A real, server-side session kill (logout_reason present) is NEVER a
+      // "soft"/skippable condition — it must propagate as session_expired so
+      // the engine re-verifies the account instead of silently retrying with a
+      // dead session and later mislabeling an unrelated downstream error (e.g.
+      // 4415001 on direct_v2/inbox) as a mere "gate". Do this check first, and
+      // let it throw straight out of _buildWarmedIgClient.
+      if (e?.logoutReason !== undefined) {
+        console.error(`[webClient] _buildWarmedIgClient: news/inbox SESSION KILLED (logout_reason:${e.logoutReason}) — not caching, not falling back, propagating session_expired`);
+        throw e;
+      }
+      // e.httpStatus is only set by mobileSessionGet when Instagram actually
+      // answered with an HTTP status (see httpStatus attachment above) — a
+      // genuine transport-level failure (proxy drop, connection reset, DNS
+      // failure) throws from lower in the stack with no httpStatus at all.
+      // Only fall back to currentUser() on a true transport failure.
+      const isNetworkErr = e?.httpStatus === undefined;
       if (isNetworkErr) {
-        console.warn(`[webClient] _buildWarmedIgClient: news/inbox network-error — trying currentUser() fallback`);
+        console.warn(`[webClient] _buildWarmedIgClient: news/inbox network-error (${e?.message}) — trying currentUser() fallback`);
         // Fallback: try current_user via mobileSessionGet (same reliable path)
-        const cuJ = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
-        if (cuJ !== null) {
-          console.log("[webClient] _buildWarmedIgClient: Phase 2 — fallback currentUser() OK");
-          warmupOk = true;
-        } else {
-          console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback also failed (null response)`);
+        try {
+          const cuJ = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
+          // A 200 response can still carry {status:"fail"} in the body (seen
+          // live: generic rejection while the session is actually dead) — a
+          // non-null response alone does not mean the account is warmed up.
+          if (cuJ !== null && cuJ?.status !== "fail") {
+            console.log("[webClient] _buildWarmedIgClient: Phase 2 — fallback currentUser() OK");
+            warmupOk = true;
+          } else {
+            console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback returned status=fail — treating as not warmed`);
+          }
+        } catch (cuErr: any) {
+          if (cuErr?.logoutReason !== undefined) {
+            console.error(`[webClient] _buildWarmedIgClient: currentUser() fallback SESSION KILLED (logout_reason:${cuErr.logoutReason}) — propagating session_expired`);
+            throw cuErr;
+          }
+          console.warn(`[webClient] _buildWarmedIgClient: currentUser() fallback also failed: ${cuErr?.message}`);
         }
       } else {
-        // Instagram returned an error body (4xx) — we're connected, treat as warm.
+        // Instagram returned an error body (4xx, no logout_reason) — we're
+        // connected, treat as warm (e.g. the 4415001 soft-gate case).
         console.warn(`[webClient] _buildWarmedIgClient: news/inbox Instagram-level error (non-fatal, treating as warm): ${e?.message}`);
         warmupOk = true;
       }
@@ -4609,7 +4648,17 @@ export class InstagramWebClient {
     // Reuse the cached warmed client — the warm-up (news.inbox) runs once per
     // session and the result is cached in _warmedIgClientCache.  Creating a
     // fresh cold client here (as before) consistently triggered 4415001.
-    const warmed = await this._buildWarmedIgClient();
+    let warmed: { ig: IgApiClient; ownUserId: string } | null;
+    try {
+      warmed = await this._buildWarmedIgClient();
+    } catch (e: any) {
+      if (e?.logoutReason !== undefined || /session_expired/i.test(e?.message ?? "")) {
+        console.warn(`[webClient] sendDM ${userId}: warm-up hit a real session kill — returning session_expired`);
+        return "session_expired";
+      }
+      console.warn(`[webClient] sendDM ${userId}: warm-up threw unexpectedly — falling back to cold client: ${e?.message}`);
+      return false;
+    }
     if (!warmed) {
       console.warn(`[webClient] sendDM ${userId}: _buildWarmedIgClient returned null — falling back to cold client`);
       return false;

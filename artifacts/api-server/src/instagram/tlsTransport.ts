@@ -15,6 +15,26 @@
 
 import { IgNetworkError } from "instagram-private-api";
 import type { IgApiClient } from "instagram-private-api";
+import * as net from "node:net";
+
+// Finds a free TCP port by binding a throwaway server to port 0 (OS picks any
+// free port) and reading back the kernel-assigned port. Used so CycleTLS's Go
+// sidecar never collides with another process's WS_PORT on this machine — the
+// library defaults to a fixed port 9119, which crash-loops if two processes
+// (e.g. a duplicate "artifact" workflow running the same package) both try to
+// bind it at once. Falls back to the library default if the probe fails.
+async function findFreeTcpPort(fallback = 9119): Promise<number> {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", () => resolve(fallback));
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      const port = typeof addr === "object" && addr ? addr.port : fallback;
+      srv.close(() => resolve(port));
+    });
+  });
+}
 
 // ── OkHttp 4 / Android 13 JA3 fingerprint ────────────────────────────────────
 // Cipher suites (decimal):
@@ -86,7 +106,8 @@ async function getClient(): Promise<CycleTLSClient | null> {
   _initPromise = (async (): Promise<CycleTLSClient | null> => {
     try {
       const { default: initCycleTLS } = await import("cycletls");
-      const client = await initCycleTLS();
+      const port = await findFreeTcpPort();
+      const client = await initCycleTLS({ port });
       _client = client as unknown as CycleTLSClient;
       console.log("[tlsTrans] CycleTLS initialised — OkHttp4 JA3 fingerprint active");
 

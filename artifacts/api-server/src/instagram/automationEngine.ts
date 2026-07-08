@@ -30,6 +30,8 @@ import { profileUsernameCache } from "../lib/profileUsernameCache";
 import { proxySlotManager } from "./proxySlotManager";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
+import * as nodeOs from "node:os";
+import { randomBytes } from "node:crypto";
 
 /**
  * Minimal Puppeteer-`page`-compatible shim backed by ebManager.ts's IPC bridge
@@ -510,12 +512,139 @@ class AutomationEngine {
   // when the runner finishes.  Maps profileId → proxyId.
   private acquiredSlots        = new Map<number, number>();
 
+  // ── Single-instance lock ─────────────────────────────────────────────────
+  // The Replit platform can auto-create an "artifact" workflow that runs this
+  // exact same package (pnpm --filter @workspace/api-server run dev) alongside
+  // the pre-existing hand-configured workflow — two live OS processes, each
+  // with their own AutomationEngine instance, polling and mutating the SAME
+  // Instagram accounts concurrently. Instagram treats concurrent sessions on
+  // one account as suspicious and can lock/ban it. This lock ensures only ONE
+  // process on this machine ever runs the reconcile/session loops at a time.
+  //
+  // Lock file lives in the OS temp dir (not cwd- or DB-relative) because the
+  // two duplicate processes can have different process.cwd() (and therefore
+  // different resolved database.db paths) while still running on the same
+  // container/filesystem — os.tmpdir() is the one location guaranteed shared.
+  private static readonly LOCK_PATH = nodePath.join(nodeOs.tmpdir(), "dannys-bot-automation-engine.lock");
+  private static readonly LOCK_STALE_MS = 30_000;  // 3x renewal cadence below
+  private static readonly LOCK_RENEW_MS = 10_000;
+  private _lockToken: string | null = null;
+  private _lockOwned = false;
+  private _lockRenewTimer: ReturnType<typeof setInterval> | null = null;
+  private _reconcileInterval: ReturnType<typeof setInterval> | null = null;
+  private _restoreInterval: ReturnType<typeof setInterval> | null = null;
+
+  private async _tryAcquireOrTakeover(): Promise<boolean> {
+    const token = `${process.pid}:${Date.now()}:${randomBytes(6).toString("hex")}`;
+    const tmpPath = `${AutomationEngine.LOCK_PATH}.tmp.${process.pid}.${randomBytes(4).toString("hex")}`;
+    try {
+      await fsPromises.writeFile(tmpPath, token, "utf8");
+      try {
+        // fs.link() is atomic: it only succeeds if LOCK_PATH does not already
+        // exist. If two processes race here, the OS guarantees exactly one
+        // link() call wins — the other gets EEXIST, even if both just decided
+        // the previous lock looked "stale" and both raced to take it over.
+        await fsPromises.link(tmpPath, AutomationEngine.LOCK_PATH);
+        this._lockToken = token;
+        return true;
+      } catch (linkErr: any) {
+        if (linkErr?.code !== "EEXIST") throw linkErr;
+        // Lock is held — check staleness (owner crashed without cleanup).
+        try {
+          const st = await fsPromises.stat(AutomationEngine.LOCK_PATH);
+          const age = Date.now() - st.mtimeMs;
+          if (age > AutomationEngine.LOCK_STALE_MS) {
+            await fsPromises.unlink(AutomationEngine.LOCK_PATH).catch(() => {});
+            // Retry the atomic link immediately against the now-cleared path.
+            await fsPromises.link(tmpPath, AutomationEngine.LOCK_PATH);
+            this._lockToken = token;
+            return true;
+          }
+        } catch { /* stat/unlink/relink race lost to another process — not fatal */ }
+        return false;
+      } finally {
+        await fsPromises.unlink(tmpPath).catch(() => {});
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  /** Re-confirms we still own the lock (another process may have taken it over
+   *  after judging our lock stale) and refreshes its mtime so nobody else does. */
+  private async _renewLock(): Promise<void> {
+    if (!this._lockOwned || !this._lockToken) return;
+    try {
+      const current = await fsPromises.readFile(AutomationEngine.LOCK_PATH, "utf8").catch(() => null);
+      if (current !== this._lockToken) {
+        console.error("[engine] SINGLE-INSTANCE LOCK LOST — another process took over automation. Stopping loops in this process to avoid a duplicate engine hitting live Instagram accounts.");
+        this._stopLoops();
+        this._lockOwned = false;
+        this._lockToken = null;
+        if (this._lockRenewTimer) { clearInterval(this._lockRenewTimer); this._lockRenewTimer = null; }
+        this._beginAcquireLoop();
+        return;
+      }
+      // Still ours — touch mtime so we don't get judged stale by anyone else.
+      await fsPromises.writeFile(AutomationEngine.LOCK_PATH, this._lockToken, "utf8");
+    } catch (e) {
+      console.warn("[engine] lock renewal error (non-fatal):", e);
+    }
+  }
+
+  private _startLoops(): void {
+    console.log(`[engine] Automation engine started (single-instance lock acquired, pid=${process.pid})`);
+    this.reconcile();
+    this._reconcileInterval = setInterval(() => this.reconcile(), 10_000);
+    this._restoreInterval = setInterval(() => this.restoreResumingAccounts(), 30_000);
+  }
+
+  private _stopLoops(): void {
+    if (this._reconcileInterval) { clearInterval(this._reconcileInterval); this._reconcileInterval = null; }
+    if (this._restoreInterval)   { clearInterval(this._restoreInterval);   this._restoreInterval   = null; }
+  }
+
+  private _beginAcquireLoop(): void {
+    (async () => {
+      // First attempt fires immediately; on failure, retry on the same
+      // cadence as lock renewal so a loser notices a freed/stale lock quickly.
+      // While unlocked, this process serves HTTP only — it never launches any
+      // profile runner, so it can never touch a live Instagram session.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const acquired = await this._tryAcquireOrTakeover();
+        if (acquired) {
+          this._lockOwned = true;
+          this._startLoops();
+          this._lockRenewTimer = setInterval(() => this._renewLock(), AutomationEngine.LOCK_RENEW_MS);
+          return;
+        }
+        console.log(`[engine] another process holds the automation single-instance lock — this process will serve HTTP only and retry every ${AutomationEngine.LOCK_RENEW_MS / 1000}s`);
+        await new Promise(r => setTimeout(r, AutomationEngine.LOCK_RENEW_MS));
+      }
+    })();
+  }
+
+  /** Best-effort synchronous release so a clean restart (SIGTERM/SIGINT) frees
+   *  the lock immediately instead of making the next owner wait out the full
+   *  staleness window (LOCK_STALE_MS) before it can take over. Safe to call
+   *  even if we never held the lock. */
+  private _releaseLockSync(): void {
+    if (this._lockRenewTimer) { clearInterval(this._lockRenewTimer); this._lockRenewTimer = null; }
+    if (!this._lockOwned || !this._lockToken) return;
+    try {
+      const current = fs.readFileSync(AutomationEngine.LOCK_PATH, "utf8");
+      if (current === this._lockToken) fs.unlinkSync(AutomationEngine.LOCK_PATH);
+    } catch { /* already gone / never existed — fine */ }
+  }
+
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
-    console.log("[engine] Automation engine started");
-    this.reconcile();
-    setInterval(() => this.reconcile(), 10_000);
-    setInterval(() => this.restoreResumingAccounts(), 30_000);
+    this._beginAcquireLoop();
+    const release = () => this._releaseLockSync();
+    process.once("exit", release);
+    process.once("SIGTERM", release);
+    process.once("SIGINT", release);
   }
 
   triggerReconcile() { this.reconcile().catch(() => {}); }
@@ -536,6 +665,15 @@ class AutomationEngine {
   }
 
   private async reconcile() {
+    // Single-instance guard: if this process does not hold the automation
+    // lock it must never launch a runner or mutate live-session state, even
+    // if an HTTP route handler calls a trigger* method on it directly (e.g.
+    // the platform's artifact-managed preview routing hitting this process's
+    // /api path while the OTHER process owns the lock). See start()/_lockOwned.
+    if (!this._lockOwned) {
+      console.warn("[engine] reconcile() skipped — this process does not hold the automation single-instance lock");
+      return;
+    }
     try {
       // On app startup (first reconcile, this.initialized = false): apply the configured X-Y
       // minute initial delay so multiple profiles don't all fire at once.
