@@ -3509,13 +3509,14 @@ export async function openEbWindow(opts: {
 
         const _ccUrl = win.webContents.getURL();
 
-        // ── Login-page guard ─────────────────────────────────────────────────
-        // If the EB is on the Instagram login page during a CookieCheck cycle,
-        // the session is already dead — log loudly so it's visible in the log.
+        // ── Login-page notice ────────────────────────────────────────────────
+        // Log when the EB lands on the login page (usually means session died),
+        // but do NOT break — the cookie consent banner appears on this page too
+        // (on first visit or after cookie-jar reset) and must still be dismissed.
+        // If no banner is found the existing `if (!pos) break` below exits cleanly.
         if (/instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_ccUrl)) {
-          _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 120)}" detect=LOGIN-PAGE — session expired, browser is logged out`);
-          console.warn(`[eb-session-dead:${profileId}] @${username} CookieCheck detected login page — session is dead at CookieCheck#${attempt + 1}, url="${_ccUrl.slice(0, 200)}"`);
-          break;
+          _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 120)}" — on login page (session may be expired; checking for cookie banner before exiting)`);
+          console.warn(`[eb-session-dead:${profileId}] @${username} CookieCheck detected login page at attempt ${attempt + 1} — session may be dead`);
         }
 
         const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
