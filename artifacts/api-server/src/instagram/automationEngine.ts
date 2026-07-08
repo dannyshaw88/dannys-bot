@@ -5550,7 +5550,7 @@ class AutomationEngine {
                 postedShortcode,
               });
               console.log(`[engine] @${profile.username}: 🔁 reposted ${item.mediaId} from @${sourceUsername} → own post ${postedShortcode} (alteration=${level}) [${repostedCount + 1}/${targetCount}]`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level}) [${repostedCount + 1}/${targetCount}]`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} [${repostedCount + 1}/${targetCount}]`);
               await storage.incrementStat(profile.id, "repost");
               repostedCount++;
             } else {
@@ -7098,7 +7098,7 @@ class AutomationEngine {
       });
 
       console.log(`[engine] @${profile.username}: 🔁 [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} → ${postedShortcode}`);
-      this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+      this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername}`);
       // Browser-posts bypass the private API client so they never land in instagram_api_calls.
       // Write a synthetic entry so the stats pie chart counts them correctly.
       if ((profile as any).postViaBrowser) {
