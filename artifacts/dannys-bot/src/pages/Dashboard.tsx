@@ -78,6 +78,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.407",
+    date: "8 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Electron Leak detection now passes: window.require, window.process, window.module and other Electron globals are explicitly deleted and suppressed before any Instagram page script runs. Previously these were visible to Instagram's login JS even with standard Electron sandboxing — a reliable automation signal that contributed to account bans. The suppressor runs as the very first script on every browser window type (main EB, silent-action, verify, and ghost-signup).",
+        technical: [
+          "Added ELECTRON_LEAK_SUPPRESSOR_JS constant injected via Page.addScriptToEvaluateOnNewDocument as the first CDP script on all four BrowserWindow creation paths",
+          "Suppressor checks the property descriptor before acting: delete for own-configurable globals, Object.defineProperty value shadow for configurable-but-surviving (prototype chain), writable assignment fallback for non-configurable own properties",
+          "Also scrubs ChromeDriver/Selenium artefacts ($cdc_*, $chrome_*, __driver_evaluate, __webdriver_evaluate, __selenium_evaluate) in the same pass",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Chrome Object check now passes: window.chrome.runtime was an empty placeholder (runtime: undefined) which failed Instagram's typeof chrome.runtime === 'object' probe — a clear Electron fingerprint. It now exposes a properly-shaped runtime object (connect, sendMessage, getManifest, onMessage, onConnect) matching real Chrome's surface. Also handles the case where window.chrome already exists but is missing the runtime property.",
+      },
+    ],
+  },
+  {
     version: "1.1.388",
     date: "7 Jul 2026",
     items: [

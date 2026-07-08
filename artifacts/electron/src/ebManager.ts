@@ -532,6 +532,53 @@ function getMobileDeviceProfile(
   return { width: p[0], height: p[1], dpr: p[2] };
 }
 
+// JavaScript injected as the FIRST addScriptToEvaluateOnNewDocument on every EB window.
+// Deletes / shadows Electron-specific globals that Instagram's login JS probes.
+// Even with contextIsolation:true + nodeIntegration:false, some Electron builds still
+// leak window.require, window.process, window.module into the renderer context.
+// Running this at document_start (before any page script) ensures they are invisible.
+const ELECTRON_LEAK_SUPPRESSOR_JS = `(function () {
+  // Names probed by Instagram's login JS to detect Electron/automation.
+  var _ELEC = ['require','process','module','exports','_electron','__electron'];
+  for (var _i = 0; _i < _ELEC.length; _i++) {
+    var _k = _ELEC[_i];
+    // Fast-path: already absent — nothing to do.
+    if (typeof window[_k] === 'undefined') continue;
+    // Step 1: attempt direct delete (own configurable property — the common case
+    // for Electron globals that leak despite contextIsolation:true).
+    var _deleted = false;
+    try { _deleted = (delete window[_k]); } catch (_e) { _deleted = false; }
+    if (_deleted && typeof window[_k] === 'undefined') continue;
+    // Step 2: delete either failed or the value survived via the prototype chain.
+    // Inspect the descriptor so we can choose the right remediation path.
+    var _desc;
+    try { _desc = Object.getOwnPropertyDescriptor(window, _k); } catch (_e) {}
+    if (_desc && !_desc.configurable) {
+      // Non-configurable own property — cannot be deleted or redefined.
+      // If it is writable, zero it out so typeof probes return 'undefined'.
+      try { if (_desc.writable) { window[_k] = undefined; } } catch (_e) {}
+    } else {
+      // Configurable (or on the prototype chain) — shadow it with a value
+      // descriptor so both typeof and direct access return undefined.
+      try {
+        Object.defineProperty(window, _k, {
+          value: undefined, writable: true, configurable: true, enumerable: false,
+        });
+      } catch (_e) {}
+    }
+  }
+  // Scrub ChromeDriver / Selenium artefacts that Electron sometimes injects.
+  try {
+    Object.keys(window)
+      .filter(function (k) {
+        return k.indexOf('$cdc_') === 0 || k.indexOf('$chrome_') === 0 ||
+               k === '__driver_evaluate' || k === '__webdriver_evaluate' ||
+               k === '__selenium_evaluate' || k === '__fxdriver_evaluate';
+      })
+      .forEach(function (k) { try { delete window[k]; } catch (_e) {} });
+  } catch (_e) {}
+})();`;
+
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
 // Applied via CDP Page.addScriptToEvaluateOnNewDocument (runs before any page script)
 // AND via dom-ready executeJavaScript (belt-and-suspenders if CDP is unavailable).
@@ -580,6 +627,7 @@ async function armSilentWindowAntiDetection(
       (async () => {
         try {
           await win.webContents.debugger.sendCommand("Page.enable");
+          await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: ELECTRON_LEAK_SUPPRESSOR_JS });
           await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
           await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: fpScript });
         } catch { /* CDP unavailable — fall back to setUserAgent below only */ }
@@ -1330,7 +1378,14 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   // Chrome's window.chrome is a minimal object (no loadTimes/csi — those were
   // removed from both desktop and mobile Chrome years ago), so we expose the
   // same minimal shape on both branches instead of contradicting the UA.
-  try{if(!window.chrome)Object.defineProperty(window,'chrome',{value:{runtime:undefined},configurable:true,writable:true,enumerable:true});}catch(_e){}
+  // window.chrome.runtime must be a real object — detectors check
+  // typeof window.chrome.runtime === 'object' and it must be truthy.
+  // The old {runtime:undefined} value failed that test (WARN in browser check).
+  try{
+    var _cr={id:undefined,connect:function(){return{onMessage:{addListener:function(){}},onDisconnect:{addListener:function(){}},postMessage:function(){},disconnect:function(){}};},sendMessage:function(){},getManifest:function(){return null;},onMessage:{addListener:function(){},removeListener:function(){},hasListener:function(){return false;}},onConnect:{addListener:function(){},removeListener:function(){},hasListener:function(){return false;}}};
+    if(!window.chrome){Object.defineProperty(window,'chrome',{value:{runtime:_cr},configurable:true,writable:true,enumerable:true});}
+    else if(window.chrome&&!window.chrome.runtime){try{Object.defineProperty(window.chrome,'runtime',{value:_cr,configurable:true,writable:true});}catch(_e2){try{window.chrome.runtime=_cr;}catch(_e3){}}}
+  }catch(_e){}
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
     if(_oq){
       // Expand to all permissions that should be "prompt" on a real Android Chrome session.
@@ -3112,6 +3167,7 @@ export async function openEbWindow(opts: {
   void (async () => {
     try {
       await win.webContents.debugger.sendCommand("Page.enable");
+      await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: ELECTRON_LEAK_SUPPRESSOR_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: DAILY_LIMIT_DISMISSER_JS });
@@ -7242,6 +7298,7 @@ export function startEbIpcServer(
             try {
               try { _hiddenWin!.webContents.debugger.attach("1.3"); } catch {}
               await _hiddenWin!.webContents.debugger.sendCommand("Page.enable");
+              await _hiddenWin!.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: ELECTRON_LEAK_SUPPRESSOR_JS });
               await _hiddenWin!.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
             } catch {}
           })();
@@ -7879,6 +7936,9 @@ export function startEbIpcServer(
 
           try {
             await wc.debugger.sendCommand("Page.enable");
+          } catch {}
+          try {
+            await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: ELECTRON_LEAK_SUPPRESSOR_JS });
           } catch {}
           try {
             await wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: GHOST_MOUSE_BLOCKER_JS });
