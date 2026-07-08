@@ -37,6 +37,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { shouldWarnForNewAccount, recordLoginEvent } from "@/lib/ipLoginTracker";
 import { ApiLeakCheck } from "@/components/ApiLeakCheck";
+import { BrowserCheck } from "@/components/BrowserCheck";
 import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
@@ -1061,7 +1062,7 @@ export function ProfileDetailsPage() {
               {([
                 { value: "settings",      label: "ACCOUNT SETTINGS",  icon: Settings    },
                 { value: "human-session", label: "HUMAN SESSION TOOL", icon: Fingerprint },
-                { value: "api-checks",    label: "API CHECKS",         icon: Shield      },
+                { value: "api-checks",    label: "CHECKS",             icon: Shield      },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -2426,7 +2427,12 @@ export function ProfileDetailsPage() {
         </Tabs.Content>
 
         <Tabs.Content value="api-checks" className="outline-none animate-in fade-in duration-300">
-          <ApiLeakCheck profileId={profile.id} />
+          <div className="space-y-10">
+            <ApiLeakCheck profileId={profile.id} />
+            <div className="border-t border-slate-200 pt-8">
+              <BrowserCheck profileId={profile.id} />
+            </div>
+          </div>
         </Tabs.Content>
 
 

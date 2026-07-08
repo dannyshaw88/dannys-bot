@@ -5089,6 +5089,244 @@ export function startEbIpcServer(
         return send(res, 200, { audits: Array.from(_ebIpAudits.values()) });
       }
 
+      // ── GET /eb/browser-check ────────────────────────────────────────────────
+      // Executes JavaScript inside the live EB window to capture what the browser
+      // is actually presenting — Electron leak flags, touch emulation, platform
+      // spoof, WebGL renderer, chrome object integrity, canvas noise.
+      // These are the signals Instagram's login JS evaluates; none are visible in
+      // server-side logs.  Requires the EB window to be open for this profileId.
+      if (req.method === "GET" && u.pathname === "/eb/browser-check") {
+        const pid   = Number(u.searchParams.get("profileId") ?? "-1");
+        const entry = ebMap.get(pid);
+        if (!entry || entry.win.isDestroyed()) {
+          return send(res, 200, {
+            open:     false,
+            error:    "EB window not open — open the browser for this account first, then re-run",
+            checks:   null,
+            checkedAt: new Date().toISOString(),
+          });
+        }
+        const wc  = entry.win.webContents;
+        const url = wc.getURL();
+        let raw: Record<string, unknown> = {};
+        try {
+          raw = await wc.executeJavaScript(`(function () {
+            const R = {};
+            // ── Electron globals (must all be absent) ──────────────────────────
+            R.webdriver  = navigator.webdriver;
+            R.hasProcess = typeof window.process   !== 'undefined';
+            R.hasRequire = typeof window.require   !== 'undefined';
+            R.hasModule  = typeof window.module    !== 'undefined';
+            R.hasElectron = typeof window._electron !== 'undefined';
+            // ── Navigator ─────────────────────────────────────────────────────
+            R.userAgent           = navigator.userAgent;
+            R.platform            = navigator.platform;
+            R.vendor              = navigator.vendor;
+            R.language            = navigator.language;
+            R.languages           = Array.from(navigator.languages || []);
+            R.hardwareConcurrency = navigator.hardwareConcurrency;
+            R.deviceMemory        = navigator.deviceMemory || null;
+            R.maxTouchPoints      = navigator.maxTouchPoints;
+            R.doNotTrack          = navigator.doNotTrack;
+            // ── Touch ─────────────────────────────────────────────────────────
+            R.ontouchstart  = 'ontouchstart'  in window;
+            R.ontouchend    = 'ontouchend'    in window;
+            R.pointerEvents = typeof window.PointerEvent !== 'undefined';
+            // ── Chrome object ─────────────────────────────────────────────────
+            R.hasChromeObj       = typeof window.chrome !== 'undefined';
+            R.chromeRuntimeOk    = !!(window.chrome && window.chrome.runtime && typeof window.chrome.runtime === 'object');
+            R.chromeLoadTimesOk  = !!(window.chrome && typeof window.chrome.loadTimes === 'function');
+            R.chromeCsiOk        = !!(window.chrome && typeof window.chrome.csi === 'function');
+            // ── Screen / viewport ─────────────────────────────────────────────
+            R.screenWidth      = screen.width;
+            R.screenHeight     = screen.height;
+            R.colorDepth       = screen.colorDepth;
+            R.devicePixelRatio = window.devicePixelRatio;
+            R.innerWidth       = window.innerWidth;
+            R.innerHeight      = window.innerHeight;
+            R.outerWidth       = window.outerWidth;
+            R.outerHeight      = window.outerHeight;
+            // ── WebGL ─────────────────────────────────────────────────────────
+            try {
+              const c  = document.createElement('canvas');
+              const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+              if (gl) {
+                const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                R.webglVendor   = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)   : '(ext unavailable)';
+                R.webglRenderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '(ext unavailable)';
+                R.webglVersion  = gl.getParameter(gl.VERSION);
+                R.webglSLVersion = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+              } else { R.webglError = 'context null'; }
+            } catch (e) { R.webglError = String(e); }
+            // ── Canvas noise check ────────────────────────────────────────────
+            // Draw identical instructions twice; if canvas noise injection is
+            // working, the data URLs will differ slightly between windows.
+            try {
+              const c = document.createElement('canvas');
+              c.width = 300; c.height = 60;
+              const ctx = c.getContext('2d');
+              ctx.textBaseline = 'top';
+              ctx.font = '18px Arial';
+              ctx.fillStyle = '#f60';
+              ctx.fillRect(0, 0, 300, 60);
+              ctx.fillStyle = '#069';
+              ctx.fillText('EquinoxNoise-\u2665', 2, 2);
+              ctx.fillStyle = 'rgba(102,204,0,0.8)';
+              ctx.fillText('EquinoxNoise', 4, 4);
+              R.canvasSnip = c.toDataURL('image/png').substring(22, 120);
+            } catch (e) { R.canvasError = String(e); }
+            // ── Network info hint ─────────────────────────────────────────────
+            try {
+              const nc = navigator.connection;
+              if (nc) { R.connEffType = nc.effectiveType; R.connType = nc.type; }
+            } catch (_) {}
+            // ── Automation hints ──────────────────────────────────────────────
+            R.puppeteerDetect = !!(navigator.webdriver);
+            R.permissions = null;
+            try {
+              // Checking notification permission synchronously
+              R.permissions = Notification.permission;
+            } catch (_) {}
+            return R;
+          })()`);
+        } catch (e: any) {
+          return send(res, 200, {
+            open:      true,
+            url,
+            error:     `JS execution failed (page may still be loading): ${(e?.message ?? String(e)).slice(0, 120)}`,
+            checks:    null,
+            checkedAt: new Date().toISOString(),
+          });
+        }
+
+        // ── Interpret raw signals → structured check results ──────────────────
+        const ua         = String(raw.userAgent ?? "");
+        const isMobileUA = /Android|iPhone|iPad/.test(ua);
+        const platform   = String(raw.platform ?? "");
+
+        type BcStatus = "pass" | "fail" | "warn" | "info";
+        interface BcCheck { title: string; status: BcStatus; label: string; detail: Record<string, unknown> }
+        const checks: Record<string, BcCheck> = {};
+
+        // 1. Electron leak
+        const leaks: string[] = [];
+        if (raw.hasProcess)  leaks.push("window.process");
+        if (raw.hasRequire)  leaks.push("window.require");
+        if (raw.hasModule)   leaks.push("window.module");
+        if (raw.hasElectron) leaks.push("window._electron");
+        if (raw.webdriver === true) leaks.push("navigator.webdriver=true");
+        checks.electronLeak = {
+          title:  "Electron Leak",
+          status: leaks.length > 0 ? "fail" : "pass",
+          label:  leaks.length > 0
+            ? `EXPOSED: ${leaks.join(", ")} — Instagram login JS can detect Electron`
+            : "Clean — no Electron globals visible to page JS",
+          detail: {
+            "window.process":        String(raw.hasProcess),
+            "window.require":        String(raw.hasRequire),
+            "window.module":         String(raw.hasModule),
+            "window._electron":      String(raw.hasElectron),
+            "navigator.webdriver":   String(raw.webdriver),
+          },
+        };
+
+        // 2. Touch emulation
+        const tp = Number(raw.maxTouchPoints ?? 0);
+        checks.touchEmulation = {
+          title:  "Touch Emulation",
+          status: isMobileUA && tp === 0 ? "fail" : isMobileUA && !raw.ontouchstart ? "warn" : "pass",
+          label:  isMobileUA && tp === 0
+            ? `maxTouchPoints=0 but UA claims mobile — touch emulation NOT applied (login events will look wrong)`
+            : isMobileUA && !raw.ontouchstart
+            ? `maxTouchPoints=${tp} OK but ontouchstart not in window`
+            : `maxTouchPoints=${tp} — touch emulation active`,
+          detail: {
+            maxTouchPoints: String(tp),
+            ontouchstart:   String(raw.ontouchstart),
+            ontouchend:     String(raw.ontouchend),
+            isMobileUA:     String(isMobileUA),
+          },
+        };
+
+        // 3. Platform spoof
+        const platformWrong = isMobileUA && (platform === "Win32" || platform === "Win64" || platform.toLowerCase().includes("windows"));
+        checks.platformSpoof = {
+          title:  "Platform Spoof",
+          status: platformWrong ? "fail" : "pass",
+          label:  platformWrong
+            ? `navigator.platform="${platform}" contradicts Android UA — detectable by 2 lines of JS`
+            : `navigator.platform="${platform}" — consistent with UA claim`,
+          detail: {
+            platform:         platform,
+            expectedForAndroid: "Linux armv8l  /  Linux aarch64",
+            isMobileUA:       String(isMobileUA),
+            userAgentSnip:    ua.substring(0, 80),
+          },
+        };
+
+        // 4. Chrome object integrity
+        checks.chromeObject = {
+          title:  "Chrome Object",
+          status: !raw.hasChromeObj ? "fail" : !raw.chromeRuntimeOk ? "warn" : "pass",
+          label:  !raw.hasChromeObj
+            ? "window.chrome missing — fingerprinted as non-Chrome"
+            : !raw.chromeRuntimeOk
+            ? "window.chrome present but chrome.runtime structure is wrong"
+            : "window.chrome + chrome.runtime look correct",
+          detail: {
+            hasChromeObj:    String(raw.hasChromeObj),
+            chromeRuntimeOk: String(raw.chromeRuntimeOk),
+            chromeLoadTimes: String(raw.chromeLoadTimesOk),
+            chromeCsi:       String(raw.chromeCsiOk),
+          },
+        };
+
+        // 5. WebGL renderer
+        const renderer = String(raw.webglRenderer ?? "").toLowerCase();
+        const isSoft   = renderer.includes("swiftshader") || renderer.includes("mesa") ||
+                         renderer.includes("llvm") || renderer.includes("virgl") ||
+                         renderer.includes("softpipe") || renderer.includes("lavapipe");
+        checks.webglRenderer = {
+          title:  "WebGL Renderer",
+          status: raw.webglError ? "warn" : isSoft ? "fail" : "pass",
+          label:  raw.webglError
+            ? `WebGL query error: ${raw.webglError}`
+            : isSoft
+            ? `Software renderer: "${raw.webglRenderer}" — flags as VM/headless to Instagram`
+            : `${raw.webglRenderer}`,
+          detail: {
+            vendor:   String(raw.webglVendor   ?? ""),
+            renderer: String(raw.webglRenderer ?? ""),
+            version:  String(raw.webglVersion  ?? ""),
+          },
+        };
+
+        // 6. Canvas noise
+        const canvasSnip = String(raw.canvasSnip ?? "");
+        checks.canvasNoise = {
+          title:  "Canvas Noise",
+          status: raw.canvasError ? "warn" : canvasSnip.length > 10 ? "info" : "warn",
+          label:  raw.canvasError
+            ? `Canvas error: ${raw.canvasError}`
+            : "Canvas rendered — compare snips across two windows to verify noise is different per-session",
+          detail: {
+            canvasDataSnip: canvasSnip,
+            note: "If noise injection is working, this string will differ between different account windows",
+          },
+        };
+
+        console.log(`[EB:browser-check:${pid}] url=${url} leaks=${leaks.length} touch=${tp} platform=${platform} renderer=${raw.webglRenderer}`);
+
+        return send(res, 200, {
+          open:      true,
+          url,
+          profileId: pid,
+          checkedAt: new Date().toISOString(),
+          checks,
+          raw,
+        });
+      }
+
       // ── GET /eb/cookies ────────────────────────────────────────────────────────
       if (req.method === "GET" && u.pathname === "/eb/cookies") {
         const pid = Number(u.searchParams.get("profileId"));

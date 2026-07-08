@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.406] — 2026-07-08
+
+### Added
+
+#### Browser Fingerprint Check — see what Instagram's login JS actually sees inside the EB window
+
+Added a "Browser Fingerprint Check" section to the CHECKS tab (renamed from "API CHECKS"). Runs `executeJavaScript` inside the live Electron browser window and returns structured pass/warn/fail results for the signals Instagram evaluates during the login flow itself — none of which were previously visible in any log.
+
+**Checks run:**
+- **Electron Leak** — `window.process`, `window.require`, `window.module`, `window._electron`, `navigator.webdriver` — must all be absent/false; if any are present, Instagram's login JS can definitively identify the browser as Electron
+- **Touch Emulation** — `maxTouchPoints` must be ≥1 for a mobile UA; 0 means touch emulation was not applied, so login tap events are typed as keyboard events (bot signal)
+- **Platform Spoof** — `navigator.platform` must be Linux-based for an Android UA; "Win32" directly contradicts the mobile UA claim and is a trivial JS detection
+- **Chrome Object** — `window.chrome` and `chrome.runtime` must exist and be structured like real Chrome; missing or malformed = fingerprinted as non-Chrome
+- **WebGL Renderer** — software renderers (SwiftShader, Mesa, LLVM, Lavapipe) flag as VM/headless to Instagram's fingerprinting pipeline
+- **Canvas Noise** — captures a canvas data URL snip; compare across two open account windows to verify noise injection is producing different outputs per-session
+
+**How to use:** Open the browser for an account (click BROWSER tab), then go to CHECKS → Run Browser Check. The window must be live. Results also show the URL the browser is currently on for context.
+
+**Files:**
+- `artifacts/electron/src/ebManager.ts` — `GET /eb/browser-check` IPC handler using `webContents.executeJavaScript()`
+- `artifacts/api-server/src/routes/instagram.ts` — `GET /api/profiles/:id/browser-check` proxy endpoint
+- `artifacts/dannys-bot/src/components/BrowserCheck.tsx` — new UI component
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — tab renamed "CHECKS", BrowserCheck added below ApiLeakCheck
+
+---
+
 ## [1.1.405] — 2026-07-08
 
 ### Added

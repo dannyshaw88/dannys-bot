@@ -3629,6 +3629,42 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Browser Fingerprint Check ──────────────────────────────────────────────
+  // Proxies GET /eb/browser-check from the Electron IPC server.
+  // Runs executeJavaScript inside the live EB window to capture what the browser
+  // actually presents to Instagram: Electron leak flags, touch emulation, platform
+  // spoof, WebGL renderer, Chrome object integrity, canvas noise check.
+  // Requires the EB window to be open for this profile.
+  app.get("/api/profiles/:id/browser-check", async (req, res) => {
+    const profileId = Number(req.params.id);
+    if (!profileId) return res.status(400).json({ error: "Invalid profileId" });
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) {
+      return res.json({
+        open:  false,
+        error: "Not running in Electron mode — browser check requires the desktop app",
+        checks: null,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+    try {
+      const r = await fetch(
+        `http://127.0.0.1:${ipcPort}/eb/browser-check?profileId=${profileId}`,
+        { signal: AbortSignal.timeout(12000) },
+      );
+      const data = await r.json();
+      res.json(data);
+    } catch (err: any) {
+      req.log.error({ err }, "[browser-check] IPC error");
+      res.status(500).json({
+        open:  false,
+        error: err?.message ?? "IPC error",
+        checks: null,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+  });
+
   // ── API Leak Check ─────────────────────────────────────────────────────────
   // Server-side checks for mobile API traffic integrity:
   //   1. Proxy IP   — hit an IP-echo service through the proxy; confirm exit IP
