@@ -5157,12 +5157,14 @@ class AutomationEngine {
         let dmOpenCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
         let dmCount = 0;
         let dmOk = false;
+        let dmGated = false;
         try {
           const result = await client.getDirectMessagesInternal(dmOpenCount);
           inboxThreads = result.threads;
           dmCount = result.count;
           dmOk = result.ok;
-          console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : " (read failed)"}`);
+          dmGated = result.gated ?? false;
+          console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : dmGated ? " (inbox gated)" : " (read failed)"}`);
         } catch (e: any) {
           if (await checkSessionErr(e, "check_dm")) return;
           console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
@@ -5177,16 +5179,19 @@ class AutomationEngine {
           console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
         }
         // Log combined result — appends auto-reply count only when triggers were found.
-        // When dmOk is false the API call itself failed (no cookies, network error,
-        // or Instagram returned an error code) — use a clear failure label so the
-        // activity ticker's red colour makes sense to the user.
+        // dmGated = 4415001 "Prompt has contribution" — Instagram mobile-API gate,
+        // not a tool failure. Log as skipped so the dashboard doesn't show red.
+        // dmOk false without gated = real failure (no session, network error, etc).
+        const dmStatus = dmOk ? "ok" : dmGated ? "skipped" : "error";
         const dmLabel = dmOk
           ? `Checked ${dmCount} direct message${dmCount === 1 ? "" : "s"}`
-          : "DM check failed";
+          : dmGated
+            ? "DM inbox temporarily gated by Instagram"
+            : "DM check failed";
         const detail = autoReplied > 0
           ? `${dmLabel}, ${autoReplied} scheduled for auto-reply`
           : dmLabel;
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", dmOk ? "ok" : "error", detail);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", dmStatus, detail);
       },
     );
 
