@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { shouldWarnForNewAccount, recordLoginEvent } from "@/lib/ipLoginTracker";
+import { ApiLeakCheck } from "@/components/ApiLeakCheck";
 import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
@@ -1060,6 +1061,7 @@ export function ProfileDetailsPage() {
               {([
                 { value: "settings",      label: "ACCOUNT SETTINGS",  icon: Settings    },
                 { value: "human-session", label: "HUMAN SESSION TOOL", icon: Fingerprint },
+                { value: "api-checks",    label: "API CHECKS",         icon: Shield      },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -2421,6 +2423,10 @@ export function ProfileDetailsPage() {
             ? <SessionLogPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
           }
+        </Tabs.Content>
+
+        <Tabs.Content value="api-checks" className="outline-none animate-in fade-in duration-300">
+          <ApiLeakCheck profileId={profile.id} />
         </Tabs.Content>
 
 
