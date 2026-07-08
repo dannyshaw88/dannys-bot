@@ -812,8 +812,12 @@ const GHOST_SIGNUP_FP_PATCH_JS = `(function(){
     if(_nc){
       try{Object.defineProperty(_nc,'type',{get:function(){return 'cellular';},configurable:true});}catch(e2){}
       try{Object.defineProperty(_nc,'effectiveType',{get:function(){return '4g';},configurable:true});}catch(e3){}
-      try{Object.defineProperty(_nc,'downlink',{get:function(){return 35+Math.round(Math.random()*25);},configurable:true});}catch(e4){}
-      try{Object.defineProperty(_nc,'rtt',{get:function(){return 35+Math.round(Math.random()*30);},configurable:true});}catch(e5){}
+      // Seed once — stable between reads on the same page (real NetworkInformation
+      // only changes when network conditions change, not on every property access).
+      var _mob_dl=35+Math.round(Math.random()*25);
+      var _mob_rtt=35+Math.round(Math.random()*30);
+      try{Object.defineProperty(_nc,'downlink',{get:function(){return _mob_dl;},configurable:true});}catch(e4){}
+      try{Object.defineProperty(_nc,'rtt',{get:function(){return _mob_rtt;},configurable:true});}catch(e5){}
     }
   }catch(e){}
   // ── DeviceMotionEvent: real phones always have active sensor emissions ─────────
@@ -1194,8 +1198,11 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       if(_nc2){
         try{Object.defineProperty(_nc2,'type',{get:function(){return _CT;},configurable:true});}catch(_ce){}
         try{Object.defineProperty(_nc2,'effectiveType',{get:function(){return '4g';},configurable:true});}catch(_ce){}
-        try{Object.defineProperty(_nc2,'downlink',{get:function(){return Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));},configurable:true});}catch(_ce){}
-        try{Object.defineProperty(_nc2,'rtt',{get:function(){return Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));},configurable:true});}catch(_ce){}
+        // Seed once — stable between reads on the same page.
+        var _dt_dl=Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));
+        var _dt_rtt=Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));
+        try{Object.defineProperty(_nc2,'downlink',{get:function(){return _dt_dl;},configurable:true});}catch(_ce){}
+        try{Object.defineProperty(_nc2,'rtt',{get:function(){return _dt_rtt;},configurable:true});}catch(_ce){}
         try{Object.defineProperty(_nc2,'saveData',{get:function(){return false;},configurable:true});}catch(_ce){}
         try{Object.defineProperty(_nc2,'downlinkMax',{get:function(){return Infinity;},configurable:true});}catch(_ce){}
       }else{
