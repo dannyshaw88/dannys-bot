@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.395] — 2026-07-08
+
+### Fixed
+
+#### Make-a-Post / Repost: configure failing with "something went wrong during media publish" — same root cause as follow fix (no Bearer token, HMAC-signed Android body)
+
+**Root cause:** Identical to the follow issue fixed in v1.1.393. `_configureViaIgClient` sends an HMAC-signed Android body to `i.instagram.com/api/v1/media/configure/`. When no Bearer token is present, Instagram returns HTTP 500 `{"status":"fail","message":"We're sorry, but something went wrong during media publish. Please try again."}`. The signed body contains `device_id: android-…`, `_uid`, `_uuid`, Android device fields — the same Android-identity contradiction that triggers the Bearer gate on the follow endpoint.
+
+The rupload step succeeds without Bearer (it's a binary upload, not an identity-sensitive write action). Only configure requires Bearer because it is the write action that commits the media to the account.
+
+**Fix:** Added `_configureViaWebEndpoint` — a direct mirror of `_followViaWebEndpoint`. When `_configureViaIgClient` returns null with a "something went wrong" error and `_deviceAuthorization` is absent (auth=MISSING), the configure is retried via:
+
+- `POST www.instagram.com/api/v1/media/configure/`
+- Plain unsigned URL-encoded body: `upload_id={id}&caption={caption}&source_type=4`
+- Uses `webPost` — EB web cookies (`cookieJar`), `X-CSRFToken`, Chrome UA
+- No HMAC signature, no Android device fields
+- Instagram's infrastructure shares upload state across `i.` and `www.` subdomains when a valid web `sessionid` is present
+
+On success returns `media.id` (or `uploadId` when response is `{"status":"ok"}` without an id field). Full error handling: checkpoint, challenge, feedback_required, login_required all mapped to appropriate `_lastConfigureError` values.
+
+The mobile-first path is fully preserved — accounts with a valid Bearer token use the signed Android path and never touch the fallback. The web fallback fires only on the specific failure + no-auth combination, matching the follow pattern exactly.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — new `_configureViaWebEndpoint` method + hook in `runAttempt`
+
+---
+
 ## [1.1.394] — 2026-07-08
 
 ### Fixed
