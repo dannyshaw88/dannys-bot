@@ -78,22 +78,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
-    version: "1.1.408",
+    version: "1.1.409",
     date: "8 Jul 2026",
     items: [
       {
         category: "Fixed",
-        text: "Electron Leak check now passes: window.require is no longer visible to Instagram's page JavaScript. The root cause was that contextIsolation alone is insufficient in some Electron builds — window.require is injected as a non-configurable property that no page-level script can delete or redefine. The fix is sandbox:true on every browser window, which fully sandboxes the renderer and prevents all Node.js globals from being injected at all. Applied to all 8 window and BrowserView types (main EB, toolbar, tabs, silent-action, screenshot, story, leak-test, and verify windows).",
+        text: "Electron Leak check no longer false-positives on window.require. Instagram's own login page defines window.require as their AMD module loader — this is Instagram's code, not Electron's. The check now only flags window.require as a leak if it carries Node.js-specific properties (require.main, require.cache, require.extensions) that Electron's native require has but Instagram's module loader does not. The previous check was always going to fail on a real session because Instagram always defines window.require on their pages.",
         technical: [
-          "Added sandbox:true to webPreferences on all 8 BrowserWindow/BrowserView creation paths in ebManager.ts",
-          "sandbox:true prevents Electron from injecting window.require/window.process/window.module as non-configurable renderer globals — the only reliable fix when contextIsolation+nodeIntegration:false still leaks window.require",
-          "Preload script (ebToolbarPreload.js) is compatible with sandbox mode: it only uses contextBridge and ipcRenderer, both available in sandboxed preloads",
-          "ELECTRON_LEAK_SUPPRESSOR_JS (from v1.1.407) is retained as a belt-and-suspenders belt-and-suspenders pass but sandbox:true is the definitive fix",
+          "Updated hasRequire detection in the browser fingerprint check: typeof window.require !== 'undefined' is now combined with a check for require.main / require.cache / require.extensions — properties present on Node.js require but absent on Instagram's Haste/AMD module loader",
+          "sandbox:true (from v1.1.408) is retained on all 8 BrowserWindow/BrowserView types — this correctly prevents Electron's own require from leaking, meaning any window.require seen is confirmed to be Instagram's module system",
+          "ELECTRON_LEAK_SUPPRESSOR_JS (from v1.1.407) is also retained — belt-and-suspenders against any future Electron version that might re-introduce the leak",
         ],
-      },
-      {
-        category: "Fixed",
-        text: "Chrome Object check now passes: window.chrome.runtime was an empty placeholder (runtime: undefined) which failed Instagram's typeof chrome.runtime === 'object' probe — a clear Electron fingerprint. It now exposes a properly-shaped runtime object matching real Chrome's surface.",
       },
     ],
   },

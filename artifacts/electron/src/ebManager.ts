@@ -5179,7 +5179,16 @@ export function startEbIpcServer(
             // ── Electron globals (must all be absent) ──────────────────────────
             R.webdriver  = navigator.webdriver;
             R.hasProcess = typeof window.process   !== 'undefined';
-            R.hasRequire = typeof window.require   !== 'undefined';
+            // Instagram's login page defines window.require as their own AMD/Haste
+            // module loader — it is NOT Electron's Node.js require.  Only flag as
+            // an Electron leak if the require carries Node.js-specific properties
+            // (main, cache, extensions) that Electron's native require has but
+            // Instagram's module loader does not.
+            R.hasRequire = typeof window.require !== 'undefined' && (
+              typeof window.require.main       !== 'undefined' ||
+              typeof window.require.cache      !== 'undefined' ||
+              typeof window.require.extensions !== 'undefined'
+            );
             R.hasModule  = typeof window.module    !== 'undefined';
             R.hasElectron = typeof window._electron !== 'undefined';
             // ── Navigator ─────────────────────────────────────────────────────
