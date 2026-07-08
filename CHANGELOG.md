@@ -4,6 +4,101 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.398] — 2026-07-08
+
+### Changed
+
+#### Verify Account: Phase 0 anonymous pre-auth calls removed — verify sequence now starts directly with the live session
+
+**Background:** The cold-start verify sequence previously opened with three calls fired against a clean (cookie-free) HTTP client before the session cookie was ever injected:
+
+1. `GET /api/v1/zr/token/result/` — anonymous zero-rating probe (GetTokenResult)
+2. `POST /api/v1/launcher/sync/` — anonymous device config download, no `_uid` (SendMobileConfig)
+3. `GET /api/v1/zr/token/result/` — second zero-rating probe immediately after launcher/sync
+
+These calls were modelled on the Jarvee cold-start flow, which starts from zero — no cookies, no session, performing an anonymous device probe before ever loading credentials. In that context the Phase 0 sequence makes sense: Instagram sees a clean device handshake rather than a direct cookie injection.
+
+**Why they are wrong for this app:** Every account in Equinox goes through the embedded browser (EB) login flow first, which harvests `sessionid`, `csrftoken`, `ds_user_id`, `mid`, and `ig_did` directly from Chrome's cookie jar. By the time `verifyInstagramCredentials` is called on the cookie-restore path, a live session already exists — there is no cold-start condition to simulate. Firing three anonymous calls against a device that already has an active session is unnecessary extra API surface, adds latency (the anonymous `launcher/sync` had a 20-second hard cap to prevent slow-proxy hangs), and contributes nothing to session health or bearer-token capture.
+
+**Fix:** Phase 0a, 0b, and 0c removed entirely from the cookie-restore path. The sequence now begins at Phase 1.
+
+**New verify sequence (cookie-restore path):**
+
+| Step | Call | Purpose |
+|------|------|---------|
+| Phase 1 | Load session cookie | Inject `sessionid` + all EB cookies into mobile API client |
+| Phase 1.5 | `POST /api/v1/launcher/sync/` with `_uid` | Authenticated config download — the only launcher/sync call needed; Instagram issues Bearer token here |
+| Phase 2a | `POST /api/v1/accounts/get_account_family/` | Session confirmation probe |
+| Phase 2b | `POST /api/v1/qe/sync/` (bare, unsigned) | ABD (Automated Behaviour Detected) probe |
+| Phase 2c | `POST /api/v1/qe/sync/` (FetchConfig) + `POST /api/v1/banyan/banyan/` | Config + Banyan (shuffled order) |
+| Phase 2d | Random endpoint pool | API-throttled additional probes per account settings |
+
+**Before:** 7 API calls (GetTokenResult × 2, SendMobileConfig × 2, GetAccountFamily, FetchConfig, Banyan)
+**After:** 4 API calls (SendMobileConfig × 1, GetAccountFamily, FetchConfig, Banyan) + Phase 2d pool
+
+The 20-second hard cap on anonymous `launcher/sync` is also gone — it existed solely to prevent the anonymous Phase 0b call from starving the rest of the sequence on high-latency proxies. The authenticated Phase 1.5 `launcher/sync` is governed by `loginApiThrottle` (the account's API Control settings) like every other Phase 1.5+ call.
+
+**File:** `artifacts/api-server/src/instagram/instagramLogin.ts` — `verifyInstagramCredentials`, cookie-restore path (Phase 0a/0b/0c block removed)
+
+---
+
+### Fixed
+
+#### BrowserPanel: Leak Check, AI Selfie, and Upload to Instagram used hardcoded port `:8080` to construct API origin — broken in any environment where API runs on a different port
+
+**Root cause:** Three actions inside `BrowserPanel.tsx` constructed absolute API origins with a hardcoded fallback port of `:8080`:
+
+```ts
+const apiOrigin = port === "5000"
+  ? `${protocol}//${hostname}:8080`
+  : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+```
+
+The API server runs on port `8082` in all configured workflows. Any `fetch` call or Puppeteer navigation URL built from this expression was targeting the wrong port, causing connection refused on all three actions.
+
+The three affected actions:
+- **Leak Check** — constructs a URL and sends it to Puppeteer via `send({ type: "navigate", url })` for in-browser leak testing
+- **Generate AI Selfie** — `POST /api/ai/generate-selfie` called via `fetch`
+- **Upload to Instagram** — `POST /api/browser/{profileId}/files` called via `fetch`
+
+**Fix — fetch calls (AI Selfie, Upload):** Replaced the absolute-origin construction with relative `/api/...` URLs. These calls are made by the browser, go through Vite's reverse proxy (`/api → localhost:${API_PORT}`), and have always been port-agnostic when expressed as relative paths. No origin construction needed at all.
+
+**Fix — Puppeteer navigation (Leak Check):** A relative URL cannot be used here because `send({ type: "navigate" })` is forwarded server-side to Puppeteer's `page.goto()`, which requires an absolute URL (a relative URL would resolve against whatever page the embedded browser is currently on — e.g. Instagram). The API port is now injected at Vite build time as `__API_PORT__` via `vite.config.ts`'s `define` block, and the Leak Check URL is constructed as:
+
+```ts
+const apiOrigin = `${protocol}//${hostname}:${__API_PORT__}`;
+const url = `${apiOrigin}/api/browser/leaks?profileId=${profileId}`;
+```
+
+This correctly resolves to the API server's port regardless of which workflow is running.
+
+**Files:**
+- `artifacts/dannys-bot/src/components/BrowserPanel.tsx` — Leak Check, AI Selfie generate, Upload to Instagram
+- `artifacts/dannys-bot/vite.config.ts` — `define: { __API_PORT__: JSON.stringify(apiPort) }`
+- `artifacts/dannys-bot/src/vite-env.d.ts` — `declare const __API_PORT__: string` (TypeScript declaration)
+
+---
+
+#### dannys-bot `package.json` scripts used a pinned pnpm store absolute path for Vite — broken after any lockfile update or reinstall
+
+**Root cause:** The `dev`, `build`, and `serve` scripts in `artifacts/dannys-bot/package.json` called Vite via a fully-expanded pnpm content-addressable store path:
+
+```
+node ../../node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.4/node_modules/vite/bin/vite.js
+```
+
+This path encodes the exact resolved dependency graph metadata of the entire `node_modules/.pnpm` tree. Any change to a transitive dependency version (even in an unrelated package) regenerates the pnpm store layout and invalidates the path, causing `Cannot find module` on the next cold start — exactly the failure mode observed after the project was imported to Replit with no `node_modules`.
+
+**Fix:** Replaced with the canonical `vite` bin invocation, which pnpm resolves correctly from `node_modules/.bin` regardless of the underlying store layout:
+
+```json
+"dev": "vite --config vite.config.ts --host 0.0.0.0"
+```
+
+**File:** `artifacts/dannys-bot/package.json`
+
+---
+
 ## [1.1.397] — 2026-07-08
 
 ### Fixed
