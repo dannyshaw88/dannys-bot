@@ -4478,7 +4478,11 @@ function setupToolbarIpc(): void {
             await _d.sendCommand("Input.insertText", { text: _lgUsr });
             await _ms(300);
 
-            // ── Step 2: Tab (username → password) ──────────────────────────────
+            // ── Step 2: Tab × 2 (username → password) ───────────────────────────
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(60);
+            await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await _ms(150);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             await _ms(60);
             await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
@@ -4596,12 +4600,20 @@ function setupToolbarIpc(): void {
               await _ms2(120);
             }
 
+            // Step 9b: Tab × 2 before pasting the code (matches the 2FA toolbar macro)
+            for (let _ti = 0; _ti < 2; _ti++) {
+              await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms2(60);
+              await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms2(120);
+            }
+
             // Step 10: paste the generated code into the browser
             await _d2.sendCommand("Input.insertText", { text: _2faCode });
             await _ms2(300);
 
-            // Steps 11-13: Tab × 4 → Enter (submit 2FA form)
-            for (let _ti = 0; _ti < 4; _ti++) {
+            // Steps 11-13: Tab × 3 → Enter (submit 2FA form)
+            for (let _ti = 0; _ti < 3; _ti++) {
               await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
               await _ms2(60);
               await _d2.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
@@ -4737,8 +4749,8 @@ function setupToolbarIpc(): void {
         // 2FA toolbar button macro.
         // The 2FA input field is already selected/focused by default, so:
         //   generate TOTP ("Generate Code" from account settings 2FA section)
-        //   → paste code into browser (Input.insertText)
-        //   → Tab × 4 → Enter
+        //   → Tab × 2 → paste code into browser (Input.insertText)
+        //   → Tab × 3 → Enter
         try {
           try { wc.debugger.attach("1.3"); } catch {}
           const _r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
@@ -4749,12 +4761,20 @@ function setupToolbarIpc(): void {
             const _ms = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
             const _d = wc.debugger;
 
-            // Paste the generated code into the already-focused 2FA input
+            // Tab × 2 before pasting the code
+            for (let _ti = 0; _ti < 2; _ti++) {
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(60);
+              await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+              await _ms(120);
+            }
+
+            // Paste the generated code into the 2FA input
             await _d.sendCommand("Input.insertText", { text: _code });
             await _ms(200);
 
-            // Tab × 4 → Enter (submit 2FA form)
-            for (let _ti = 0; _ti < 4; _ti++) {
+            // Tab × 3 → Enter (submit 2FA form)
+            for (let _ti = 0; _ti < 3; _ti++) {
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
               await _ms(60);
               await _d.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
