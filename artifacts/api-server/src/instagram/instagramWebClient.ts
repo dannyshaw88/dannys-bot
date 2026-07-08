@@ -354,7 +354,10 @@ function patchDeviceStringVersionCode(ig: IgApiClient, targetVersionCode: string
   }
 }
 
-type ApiCallLogger = (op: string, durationMs: number, message?: string, isError?: boolean) => void;
+// isTransportCall=true means a real HTTP hit to Instagram servers (logged via _logTransport).
+// isTransportCall=false/undefined means a high-level operation wrapper (logged via timed()) —
+// no direct HTTP call at this level; the transport is "Equinox" (internal).
+type ApiCallLogger = (op: string, durationMs: number, message?: string, isError?: boolean, isTransportCall?: boolean) => void;
 
 // Keep this version current — Instagram rejects signup requests from versions
 // older than a few months with error_type:"needs_upgrade".
@@ -1249,7 +1252,7 @@ export class InstagramWebClient {
         : (isError ? "Request failed" : base);
     }
 
-    this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError);
+    this.logCallFn(this._opNameFromPath(path, method), durationMs, msg, isError, true);
   }
 
   // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.

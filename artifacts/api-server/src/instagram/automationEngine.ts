@@ -2146,7 +2146,7 @@ class AutomationEngine {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
       state.currentProxyUrl = proxyUrl;
       // Log every API call — no filtering.
-      state.client.setLogger((op, durationMs, message, isError) => {
+      state.client.setLogger((op, durationMs, message, isError, isTransportCall) => {
         // Always use the CURRENT time as the log timestamp so every entry
         // shows when the API call actually completed (i.e. when Instagram
         // was last contacted), not when the enclosing function was entered.
@@ -2154,6 +2154,9 @@ class AutomationEngine {
         // timestamps for timed() entries, making paired operations appear to
         // fire simultaneously in the API call log even when the full
         // inter-action delay had been respected.
+        //
+        // isTransportCall=true  → real HTTP hit (FriendshipsCreate, MediaLike, etc.) → transport "ja3"
+        // isTransportCall=false → high-level operation wrapper (FollowedUser, LikeMedia, etc.) → transport "Equinox"
         storage.createInstagramApiCall({
           profileId: profile.id,
           username: profile.username,
@@ -2163,7 +2166,7 @@ class AutomationEngine {
           source: state.client!.apiCallSource,
           durationMs,
           isError: isError ?? false,
-          transport: "ja3",
+          transport: isTransportCall ? "ja3" : "Equinox",
         }).catch(() => {});
       });
     }
