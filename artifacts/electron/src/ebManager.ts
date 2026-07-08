@@ -2966,6 +2966,12 @@ export async function openEbWindow(opts: {
     webPreferences: {
       nodeIntegration:         false,
       contextIsolation:        true,
+      sandbox:                 true,    // CRITICAL: prevents Electron from injecting window.require /
+      // window.process into the renderer main-world. contextIsolation alone is
+      // insufficient in some Electron builds — window.require is still injected
+      // as a non-configurable property that page-script suppressors cannot delete.
+      // sandbox:true fully sandboxes the renderer; the preload still works because
+      // it only uses contextBridge + ipcRenderer, both available in sandbox mode.
       backgroundThrottling:    false,   // CRITICAL: prevents Chromium from throttling timers,
       // animations, and rendering when the window is hidden or off-screen.
       // Without this flag, waitFor() always times out, DOM elements never appear,
@@ -3533,6 +3539,7 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox:          true,      // prevent window.require leak (see main EB window comment)
       backgroundThrottling: false, // keep toolbar clock/URL bar live when window is hidden
     },
   });
@@ -4811,6 +4818,7 @@ function setupToolbarIpc(): void {
             partition,
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: true,           // prevent window.require leak (see main EB window comment)
             // CRITICAL: without this, Chromium throttles timers/rAF/lazy-loading
             // for this BrowserView whenever the parent EB window is hidden,
             // minimized, or occluded on Windows — Instagram's virtualized feed,
@@ -5687,6 +5695,7 @@ export function startEbIpcServer(
             webPreferences: {
               nodeIntegration:  false,
               contextIsolation: true,
+              sandbox:          true,  // prevent window.require leak
               partition:        sfPartition,
               backgroundThrottling: false,
             },
@@ -6174,6 +6183,7 @@ export function startEbIpcServer(
             show: false, skipTaskbar: true,
             webPreferences: {
               nodeIntegration: false, contextIsolation: true,
+              sandbox: true,          // prevent window.require leak
               partition: spPartition,
               backgroundThrottling: false,
             },
@@ -6866,7 +6876,7 @@ export function startEbIpcServer(
             width: 1280, height: 820,
             x: _ssSw + 10, y: 0,
             show: false, skipTaskbar: true,
-            webPreferences: { nodeIntegration: false, contextIsolation: true, partition: ssPartition, backgroundThrottling: false },
+            webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, partition: ssPartition, backgroundThrottling: false },
           });
           ssTempWin.showInactive();
           // Supply proxy credentials for 407 challenges.  Without this handler
@@ -7110,6 +7120,7 @@ export function startEbIpcServer(
               partition,
               nodeIntegration: false,
               contextIsolation: true,
+              sandbox: true,          // prevent window.require leak
               backgroundThrottling: false,
             },
           });
@@ -7288,6 +7299,7 @@ export function startEbIpcServer(
             webPreferences: {
               nodeIntegration: false,
               contextIsolation: true,
+              sandbox: true,          // prevent window.require leak
               partition,
               backgroundThrottling: false,
             },
