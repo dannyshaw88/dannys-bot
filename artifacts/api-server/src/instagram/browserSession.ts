@@ -337,31 +337,38 @@ function tzFromIana(iana: string): readonly [string, number, number] {
   return _TZ_MAP[iana] ?? ["America/New_York", 300, 240];
 }
 
+interface ProxyGeo {
+  timezone: string | null;
+  countryCode: string | null;
+}
+
 /**
- * Resolves the IANA timezone of the proxy exit IP by sending a plain HTTP GET
- * to http://ip-api.com/json?fields=timezone through the proxy.
+ * Resolves the IANA timezone AND ISO 3166-1 country code of the proxy exit IP
+ * by sending a plain HTTP GET to http://ip-api.com/json?fields=timezone,countryCode
+ * through the proxy.
  *
  * Uses a raw TCP connection via the `net` module — no extra dependencies.
  * Plain HTTP proxies forward the full request without CONNECT.
- * Returns null on any error or timeout (caller falls back to PRNG timezone).
+ * Returns null fields on any error or timeout (caller falls back to PRNG timezone / en_US locale).
  */
-function resolveProxyTimezone(
+function resolveProxyGeo(
   proxyHost: string,
   proxyPort: number,
   proxyUser?: string | null,
   proxyPass?: string | null,
   timeoutMs = 7000,
-): Promise<string | null> {
+): Promise<ProxyGeo> {
+  const NULL_GEO: ProxyGeo = { timezone: null, countryCode: null };
   return new Promise((resolve) => {
     let settled = false;
-    const done = (v: string | null) => { if (!settled) { settled = true; resolve(v); } };
+    const done = (v: ProxyGeo) => { if (!settled) { settled = true; resolve(v); } };
 
     const sock = net.createConnection({ host: proxyHost, port: proxyPort });
-    const timer = setTimeout(() => { sock.destroy(); done(null); }, timeoutMs);
+    const timer = setTimeout(() => { sock.destroy(); done(NULL_GEO); }, timeoutMs);
 
-    sock.on("error", () => { clearTimeout(timer); done(null); });
+    sock.on("error", () => { clearTimeout(timer); done(NULL_GEO); });
     sock.on("connect", () => {
-      let req = "GET http://ip-api.com/json?fields=timezone HTTP/1.1\r\n" +
+      let req = "GET http://ip-api.com/json?fields=timezone,countryCode HTTP/1.1\r\n" +
                 "Host: ip-api.com\r\n" +
                 "Connection: close\r\n";
       if (proxyUser) {
@@ -377,12 +384,70 @@ function resolveProxyTimezone(
         clearTimeout(timer);
         try {
           const body = raw.slice(raw.indexOf("\r\n\r\n") + 4).trim();
-          const parsed = JSON.parse(body) as { timezone?: string };
-          done(parsed.timezone ?? null);
-        } catch { done(null); }
+          const parsed = JSON.parse(body) as { timezone?: string; countryCode?: string };
+          done({ timezone: parsed.timezone ?? null, countryCode: parsed.countryCode ?? null });
+        } catch { done(NULL_GEO); }
       });
     });
   });
+}
+
+// ── Proxy locale helpers ──────────────────────────────────────────────────────
+// Maps ISO 3166-1 alpha-2 country codes to the Instagram API locale suffix that
+// a real device in that country would send (the final field in the API UA string,
+// e.g. "en_US", "en_GB"). Accounts use UK and USA proxies almost exclusively,
+// so GB → en_GB and US → en_US are the critical mappings; the full table covers
+// any future proxy geography expansion without code changes.
+
+const COUNTRY_TO_IG_LOCALE: Record<string, string> = {
+  US: "en_US", GB: "en_GB", CA: "en_CA", AU: "en_AU", NZ: "en_NZ",
+  IE: "en_IE", ZA: "en_ZA", IN: "en_IN", NG: "en_NG", PH: "en_PH",
+  SG: "en_SG", MY: "en_MY", PK: "en_PK",
+  DE: "de_DE", AT: "de_AT",
+  FR: "fr_FR", BE: "fr_BE",
+  ES: "es_ES", MX: "es_MX", AR: "es_AR", CO: "es_CO",
+  IT: "it_IT",
+  PT: "pt_PT", BR: "pt_BR",
+  NL: "nl_NL",
+  RU: "ru_RU",
+  TR: "tr_TR",
+  JP: "ja_JP",
+  KR: "ko_KR",
+  CN: "zh_CN", TW: "zh_TW", HK: "zh_HK",
+  TH: "th_TH",
+  ID: "id_ID",
+  PL: "pl_PL",
+  SE: "sv_SE", NO: "nb_NO", DK: "da_DK", FI: "fi_FI",
+  VN: "vi_VN",
+  SA: "ar_SA", AE: "ar_AE", EG: "ar_EG",
+  IL: "he_IL",
+};
+
+function countryToIgLocale(cc: string): string {
+  return COUNTRY_TO_IG_LOCALE[cc.toUpperCase()] ?? "en_US";
+}
+
+/**
+ * Converts an Instagram locale string to an HTTP Accept-Language header value.
+ * "en_GB" → "en-GB,en;q=0.9"   (BCP-47 hyphen, with base-lang fallback)
+ */
+function localeToAcceptLanguage(locale: string): string {
+  const bcp47 = locale.replace("_", "-");  // "en_GB" → "en-GB"
+  const base  = bcp47.split("-")[0];        // "en"
+  return bcp47 === base ? `${base};q=1` : `${bcp47},${base};q=0.9`;
+}
+
+/**
+ * Replaces the locale suffix at the end of an Instagram API UA string.
+ * "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro; caiman; gs302; en_US"
+ *  → "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro; caiman; gs302; en_GB"
+ * If no locale-style suffix is found the new locale is appended.
+ */
+export function patchApiUALocale(apiUA: string, locale: string): string {
+  if (/;\s*[a-z]{2}_[A-Z]{2}\s*$/.test(apiUA)) {
+    return apiUA.replace(/;\s*[a-z]{2}_[A-Z]{2}\s*$/, `; ${locale}`);
+  }
+  return `${apiUA}; ${locale}`;
 }
 
 /**
@@ -1039,6 +1104,16 @@ function wsWrite(ws: WebSocket | null, data: object) {
 
 const sessions = new Map<number, Session>();
 
+/**
+ * Returns the geo-locale-patched API UA string for an open session, or undefined
+ * if no session is active. The automation engine uses this so API requests sent
+ * via setDeviceInfo carry the correct locale suffix (e.g. "en_GB" for UK proxies)
+ * rather than whatever static value is stored in the DB.
+ */
+export function getSessionUserAgentApi(profileId: number): string | null | undefined {
+  return sessions.get(profileId)?.userAgentApi;
+}
+
 // ── Event-loop lag monitor ────────────────────────────────────────────────────
 // Measures the difference between when a setInterval callback was _scheduled_
 // to fire and when it _actually_ fired.  Any gap > 100 ms means the Node.js
@@ -1378,7 +1453,18 @@ export async function applyStealthScripts(
   const meta = buildUAMetadata(userAgent) as any;
 
   await page.evaluateOnNewDocument((mobile: boolean, meta: any, _overrideTZ: readonly [string, number, number] | null, _apiUA: string | null) => {
-    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    // Correct webdriver patch — two rules that the old code violated:
+    //   1. Must live on Navigator.prototype, not the navigator instance.
+    //      Real Chrome (non-automated) never has an own-instance "webdriver" property;
+    //      shadowing it on the instance is itself a textbook automation tell.
+    //   2. Must return false, not undefined.
+    //      Every non-automated Chrome build returns false for navigator.webdriver.
+    //      undefined is not a value any real browser ever produces, and mainstream
+    //      anti-bot JS (including Instagram's) distinguishes undefined from false.
+    // Step 1: remove any own-instance shadow (guards against partial Chromium internals)
+    try { delete (navigator as any).webdriver; } catch (_) {}
+    // Step 2: patch the prototype — spec-correct, returns false
+    Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true });
 
     // ── Per-account device profile ───────────────────────────────────────────
     // Every value that could cluster across accounts (screen size, DPR, memory,
@@ -2330,22 +2416,38 @@ export async function getOrCreateSession(
   }
   log(`Chrome launched for profile ${profileId}`, "browser");
 
-  // Resolve proxy exit-IP timezone before injecting stealth scripts.
+  // Resolve proxy exit-IP timezone AND country before injecting stealth scripts.
   // This ensures the browser's Date API timezone matches the proxy's country
-  // rather than a randomly selected US/EU timezone from the fallback pool.
+  // rather than a randomly selected US/EU timezone from the fallback pool,
+  // and that the Accept-Language header and API UA locale suffix match what
+  // a real device in that country would send.
   let resolvedTZ: readonly [string, number, number] | undefined;
+  let resolvedAcceptLang = "en-US,en;q=0.9";
   if (proxy?.host && proxy?.port) {
     try {
-      const iana = await resolveProxyTimezone(proxy.host, proxy.port, proxy.username, proxy.password);
-      if (iana) {
-        resolvedTZ = tzFromIana(iana);
-        log(`Geo-timezone for profile ${profileId}: ${iana} → [${resolvedTZ.join(", ")}]`, "browser");
+      const geo = await resolveProxyGeo(proxy.host, proxy.port, proxy.username, proxy.password);
+      if (geo.timezone) {
+        resolvedTZ = tzFromIana(geo.timezone);
+        log(`Geo-timezone for profile ${profileId}: ${geo.timezone} → [${resolvedTZ.join(", ")}]`, "browser");
       }
-    } catch { /* non-fatal — fall back to PRNG pool */ }
+      if (geo.countryCode) {
+        const locale = countryToIgLocale(geo.countryCode);
+        resolvedAcceptLang = localeToAcceptLanguage(locale);
+        // Patch the API UA locale suffix so it matches the proxy exit country.
+        // This updates the local copy used by applyStealthScripts for JS-level
+        // fingerprinting; the session object stores the patched version so the
+        // automation engine picks it up for API requests via setDeviceInfo.
+        if (userAgentApi) userAgentApi = patchApiUALocale(userAgentApi, locale);
+        log(`Proxy locale for profile ${profileId}: ${geo.countryCode} → ${locale} (Accept-Language: ${resolvedAcceptLang})`, "browser");
+      }
+    } catch { /* non-fatal — fall back to defaults */ }
   }
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
   await applyStealthScripts(page, userAgent, resolvedTZ, userAgentApi);
+  // Inject locale-matched Accept-Language — headless Chrome omits it by default
+  // (a bot tell). Use the proxy's detected country for the correct regional value.
+  await page.setExtraHTTPHeaders({ "Accept-Language": resolvedAcceptLang });
 
   // ── Request filtering via CDP Fetch (replaces setRequestInterception) ─────────
   // page.setRequestInterception(true) pauses EVERY network request in Node.js and

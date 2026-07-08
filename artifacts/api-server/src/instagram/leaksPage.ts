@@ -1099,6 +1099,13 @@ function testUAMatch() {
 function testBot() {
   const body = document.getElementById('bot-body');
   const wd = navigator.webdriver;
+  // Check BOTH conditions that make a webdriver patch correct:
+  //   1. Value must be exactly false (not undefined — real Chrome never returns undefined)
+  //   2. Must NOT be an own-instance property (real Chrome keeps it on Navigator.prototype)
+  // Both are tested explicitly below so the old get:undefined / instance-shadow bug
+  // shows red instead of silently passing a simple truthy test.
+  const wdIsOwnProp = Object.prototype.hasOwnProperty.call(navigator, 'webdriver');
+  const wdBad = wd !== false || wdIsOwnProp;
   const hasCDP = !!(window.cdc_adoQpoasnfa76pfcZLmcfl_Array || window.cdc_adoQpoasnfa76pfcZLmcfl_Promise || window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol);
   const hasPhantom = !!(window.callPhantom || window._phantom || window.__phantomas);
   const hasSelenium = !!(window.__selenium_evaluate || window.__webdriver_evaluate || window.__driver_evaluate || window.$cdc_asdjflasutopfhvcZLmcfl_);
@@ -1110,7 +1117,16 @@ function testBot() {
   const hardwareOk = navigator.hardwareConcurrency > 1;
 
   let html = '';
-  html += row('navigator.webdriver', wd ? 'TRUE' : 'false', wd ? 'red' : 'green');
+  var wdLabel = wd === undefined ? 'undefined (bad \u2014 automation tell)' :
+                (wd === false && wdIsOwnProp) ? 'false (own-prop shadow \u2014 bad)' :
+                wd === false ? 'false \u2713' : 'TRUE (bad)';
+  html += row('navigator.webdriver', wdLabel, wdBad ? 'red' : 'green');
+  if (wdIsOwnProp && wd === false) {
+    html += desc('webdriver is false but is set as an own property on navigator instead of Navigator.prototype. Real Chrome keeps it on the prototype. Anti-bot scripts that call Object.getOwnPropertyDescriptor(navigator,"webdriver") will detect this shadow as an automation tell.', 'fail');
+  }
+  if (wd === undefined) {
+    html += desc('navigator.webdriver is undefined. Real non-automated Chrome always returns false, never undefined. This is a known automation tell that Instagram\'s JS checks.', 'fail');
+  }
   html += row('CDP artifacts', hasCDP ? 'FOUND' : 'None', hasCDP ? 'red' : 'green');
   html += row('PhantomJS artifacts', hasPhantom ? 'FOUND' : 'None', hasPhantom ? 'red' : 'green');
   html += row('Selenium artifacts', hasSelenium ? 'FOUND' : 'None', hasSelenium ? 'red' : 'green');
@@ -1121,9 +1137,9 @@ function testBot() {
   html += row('Languages', langOk ? navigator.languages.join(', ') : 'None', langOk ? 'green' : 'warn');
   html += row('CPU Cores', hardwareOk ? navigator.hardwareConcurrency : '1 — suspicious', hardwareOk ? 'green' : 'warn');
 
-  const isBot = wd || hasCDP || hasPhantom || hasSelenium || hasNightmare;
+  const isBot = wdBad || hasCDP || hasPhantom || hasSelenium || hasNightmare;
   if (isBot) {
-    html += desc('⚠ Automation signals detected. Instagram\'s JS will flag this session. Ensure stealth patches are applied.', 'fail');
+    html += desc('\u26a0 Automation signals detected. Instagram\'s JS will flag this session. Ensure stealth patches are applied.', 'fail');
     setBadge('badge-bot', 'fail', 'FLAGGED');
     setCardBorder('card-bot', 'fail');
     setResult('Bot', 'fail', 'Flagged');

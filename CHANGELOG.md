@@ -4,6 +4,66 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.400] — 2026-07-08
+
+### Fixed
+
+#### `navigator.webdriver` was returning `undefined` instead of `false` — causing bans on EB login with no API calls
+
+**Root cause:** The stealth script in `browserSession.ts` (`applyStealthScripts`) patched `navigator.webdriver` with:
+```js
+Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+```
+This violated the spec in two distinct, detectable ways:
+
+1. **Wrong value:** Real non-automated Chrome always returns `false` for `navigator.webdriver`. The spec mandates `false` when automation is not active. Returning `undefined` is a value no real browser ever produces — Instagram's JS fingerprinting distinguishes `undefined` from `false` and treats `undefined` as an automation tell.
+
+2. **Wrong location:** The property was patched as an own property directly on the `navigator` instance, not on `Navigator.prototype`. Real Chrome sets it on the prototype. Anti-bot scripts (and likely Instagram's) call `Object.getOwnPropertyDescriptor(navigator, 'webdriver')` to check whether it is an own-instance property — finding one is an additional, independent automation signal even when the value is falsy.
+
+Both flaws are present in the existing code and either one alone is sufficient to trigger detection. Together they produced an automation fingerprint that fired at page-load time, before any API call, explaining why accounts were banned within 30 minutes of an EB login with zero API activity, and why fresh 4G IPs did not help (the leak is JS-level, not IP-level).
+
+The **Leak Check** page compounded the problem: the `testBot()` function only checked `if (wd)` (truthy), so both `undefined` and `false` showed green. The bug could have been running undetected for any length of time.
+
+**Fix (`browserSession.ts` — `applyStealthScripts`):**
+```js
+// Step 1: remove any own-instance shadow
+try { delete navigator.webdriver; } catch (_) {}
+// Step 2: patch Navigator.prototype — spec-correct location, returns false
+Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true });
+```
+
+**Fix (`leaksPage.ts` — `testBot`):**
+- Explicitly checks `wd === false` (not just falsy) — flags `undefined` as red
+- Checks `Object.prototype.hasOwnProperty.call(navigator, 'webdriver')` — flags own-instance shadow as red even when the value is false
+- Displays a distinct label for each failure mode: `undefined (bad — automation tell)`, `false (own-prop shadow — bad)`, or `false ✓`
+- The `isBot` flag now includes `wdBad` (either wrong value or wrong location) so the card correctly shows FLAGGED when the patch is absent or broken
+
+**Files:** `artifacts/api-server/src/instagram/browserSession.ts` · `artifacts/api-server/src/instagram/leaksPage.ts`
+
+---
+
+#### API UA locale and `Accept-Language` header now match proxy exit country
+
+**Root cause:** All API user-agent strings in the UA pool end with a locale suffix (e.g. `; en_US`, `; en_GB`). These were static — the suffix in the pool entry was baked in at pool-authoring time and never updated to reflect the actual proxy country assigned to an account. For UK proxies this meant the API UA claimed `en_US` (a US device) while the IP was clearly UK — a geographic inconsistency Instagram can detect. Similarly, the `Accept-Language` HTTP header was hardcoded to `en-US,en;q=0.9` for all sessions regardless of proxy country.
+
+**Fix:** The existing `resolveProxyTimezone` function (which already calls `ip-api.com` through the proxy to detect the exit-IP timezone) has been extended to also fetch `countryCode` in the same request (`fields=timezone,countryCode`). The function is renamed `resolveProxyGeo` and returns `{ timezone, countryCode }`.
+
+At EB session launch (inside `getOrCreateSession`):
+- The country code is mapped to an Instagram locale string (`GB → en_GB`, `US → en_US`, etc.) via a comprehensive `COUNTRY_TO_IG_LOCALE` table covering 40+ countries.
+- The locale suffix at the end of the API UA string is replaced in-place via `patchApiUALocale()` — the stored DB value is not mutated; only the live session copy is patched.
+- The patched UA is stored in the `Session` context (`session.userAgentApi`) so the automation engine picks it up via `getSessionUserAgentApi(profileId)` when calling `setDeviceInfo`.
+- An `Accept-Language` header matching the locale (`en-GB,en;q=0.9` for GB, `en-US,en;q=0.9` for US, etc.) is injected into the Puppeteer page via `setExtraHTTPHeaders` immediately after the stealth scripts are applied.
+
+If the geo lookup fails (proxy unreachable, ip-api.com timeout, etc.) the fallback remains `en-US,en;q=0.9` and the stored API UA locale is left unchanged — fully non-fatal.
+
+**New exports in `browserSession.ts`:**
+- `patchApiUALocale(apiUA, locale)` — replaces the locale suffix in an API UA string
+- `getSessionUserAgentApi(profileId)` — returns the live session's geo-patched API UA
+
+**Files:** `artifacts/api-server/src/instagram/browserSession.ts` · `artifacts/api-server/src/instagram/automationEngine.ts`
+
+---
+
 ## [1.1.399] — 2026-07-08
 
 ### Fixed

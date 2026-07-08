@@ -23,7 +23,7 @@ import { HikerApiClient, HikerCacheMissError } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import { makeUniqueImage, makeUniqueVideo, isImageFile, isVideoFile, ALL_MEDIA_EXTS } from "./makeUnique";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs, classifyEbChallengeUrl } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs, classifyEbChallengeUrl, getSessionUserAgentApi } from "./browserSession";
 import { getAdapterProxyPort, getAdapterIp, startAdapterProxy } from "./adapterProxy";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
@@ -954,7 +954,7 @@ class AutomationEngine {
       // setDeviceInfo MUST be called before loadBrowserCookies so that stored
       // igApiCookies seed the mobile session (mobileSessionReady=true).
       // Without it mobileSessionGet returns null immediately and sync always fails.
-      client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+      client.setDeviceInfo(profile.igDeviceState, getSessionUserAgentApi(profile.id) ?? profile.userAgentApi, profile.igApiCookies);
       client.onDeviceStateUpdate = (state) => { storage.updateProfile(profile.id, { igDeviceState: state }).catch(() => {}); };
       client.loadBrowserCookies();
       try {
@@ -2335,7 +2335,7 @@ class AutomationEngine {
     // Sync device state and stored API cookies. setDeviceInfo now eagerly calls
     // _restoreMobileFromApiCookies, so if the account was previously verified
     // isMobileLoggedIn() will return true immediately below — no web login needed.
-    state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+    state.client.setDeviceInfo(profile.igDeviceState, getSessionUserAgentApi(profile.id) ?? profile.userAgentApi, profile.igApiCookies);
     state.client.onDeviceStateUpdate = (s) => { storage.updateProfile(profile.id, { igDeviceState: s }).catch(() => {}); };
 
     const client = state.client;
@@ -7384,7 +7384,7 @@ class AutomationEngine {
     const proxyUrl = await this.buildProxyUrl(profile);
     if (!proxyUrl) return { ok: false, message: "No proxy assigned — assign a proxy to this account before fixing ABD." };
     const client = new InstagramWebClient(proxyUrl, profileId);
-    client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
+    client.setDeviceInfo(profile.igDeviceState, getSessionUserAgentApi(profileId) ?? profile.userAgentApi, profile.igApiCookies);
     client.onDeviceStateUpdate = (s) => { storage.updateProfile(profileId, { igDeviceState: s }).catch(() => {}); };
     client.username = profile.username;
 
