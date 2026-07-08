@@ -4455,6 +4455,17 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Force an immediate human-session for HS-managed accounts (bypasses inter-session wait).
+  // For accounts with an HS tool, the standalone follow runner is blocked — follows run
+  // inside the HS queue instead. Use this endpoint to wake the HS runner so the follow
+  // fires within the next session (≤1 s from now).
+  app.post("/api/profiles/:profileId/tools/human-session/run-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    if (Number.isNaN(profileId)) return res.status(400).json({ ok: false, error: "invalid profileId" });
+    automationEngine.triggerHumanSession(profileId);
+    res.json({ ok: true });
+  });
+
   // Force an immediate contact-users send session (bypasses wait timer)
   app.post("/api/profiles/:profileId/tools/contact/send-now", async (req, res) => {
     const profileId = Number(req.params.profileId);

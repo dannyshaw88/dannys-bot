@@ -20,17 +20,21 @@ Instagram verifies the HMAC signature and parses the body. Seeing `device_id: an
 
 **Fix:** `_followViaMobileSession` now includes a web-endpoint fallback. When the mobile API returns `{"status":"fail","message":"We're sorry, but something went wrong"}` **and** no Bearer token is present (`auth=MISSING`) **and** the account has a valid EB web session (`cookieJar` contains a `sessionid` cookie), the follow is retried via `_followViaWebEndpoint`:
 
-- Hits `POST www.instagram.com/api/v1/web/friendships/{userId}/follow/`
+- Hits `POST www.instagram.com/api/v1/friendships/create/{userId}/`
+- Body: plain `user_id={userId}` — **no HMAC signature**, no Android fields
 - Uses `webPost` — plain `WEB_UA` (Chrome), `cookieJar` (EB web cookies), `X-CSRFToken` header
-- **No signed Android body** — the web endpoint accepts a plain POST from a web client
-- Instagram does **not** apply the Bearer-token gate to web-session requests
+- Instagram accepts this as a normal web-app follow and does **not** apply the Bearer-token gate
+- Returns `{"friendship_status":{"following":true,...},"status":"ok"}` on success
 
 The mobile-first path is fully preserved: `_bootstrapWwwClaim` still runs before every follow attempt, so accounts that can recover a Bearer token (fresh EB login → cold-start sequence) will use the mobile path successfully. The web fallback only fires on the specific failure + no-auth combination.
 
 **When auth IS present:** all existing behaviour is unchanged — the signed Android body + all Android headers + Bearer token is the correct payload for a fully verified account.
 
+**Also added:** `POST /api/profiles/:profileId/tools/human-session/run-now` API endpoint that calls `triggerHumanSession`. For HS-managed accounts the standalone follow runner is permanently blocked (follows run inside the HS queue), so the existing follow `run-now` endpoint had no effect — this endpoint wakes the HS runner within 1 second instead.
+
 **Files:**
 - `artifacts/api-server/src/instagram/instagramWebClient.ts` — `_followViaMobileSession` status=fail branch + new `_followViaWebEndpoint` method
+- `artifacts/api-server/src/routes/instagram.ts` — new `human-session/run-now` endpoint
 
 ---
 

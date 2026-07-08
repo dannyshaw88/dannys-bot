@@ -2473,8 +2473,13 @@ export class InstagramWebClient {
       return { ok: false, status: "follow_blocked", reason: "api_error: We're sorry, but something went wrong (no web session for fallback)" };
     }
 
-    console.log(`[webClient] follow ${userId}: _followViaWebEndpoint — web session present, POST www.instagram.com/api/v1/web/friendships/${userId}/follow/`);
-    const res = await this.webPost(`/api/v1/web/friendships/${userId}/follow/`);
+    // The web follow endpoint is the same path as mobile but routed through
+    // www.instagram.com.  /api/v1/web/friendships/*/follow/ does not exist (404).
+    // www.instagram.com/api/v1/friendships/create/{userId}/ accepts web-cookie
+    // sessions and does not require a signed Android body.
+    // Body: plain user_id param (no HMAC signature — web clients don't sign).
+    console.log(`[webClient] follow ${userId}: _followViaWebEndpoint — web session present, POST www.instagram.com/api/v1/friendships/create/${userId}/`);
+    const res = await this.webPost(`/api/v1/friendships/create/${userId}/`, `user_id=${userId}`);
     const j = res?.json as any;
 
     if (!j) {
@@ -2513,7 +2518,12 @@ export class InstagramWebClient {
       if (j.following || j.outgoing_request) return { ok: true, status: j.following ? "following" : "requested" };
       return { ok: false, status: "follow_blocked", reason: "web-endpoint: Instagram silently declined (following=false, outgoing_request=false)" };
     }
-    if (j?.status === "ok") return { ok: true, status: "following" };
+    // Last-resort: status=ok but none of the expected follow fields present.
+    // Log a warning so we can tighten this if we see it in the wild with a non-follow response.
+    if (j?.status === "ok") {
+      console.warn(`[webClient] follow ${userId} web-endpoint: status=ok but no friendship_status/result/following field — optimistically treating as success`, JSON.stringify(j).slice(0, 200));
+      return { ok: true, status: "following" };
+    }
     if (j?.status === "fail") {
       return { ok: false, status: "follow_blocked", reason: `web-endpoint api_error: ${j?.message ?? "Instagram declined (status: fail)"}` };
     }
