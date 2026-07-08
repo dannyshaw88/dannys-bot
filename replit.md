@@ -6,18 +6,18 @@ An Instagram automation platform for managing multiple accounts with tools for f
 
 1. `PORT=8082 pnpm --filter @workspace/api-server run dev` — run the API server (port 8082)
 2. `PORT=5000 API_PORT=8082 pnpm --filter @workspace/dannys-bot run dev` — run the frontend (port 5000)
-3. `pnpm run typecheck` — full typecheck across all packages
-4. `pnpm run build` — typecheck + build all packages
+3. `pnpm run typecheck` — full typecheck across all packages (separate from `build`)
+4. `pnpm run build` — server + client build only (does not run typecheck)
 5. `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 
 ## Stack
 
-6. pnpm workspaces, Node.js 24, TypeScript 5.9
+6. pnpm workspaces, Node.js 20 (per `.replit`), TypeScript 5.9
 7. API: Express 5
 8. DB: SQLite + better-sqlite3 + Drizzle ORM (file: `database.db` at workspace root)
 9. Frontend: React + Vite + Tailwind CSS + shadcn/ui + Wouter
 10. Validation: Zod (`zod/v4`), `drizzle-zod`
-11. Build: esbuild (CJS bundle)
+11. Build: esbuild (ESM `.mjs` bundle)
 12. Electron: desktop app wrapper in `artifacts/electron/`
 
 ## Where things live
