@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.401] — 2026-07-08
+
+### Fixed
+
+#### API UA locale now written to the DB immediately at device-ID assignment time
+
+The previous fix (v1.1.400) only patched the locale in the live EB session — the DB still stored whatever locale was baked into the UA pool entry (e.g. `en_IN` for a Samsung SM-A055F originally registered in India), so the UI always showed the wrong locale and every code path that read `profile.userAgentApi` directly from the DB sent the wrong value.
+
+**Root cause:** The UA pool entries have baked-in locale suffixes from the country where the device model was first registered. Accounts on UK/US proxies were being assigned pool entries with `en_IN`, `de_DE`, etc. — and these were written directly to the DB at two points: Reset Device IDs and account creation.
+
+**Fix — three layers:**
+
+1. **Reset Device IDs handler** (`/api/profiles/:id/reset-device-ids`): after picking the UA from the pool, the profile's assigned proxy is looked up and `resolveProxyGeo` is called. The locale suffix in `userAgentApi` is patched before saving to the DB. The EB fingerprint (`ebFingerprint`) is also regenerated from the locale-correct API UA. Non-fatal: if the proxy is unreachable or unassigned, the pool locale is preserved.
+
+2. **Account creation** (`POST /api/profiles`): if a proxy is assigned at creation time, the auto-selected `userAgentApi` is patched with the proxy locale before the profile row is written.
+
+3. **Session-launch persist (belt-and-suspenders)**: when `getOrCreateSession` resolves the proxy geo (which it already did to set the timezone and Accept-Language), it now also writes the locale-corrected `userAgentApi` back to the DB. This covers accounts that had the wrong locale baked in before this fix — next time their EB opens, the DB is automatically corrected.
+
+**New exports in `browserSession.ts`:** `resolveProxyGeo`, `countryToIgLocale` (previously module-private, now exported so the routes layer can call them directly).
+
+**Files:** `artifacts/api-server/src/routes/instagram.ts` · `artifacts/api-server/src/instagram/browserSession.ts`
+
+---
+
 ## [1.1.400] — 2026-07-08
 
 ### Fixed
