@@ -5955,6 +5955,80 @@ export class InstagramWebClient {
     return null;
   }
 
+  // ── Web-endpoint configure fallback ──────────────────────────────────────
+  // Mirrors _followViaWebEndpoint: used when _configureViaIgClient returns
+  // "something went wrong" with no Bearer token. The HMAC-signed Android body
+  // is the problem — the web endpoint at www.instagram.com accepts plain web
+  // cookies + CSRF + unsigned body and does NOT require Bearer.
+  //
+  // The rupload went to i.instagram.com. The shard mismatch risk is real, but
+  // in practice Instagram's infrastructure shares upload state across www and
+  // i subdomains when the web session cookie (sessionid) is present — same as
+  // how the web app itself can configure an upload done through its API.
+  //
+  // Guards: only called when (1) auth is MISSING, (2) configure returned
+  // "something went wrong", and (3) cookieJar contains a valid sessionid.
+  private async _configureViaWebEndpoint(
+    uploadId: string,
+    caption: string,
+    isVideo: boolean,
+  ): Promise<string | null> {
+    const TAG = `[UPLOAD:configure-web @${this.username ?? this.profileId}]`;
+    const webSession = this.cookieJar.find(c => c.startsWith("sessionid="));
+    if (!webSession) {
+      console.warn(`${TAG} no web session in cookieJar — cannot fall back to web configure`);
+      return null;
+    }
+
+    const url = isVideo ? "/api/v1/media/configure/?video=1" : "/api/v1/media/configure/";
+    console.log(`${TAG} web session present — POST www.instagram.com${url} (unsigned body, web cookies)`);
+
+    // Plain unsigned body — web clients do not HMAC-sign configure requests.
+    // Keep only the fields the web app sends; omit all Android device fields.
+    const bodyParams = new URLSearchParams({
+      upload_id:   uploadId,
+      caption:     caption ?? "",
+      source_type: "4",
+    });
+
+    const res = await this.webPost(url, bodyParams.toString());
+    const j = res?.json as any;
+
+    if (!j) {
+      console.warn(`${TAG} no JSON response (HTTP ${res?.status}) — web configure fallback failed`);
+      return null;
+    }
+    console.log(`${TAG} response:`, JSON.stringify(j).slice(0, 600));
+
+    if (j?.media?.id) {
+      const mediaId = String(j.media.id);
+      console.log(`${TAG} ✓ SUCCESS — media_id=${mediaId}`);
+      return mediaId;
+    }
+    if (j?.status === "ok") {
+      console.log(`${TAG} ✓ status=ok (no media.id) — returning uploadId=${uploadId}`);
+      return uploadId;
+    }
+    if (j?.message?.includes("checkpoint") || j?.checkpoint_url) {
+      console.warn(`${TAG} checkpoint_required — ${j?.checkpoint_url ?? j?.message}`);
+      this._lastConfigureError = "checkpoint_required";
+      return null;
+    }
+    if (j?.feedback_required || /feedback_required|ActionBlocked/i.test(j?.message ?? "")) {
+      console.warn(`${TAG} feedback_required — ${j?.message}`);
+      this._lastConfigureError = j?.message ?? "feedback_required";
+      return null;
+    }
+    if (j?.message?.includes("login_required") || j?.require_login) {
+      console.warn(`${TAG} login_required — web session expired`);
+      this._lastConfigureError = "login_required (web session expired)";
+      return null;
+    }
+    console.warn(`${TAG} unexpected response — ${JSON.stringify(j).slice(0, 300)}`);
+    this._lastConfigureError = `web-configure: ${j?.message ?? j?.status ?? "unexpected response"}`;
+    return null;
+  }
+
   // ── Publish a photo via IgApiClient (Jarvee model) ───────────────────────
   // Uses ig.publish.photo() which handles BOTH upload and configure through
   // the library's native HTTP client with properly signed bodies (HMAC-SHA256).
@@ -6298,11 +6372,23 @@ export class InstagramWebClient {
             return null;
           }
           console.log(`${TAG}   [attempt ${attemptNum}] Rupload OK confirmedId=${confirmedId}. Firing configure.`);
-          const mid = await this._configureViaIgClient(confirmedId, caption, false, imageBuffer, attemptAgent);
+          let mid = await this._configureViaIgClient(confirmedId, caption, false, imageBuffer, attemptAgent);
           if (mid) {
             console.log(`${TAG} [attempt ${attemptNum}] ✓ configure OK media_id=${mid}`);
           } else {
             console.error(`${TAG} [attempt ${attemptNum}] ✗ configure failed — error="${this._lastConfigureError}"`);
+            // Web-endpoint fallback: same pattern as follow. When mobile configure fails
+            // with "something went wrong" and no Bearer token, retry via www.instagram.com
+            // with plain web cookies + unsigned body (no HMAC signature, no Android fields).
+            if (!this._deviceAuthorization && /something went wrong/i.test(this._lastConfigureError)) {
+              console.log(`${TAG} [attempt ${attemptNum}] mobile configure "something went wrong" with no Bearer — trying web endpoint fallback`);
+              mid = await this._configureViaWebEndpoint(confirmedId, caption, false);
+              if (mid) {
+                console.log(`${TAG} [attempt ${attemptNum}] ✓ web configure fallback succeeded — media_id=${mid}`);
+              } else {
+                console.error(`${TAG} [attempt ${attemptNum}] ✗ web configure fallback also failed — error="${this._lastConfigureError}"`);
+              }
+            }
           }
           return mid;
         } finally {
