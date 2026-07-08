@@ -12,6 +12,7 @@
 
 import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents, dialog, shell, screen as eScreen } from "electron";
 import http from "http";
+import https from "https";
 import fs from "fs";
 import path from "path";
 import net from "net";
@@ -259,6 +260,34 @@ export const ebMap = new Map<number, EbEntry>();
 // Scope: lifetime of the Electron process (cleared on app restart).
 // Effect: all accounts sharing the same proxy host share one lookup per session.
 const _tzCache = new Map<string, string>();
+
+// ── EB Exit-IP Audit store ────────────────────────────────────────────────────
+// Populated every time openEbWindow runs (before Instagram loads).
+// Exposed via GET /eb/ip-audits so the API server and frontend can show results.
+interface EbIpAuditResult {
+  profileId: number;
+  username: string;
+  serverIp: string;   // machine real IP (direct https, no proxy)
+  exitIp: string;     // session exit IP (ses.fetch, through proxy)
+  proxy: string | null;
+  proxyHost: string | null;
+  leaking: boolean;   // true if exitIp === serverIp (proxy not routing)
+  checkedAt: string;
+}
+const _ebIpAudits = new Map<number, EbIpAuditResult>();
+
+// Helper: direct HTTPS GET (bypasses all proxies — gives real server IP)
+function _directHttpsGet(url: string, timeoutMs = 5000): Promise<string> {
+  return new Promise(resolve => {
+    const req = https.get(url, { timeout: timeoutMs }, res => {
+      let body = "";
+      res.on("data", (d: Buffer) => { body += d.toString(); });
+      res.on("end", () => resolve(body));
+    });
+    req.on("error", () => resolve(""));
+    req.on("timeout", () => { req.destroy(); resolve(""); });
+  });
+}
 
 // ── CDP emulation serialization lock ────────────────────────────────────────
 // Concurrent Emulation.setDeviceMetricsOverride / setTouchEmulationEnabled
@@ -2682,6 +2711,88 @@ export async function openEbWindow(opts: {
     _ebCrashLog(profileId, "STEP-8: proxy double-set done");
   }
 
+  // ── EXIT-IP AUDIT (STEP-8b) ───────────────────────────────────────────────
+  // The single most reliable way to confirm whether the proxy is actually
+  // routing this EB session BEFORE Instagram sees any traffic.
+  //
+  // ses.fetch() is Electron-session-scoped → routes through the configured proxy.
+  // _directHttpsGet() is a raw Node.js https.get() → bypasses all proxies → real machine IP.
+  //
+  // If both return the SAME IP → the proxy is NOT routing → Instagram sees the
+  // server's real IP on every request → accounts get flagged immediately.
+  //
+  // Results are stored in _ebIpAudits (queryable via GET /eb/ip-audits)
+  // AND logged to equinox-debug.log via _ipcLog so they appear immediately.
+  _ebCrashLog(profileId, "STEP-8b: exit-IP audit start");
+  {
+    let _auditServerIp = "unknown";
+    let _auditExitIp   = "unknown";
+    let _auditLeaking  = false;
+
+    // Real server IP — direct Node.js https, no proxy
+    try {
+      const _body = await _directHttpsGet("https://api4.ipify.org?format=json", 5000);
+      if (_body) _auditServerIp = (JSON.parse(_body) as { ip?: string }).ip ?? "unknown";
+    } catch { /* non-fatal */ }
+
+    if (proxy) {
+      // Session-scoped fetch — must go through the configured proxy
+      try {
+        const _sesRes = await Promise.race([
+          ses.fetch("https://api4.ipify.org?format=json").then(r => r.json() as Promise<{ ip?: string }>),
+          new Promise<{ ip?: string }>((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
+        ]);
+        _auditExitIp = _sesRes?.ip ?? "fetch-failed";
+      } catch (e: any) {
+        _auditExitIp = `FETCH-FAILED(${String(e?.message ?? "unknown").slice(0, 60)})`;
+      }
+
+      _auditLeaking = (
+        _auditServerIp !== "unknown" &&
+        !_auditExitIp.startsWith("FETCH-FAILED") &&
+        _auditExitIp !== "unknown" &&
+        _auditServerIp === _auditExitIp
+      );
+    }
+
+    const _auditMsg =
+      `[EB-IP-AUDIT:${profileId}] @${username}\n` +
+      `  server-real-ip  : ${_auditServerIp}\n` +
+      `  browser-exit-ip : ${_auditExitIp}\n` +
+      `  proxy           : ${proxy ? `${proxy.type || "http"}://${proxy.host}:${proxy.port}` : "NONE"}\n` +
+      `  LEAKING         : ${_auditLeaking
+        ? "⚠ YES — browser is routing through server real IP — PROXY NOT WORKING"
+        : proxy
+        ? "✓ NO — exit IP differs from server IP — proxy routing correctly"
+        : "⚠ NO PROXY CONFIGURED"}`;
+
+    console.log(_auditMsg);
+    _ebCrashLog(profileId, _auditLeaking
+      ? `STEP-8b: ⚠ IP LEAK — exitIp=${_auditExitIp} === serverIp=${_auditServerIp}`
+      : `STEP-8b: audit done — exitIp=${_auditExitIp} serverIp=${_auditServerIp} leak=false`);
+    _ipcLog(_auditMsg); // → equinox-debug.log via pino
+
+    if (_auditLeaking) {
+      console.error(
+        `[EB-IP-AUDIT:${profileId}] ⚠⚠⚠ PROXY NOT ROUTING — ` +
+        `@${username} is exposing real server IP (${_auditServerIp}) to Instagram ⚠⚠⚠`
+      );
+    }
+
+    // Store for /eb/ip-audits query
+    _ebIpAudits.set(profileId, {
+      profileId,
+      username,
+      serverIp:  _auditServerIp,
+      exitIp:    _auditExitIp,
+      proxy:     proxy ? `${proxy.type || "http"}://${proxy.host}:${proxy.port}` : null,
+      proxyHost: proxy?.host ?? null,
+      leaking:   _auditLeaking,
+      checkedAt: new Date().toISOString(),
+    });
+  }
+  _ebCrashLog(profileId, "STEP-8b: exit-IP audit done");
+
   // Seed existing cookies into the Electron session
   _ebCrashLog(profileId, "STEP-9: loading cookies from file");
   await loadCookiesFromFile(profileId, ses);
@@ -4969,6 +5080,13 @@ export function startEbIpcServer(
             user:           stored.user ? `${stored.user.slice(0,2)}***` : null,
           } : null,
         });
+      }
+
+      // ── GET /eb/ip-audits ─────────────────────────────────────────────────────
+      // Returns the exit-IP audit result for every EB session opened since the
+      // last app start.  Used by GET /api/eb-ip-audits on the API server side.
+      if (req.method === "GET" && u.pathname === "/eb/ip-audits") {
+        return send(res, 200, { audits: Array.from(_ebIpAudits.values()) });
       }
 
       // ── GET /eb/cookies ────────────────────────────────────────────────────────

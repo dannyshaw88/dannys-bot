@@ -4,6 +4,51 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.405] — 2026-07-08
+
+### Added
+
+#### EB Session Proxy Audit — definitive real-time leak detection for every browser session
+
+Built a systematic IP leak logger that fires **before Instagram sees any traffic**, every time an embedded browser session opens. Eliminates guesswork by capturing the actual exit IP the Electron session uses vs the server's real IP, then flagging whether the proxy is routing correctly.
+
+**Root cause of the ban wave:** With 10 accounts banned immediately from login, the two most likely culprits are (a) proxy not routing (browser exits via real server IP, Instagram sees the same IP on every account) and (b) multiple accounts sharing the same exit IP, competing for Instagram's ~3-new-logins-per-IP-per-6-hours quota. Both are now detected and logged automatically.
+
+**How the audit works:**
+
+Every call to `openEbWindow()` in `ebManager.ts` now runs an exit-IP audit immediately after the proxy double-set (STEP-8b), before `loadCookiesFromFile` and before `loadURL`:
+
+1. **Server real IP** — fetched via a raw Node.js `https.get()` call that bypasses all Electron sessions and proxies. This is the IP Instagram would see if the proxy fails.
+2. **Browser exit IP** — fetched via `ses.fetch()` (Electron session-scoped), which routes through the configured proxy. This is what Instagram actually sees.
+3. **Leak detection** — if both IPs match → proxy is not routing → accounts will be banned. If multiple sessions share the same exit IP → they are competing for Instagram's per-IP login quota.
+
+**Where to find the log:**
+- `equinox-debug.log` — search `EB-IP-AUDIT` for a per-account block that shows server IP, browser exit IP, proxy config, and LEAKING: YES/NO
+- `[EB:N]` crash-step log — STEP-8b entries show the audit result inline with the session setup sequence
+
+**The audit result is also queryable via API:**
+
+`GET /api/eb-ip-audits` returns the audit map for all sessions opened since last app start. Only populated in Electron mode (EB_IPC_PORT set). The Electron IPC server exposes it at `GET /eb/ip-audits`.
+
+**New frontend page — EB IP AUDIT (sidebar nav item):**
+
+Navigate to `/eb-audit` in the app. Shows:
+- **IP Leaks** — count of sessions where exit IP === server real IP (proxy broken)
+- **Shared Exit IPs** — count of accounts competing on the same proxy exit IP
+- **Per-session table** — account, proxy config, server real IP, browser exit IP, result (OK / LEAK / SHARED IP / check failed)
+- **Leak alert** — red banner with exact fix instructions if any session is leaking
+- **Shared IP alert** — amber banner explaining the per-IP login quota risk
+
+**Files:**
+- `artifacts/electron/src/ebManager.ts` — `import https from "https"`, `EbIpAuditResult` interface, `_ebIpAudits` Map, `_directHttpsGet()` helper, STEP-8b exit-IP audit block (in `openEbWindow`), `GET /eb/ip-audits` IPC route handler
+- `artifacts/api-server/src/routes/instagram.ts` — `GET /api/eb-ip-audits` endpoint
+- `artifacts/dannys-bot/src/components/EbProxyAudit.tsx` — new audit UI component (summary cards + per-session table + alert banners)
+- `artifacts/dannys-bot/src/pages/EbAuditPage.tsx` — page wrapper
+- `artifacts/dannys-bot/src/App.tsx` — `/eb-audit` route added
+- `artifacts/dannys-bot/src/components/layout/Sidebar.tsx` — "EB IP AUDIT" nav item added
+
+---
+
 ## [1.1.404] — 2026-07-08
 
 ### Fixed

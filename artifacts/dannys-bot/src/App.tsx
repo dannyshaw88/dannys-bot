@@ -18,6 +18,7 @@ import { MobilePage } from "@/pages/MobilePage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
 import { ToolsPage } from "@/pages/ToolsPage";
+import { EbAuditPage } from "@/pages/EbAuditPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
@@ -117,6 +118,7 @@ function Router() {
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
       <Route path="/tools" component={ToolsPage} />
+      <Route path="/eb-audit" component={EbAuditPage} />
       <Route path="/ban-analytics"><Redirect to="/tools" /></Route>
       <Route path="/readme" component={ReadmePage} />
       <Route component={NotFound} />

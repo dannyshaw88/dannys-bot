@@ -109,6 +109,7 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
+    { name: "EB IP Audit",     shortLabel: "EB IP AUDIT",    path: "/eb-audit",       icon: FilledShieldAlertIcon    },
     { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",          icon: FilledHammerIcon         },
   ];
 

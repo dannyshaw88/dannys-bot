@@ -3607,6 +3607,28 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── EB Exit-IP Audit ───────────────────────────────────────────────────────
+  // Proxies the _ebIpAudits store from ebManager.ts via the Electron IPC server.
+  // Returns exit-IP audit results for every EB session opened since last app start.
+  // Only meaningful in Electron mode (EB_IPC_PORT set); returns empty array otherwise.
+  app.get("/api/eb-ip-audits", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) {
+      return res.json({ audits: [], note: "not in Electron mode" });
+    }
+    try {
+      const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/ip-audits`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) throw new Error(`IPC ${r.status}`);
+      const data = await r.json() as { audits: unknown[] };
+      res.json({ audits: data.audits ?? [] });
+    } catch (err: any) {
+      req.log.error({ err }, "[eb-ip-audits] IPC error");
+      res.status(500).json({ audits: [], error: err?.message ?? "IPC error" });
+    }
+  });
+
   // ── API Leak Check ─────────────────────────────────────────────────────────
   // Server-side checks for mobile API traffic integrity:
   //   1. Proxy IP   — hit an IP-echo service through the proxy; confirm exit IP
