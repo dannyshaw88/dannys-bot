@@ -4,6 +4,56 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.403] — 2026-07-08
+
+### Added
+
+#### API Leak Check — server-side diagnostic for mobile API traffic integrity
+
+New diagnostic tool accessible from the **API Checks** tab on every account's detail page (profile detail → "API Checks"). Runs four checks against the account's proxy and stored device state without opening a browser. Complements the existing browser-based Leak Check page.
+
+**Why this was needed:** The browser Leak Check page works by running real JavaScript inside the embedded browser (canvas fingerprint, WebRTC, IP echo, navigator properties) and comparing results against expectations. For mobile API calls, there is no browser — so the same class of leak has no equivalent test. An audit query ("check all signals for API calls") identified the gap: we could fix specific bugs (v1.1.402 fixed Accept-Language and JA3 per-call), but without an active test there was no way to confirm completeness or catch regressions.
+
+**Endpoint:** `GET /api/profiles/:id/api-leak-check`
+**UI:** "API Checks" tab on the profile detail page — click **Run Checks** to execute all four checks on demand. Results display as pass/fail/warn cards with expandable detail rows.
+
+**Check 1 — Proxy IP routing:**
+Sends a real HTTPS request through the account's assigned proxy to two independent IP-echo services (ipify.org and Cloudflare's `1.1.1.1/cdn-cgi/trace`). Confirms the exit IP is not leaking through the server's real address. Warns if multiple different exit IPs are returned (split routing). For hostname-based proxies where the host itself is not an IP, the match check is skipped with an explanatory note (rotating/hostname proxies have no fixed exit IP to compare against). Fails if the proxy is unreachable or returns no response.
+
+**Check 2 — Header geo-consistency:**
+Geo-resolves the proxy's exit IP (socks5-aware: HTTP proxies use `resolveProxyGeo` direct TCP tunnel; socks5 proxies use a `SocksProxyAgent` fetch to ip-api.com). From the country code, derives:
+- `X-IG-App-Locale` / `X-IG-Device-Locale` / `X-IG-Mapped-Locale` — e.g. `en_GB` for a UK proxy
+- `Accept-Language` — e.g. `en-GB,en;q=0.9` (via `localeToAcceptLanguage`)
+- `X-IG-Timezone-Offset` — UTC offset in seconds derived from the IANA timezone name using `Intl.DateTimeFormat`
+
+These are the exact header values `_buildMobileHeaders()` will actually send on every API call. The check also validates the locale suffix baked into the stored `userAgentApi` string — if the UA locale (`en_IN`) contradicts the proxy's expected locale (`en_GB`), that is flagged as a mismatch (the UA string is sent as-is; the runtime geo lookup corrects the IG headers but not the UA string itself).
+
+**Check 3 — TLS / JA3 fingerprint:**
+Makes a live probe through CycleTLS to `api.ipify.org` using the account's proxy and a realistic Instagram Android User-Agent. Confirms:
+- CycleTLS (Go subprocess) is initialised and routing correctly — the OkHttp4 Android JA3 is active
+- If CycleTLS is down, the check fails immediately with `TLS-BLOCKED` rather than silently falling back to raw OpenSSL (which would expose the server's OpenSSL JA3 — a clear bot fingerprint)
+- Reports the two JA3 strings in effect: `OKHTTP4_JA3` for bootstrap/read calls, `CHROME120_JA3` for write calls (friendships/create, media/like, DM)
+- Reports the probe exit IP for cross-reference against the Proxy IP check
+
+**Check 4 — Device ID sanity:**
+Parses `igDeviceState` from the profile DB row and validates all four persistent device identifiers:
+- `uuid` — must be a valid RFC 4122 UUID (any version v1–v5, not v4-only)
+- `phone_id` — same
+- `device_id` (`android_id`) — must be `android-{16 hex chars}` or a valid UUID
+- `igDid` — must be a valid RFC 4122 UUID
+
+Warns if any are missing (account not yet verified or device state cleared), fails if any are malformed. Also checks for duplicate values across the four fields — duplicate IDs create a non-unique device fingerprint detectable as automation.
+
+**Not checked (documented gap, same as before):** `browserProxy.ts`'s preview-fetch handler still hardcodes `en-US` and does not route through the account's proxy — a separate, larger fix.
+
+**Files:**
+- `artifacts/api-server/src/routes/instagram.ts` — new `GET /api/profiles/:id/api-leak-check` endpoint (~190 lines)
+- `artifacts/api-server/src/instagram/tlsTransport.ts` — `OKHTTP4_JA3` exported (was `const`, now `export const`)
+- `artifacts/dannys-bot/src/components/ApiLeakCheck.tsx` — new frontend component (idle → run → 4 cards + summary bar)
+- `artifacts/dannys-bot/src/pages/ProfileDetail.tsx` — "API Checks" tab added
+
+---
+
 ## [1.1.402] — 2026-07-08
 
 ### Fixed
