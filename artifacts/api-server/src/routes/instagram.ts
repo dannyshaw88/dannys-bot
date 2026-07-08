@@ -481,6 +481,7 @@ export async function registerInstagramRoutes(
       ...p,
       tunnelPort: getAdapterProxyPort(p.id) ?? null,
       rotating: p.proxyType === "adapter" && p.adapterName ? isAdapterRotating(p.adapterName) : false,
+      currentAdapterIp: p.proxyType === "adapter" && p.adapterName ? getAdapterIp(p.adapterName) : null,
     }));
     res.json(enriched);
   });
@@ -701,11 +702,26 @@ export async function registerInstagramRoutes(
         const scheduleNext = (id: number, name: string) => {
           const nextMs = (proxy.rotateEveryMin! + Math.random() * (proxy.rotateEveryMax! - proxy.rotateEveryMin!)) * 60 * 1000;
           scheduleRotation(id, name, nextMs, (triggeredId, triggeredName) => {
-            console.log(`[adapter] Auto-rotate triggered for proxy ${triggeredId} adapter "${triggeredName}"`);
-            rotateAdapter(triggeredName, newIp => {
-              console.log(`[adapter] Auto-rotate complete for proxy ${triggeredId} — new IP: ${newIp ?? "unknown"}`);
-              // Schedule the next rotation after this one finishes
+            // Guard against overlapping cycles — e.g. a manual "Rotate Now" click
+            // fired while this auto-rotate was already mid-cycle for the same adapter.
+            if (isAdapterRotating(triggeredName)) {
+              console.log(`[adapter] Auto-rotate skipped for proxy ${triggeredId} — "${triggeredName}" is already rotating`);
               scheduleNext(triggeredId, triggeredName);
+              return;
+            }
+            const oldIp = getAdapterIp(triggeredName);
+            console.log(`[adapter] Auto-rotate triggered for proxy ${triggeredId} adapter "${triggeredName}" — current IP: ${oldIp ?? "unknown"}`);
+            rotateAdapter(triggeredName, newIp => {
+              console.log(`[adapter] Auto-rotate complete for proxy ${triggeredId} — old IP: ${oldIp ?? "unknown"} → new IP: ${newIp ?? "unknown"}`);
+              storage.updateProxy(triggeredId, {
+                lastRotatedAt: new Date().toISOString(),
+                lastRotationOldIp: oldIp ?? "unknown",
+                lastRotationNewIp: newIp ?? "unknown",
+              }).catch(err => console.warn(`[adapter] Failed to persist rotation record for proxy ${triggeredId}:`, err))
+                .finally(() => {
+                  // Schedule the next rotation only after this one's history is persisted
+                  scheduleNext(triggeredId, triggeredName);
+                });
             });
           });
         };
@@ -736,10 +752,18 @@ export async function registerInstagramRoutes(
     const adapterName = proxy.adapterName ?? "";
     const ip = getAdapterIp(adapterName);
     if (!ip) return res.status(400).json({ error: "Adapter not found or unplugged" });
+    if (isAdapterRotating(adapterName)) {
+      return res.status(409).json({ error: `Adapter "${adapterName}" is already rotating` });
+    }
     // Kick off the netsh disable/wait/enable cycle in the background — response returns immediately
     res.json({ ok: true, adapterIp: ip, rotating: true });
     rotateAdapter(adapterName, newIp => {
-      console.log(`[adapter] Manual rotate complete for proxy ${proxyId} — new IP: ${newIp ?? "unknown"}`);
+      console.log(`[adapter] Manual rotate complete for proxy ${proxyId} — old IP: ${ip} → new IP: ${newIp ?? "unknown"}`);
+      storage.updateProxy(proxyId, {
+        lastRotatedAt: new Date().toISOString(),
+        lastRotationOldIp: ip,
+        lastRotationNewIp: newIp ?? "unknown",
+      }).catch(err => console.warn(`[adapter] Failed to persist rotation record for proxy ${proxyId}:`, err));
     });
   });
 

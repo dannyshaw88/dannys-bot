@@ -40,6 +40,18 @@ const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy / Adapter", t
 const ACTIONS_COL_WIDTH = 130;
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const sec = Math.max(0, Math.floor(diffMs / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
 function acctStatusPill(s: string): string {
   if (s === "valid") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (s === "banned" || s === "account_disabled" || s === "compromised" || s === "invalid_credentials") return "bg-red-50 text-red-700 border-red-200";
@@ -137,6 +149,9 @@ function ProxyRow({
   const [adapterName, setAdapterName] = useState(proxy.adapterName ?? "");
   const [rotateMin, setRotateMin] = useState(proxy.rotateEveryMin ?? "");
   const [rotateMax, setRotateMax] = useState(proxy.rotateEveryMax ?? "");
+  const lastRotatedAt = proxy.lastRotatedAt;
+  const lastRotationOldIp = proxy.lastRotationOldIp;
+  const lastRotationNewIp = proxy.lastRotationNewIp;
 
   useEffect(() => {
     if (!isAdapter) {
@@ -198,7 +213,7 @@ function ProxyRow({
   }, [proxy.id, rotateMin, rotateMax, updateProxyMutation]);
 
   // Server-side rotation flag (survives page navigation — polled every 2 s from the proxy list)
-  const serverRotating = (proxy as any).rotating as boolean ?? false;
+  const serverRotating = proxy.rotating ?? false;
   const [localRotating, setLocalRotating] = useState(false);
   const rotating = serverRotating || localRotating;
 
@@ -344,30 +359,42 @@ function ProxyRow({
               </div>
             );
             if (col === "rotate") return (
-              <div key={col} className="shrink-0 flex items-center justify-center" style={{ width: colWidths.rotate }}>
+              <div key={col} className="shrink-0 flex flex-col items-center justify-center gap-0.5" style={{ width: colWidths.rotate }}>
                 {isAdapter ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="min"
-                      value={rotateMin}
-                      onChange={e => setRotateMin(e.target.value === "" ? "" : Number(e.target.value))}
-                      onBlur={saveRotate}
-                      className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                    />
-                    <span className="text-[10px] text-muted-foreground">–</span>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="max"
-                      value={rotateMax}
-                      onChange={e => setRotateMax(e.target.value === "" ? "" : Number(e.target.value))}
-                      onBlur={saveRotate}
-                      className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                    />
-                    <span className="text-[10px] text-muted-foreground">m</span>
-                  </div>
+                  <>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="min"
+                        value={rotateMin}
+                        onChange={e => setRotateMin(e.target.value === "" ? "" : Number(e.target.value))}
+                        onBlur={saveRotate}
+                        className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                      />
+                      <span className="text-[10px] text-muted-foreground">–</span>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="max"
+                        value={rotateMax}
+                        onChange={e => setRotateMax(e.target.value === "" ? "" : Number(e.target.value))}
+                        onBlur={saveRotate}
+                        className="h-7 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                      />
+                      <span className="text-[10px] text-muted-foreground">m</span>
+                    </div>
+                    {lastRotatedAt ? (
+                      <span
+                        className="text-[10px] text-muted-foreground/70 truncate max-w-full"
+                        title={`Last rotation: ${new Date(lastRotatedAt).toLocaleString()}\n${lastRotationOldIp} → ${lastRotationNewIp}`}
+                      >
+                        Last: {timeAgo(lastRotatedAt)} · {lastRotationOldIp}→{lastRotationNewIp}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/40">Never rotated yet</span>
+                    )}
+                  </>
                 ) : (
                   <span className="text-[11px] text-muted-foreground/40">—</span>
                 )}
@@ -527,7 +554,7 @@ export function ProxiesPage() {
 
   // While any adapter is rotating, refresh the proxy list every 2 s so the spinner
   // survives page navigation (rotation state is server-side, not React state)
-  const anyRotating = proxies.some(p => (p as any).rotating);
+  const anyRotating = proxies.some(p => p.rotating);
   useEffect(() => {
     if (!anyRotating) return;
     const id = setInterval(() => {

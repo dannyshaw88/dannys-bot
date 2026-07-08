@@ -46,9 +46,21 @@ export type Proxy = {
   port: number;
   username: string | null;
   password: string | null;
+  proxyType?: string | null;
+  importLinked?: number | null;
+  adapterName?: string | null;
+  rotateEveryMin?: number | null;
+  rotateEveryMax?: number | null;
+  lastRotatedAt?: string | null;
+  lastRotationOldIp?: string | null;
+  lastRotationNewIp?: string | null;
+  // Enriched fields attached by GET /api/proxies (not persisted columns)
+  tunnelPort?: number | null;
+  rotating?: boolean;
+  currentAdapterIp?: string | null;
 };
 
-export type InsertProxy = Omit<Proxy, 'id' | 'name'>;
+export type InsertProxy = Omit<Proxy, 'id' | 'name' | 'tunnelPort' | 'rotating' | 'currentAdapterIp'>;
 
 export type Profile = {
   id: number;

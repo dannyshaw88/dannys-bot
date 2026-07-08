@@ -15,6 +15,9 @@ export const proxies = sqliteTable("proxies", {
   adapterName: text("adapter_name"),
   rotateEveryMin: integer("rotate_every_min"),
   rotateEveryMax: integer("rotate_every_max"),
+  lastRotatedAt: text("last_rotated_at"),
+  lastRotationOldIp: text("last_rotation_old_ip"),
+  lastRotationNewIp: text("last_rotation_new_ip"),
 });
 
 export const ACCOUNT_STATUSES = [
