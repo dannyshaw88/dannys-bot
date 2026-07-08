@@ -4,6 +4,53 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.394] — 2026-07-08
+
+### Fixed
+
+#### API call export: operation wrappers (FollowedUser, LikeMedia, ViewStories, etc.) incorrectly showed transport "JA3" instead of "Equinox"
+
+**Root cause:** The `setLogger` callback in `automationEngine.ts` hardcoded `transport: "ja3"` for every entry written to `instagram_api_calls`, regardless of whether the log row originated from a real HTTP hit to Instagram's servers or from a high-level operation wrapper tracked by `timed()`.
+
+Two distinct code paths both call `logCallFn`:
+
+- **`_logTransport()`** — fires once per real outbound HTTP request (e.g. `FriendshipsCreate`, `MediaLike`, `HashtagScrape`). These are genuine network hits to Instagram and correctly carry `transport: "ja3"`.
+- **`timed()`** — fires once per named operation block (e.g. `FollowedUser`, `LikeMedia`, `ViewStories`, `ViewHighlights`, `ViewReels`, `VisitNotifications`, `VisitOwnProfile`, `Login`). These are internal bookkeeping rows — no direct HTTP call is made at this level; the actual HTTP calls are already logged by `_logTransport()` inside the same block.
+
+Because both paths used the same `transport: "ja3"` value, the API call export (Excel/CSV) showed `FollowedUser` with `transport=JA3`, which is misleading — `FollowedUser` is an internal Equinox event, not a network request to Instagram.
+
+**Fix:** Added a fifth parameter `isTransportCall?: boolean` to the `ApiCallLogger` type. `_logTransport()` passes `true`; `timed()` does not (defaults to `undefined`/falsy). The `setLogger` callback now evaluates:
+
+```
+transport: isTransportCall ? "ja3" : "Equinox"
+```
+
+**Result in the export:**
+- `FriendshipsCreate`, `WebFriendshipsFollow`, `MediaLike`, `HashtagScrape`, etc. → `transport: JA3` ✓
+- `FollowedUser`, `LikeMedia`, `ViewStories`, `ViewHighlights`, `ViewReels`, `VisitNotifications`, `VisitOwnProfile`, `Login`, `MobileLogin`, etc. → `transport: Equinox` ✓
+
+**Files:**
+- `artifacts/api-server/src/instagram/instagramWebClient.ts` — `ApiCallLogger` type signature + `_logTransport` call site
+- `artifacts/api-server/src/instagram/automationEngine.ts` — `setLogger` callback
+
+---
+
+#### `_followViaWebEndpoint`: `status:"ok"` catch-all now logs a warning before optimistic return
+
+When `www.instagram.com/api/v1/friendships/create/{userId}/` returns `{"status":"ok"}` without any of the expected follow-state fields (`friendship_status`, `result`, `following`, `outgoing_request`), the code previously returned success silently. A `console.warn` is now emitted so any unexpected edge-case responses are visible in the debug log for tightening later.
+
+**File:** `artifacts/api-server/src/instagram/instagramWebClient.ts` — `_followViaWebEndpoint`
+
+---
+
+#### `human-session/run-now` endpoint: reverted
+
+A `POST /api/profiles/:profileId/tools/human-session/run-now` endpoint was added during v1.1.393 debugging to wake the HS runner for accounts where the standalone follow runner is permanently blocked. This was reverted — the HS tool structure is by design and the endpoint was not part of the agreed-upon fix scope.
+
+**File:** `artifacts/api-server/src/routes/instagram.ts`
+
+---
+
 ## [1.1.393] — 2026-07-07
 
 ### Fixed
