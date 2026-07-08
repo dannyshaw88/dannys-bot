@@ -3583,7 +3583,7 @@ export class InstagramWebClient {
       // a bare GET with no IDs returns "Invalid reel id list" every time.
       { method: "GET",  path: "/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true",                                      opName: "NotificationsBadge" },
       // Full params match the real GetDirectMessages call at line 2415
-      { method: "GET",  path: "/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20", opName: "GetDirectInbox"     },
+      { method: "GET",  path: "/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&limit=20", opName: "GetDirectInbox"     },
       { method: "GET",  path: "/api/v1/accounts/current_user/?edit=true",                                                              opName: "GetCurrentUser"     },
       // Body matches viewTimelineFeed() at line 2033 — required by Instagram for cold-start fetches
       { method: "POST", path: "/api/v1/feed/timeline/",   body: "reason=cold_start_fetch&is_pull_to_refresh=0",                        opName: "ViewTimelineFeed"   },
@@ -4194,9 +4194,9 @@ export class InstagramWebClient {
   // finding a thread ID — it is NOT a "check DMs" action.
   async shareStoryViaDm(mediaId: string, ownerId: string): Promise<boolean> {
     return this.timed("ShareStoryViaDM", async () => {
-      const j = await this.mobileSessionGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=20`
-      );
+      const j = this.isLoggedIn
+        ? await this.webGet(`/api/v1/direct_v2/inbox/?limit=20`)
+        : await this.mobileSessionGet(`/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=1&limit=20`);
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       if (!threads.length) {
         console.log(`[webClient] shareStoryViaDm: no DM threads found — skipping share`);
@@ -4228,9 +4228,10 @@ export class InstagramWebClient {
   // Fetches the main DM inbox to simulate a user checking their messages.
   async getDirectMessages(count: number = 5): Promise<boolean> {
     return this.timed("GetDirectMessages", async () => {
-      const j = await this.mobileSessionGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
-      );
+      // Prefer web session (www.instagram.com) — same fix as follow/repost host mismatch.
+      const j = this.isLoggedIn
+        ? await this.webGet(`/api/v1/direct_v2/inbox/?limit=${count}`)
+        : await this.mobileSessionGet(`/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`);
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
     }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`,
@@ -4241,8 +4242,11 @@ export class InstagramWebClient {
   // Simulates a user opening the DM inbox, then tapping into `count` threads.
   // Produces N+1 API call log entries: 1 × GetDirectMessages (inbox overview)
   // + N × GetDirectMessageThread (one per thread opened).
-  // Runs _buildWarmedIgClient() first (NotificationsBadge warm-up) to lift
-  // the 4415001 "Prompt has contribution" gate on direct_v2/inbox/.
+  // Uses the web session (www.instagram.com + EB cookieJar) when available —
+  // the same host fix as follow/repost.  The mobile API path (i.instagram.com)
+  // returns 4415001 "Prompt has contribution" for accounts whose ig_did has not
+  // been through Instagram's device-level DM registration flow, even when the
+  // EB/web session can access DMs perfectly fine.
   // Returns the full mapped inbox thread list so auto-reply can reuse it
   // without a second inbox fetch.
   async getDirectMessagesInternal(count: number = 5): Promise<{
@@ -4251,12 +4255,15 @@ export class InstagramWebClient {
     gated?: boolean;
     threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
   }> {
-    // Check a mobile session is available before making any calls.
+    // Accept either a web session (EB cookies) or a mobile session (igApiCookies).
+    const hasWebSession    = this.isLoggedIn; // cookieJar has sessionid
     const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!this._deviceAuthorization;
-    if (!hasMobileSession && !this.igApiCookies) {
-      console.warn("[webClient] getDirectMessagesInternal: no mobile session — skipping DM check");
+    if (!hasWebSession && !hasMobileSession && !this.igApiCookies) {
+      console.warn("[webClient] getDirectMessagesInternal: no session — skipping DM check");
       return { count: 0, ok: false, threads: [] };
     }
+    // Route: prefer web session (www.instagram.com) over mobile API (i.instagram.com).
+    const useWebSession = hasWebSession;
 
     // ── Step 1: warm up the session (NotificationsBadge) ─────────────────────
     // _buildWarmedIgClient fires news/inbox via mobileSessionGet — the same
@@ -4305,10 +4312,23 @@ export class InstagramWebClient {
     let inboxThreads: any[] = [];
     let firstProbeOk = false;
     try {
-      const j = await this.mobileSessionGet(
-        `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
-      );
-      if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
+      let j: any;
+      if (useWebSession) {
+        // www.instagram.com/api/v1/direct_v2/inbox/ — same endpoint the web EB
+        // uses, avoids the i.instagram.com 4415001 device-registration gate.
+        console.log("[webClient] getDirectMessagesInternal: Step 2 — webGet (www.instagram.com)");
+        j = await this.webGet(`/api/v1/direct_v2/inbox/?limit=20`);
+        if (!j || j?.status === "fail") {
+          const code = j?.content?.error_code ?? j?.error_code;
+          const msg  = j?.message ?? "no JSON";
+          throw Object.assign(new Error(`webGet inbox: ${msg} (code=${code})`), { httpStatus: 400 });
+        }
+      } else {
+        j = await this.mobileSessionGet(
+          `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&limit=20`
+        );
+        if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
+      }
       inboxThreads = j?.inbox?.threads ?? j?.threads ?? [];
       firstProbeOk = true;
       console.log(`[webClient] getDirectMessagesInternal: inbox OK — ${inboxThreads.length} thread(s)`);
@@ -4320,9 +4340,8 @@ export class InstagramWebClient {
       if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
         throw e;
       }
-      // 4415001 "Prompt has contribution" — Instagram mobile-API-level gate that
-      // does NOT reflect a tool failure or an account problem visible in the EB.
-      // Return gated:true so the engine logs it as skipped rather than error.
+      // 4415001 on the mobile path — surface as gated; the web path should have
+      // been tried first, so reaching here means no web session was available.
       if (msg.includes("4415001") || msg.includes("prompt_required_4415001")) {
         return { count: 0, ok: false, gated: true, threads: [] };
       }
@@ -4346,11 +4365,9 @@ export class InstagramWebClient {
       if (!threadId) continue;
       try {
         await this.timed("GetDirectMessageThread", async () => {
-          // Use mobileSessionGet — same reason as inbox fetch above
-          // (ig.feed.directThread also gets 400 from the library transport).
-          const j = await this.mobileSessionGet(
-            `/api/v1/direct_v2/threads/${threadId}/?visual_message_return_type=unseen&limit=10`
-          );
+          const j = useWebSession
+            ? await this.webGet(`/api/v1/direct_v2/threads/${threadId}/?limit=10`)
+            : await this.mobileSessionGet(`/api/v1/direct_v2/threads/${threadId}/?visual_message_return_type=unseen&limit=10`);
           if (!j) throw new Error(`thread ${threadId} returned null (HTTP 4xx)`);
           const msgs: any[] = j?.thread?.items ?? [];
           return { ok: true as const, count: msgs.length };
@@ -4418,12 +4435,12 @@ export class InstagramWebClient {
       const results: ReturnType<typeof mapThread>[] = [];
 
       try {
-        // Use mobileSessionGet — ig.feed.directInbox().items() gets 400 from
-        // Instagram (library transport header mismatch). mobileSessionGet uses
-        // the correct header set that all other working calls use.
-        const j = await this.mobileSessionGet(
-          `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=${count}`
-        );
+        // Prefer web session (www.instagram.com) — same host fix as follow/repost.
+        // The mobile API path (i.instagram.com) returns 4415001 for accounts
+        // whose ig_did has not been through device-level DM registration.
+        const j = this.isLoggedIn
+          ? await this.webGet(`/api/v1/direct_v2/inbox/?limit=${count}`)
+          : await this.mobileSessionGet(`/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&limit=${count}`);
         if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
         const mainThreads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
         inboxOk = true; // Instagram responded — record as a real API call
@@ -4634,18 +4651,23 @@ export class InstagramWebClient {
 
     // 2. Fetch inbox and scan for the thread — sent DM requests appear in sender's inbox
     try {
-      await this.apiThrottle();
-      const res = await igReq({
-        host: "i.instagram.com",
-        path: `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=100`,
-        method: "GET",
-        headers: this._buildMobileHeaders(this.csrfToken),
-        cookieJar: this.cookieJar,
-        proxyUrl: this.proxyUrl,
-      });
-      console.log(`[webClient] inbox HTTP ${res.status} raw(500):`, res.rawBody.slice(0, 500));
-      this._absorbResponseHeaders(res.responseHeaders);
-      const j = res.json;
+      // Use web session path (www.instagram.com) — same host fix as follow/repost/checkDm.
+      const j = this.isLoggedIn
+        ? await this.webGet(`/api/v1/direct_v2/inbox/?limit=100`)
+        : await (async () => {
+            await this.apiThrottle();
+            const res = await igReq({
+              host: "i.instagram.com",
+              path: `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=1&limit=100`,
+              method: "GET",
+              headers: this._buildMobileHeaders(this.csrfToken),
+              cookieJar: this.cookieJar,
+              proxyUrl: this.proxyUrl,
+            });
+            this._absorbResponseHeaders(res.responseHeaders);
+            return res.json;
+          })();
+      console.log(`[webClient] inbox raw keys: ${Object.keys(j ?? {}).join(",")}`);
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       console.log(`[webClient] inbox: ${threads.length} threads, top-level keys: ${Object.keys(j ?? {}).join(",")}`);
       const matched = threads.find((t: any) =>

@@ -1,21 +1,17 @@
 ---
-name: DM warm-up sequence for direct_v2/inbox
-description: The complete Phase 2 warm-up required before direct_v2/inbox will not return 4415001, and why news/inbox alone is insufficient.
+name: DM inbox host — www vs i.instagram.com
+description: direct_v2/inbox must go through www.instagram.com (web cookies) not i.instagram.com (mobile cookies) or it returns 4415001 for accounts whose ig_did hasn't been through mobile DM registration.
 ---
 
-The documented Jarvee Phase 2 sequence to prevent 4415001 on `direct_v2/inbox` is:
+## Rule
 
-```
-user.info → news.inbox → (qe.syncLoginExperiments — intentionally omitted, belongs to verify only)
-```
+All `direct_v2/inbox` and `direct_v2/threads` calls must use `webGet` (www.instagram.com + EB cookieJar) when a web session is present. The mobile API path (`mobileSessionGet`, i.instagram.com + mobileCookieJar) returns 4415001 "Prompt has contribution" for accounts imported from other tools, because the `ig_did` generated on this system is fresh and hasn't been through Instagram's device-level DM registration flow.
 
-The `users/{uid}/info` call MUST come before `news/inbox`. Without it, Instagram hasn't seen the "active user" signal and returns 4415001 "Prompt has contribution" on `direct_v2/inbox` even for accounts with no real pending in-app prompt.
-
-**Why:** Instagram requires the client to prove it knows the account's profile before granting DM inbox access. `news/inbox` alone establishes notification badge state but not the active-user context. The symptom (4415001 on `direct_v2/inbox` after a successful `news/inbox` warmup) is the exact tell that `user.info` was missing.
+**Why:** This is the same root cause as the follow/repost host mismatch. The `i.instagram.com` mobile API is more restrictive about new devices for DM-specific endpoints. The web session (www.instagram.com) has no such restriction because it uses the account's real web-browser session identity.
 
 **How to apply:**
-- In `_buildWarmedIgClient`, Phase 2a must call `mobileSessionGet(/api/v1/users/${ownUserId}/info/)` before Phase 2b (`news/inbox`).
-- If `ownUserId` is unavailable (cannot be parsed from `igApiCookies`), log a warning — the warm-up will still proceed but `direct_v2/inbox` may gate. Verified accounts always have `ds_user_id` in `igApiCookies`.
-- Use `mobileSessionGet` (not IgApiClient) for both calls — IgApiClient via CycleTLS returns status 0 for authenticated calls through certain proxies.
-- `qe/sync` (Phase 2c) belongs exclusively to verify bootstrap — do NOT add it to `_buildWarmedIgClient` or it creates a redundant double qe/sync.
-- Phase 2a errors: propagate if `logoutReason` is set (real session kill); swallow all other errors (non-fatal, continue to Phase 2b).
+- In any function calling `direct_v2/inbox` or `direct_v2/threads`: check `this.isLoggedIn` (web EB session present) first; if true, use `this.webGet(path)`. Only fall back to `this.mobileSessionGet(path)` when no web session exists.
+- The warm-up sequence (`_buildWarmedIgClient` with user.info → news/inbox) is NOT the fix for 4415001 on direct_v2/inbox. Phase 2a/2b help other endpoints but NOT the DM inbox gate.
+- `persistentBadging=true` in the URL also does NOT cause 4415001 — the host/cookie path is the real issue.
+- `webGet` returns the raw JSON without throwing on 4xx; check for `status === "fail"` manually if needed.
+- Affected call sites: `getDirectMessages`, `getDirectMessagesInternal` (Step 2 inbox + Step 3 thread), `getDMThreadsWithContent`, `shareStoryViaDm`, `getThreadIdWithUser` inbox scan.
