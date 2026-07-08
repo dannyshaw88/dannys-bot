@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.402] — 2026-07-08
+
+### Fixed
+
+#### API-call leak audit: Accept-Language still hardcoded `en-US`, and follow JA3 fingerprint was never actually conditional
+
+Follow-up to the v1.1.400/401 EB browser-leak fixes. The user asked whether the same class of leak existed on the **API side** (plain HTTPS mobile-API calls have no JS, so the `navigator.webdriver` fix does not apply there — but headers/TLS fingerprint are the API-call equivalent of a browser leak). An audit of every outbound mobile-API header found two real gaps:
+
+1. **`Accept-Language` hardcoded to `en-US,en;q=0.9` in 13 call sites** in `instagramWebClient.ts`, while `X-IG-App-Locale` / `X-IG-Device-Locale` / `X-IG-Mapped-Locale` were already correctly derived from the proxy's exit country (`resolveProxyGeo` → `countryToIgLocale`). A UK-proxy account was sending `X-IG-App-Locale: en_GB` alongside `Accept-Language: en-US,en;q=0.9` on every single API call — an internal contradiction visible on literally every request, not just at EB login.
+
+   **Fix:** added a `_acceptLanguage` getter on `InstagramWebClient` that derives the header from `this._locale` via the (now-exported) `localeToAcceptLanguage()` in `browserSession.ts`, and replaced all 13 hardcoded occurrences with `this._acceptLanguage`.
+
+2. **Follow calls (`friendships/create`) always used Chrome 120 JA3, even when a Bearer token (`X-IG-Authorization`) was present.** The existing comment described intent to use Android/OkHttp4 JA3 when a Bearer token is available (matching the Android headers + Bearer token that a real app sends together) and Chrome JA3 only as the no-Bearer fallback — but the code unconditionally passed `ja3Override: CHROME120_JA3`, so authenticated follows still went out as Chrome-TLS + (partially Android) headers, a fingerprint mismatch on exactly the call type most associated with follow-related bans.
+
+   **Fix:** `ja3Override` on the follow call is now `this._deviceAuthorization ? undefined : CHROME120_JA3` — `undefined` falls through to the transport's default `OKHTTP4_JA3` (Android), matching the full Android header set kept when auth is present; `CHROME120_JA3` is used only when auth is absent, matching the Android-header-stripped path already in place for that case.
+
+**Also confirmed correct (no change needed):** `X-IG-Timezone-Offset`, User-Agent/`_fullMobileUA`, `radio_type`, and `phone_id` handling were already consistent with the proxy geo and account UA.
+
+**Three more locale-consistency gaps found while wiring this up, same root cause (a static `en-US` default where a proxy-geo lookup was available but not used):**
+
+- `followChallengeRedirects` (challenge/checkpoint redirect follower — plain HTTPS hops straight to instagram.com over the account's proxy) now resolves Accept-Language from `resolveProxyGeo(proxy.host, proxy.port, ...)` instead of a hardcoded default.
+- `createSignupBrowser` (Puppeteer browser used during account signup) now does the same via `opts.proxyHost`.
+- `createInstagramAccountViaEBForm` (EB-driven signup form flow) now does the same via its `proxyHost` param.
+
+**Not fixed (out of scope, flagged for follow-up):** `browserProxy.ts`'s `handleBrowserProxy` handler still sends a hardcoded `en-US` Accept-Language and does not route its `fetch()` through the account's assigned proxy at all — a larger, separate gap than a header default.
+
+**Files:** `artifacts/api-server/src/instagram/instagramWebClient.ts` · `artifacts/api-server/src/instagram/browserSession.ts` (exported `localeToAcceptLanguage`)
+
+---
+
 ## [1.1.401] — 2026-07-08
 
 ### Fixed

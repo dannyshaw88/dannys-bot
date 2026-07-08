@@ -83,6 +83,7 @@ import { generateSync as totpGenerate } from "otplib";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
 import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls, CHROME120_JA3 } from "./tlsTransport.js";
+import { localeToAcceptLanguage } from "./browserSession.js";
 
 
 // Warm up the CycleTLS Go subprocess at module load so the first real request
@@ -491,6 +492,13 @@ export class InstagramWebClient {
   // between X-IG-App-Locale and the connecting IP's region (bot signal).
   // Defaults to "en_US" until the async lookup resolves.
   private _locale: string = "en_US";
+  // Accept-Language header derived from the same proxy-geo locale used for
+  // X-IG-App-Locale. Previously every call hardcoded "en-US,en;q=0.9" even on
+  // UK/other-region accounts, contradicting X-IG-App-Locale: en_GB — a
+  // geographic mismatch Instagram's fraud model flags on write calls.
+  private get _acceptLanguage(): string {
+    return localeToAcceptLanguage(this._locale);
+  }
   // Called immediately whenever _absorbResponseHeaders() updates igDeviceState
   // (e.g. new ig-set-www-claim or ig-set-authorization from Instagram).
   // Set by the automation engine to persist the fresh state to the DB so it
@@ -1267,7 +1275,7 @@ export class InstagramWebClient {
           Host: "www.instagram.com",
           "User-Agent": WEB_UA,
           Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Language": this._acceptLanguage,
         },
         cookieJar: this.cookieJar,
         proxyUrl: this.proxyUrl,
@@ -1334,7 +1342,7 @@ export class InstagramWebClient {
         Host: "www.instagram.com",
         "User-Agent": WEB_UA,
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": this._acceptLanguage,
       },
       proxyUrl: this.proxyUrl,
     });
@@ -1365,7 +1373,7 @@ export class InstagramWebClient {
         Host: "www.instagram.com",
         "User-Agent": WEB_UA,
         Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": this._acceptLanguage,
         "Content-Type": "application/x-www-form-urlencoded",
         "X-CSRFToken": this.csrfToken,
         "X-IG-App-ID": APP_ID,
@@ -1411,7 +1419,7 @@ export class InstagramWebClient {
           Host: "www.instagram.com",
           "User-Agent": WEB_UA,
           Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Language": this._acceptLanguage,
           "Content-Type": "application/x-www-form-urlencoded",
           "X-CSRFToken": this.csrfToken,
           "X-IG-App-ID": APP_ID,
@@ -1755,7 +1763,7 @@ export class InstagramWebClient {
         Host: "www.instagram.com",
         "User-Agent": WEB_UA,
         Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": this._acceptLanguage,
         "X-IG-App-ID": APP_ID,
         "X-CSRFToken": this.csrfToken,
         "X-Requested-With": "XMLHttpRequest",
@@ -1895,7 +1903,7 @@ export class InstagramWebClient {
       "Host":                         "i.instagram.com",
       "User-Agent":                   this._fullMobileUA,
       "Accept":                       "*/*",
-      "Accept-Language":              "en-US,en;q=0.9",
+      "Accept-Language":              this._acceptLanguage,
       "X-IG-App-ID":                  MOBILE_APP_ID,
       "X-CSRFToken":                  csrf,
       "X-IG-Capabilities":            "3brTvwE=",
@@ -2111,7 +2119,7 @@ export class InstagramWebClient {
         Host: "i.instagram.com",
         "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
         Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": this._acceptLanguage,
         "X-IG-App-ID": APP_ID,
         "X-IG-Capabilities": "3brTvwE=",
         "X-IG-Connection-Type": "WIFI",
@@ -2135,7 +2143,7 @@ export class InstagramWebClient {
         Host: "www.instagram.com",
         "User-Agent": WEB_UA,
         Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": this._acceptLanguage,
         "Content-Type": "application/x-www-form-urlencoded",
         "X-IG-App-ID": APP_ID,
         "X-CSRFToken": this.csrfToken,
@@ -2395,13 +2403,15 @@ export class InstagramWebClient {
 
     console.log(`[webClient] follow ${userId}: via _followViaMobileSession (signed body, _buildMobileHeaders, csrf=${csrf.slice(0, 8)}…, auth=${this._deviceAuthorization ? "present" : "MISSING"}, claim=${followHeaders["X-IG-WWW-Claim"] ?? "omitted"})`);
 
-    // Use Chrome 120 JA3 (not OkHttp4/Android) for this write call.
-    // Instagram's backend requires a Bearer token for write calls from Android-JA3
-    // clients — because real Android apps always carry one.  EB sessions use Chrome
-    // web cookies and never issue a Bearer token, so the Android fingerprint always
-    // fails on friendships/create.  Chrome JA3 removes that Bearer requirement when
-    // combined with stripping ALL Android-specific headers above — making the request
-    // look like a pure Chrome/web client that Instagram doesn't apply the Bearer gate to.
+    // JA3 fingerprint must match whichever header set was sent above.
+    // - auth PRESENT: headers above keep the full Android/Bloks/Pigeon set, so this
+    //   call must go out on the default OkHttp4/Android JA3 (ja3Override omitted) —
+    //   real Android app v431+ sends Bearer + Android headers + Android JA3 together.
+    // - auth MISSING: Android-specific headers were stripped above, so Chrome JA3
+    //   is used instead — Instagram's backend requires a Bearer token for write calls
+    //   from an Android-JA3 client (real Android apps always carry one). Sending
+    //   Android JA3 without a Bearer token, or Chrome JA3 with Android headers, are
+    //   both detectable contradictions; only one consistent identity is used per call.
     const res = await igReq({
       host: "i.instagram.com",
       path: `/api/v1/friendships/create/${userId}/`,
@@ -2410,7 +2420,7 @@ export class InstagramWebClient {
       body,
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
-      ja3Override: CHROME120_JA3,
+      ja3Override: this._deviceAuthorization ? undefined : CHROME120_JA3,
     });
 
     // Merge cookies/headers back (same as mobileSessionPost)
@@ -4962,7 +4972,7 @@ export class InstagramWebClient {
             Host: "i.instagram.com",
             "User-Agent": fullMobileUA,
             Accept: "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": this._acceptLanguage,
             "X-IG-App-ID": MOBILE_APP_ID,
             "X-IG-Capabilities": "3brTvwE=",
             "X-IG-Connection-Type": "WIFI",
@@ -5522,7 +5532,7 @@ export class InstagramWebClient {
     const headers: Record<string, string> = {
       "User-Agent": this._fullMobileUA,
       Accept: "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language": this._acceptLanguage,
       "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": String(body.length),
       "X-IG-App-ID": MOBILE_AID,
@@ -5645,7 +5655,7 @@ export class InstagramWebClient {
     const headers: Record<string, string> = {
       "User-Agent": this._fullMobileUA,
       "Accept": "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language": this._acceptLanguage,
       [waterfallHeader]: waterfallId,
       "X-Entity-Type": entityType,
       "Offset": "0",
@@ -6911,7 +6921,7 @@ export async function createInstagramAccountViaApi(params: {
     "Host": "i.instagram.com",
     "User-Agent": effectiveUA,
     "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Language": localeToAcceptLanguage(signupLocale),
     "Accept-Encoding": "gzip",
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
@@ -7385,7 +7395,7 @@ export async function createInstagramAccountViaApi(params: {
             return poolEntry?.embedded ?? UA_POOL[Math.floor(Math.random() * UA_POOL.length)].embedded;
           })(),
           "Accept": "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Language": localeToAcceptLanguage(signupLocale),
           "Accept-Encoding": "gzip, deflate",
           "Content-Type": "application/x-www-form-urlencoded",
           "X-CSRFToken": csrfToken,

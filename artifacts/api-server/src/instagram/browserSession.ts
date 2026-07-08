@@ -431,7 +431,7 @@ export function countryToIgLocale(cc: string): string {
  * Converts an Instagram locale string to an HTTP Accept-Language header value.
  * "en_GB" → "en-GB,en;q=0.9"   (BCP-47 hyphen, with base-lang fallback)
  */
-function localeToAcceptLanguage(locale: string): string {
+export function localeToAcceptLanguage(locale: string): string {
   const bcp47 = locale.replace("_", "-");  // "en_GB" → "en-GB"
   const base  = bcp47.split("-")[0];        // "en"
   return bcp47 === base ? `${base};q=1` : `${bcp47},${base};q=0.9`;
@@ -3848,12 +3848,22 @@ async function followChallengeRedirects(
 
     // Use the account's actual EB user-agent (never a hardcoded generic string).
     const sessionUA = sessions.get(profileId)?.userAgent ?? "";
+    // Accept-Language must match the proxy's exit country — these hops go straight
+    // to instagram.com over the account's proxy, so a stale en-US default here
+    // creates the same locale/IP contradiction the API-header fix addressed.
+    let hopAcceptLang = "en-US,en;q=0.9";
+    if (proxy?.host) {
+      try {
+        const geo = await resolveProxyGeo(proxy.host, proxy.port, proxy.user, proxy.pass);
+        if (geo.countryCode) hopAcceptLang = localeToAcceptLanguage(countryToIgLocale(geo.countryCode));
+      } catch { /* non-fatal — keep default */ }
+    }
     const makeHeaders = (): Record<string, string> => ({
       Cookie: [...cookieMap.entries()].map(([k, v]) => `${k}=${v}`).join("; "),
       "User-Agent": sessionUA,
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language": hopAcceptLang,
       "Cache-Control": "no-cache",
       Pragma: "no-cache",
       "X-IG-App-ID": "936619743392459",
@@ -7213,13 +7223,23 @@ export async function openSignupBrowser(opts?: {
     // Instagram also validates all three sec-ch-ua Client-Hint headers together;
     // if any are absent the CDN scores the session as non-browser and the
     // registration gets rejected server-side before any code is even evaluated.
-    await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+    // Derived from the proxy's exit country — a static en-US default here would
+    // contradict the proxy-geo-resolved locale the API-side signup call sends
+    // (same class of leak as the API Accept-Language fix).
+    let signupBrowserAcceptLang = "en-US,en;q=0.9";
+    if (opts?.proxyHost) {
+      try {
+        const geo = await resolveProxyGeo(opts.proxyHost, opts.proxyPort ?? 80, opts.proxyUsername, opts.proxyPassword);
+        if (geo.countryCode) signupBrowserAcceptLang = localeToAcceptLanguage(countryToIgLocale(geo.countryCode));
+      } catch { /* non-fatal — keep default */ }
+    }
+    await page.setExtraHTTPHeaders({ "Accept-Language": signupBrowserAcceptLang });
     try {
       const _cdp = await page.createCDPSession();
       const _chrVer = (opts?.userAgent ?? "").match(/Chrome\/(\d+)/)?.[1] ?? "130";
       await _cdp.send("Network.setExtraHTTPHeaders", {
         headers: {
-          "Accept-Language":    "en-US,en;q=0.9",
+          "Accept-Language":    signupBrowserAcceptLang,
           "sec-ch-ua":          `"Chromium";v="${_chrVer}", "Google Chrome";v="${_chrVer}", "Not?A_Brand";v="99"`,
           "sec-ch-ua-mobile":   "?1",
           "sec-ch-ua-platform": '"Android"',
@@ -7708,9 +7728,16 @@ export async function createInstagramAccountViaEBForm(params: {
     // Viewport must match the UA — a 1280×760 desktop viewport against a mobile UA
     // exposes window.innerWidth / screen.width mismatch and missing touch points.
     await page.setViewport(viewportForUA(effectiveUA));
-    // Inject Accept-Language on all outgoing HTTP requests so Instagram sees en-US.
-    // Headless Chrome sends no Accept-Language by default — a bot tell.
-    await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+    // Inject Accept-Language on all outgoing HTTP requests, derived from the proxy's
+    // exit country. Headless Chrome sends no Accept-Language by default — a bot tell —
+    // and a static en-US default here would contradict the proxy-geo-resolved locale
+    // the API-side signup call sends (same class of leak as the API Accept-Language fix).
+    let ebFormAcceptLang = "en-US,en;q=0.9";
+    try {
+      const geo = await resolveProxyGeo(proxyHost, proxyPort ?? 80, proxyUsername, proxyPassword);
+      if (geo.countryCode) ebFormAcceptLang = localeToAcceptLanguage(countryToIgLocale(geo.countryCode));
+    } catch { /* non-fatal — keep default */ }
+    await page.setExtraHTTPHeaders({ "Accept-Language": ebFormAcceptLang });
     if (proxyUsername) await page.authenticate({ username: proxyUsername, password: proxyPassword ?? "" });
 
     // Inject sec-ch-ua client-hint headers via CDP on all Instagram requests.
@@ -7723,7 +7750,7 @@ export async function createInstagramAccountViaEBForm(params: {
       cdp = await page.createCDPSession();
       await cdp.send("Network.setExtraHTTPHeaders", {
         headers: {
-          "Accept-Language":    "en-US,en;q=0.9",
+          "Accept-Language":    ebFormAcceptLang,
           "sec-ch-ua-mobile":   "?1",
           "sec-ch-ua-platform": '"Android"',
         },
