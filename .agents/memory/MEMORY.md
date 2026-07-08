@@ -10,3 +10,4 @@
 - [Artifact auto-creation duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — Replit can auto-create artifact-managed workflows that run a second live copy of a stateful backend; must gate with a cross-process lock, not assume one instance
 - [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills
 - [DM inbox host fix](dm-warmup-sequence.md) — direct_v2/inbox must use webGet (www.instagram.com + EB cookies), NOT mobileSessionGet (i.instagram.com) — same root cause as follow/repost host mismatch; warm-up sequence does NOT fix 4415001
+- [API Leak Check socks5 geo](api-leak-check-socks5.md) — resolveProxyGeo uses raw TCP HTTP CONNECT (HTTP proxies only); for socks5 fall back to fetching ip-api.com through SocksProxyAgent directly

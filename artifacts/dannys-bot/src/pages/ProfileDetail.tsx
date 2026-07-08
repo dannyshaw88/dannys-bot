@@ -2,6 +2,7 @@ import { useParams, Link } from "wouter";
 import { ArrowLeft, Instagram, Loader2 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profiles";
 import { ToolConfig } from "@/components/ToolConfig";
+import { ApiLeakCheck } from "@/components/ApiLeakCheck";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 
@@ -44,6 +45,7 @@ export default function ProfileDetail() {
           <TabsTrigger value="unfollow" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Unfollow</TabsTrigger>
           <TabsTrigger value="like" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Auto Like</TabsTrigger>
           <TabsTrigger value="dm" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">Direct Messages</TabsTrigger>
+          <TabsTrigger value="api-leak" className="text-sm px-6 h-11 rounded-lg data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:font-semibold">API Checks</TabsTrigger>
         </TabsList>
         
         <TabsContent value="follow" className="m-0 focus-visible:outline-none">
@@ -57,6 +59,9 @@ export default function ProfileDetail() {
         </TabsContent>
         <TabsContent value="dm" className="m-0 focus-visible:outline-none">
           <ToolConfig profileId={profile.id} type="dm" />
+        </TabsContent>
+        <TabsContent value="api-leak" className="m-0 focus-visible:outline-none">
+          <ApiLeakCheck profileId={profile.id} />
         </TabsContent>
       </Tabs>
     </div>

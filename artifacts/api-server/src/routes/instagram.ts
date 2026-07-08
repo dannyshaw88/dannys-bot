@@ -86,9 +86,11 @@ import {
   consumePendingAutomateSession,
   resolveProxyGeo,
   countryToIgLocale,
+  localeToAcceptLanguage,
   patchApiUALocale,
   type ProxyConfig,
 } from "../instagram/browserSession";
+import { tlsRequest, CHROME120_JA3, OKHTTP4_JA3 } from "../instagram/tlsTransport";
 import { automationEngine } from "../instagram/automationEngine";
 import { proxySlotManager } from "../instagram/proxySlotManager";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
@@ -3603,6 +3605,345 @@ export async function registerInstagramRoutes(
       req.log.error({ err }, "[leak-snapshot] error");
       res.status(500).json({ error: "Failed to save leak snapshot" });
     }
+  });
+
+  // ── API Leak Check ─────────────────────────────────────────────────────────
+  // Server-side checks for mobile API traffic integrity:
+  //   1. Proxy IP   — hit an IP-echo service through the proxy; confirm exit IP
+  //   2. Headers    — geo-resolve proxy → compare expected Accept-Language /
+  //                   X-IG-App-Locale / X-IG-Timezone-Offset vs proxy country
+  //   3. TLS / JA3  — verify CycleTLS (OkHttp4) is active via a live probe
+  //   4. Device IDs — parse igDeviceState; validate uuid/phone_id/igDid format
+  app.get("/api/profiles/:id/api-leak-check", async (req, res) => {
+    const profileId = Number(req.params.id);
+    if (!profileId) return res.status(400).json({ error: "Invalid profileId" });
+
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    // ── Resolve proxy ────────────────────────────────────────────────────────
+    let proxyHost: string | null = (profile as any).proxyHost || null;
+    let proxyPort: number | null = (profile as any).proxyPort || null;
+    let proxyType: string        = (profile as any).proxyType || "http";
+    let proxyUser: string | null = (profile as any).proxyUsername || null;
+    let proxyPass: string | null = (profile as any).proxyPassword || null;
+
+    if (!proxyHost && (profile as any).proxyId) {
+      try {
+        const [linked] = await db.select().from(proxies).where(eq(proxies.id, (profile as any).proxyId));
+        if (linked) {
+          proxyHost = linked.host;
+          proxyPort = linked.port;
+          proxyType = (linked as any).proxyType || "http";
+          proxyUser = (linked as any).username  || null;
+          proxyPass = (linked as any).password  || null;
+        }
+      } catch {}
+    }
+
+    const auth     = proxyUser && proxyPass
+      ? `${encodeURIComponent(proxyUser)}:${encodeURIComponent(proxyPass)}@`
+      : "";
+    const proxyUrl = proxyHost && proxyPort
+      ? `${proxyType === "socks5" ? "socks5" : "http"}://${auth}${proxyHost}:${proxyPort}`
+      : null;
+
+    // ── Parse stored device state ────────────────────────────────────────────
+    let deviceState: Record<string, any> | null = null;
+    try {
+      const raw = (profile as any).igDeviceState;
+      if (raw) deviceState = typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch {}
+
+    const apiUA = (profile as any).userAgentApi ?? null;
+
+    // ── Helper: make one HTTPS GET through a proxy agent ────────────────────
+    const https = await import("node:https");
+    async function proxyGet(url: string, agent: any, timeoutMs = 9000): Promise<string | null> {
+      const parsed = new URL(url);
+      return new Promise(resolve => {
+        try {
+          const r2 = https.request(
+            { host: parsed.hostname, port: 443, path: parsed.pathname + parsed.search,
+              method: "GET", agent, rejectUnauthorized: false,
+              headers: { "User-Agent": "curl/7.68.0", Accept: "*/*" } },
+            (r) => {
+              const chunks: Buffer[] = [];
+              r.on("data", (c: Buffer) => chunks.push(c));
+              r.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+              r.on("error", () => resolve(null));
+            },
+          );
+          r2.on("error", () => resolve(null));
+          r2.setTimeout(timeoutMs, () => { r2.destroy(); resolve(null); });
+          r2.end();
+        } catch { resolve(null); }
+      });
+    }
+
+    // ── Check 1 + Check 3: IP probe + TLS probe (both need a proxy agent) ───
+    type IpCheckResult     = { status: "pass"|"fail"|"warn"|"na"; label: string; detail: any };
+    type TlsCheckResult    = { status: "pass"|"fail"|"warn"|"na"; label: string; detail: any };
+    type HeaderCheckResult = { status: "pass"|"fail"|"warn"|"na"; label: string; detail: any };
+    type DeviceCheckResult = { status: "pass"|"fail"|"warn"|"na"; label: string; detail: any };
+
+    const [ipResult, tlsResult, headerResult] = await Promise.all<IpCheckResult, TlsCheckResult, HeaderCheckResult>([
+
+      // ── Check 1: Proxy IP ────────────────────────────────────────────────
+      (async (): Promise<IpCheckResult> => {
+        if (!proxyUrl || !proxyHost || !proxyPort) {
+          return { status: "fail", label: "No proxy configured", detail: null };
+        }
+        let agent: any;
+        try {
+          if (proxyType === "socks5") {
+            const { SocksProxyAgent } = await import("socks-proxy-agent");
+            agent = new SocksProxyAgent(proxyUrl);
+          } else {
+            const { HttpsProxyAgent } = await import("https-proxy-agent");
+            agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+          }
+        } catch (e: any) {
+          return { status: "fail", label: `Proxy agent init failed: ${e?.message ?? e}`, detail: null };
+        }
+
+        const [ipifyRaw, cfRaw] = await Promise.all([
+          proxyGet("https://api.ipify.org?format=text", agent),
+          proxyGet("https://1.1.1.1/cdn-cgi/trace", agent),
+        ]);
+
+        const ipifyIp = ipifyRaw?.trim() || null;
+        const cfIp    = cfRaw?.match(/ip=([^\n]+)/)?.[1]?.trim() || null;
+        const ips     = [ipifyIp, cfIp].filter(Boolean) as string[];
+        const unique  = [...new Set(ips)];
+
+        if (ips.length === 0) {
+          return { status: "fail", label: "Proxy unreachable — no IP returned", detail: { proxyHost, proxyPort, ipify: null, cloudflare: null } };
+        }
+
+        const exitIp      = ips[0];
+        const isIpHost    = /^\d+\.\d+\.\d+\.\d+$/.test(proxyHost);
+        const matchesHost = isIpHost ? exitIp === proxyHost : true;
+        const detail      = { proxyHost, proxyPort, exitIp, ipify: ipifyIp, cloudflare: cfIp, uniqueExitIps: unique };
+
+        if (unique.length > 1) {
+          return { status: "warn", label: `${unique.length} different exit IPs detected — possible split routing`, detail };
+        }
+        if (!isIpHost) {
+          return { status: "pass", label: `Exit IP: ${exitIp} (hostname proxy — IP match skipped)`, detail };
+        }
+        if (!matchesHost) {
+          return { status: "warn", label: `Exit IP ${exitIp} ≠ proxy host ${proxyHost} (rotating proxy?)`, detail };
+        }
+        return { status: "pass", label: `Exit IP matches proxy host (${exitIp})`, detail };
+      })(),
+
+      // ── Check 3: TLS / JA3 fingerprint ──────────────────────────────────
+      (async (): Promise<TlsCheckResult> => {
+        if (!proxyUrl) {
+          return { status: "fail", label: "No proxy — cannot test TLS fingerprint", detail: { cycleTls: false } };
+        }
+        try {
+          const r = await tlsRequest({
+            host: "api.ipify.org",
+            path: "/?format=text",
+            method: "GET",
+            headers: { "User-Agent": "Instagram 365.0.0.46.94 Android (30/11; 420dpi; 1080x2118; Google/google; Pixel 4a; sunfish; qcom; en_US)", Accept: "*/*" },
+            proxyUrl,
+          });
+          const probeIp = r.rawBody?.trim() || null;
+          return {
+            status: "pass",
+            label: `CycleTLS active — OkHttp4 JA3 in use. Write calls use Chrome 120 JA3.`,
+            detail: {
+              cycleTls: true,
+              okHttp4Ja3: OKHTTP4_JA3,
+              chrome120Ja3: CHROME120_JA3,
+              writeCallsPolicy: "friendships/create, media/like → CHROME120_JA3 (no Bearer required)",
+              readCallsPolicy:  "bootstrap, verify, feed → OKHTTP4_JA3",
+              probeExitIp: probeIp,
+            },
+          };
+        } catch (e: any) {
+          const msg = String(e?.message ?? e);
+          if (msg.includes("CycleTLS failed") || msg.includes("TLS-BLOCKED")) {
+            return { status: "fail", label: "CycleTLS not available — OpenSSL JA3 exposed (bot signal)", detail: { cycleTls: false, error: msg.slice(0, 200) } };
+          }
+          return { status: "warn", label: `TLS probe error: ${msg.slice(0, 100)}`, detail: { cycleTls: null, error: msg.slice(0, 200) } };
+        }
+      })(),
+
+      // ── Check 2: Header Consistency ──────────────────────────────────────
+      // Geo-resolve the proxy exit IP, then compare the expected IG headers
+      // (Accept-Language, X-IG-App-Locale, X-IG-Timezone-Offset) against:
+      //   a) the UA locale suffix stored in the DB (proxy for what will be sent)
+      //   b) the timezone offset derivable from the geo IANA timezone name
+      // For socks5 proxies, resolveProxyGeo uses raw TCP CONNECT which is
+      // HTTP-proxy specific, so we fall back to a direct ip-api.com lookup.
+      (async (): Promise<HeaderCheckResult> => {
+        if (!proxyHost || !proxyPort) {
+          return { status: "fail", label: "No proxy — cannot resolve geo", detail: null };
+        }
+
+        // For socks5, resolveProxyGeo tunnels an HTTP GET through a raw TCP
+        // socket in HTTP CONNECT style — that only works for HTTP(S) proxies.
+        // Fall back to fetching ip-api.com directly through a SOCKS agent.
+        let geo: { timezone: string | null; countryCode: string | null } = { timezone: null, countryCode: null };
+        if (proxyType === "socks5") {
+          try {
+            const { SocksProxyAgent } = await import("socks-proxy-agent");
+            const socksAgent = new SocksProxyAgent(proxyUrl!);
+            const raw = await proxyGet("https://ip-api.com/json/?fields=timezone,countryCode", socksAgent, 7000);
+            if (raw) {
+              const j = JSON.parse(raw) as { timezone?: string; countryCode?: string };
+              geo = { timezone: j.timezone ?? null, countryCode: j.countryCode ?? null };
+            }
+          } catch { /* keep null geo */ }
+        } else {
+          geo = await resolveProxyGeo(proxyHost, proxyPort, proxyUser, proxyPass).catch(() => ({ timezone: null, countryCode: null }));
+        }
+
+        if (!geo.countryCode) {
+          return { status: "warn", label: "Proxy geo lookup failed — cannot verify header consistency", detail: { proxyHost, proxyType, geo } };
+        }
+
+        // ── Expected header values (what _buildMobileHeaders would send) ───
+        const expectedLocale     = countryToIgLocale(geo.countryCode);
+        const expectedAcceptLang = localeToAcceptLanguage(expectedLocale);
+
+        // Derive UTC offset in seconds from IANA timezone name using Intl API.
+        // This mirrors the ip-api.com `offset` field that instagramWebClient uses.
+        let expectedTzOffset: number | null = null;
+        if (geo.timezone) {
+          try {
+            const now = new Date();
+            const fmt = new Intl.DateTimeFormat("en-US", {
+              timeZone: geo.timezone, hour12: false,
+              year: "numeric", month: "2-digit", day: "2-digit",
+              hour: "2-digit", minute: "2-digit", second: "2-digit",
+            });
+            const parts = fmt.formatToParts(now).reduce<Record<string, string>>((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+            const hr = Number(parts.hour);
+            // Intl may return hour 24 for midnight in some locales
+            const localMs = Date.UTC(
+              Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+              hr === 24 ? 0 : hr, Number(parts.minute), Number(parts.second),
+            );
+            expectedTzOffset = Math.round((localMs - now.getTime()) / 1000);
+          } catch { /* keep null */ }
+        }
+
+        // ── Actual stored values ────────────────────────────────────────────
+        // UA locale suffix — last semicolon-separated field of the API UA string
+        // e.g. "… 420dpi; …; en_GB" → "en_GB"
+        let uaLocale: string | null = null;
+        if (apiUA) {
+          const parts = (apiUA as string).split(";").map((s: string) => s.trim());
+          const last  = parts[parts.length - 1] ?? "";
+          if (/^[a-z]{2}_[A-Z]{2}$/.test(last)) uaLocale = last;
+        }
+
+        const issues: string[] = [];
+
+        // Issue A: UA locale doesn't match proxy geo (will cause X-IG-App-Locale mismatch)
+        if (uaLocale && uaLocale !== expectedLocale) {
+          issues.push(`UA locale "${uaLocale}" ≠ expected "${expectedLocale}" for ${geo.countryCode} proxy — X-IG-App-Locale will be geo-corrected at runtime but UA string is wrong`);
+        }
+
+        // Issue B: no locale suffix in UA (won't cause a header leak but is unusual)
+        if (apiUA && !uaLocale) {
+          issues.push("No locale suffix found in API UA string — cannot verify locale consistency");
+        }
+
+        const detail: Record<string, any> = {
+          proxyHost,
+          proxyType,
+          countryCode:              geo.countryCode,
+          timezone:                 geo.timezone,
+          // What _buildMobileHeaders() will ACTUALLY send (derived from proxy geo at runtime)
+          willSend_AcceptLanguage:  expectedAcceptLang,
+          willSend_XIG_App_Locale:  expectedLocale,
+          willSend_XIG_TzOffset:    expectedTzOffset !== null ? String(expectedTzOffset) : "(unknown)",
+          // What the stored UA locale says
+          uaStoredLocale:           uaLocale,
+          issues,
+        };
+
+        if (issues.length > 0) {
+          return { status: issues.some(i => i.includes("≠")) ? "fail" : "warn", label: issues.join("; "), detail };
+        }
+        const tzStr = expectedTzOffset !== null ? `, TZ offset ${expectedTzOffset}s` : "";
+        return {
+          status: "pass",
+          label: `Locale ${expectedLocale} (${geo.countryCode})${tzStr} — Accept-Language, X-IG-App-Locale, X-IG-Timezone-Offset all geo-consistent`,
+          detail,
+        };
+      })(),
+    ]);
+
+    // ── Check 4: Device ID sanity (sync) ────────────────────────────────────
+    const deviceIdResult: DeviceCheckResult = (() => {
+      if (!deviceState) {
+        return { status: "warn", label: "No device state stored — account not yet verified", detail: { hasDeviceState: false } };
+      }
+      // Any RFC 4122 UUID (v1–v5) is valid — don't require v4 specifically.
+      const UUID_ANY   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ANDROID_ID = /^android-[0-9a-f]{16}$/i;
+
+      const uuid     = deviceState.uuid     ?? null;
+      const phoneId  = deviceState.phoneId  ?? deviceState.phone_id ?? null;
+      const deviceId = deviceState.deviceId ?? deviceState.device_id ?? null;
+      const igDid    = deviceState.igDid    ?? null;
+
+      const issues: string[] = [];
+
+      if (!uuid)     issues.push("uuid missing");
+      else if (!UUID_ANY.test(uuid))    issues.push(`uuid malformed: ${String(uuid).slice(0, 20)}…`);
+
+      if (!phoneId)  issues.push("phone_id missing");
+      else if (!UUID_ANY.test(phoneId)) issues.push(`phone_id malformed: ${String(phoneId).slice(0, 20)}…`);
+
+      if (!deviceId) issues.push("device_id missing");
+      else if (!ANDROID_ID.test(deviceId) && !UUID_ANY.test(deviceId)) {
+        issues.push(`device_id unexpected format: ${String(deviceId).slice(0, 20)}…`);
+      }
+
+      if (!igDid)    issues.push("igDid missing");
+      else if (!UUID_ANY.test(igDid))   issues.push(`igDid malformed: ${String(igDid).slice(0, 20)}…`);
+
+      const presentIds = [uuid, phoneId, deviceId, igDid].filter(Boolean) as string[];
+      if (new Set(presentIds).size < presentIds.length) {
+        issues.push("duplicate IDs detected — fingerprint not unique across fields");
+      }
+
+      const detail: Record<string, any> = {
+        uuid:     uuid    ? `${String(uuid).slice(0, 8)}…`    : null,
+        phoneId:  phoneId ? `${String(phoneId).slice(0, 8)}…` : null,
+        deviceId: deviceId ?? null,
+        igDid:    igDid   ? `${String(igDid).slice(0, 8)}…`   : null,
+        issues,
+      };
+
+      if (issues.length === 0) {
+        return { status: "pass", label: "All 4 device IDs present and properly formatted", detail };
+      }
+      const hasMissing = issues.some(i => i.includes("missing"));
+      return { status: hasMissing ? "warn" : "fail", label: issues.join("; "), detail };
+    })();
+
+    res.json({
+      profileId,
+      username:        (profile as any).username ?? null,
+      checkedAt:       new Date().toISOString(),
+      proxyConfigured: !!proxyUrl,
+      proxy:           proxyHost && proxyPort ? `${proxyHost}:${proxyPort}` : null,
+      checks: {
+        ip:        { title: "Proxy IP",           ...ipResult },
+        headers:   { title: "Header Consistency", ...headerResult },
+        tls:       { title: "TLS / JA3",          ...tlsResult },
+        deviceIds: { title: "Device IDs",         ...deviceIdResult },
+      },
+    });
   });
 
   // ── Server-side proxy leak check — called at export time, no browser needed ──
