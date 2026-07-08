@@ -2047,9 +2047,6 @@ async function doAutoLogin(
     await delay(150);
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-    await delay(80);
-    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-    await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
 
     // Wait for Instagram's async username validation to settle before tapping the
     // password field. Instagram re-renders the form (shows a checking-username
