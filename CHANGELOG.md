@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.399] — 2026-07-08
+
+### Fixed
+
+#### EB browser toolbar "Login" and "2FA" macros used the wrong Tab-key sequence, out of step with Instagram's current login form focus order
+
+**Root cause:** Both the manual "Login" toolbar button (which pastes username/password and submits) and the manual "2FA" toolbar button (which pastes a generated TOTP code and submits) in the embedded browser (EB) had Tab-key counts that no longer matched Instagram's field/focus order:
+
+- **Login macro:** after pasting the username it sent only a single `Tab` before pasting the password (`paste username → Tab → paste password → Tab, Tab → Enter`), skipping over a focusable element between the two fields.
+- **2FA macro (toolbar button):** it pasted the code immediately into whatever was focused, with no leading `Tab`s at all, then sent four trailing `Tab`s before `Enter`.
+- **2FA macro (inline, automatic continuation right after a login submit):** same missing leading `Tab`s and one extra trailing `Tab` as the toolbar button version.
+
+**Fix:** All three macros now use the corrected sequence:
+- **Login:** paste username → `Tab, Tab` → paste password → `Tab, Tab` → `Enter`.
+- **2FA (toolbar button and inline auto-continuation):** `Tab, Tab` → paste code → `Tab, Tab, Tab` → `Enter`.
+
+All key events are still dispatched via `Input.dispatchKeyEvent`/`Input.insertText` over CDP (OS-level, `isTrusted = true`) — unchanged from the existing anti-detection approach, only the Tab counts and paste ordering changed.
+
+**File:** `artifacts/electron/src/ebManager.ts` — `case "login"` (`_cdpFillLogin` username→password Tab step, inline 2FA continuation) and `case "totp"` (2FA toolbar button macro)
+
+---
+
 ## [1.1.398] — 2026-07-08
 
 ### Changed
