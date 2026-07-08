@@ -19,17 +19,9 @@ export function LoginRateLimitDialog({ open, proxyDisplay, onCancel, onContinue 
             IP Login Rate Limit Warning
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 text-sm">
-          <p>
-            <span className="font-semibold">{proxyDisplay}</span> has already been used to verify{" "}
-            <span className="font-semibold text-red-600 dark:text-red-400">3 new accounts in the last 6 hours</span>.
-          </p>
-          <p className="text-muted-foreground">
-            Instagram allows roughly{" "}
-            <span className="font-semibold text-foreground">3 new account logins per IP per 6 hours</span>.
-            Adding a 4th new account on this IP may increase the risk of login flags.
-            Accounts already running on this proxy for 6+ hours are not affected.
-          </p>
+        <div className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{proxyDisplay}</span> has verified{" "}
+          <span className="font-semibold text-red-600 dark:text-red-400">3 new accounts in the last 6 hours</span>.
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
