@@ -1591,6 +1591,20 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   // against the proxy exit IP.  This override fixes the mismatch by wrapping
   // the constructor to always inject the correct timeZone option.
   if(_TZ){try{var _oDTF=Intl.DateTimeFormat;var _pDTF=function(l,o){return new _oDTF(l,Object.assign({},o||{},{timeZone:_TZ}));};_pDTF.prototype=_oDTF.prototype;_pDTF.supportedLocalesOf=_oDTF.supportedLocalesOf.bind(_oDTF);Intl.DateTimeFormat=_pDTF;}catch(_e){}}
+  // ── Intl locale fix: RelativeTimeFormat / NumberFormat / PluralRules / Collator ─
+  // Emulation.setUserAgentOverride acceptLanguage controls HTTP headers and
+  // navigator.language but NOT the ICU locale used by other Intl constructors —
+  // they read the process locale directly (e.g. may expose 'pt-BR' on a Linux
+  // server even though navigator.language is 'en-US').  Force them to match.
+  try{var _lang0=(navigator.languages&&navigator.languages[0])||'en-US';
+    ['RelativeTimeFormat','NumberFormat','PluralRules','Collator'].forEach(function(n){
+      var _o=(Intl)[n];if(!_o)return;
+      var _p=function(l,o){return new _o(l!==undefined?l:_lang0,o);};
+      try{_p.prototype=_o.prototype;}catch(_e){}
+      try{_p.supportedLocalesOf=_o.supportedLocalesOf.bind(_o);}catch(_e){}
+      try{(Intl)[n]=_p;}catch(_e){}
+    });
+  }catch(_e){}
 }catch(e){}})();`;
   // Make every Object.defineProperty getter in the fp script configurable:true.
   // Without this, the desktop-mode fp script (which runs when ghost browser
@@ -2942,7 +2956,9 @@ export async function openEbWindow(opts: {
       try {
         const _tzAc = new AbortController();
         const _tzTimer = setTimeout(() => _tzAc.abort(), 5000);
-        const tzRes = await fetch(
+        // Use ses.fetch() (session-scoped) so the request routes through the
+        // account's proxy — the machine's real IP is never sent to ip-api.com.
+        const tzRes = await ses.fetch(
           `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
           { signal: _tzAc.signal },
         );
