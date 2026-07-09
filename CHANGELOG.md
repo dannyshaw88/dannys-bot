@@ -4,6 +4,27 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.426] — 2026-07-09
+
+### Mobile Farm — fix WebSocket port (Electron serves frontend + API on same port)
+
+**Root cause of "WS error readyState=0 / code=1006 / never connects":**
+
+The v1.1.425 build changed `makeWsUrl()` to always connect to
+`ws://127.0.0.1:8082/...` (the Replit dev `__API_PORT__`).  In Electron the
+API server does NOT run on 8082 — it finds a free port at startup (preferred
+32987, falls back to random).  The frontend is served by the same Express
+process on that same dynamic port.  So `window.location.host` is
+`127.0.0.1:32987` and IS the correct WebSocket target.  Connecting to 8082
+failed immediately with ECONNREFUSED, which in the browser WebSocket API
+surfaces as `readyState=0` + `code=1006` — exactly what the debug log showed.
+
+**Fix:** `makeWsUrl()` reverted to `window.location.host` (with `ws:`/`wss:`
+derived from `window.location.protocol`).  The `__API_PORT__` fallback is kept
+only for environments where `window.location.host` is empty.
+
+---
+
 ## [1.1.425] — 2026-07-09
 
 ### Mobile Farm — 4-slot row, Electron WebSocket fix, visible debug log

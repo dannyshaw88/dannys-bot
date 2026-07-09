@@ -34,12 +34,21 @@ interface PhonesResponse {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Always connect directly to the API server on 127.0.0.1:__API_PORT__.
- * In Electron there is no Vite proxy, so window.location.host is wrong.
+ * Build the WebSocket URL for the screen stream.
+ *
+ * In Electron the Express API server also serves the frontend (same process,
+ * same port — preferred 32987).  window.location.host is therefore
+ * "127.0.0.1:32987" and IS the right target.  __API_PORT__ (8082) is only
+ * correct in the Replit dev environment where there is a Vite proxy; using it
+ * inside Electron would point at the wrong port and fail immediately.
  */
 function makeWsUrl(serial: string): string {
-  const port = (typeof __API_PORT__ !== "undefined" && __API_PORT__) ? __API_PORT__ : "8082";
-  return `ws://127.0.0.1:${port}/api/mobile/screen/${encodeURIComponent(serial)}`;
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  // window.location.host is "127.0.0.1:<port>" in Electron and the correct
+  // Replit dev host when going through the Vite proxy.
+  const host = window.location.host
+    || `127.0.0.1:${typeof __API_PORT__ !== "undefined" ? __API_PORT__ : "8082"}`;
+  return `${proto}//${host}/api/mobile/screen/${encodeURIComponent(serial)}`;
 }
 
 async function fetchPhones(): Promise<PhonesResponse> {
