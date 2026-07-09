@@ -317,7 +317,7 @@ function newIgClient(): IgApiClient {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
 const APP_ID  = "936619743392459";
 
 /**
@@ -5571,7 +5571,7 @@ export class InstagramWebClient {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers: {
-          "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+          "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
           Accept: "image/*,*/*",
         },
       };

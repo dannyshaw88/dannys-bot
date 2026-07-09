@@ -470,10 +470,21 @@ const CHROME_BUILD_INFO: Record<string, { full: string; grease: string; greaseVe
   "135": { full: "135.0.7049.114", grease: " Not A;Brand", greaseVer: "8" },
   "136": { full: "136.0.7103.125", grease: " Not;A Brand", greaseVer: "8" },
   "137": { full: "137.0.7151.55",  grease: " Not;A Brand", greaseVer: "8" },
+  "138": { full: "138.0.7204.101", grease: " Not;A Brand", greaseVer: "8" },
+  "139": { full: "139.0.7258.66",  grease: " Not;A Brand", greaseVer: "8" },
+  "140": { full: "140.0.7312.45",  grease: " Not;A Brand", greaseVer: "8" },
 };
 
+// Real Android Chrome auto-updates within days of a new stable release — a
+// device reporting a Chrome version that's been end-of-life for months is
+// itself a fingerprint tell, independent of any header/TLS/device-ID check.
+// Bump this whenever CHROME_BUILD_INFO gains a newer entry so every fallback
+// site (UA generation, Client-Hints, injected JS) stays on a current version
+// instead of silently drifting stale as real Chrome ships past it.
+const CURRENT_CHROME_MAJOR = "139";
+
 function getChromeBuildInfo(majorVersion: string): { full: string; grease: string; greaseVer: string } {
-  return CHROME_BUILD_INFO[majorVersion] ?? { full: `${majorVersion}.0.6778.260`, grease: " Not A;Brand", greaseVer: "8" };
+  return CHROME_BUILD_INFO[majorVersion] ?? CHROME_BUILD_INFO[CURRENT_CHROME_MAJOR];
 }
 
 // ── Desktop Client-Hints metadata resolver ────────────────────────────────────
@@ -686,7 +697,7 @@ async function armSilentWindowAntiDetection(
       fp = typeof opts.ebFingerprint === "string" ? JSON.parse(opts.ebFingerprint) : (opts.ebFingerprint ?? null);
     } catch { fp = null; }
     const isMobile = !!browserUA && (browserUA.includes("Mobile") || isApiFormatUA(browserUA));
-    const chromeMajor = browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+    const chromeMajor = browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? CURRENT_CHROME_MAJOR;
     const buildInfo = getChromeBuildInfo(chromeMajor);
     const fpScript = buildFingerprintScript(isMobile, apiUA, fp, buildInfo.full, buildInfo.grease, buildInfo.greaseVer, null, browserUA);
 
@@ -1566,7 +1577,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   }catch(e){}
   try{
     var _chm=_ua.match(/Chrome\\/([0-9]+)/);
-    var _chv=_chm?_chm[1]:"131";
+    var _chv=_chm?_chm[1]:"${CURRENT_CHROME_MAJOR}";
     var _chp=_ua.indexOf("Android")>=0?"Android":_ua.indexOf("Macintosh")>=0?"macOS":_ua.indexOf("Linux")>=0?"Linux":"Windows";
     var _chmo=_ua.indexOf("Android")>=0&&_ua.indexOf("Mobile")>=0;
     // Real greased brand + version baked in from CHROME_BUILD_INFO at injection time.
@@ -1795,7 +1806,7 @@ function apiUAToBrowserUA(apiUA: string): { browserUA: string; androidVersion: s
   // the advertised Chrome version matches reality.  Hardcoding "131" meant all
   // ghost/verify windows presented the same UA regardless of the Electron build,
   // which is a trivial bot-detection signal.
-  const chromeMajor = process.versions.chrome?.split(".")[0] ?? "131";
+  const chromeMajor = process.versions.chrome?.split(".")[0] ?? CURRENT_CHROME_MAJOR;
   const browserUA = `Mozilla/5.0 (Linux; Android ${androidVersion}; ${deviceModel}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Mobile Safari/537.36`;
   return { browserUA, androidVersion, deviceModel };
 }
@@ -2036,7 +2047,7 @@ async function doAutoLogin(
     try {
       try { wc.debugger.attach("1.3"); } catch {}
       wireHeaderCapture(wc, profileId);
-      const _chromeMajor = (userAgent.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
+      const _chromeMajor = (userAgent.match(/Chrome\/(\d+)/)?.[1]) ?? CURRENT_CHROME_MAJOR;
       const _isMob = userAgent.includes("Mobile") || userAgent.includes("Android");
       const _buildInfo = getChromeBuildInfo(_chromeMajor);
       // Extract Android version from UA string — must match Sec-CH-UA-Platform-Version.
@@ -2952,7 +2963,7 @@ export async function openEbWindow(opts: {
     console.log(`[ebManager:${profileId}] API-format UA converted → browserUA="${_browserUA}" apiUA="${userAgent}"`);
   }
   let _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
-  const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? "131";
+  const _fpChromeMajor = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? CURRENT_CHROME_MAJOR;
   // ── DEVICE FINGERPRINT CONTINUITY: no forced desktop-UA override ──────────
   // REMOVED (6 Jul 2026, ban-fix): this block used to force EVERY regular
   // (non-ghost, non-verify) account EB window into a shared, generic Windows
@@ -8827,19 +8838,19 @@ export function startEbIpcServer(
             relay("[mobile-setup] Forcing mobile layout via CDP (required for signup URL flow)…");
             try {
               await wc.debugger.sendCommand("Emulation.setUserAgentOverride", {
-                userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+                userAgent: `Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CURRENT_CHROME_MAJOR}.0.0.0 Mobile Safari/537.36`,
                 acceptLanguage: "en-US,en;q=0.9",
                 platform: "Linux armv8l",
                 userAgentMetadata: {
                   brands: [
                     { brand: "Not_A Brand",   version: "8" },
-                    { brand: "Chromium",       version: "131" },
-                    { brand: "Google Chrome",  version: "131" },
+                    { brand: "Chromium",       version: CURRENT_CHROME_MAJOR },
+                    { brand: "Google Chrome",  version: CURRENT_CHROME_MAJOR },
                   ],
                   fullVersionList: [
                     { brand: "Not_A Brand",   version: "8.0.0.0" },
-                    { brand: "Chromium",       version: "131.0.6778.204" },
-                    { brand: "Google Chrome",  version: "131.0.6778.204" },
+                    { brand: "Chromium",       version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).full },
+                    { brand: "Google Chrome",  version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).full },
                   ],
                   platform:        "Android",
                   platformVersion: "14",
@@ -8870,7 +8881,7 @@ export function startEbIpcServer(
                   { name: "any-pointer", value: "coarse" },
                 ],
               });
-              relay("[mobile-setup] ✅ Mobile UA=Pixel 8 Chrome/131 viewport=393x851 dpr=2.75 touch=on hover=none pointer=coarse");
+              relay(`[mobile-setup] ✅ Mobile UA=Pixel 8 Chrome/${CURRENT_CHROME_MAJOR} viewport=393x851 dpr=2.75 touch=on hover=none pointer=coarse`);
             } catch (mobileErr: any) {
               relay(`[mobile-setup] ⚠ Could not set mobile layout: ${mobileErr?.message ?? String(mobileErr)} — desktop layout may be active, signup flow may fail`);
             }

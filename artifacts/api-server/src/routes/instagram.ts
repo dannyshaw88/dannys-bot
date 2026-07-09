@@ -150,7 +150,7 @@ function pickDesktopUAForAccount(username: string): { api: string; embedded: str
 // Last-resort desktop Chrome UA — used ONLY for the Clear EB Session cleanup path when
 // no per-account UA is stored (so the session can still be wiped even if UA is unset).
 // NEVER use this for a new login, verify, or WS attach — those must block instead.
-const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
 
 // Per-account verify lock — prevents concurrent logins for the same account.
 // Multiple simultaneous IgApiClient instances logging in with the same device

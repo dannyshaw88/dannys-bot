@@ -7722,7 +7722,7 @@ export async function createInstagramAccountViaEBForm(params: {
     // (mid, ig_did, cookies) matches what the mobile API will use during verification.
     // A Windows desktop UA paired with mobile API calls is a device-type mismatch —
     // one of the clearest signals that the session did not originate on a real phone.
-    const GHOST_DEFAULT_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AD1A.240530.047) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.102 Mobile Safari/537.36";
+    const GHOST_DEFAULT_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AD1A.240530.047) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.66 Mobile Safari/537.36";
     const effectiveUA = userAgent || GHOST_DEFAULT_UA;
     await page.setUserAgent(effectiveUA);
     // Viewport must match the UA — a 1280×760 desktop viewport against a mobile UA

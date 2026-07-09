@@ -120,7 +120,7 @@ function rewriteHtml(html: string, baseUrl: string, profileId: number, proxyBase
 export async function handleBrowserProxy(req: Request, res: Response) {
   const profileId = Number(req.params.profileId);
   const targetUrl = req.query.url as string;
-  const userAgent = req.query.ua as string || "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
+  const userAgent = req.query.ua as string || "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36";
 
   if (!targetUrl) {
     return res.status(400).send("Missing url parameter");

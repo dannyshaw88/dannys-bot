@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.414",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Every User-Agent string used by real accounts — the mobile UA pool (150+ device profiles), the EB signup mobile-emulation UA, and every desktop/API fallback UA — was pinned to a stale Chrome version (Chrome 120–131) that has been end-of-life for months. Real Android/Chrome auto-updates within days of release, so a device claiming to be a current phone but reporting a version that old is a static, session-independent bot tell — present on every login regardless of IP, proxy, or account history. All UA pools and fallbacks now report Chrome 137–140, and a single CURRENT_CHROME_MAJOR constant controls the EB browser's live version going forward.",
+        technical: [
+          "shared/userAgents.ts: 119 stale Chrome/1xx occurrences across the mobile device UA pool bumped to Chrome 137-140; DESKTOP_CHROME_MAX_VERSION raised 137→140",
+          "instagramWebClient.ts (WEB_UA, image-download UA), browserSession.ts (GHOST_DEFAULT_UA), browserProxy.ts, routes/instagram.ts (DESKTOP_BROWSER_UA), automationEngine.ts (defaultUA) — all stale hardcoded fallback UAs updated",
+          "ebManager.ts: CHROME_BUILD_INFO table extended to 138/139/140; new CURRENT_CHROME_MAJOR constant replaces every hardcoded \"131\" fallback (UA generation, Client-Hints, injected fingerprint JS, signup mobile-emulation UA)",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.413",
     date: "9 Jul 2026",
     items: [
