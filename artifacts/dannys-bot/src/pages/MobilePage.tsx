@@ -88,7 +88,7 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 // ─── Live Canvas ──────────────────────────────────────────────────────────────
 
-const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }) {
+const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: string; onLog?: (msg: string) => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
@@ -98,10 +98,10 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
 
-  // No-op logger kept as a name so the effect below reads cleanly; the debug
-  // log panel was removed from the phone UI itself (moved out — nothing to
-  // render on-device anymore).
-  const addLog = useCallback((_msg: string) => {}, []);
+  // The debug log panel was moved off the phone screen itself — this just
+  // forwards messages up to the parent, which renders them in a panel below
+  // the automation settings on the right.
+  const addLog = useCallback((msg: string) => { onLog?.(msg); }, [onLog]);
 
   // FPS ticker
   useEffect(() => {
@@ -269,13 +269,13 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
   return (
     <div className="absolute inset-0 bg-black flex flex-col">
       {status === "connecting" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
           <Loader2 className="w-5 h-5 animate-spin text-white/30" />
           <span className="text-[10px] text-white/30 select-none">Connecting…</span>
         </div>
       )}
       {status === "waiting" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
           <Loader2 className="w-5 h-5 animate-spin text-white/30" />
           <span className="text-[10px] text-white/30 select-none">Waiting for screen data…</span>
         </div>
@@ -342,7 +342,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx }: { phone: UsbPhone | null; idx: number }) {
+function PhoneSlot({ phone, idx, onLog }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void }) {
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
@@ -353,7 +353,7 @@ function PhoneSlot({ phone, idx }: { phone: UsbPhone | null; idx: number }) {
   const isEmpty        = !phone;
 
   return (
-    <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl w-full">
+    <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl w-full h-full">
 
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-white/6 shrink-0">
@@ -370,8 +370,14 @@ function PhoneSlot({ phone, idx }: { phone: UsbPhone | null; idx: number }) {
         {isEmpty        && <span className="text-[9px] font-mono text-white/15 shrink-0">empty</span>}
       </div>
 
-      {/* Screen area — 9:16 portrait */}
-      <div className="relative bg-zinc-900" style={{ width: "100%", aspectRatio: "9 / 16" }}>
+      {/* Screen area — fills whatever height is left in the card. Using
+          flex-1/min-h-0 here (instead of a fixed aspect-ratio) means the
+          card's real, computed pixel height always matches its parent, so
+          nested percentage heights below (the canvas) never collapse to 0 —
+          which is what made the old layout both overflow the viewport and
+          silently stop registering clicks. The canvas itself preserves the
+          real phone aspect ratio via object-fit: contain. */}
+      <div className="relative bg-zinc-900 flex-1 min-h-0">
         {isEmpty && <EmptyShell idx={idx} />}
 
         {isUnauthorized && (
@@ -390,7 +396,7 @@ function PhoneSlot({ phone, idx }: { phone: UsbPhone | null; idx: number }) {
         )}
 
         {/* Auto-stream — always mounts when phone is ready */}
-        {isReady && phone && <LiveCanvas serial={phone.serial} />}
+        {isReady && phone && <LiveCanvas serial={phone.serial} onLog={onLog} />}
       </div>
 
       {/* Nav bar */}
@@ -640,6 +646,35 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
+// ─── Debug log panel (right column, below settings) ───────────────────────────
+
+function DebugLogPanel({ logs }: { logs: string[] }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = boxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs]);
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="px-4 py-2 border-b border-border shrink-0 flex items-center gap-1.5">
+        <Terminal className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-foreground">Stream log</span>
+      </div>
+      <div ref={boxRef} className="flex-1 min-h-0 overflow-y-auto bg-zinc-950 px-3 py-2">
+        {logs.length === 0 ? (
+          <p className="text-[11px] text-white/25 font-mono">No activity yet…</p>
+        ) : (
+          logs.map((l, i) => (
+            <div key={i} className="text-[10px] font-mono text-white/50 leading-relaxed whitespace-pre-wrap break-all">{l}</div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TOTAL_SLOTS = 1;
@@ -648,6 +683,12 @@ export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logs,    setLogs]    = useState<string[]>([]);
+
+  const pushLog = useCallback((msg: string) => {
+    const stamp = new Date().toLocaleTimeString([], { hour12: false });
+    setLogs(l => [...l.slice(-199), `${stamp}  ${msg}`]);
+  }, []);
 
   const refresh = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -666,13 +707,24 @@ export function MobilePage() {
   const phones = data?.phones ?? [];
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
 
+  // Only true once we have real data AND either a phone is connected or one
+  // of the setup panels needs to take over the whole content area.
+  const showSplitView = !!(data && data.adbFound && !error && (phones.length > 0 || loading));
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
-      <main className="ml-[133px] flex-1 overflow-y-auto">
+      {/* h-screen + flex-col + overflow-hidden here (instead of the old
+          overflow-y-auto page scroll) is required: it's what gives every
+          descendant below a real, computed pixel height to stretch/percent
+          against. Without it, "h-full" a few levels down silently resolves
+          to 0 against an auto-height ancestor — which is why the phone used
+          to render far down the page (extra collapsed space above it) and
+          why taps landed on a zero-size element and did nothing. */}
+      <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
+        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Smartphone className="w-5 h-5 text-primary" />
             <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
@@ -696,37 +748,44 @@ export function MobilePage() {
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-6">
-          {error && (
-            <div className="max-w-lg mx-auto mt-12 flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-xl p-4">
-              <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-              <div>
-                <div className="text-sm font-semibold text-destructive">Could not reach server</div>
-                <div className="text-xs text-destructive/80 mt-0.5">{error}</div>
+        {/* Setup / error states — the only part of the page allowed to scroll */}
+        {!showSplitView && (
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
+            {error && (
+              <div className="max-w-lg mx-auto mt-12 flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-xl p-4">
+                <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-destructive">Could not reach server</div>
+                  <div className="text-xs text-destructive/80 mt-0.5">{error}</div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {data && !data.adbFound && !error && <NoAdbPanel onSaved={() => refresh(true)} />}
+            {data && !data.adbFound && !error && <NoAdbPanel onSaved={() => refresh(true)} />}
 
-          {data && data.adbFound && phones.length === 0 && !loading && (
-            <NoPhonesPanel rawOutput={data.rawOutput} />
-          )}
-        </div>
+            {data && data.adbFound && phones.length === 0 && !loading && !error && (
+              <NoPhonesPanel rawOutput={data.rawOutput} />
+            )}
+          </div>
+        )}
 
-        {/* Phone (left half, full height) + automation settings (right half) */}
-        {data && data.adbFound && (
-          <div className="flex" style={{ minHeight: "calc(100vh - 57px)" }}>
-            <div className="flex items-stretch justify-center p-6" style={{ width: "50%" }}>
-              <div className="h-full" style={{ aspectRatio: "9 / 16", maxWidth: "100%" }}>
+        {/* Phone (left half, full height) + automation settings & log (right half) */}
+        {showSplitView && (
+          <div className="flex-1 min-h-0 flex">
+            <div className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
+              <div className="h-full aspect-[9/16]" style={{ maxWidth: "100%" }}>
                 {slots.map((phone, i) => (
-                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} />
+                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onLog={pushLog} />
                 ))}
               </div>
             </div>
-            <div className="border-l border-border" style={{ width: "50%" }}>
-              <AutomationSettingsPanel phone={slots[0]} />
+            <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
+              <div className="flex-[2] min-h-0 overflow-y-auto">
+                <AutomationSettingsPanel phone={slots[0]} />
+              </div>
+              <div className="flex-1 min-h-0 border-t border-border">
+                <DebugLogPanel logs={logs} />
+              </div>
             </div>
           </div>
         )}
