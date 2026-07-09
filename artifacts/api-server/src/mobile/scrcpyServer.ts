@@ -249,6 +249,18 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     return `scrcpy server exited (code=${serverExitCode})${tail ? `: ${tail}` : " with no output"}`;
   };
 
+  // A socket 'close' event can fire a beat before the spawned process's own
+  // 'exit' event is delivered (they're two independent async notifications
+  // for essentially the same crash), so checking failIfServerDied()
+  // synchronously right after a socket error/close can race and miss real
+  // exit output that lands milliseconds later. Give the exit event a short
+  // grace window before giving up on getting a real reason.
+  const waitBriefly = (ms: number): Promise<void> =>
+    serverExited ? Promise.resolve() : new Promise((resolve) => {
+      const t = setTimeout(resolve, ms);
+      serverProc.once("exit", () => { clearTimeout(t); resolve(); });
+    });
+
   let videoSock: net.Socket;
   let controlSock: net.Socket;
   try {
@@ -264,9 +276,11 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
       new Promise<net.Socket>((_, reject) => serverProc.once("exit", () => reject(new Error(failIfServerDied() ?? "scrcpy server exited before control connection")))),
     ]);
   } catch (err) {
+    await waitBriefly(400);
     try { serverProc.kill(); } catch { /* ignore */ }
     removeForward();
-    throw err instanceof Error ? err : new Error(String(err));
+    const diedReason = failIfServerDied();
+    throw diedReason ? new Error(diedReason) : (err instanceof Error ? err : new Error(String(err)));
   }
 
   // 5. Parse the one-time video header: 64-byte device name, then 4-byte
@@ -282,6 +296,7 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     width = codecMeta.readUInt32BE(4);
     height = codecMeta.readUInt32BE(8);
   } catch (err) {
+    await waitBriefly(400);
     try { serverProc.kill(); } catch { /* ignore */ }
     videoSock.destroy();
     controlSock.destroy();
