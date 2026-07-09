@@ -481,10 +481,113 @@ const CHROME_BUILD_INFO: Record<string, { full: string; grease: string; greaseVe
 // Bump this whenever CHROME_BUILD_INFO gains a newer entry so every fallback
 // site (UA generation, Client-Hints, injected JS) stays on a current version
 // instead of silently drifting stale as real Chrome ships past it.
-const CURRENT_CHROME_MAJOR = "139";
+// refreshChromeVersion() keeps this up-to-date automatically at runtime.
+let CURRENT_CHROME_MAJOR = "140";
 
 function getChromeBuildInfo(majorVersion: string): { full: string; grease: string; greaseVer: string } {
   return CHROME_BUILD_INFO[majorVersion] ?? CHROME_BUILD_INFO[CURRENT_CHROME_MAJOR];
+}
+
+// ── Auto-updating Chrome stable version ───────────────────────────────────────
+//
+// Real Android Chrome auto-updates within days of a new stable release. Rather
+// than manually bumping CURRENT_CHROME_MAJOR and CHROME_BUILD_INFO, we fetch
+// the live stable version from Google's public Version History API at startup
+// and once every 24 hours. On any network/parse error the in-process table is
+// left untouched (silent fallback).
+//
+// GREASE brand is derived from the real Chromium rotation algorithm:
+//   greaseBrands[floor(major/8) % 8]
+// where greaseBrands is the 8-entry array documented at the CHROME_BUILD_INFO
+// definition above. This matches real Chrome behavior indefinitely regardless
+// of which milestone the auto-fetch returns.
+//
+// Concurrent refresh calls coalesce into a single in-flight request — the
+// second caller awaits the same promise rather than issuing a duplicate fetch.
+//
+// Cache: 24 hours in-memory — no disk writes, no secrets required.
+
+// Full 8-entry GREASE rotation from the Chromium source (greaseBrands array).
+// Index = floor(chromeMajor / 8) % 8.
+// Confirmed: index 7 → Chrome 120-127, index 0 → Chrome 128-135,
+//            index 1 → Chrome 136-143.
+const _GREASE_BRANDS: readonly string[] = [
+  " Not A;Brand",  // 0 — Chrome 128-135 (confirmed)
+  " Not;A Brand",  // 1 — Chrome 136-143 (confirmed)
+  "Not A)Brand",   // 2 — Chrome 144-151 (from Chromium source)
+  "Not)A;Brand",   // 3 — Chrome 152-159 (from Chromium source)
+  "Not;A)Brand",   // 4 — Chrome 160-167 (from Chromium source)
+  "Not-A(Brand",   // 5 — Chrome 168-175 (from Chromium source)
+  "Not A(Brand",   // 6 — Chrome 176-183 (from Chromium source)
+  "Not/A)Brand",   // 7 — Chrome 120-127 (confirmed)
+];
+
+function _inferGrease(major: number): { grease: string; greaseVer: string } {
+  const idx = Math.floor(major / 8) % 8;
+  return { grease: _GREASE_BRANDS[idx], greaseVer: "8" };
+}
+
+let _chromeVersionLastFetch = 0;
+const _CHROME_VERSION_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 h
+
+// In-flight guard: coalesces concurrent calls into a single network request.
+let _chromeVersionInFlight: Promise<void> | null = null;
+
+function refreshChromeVersion(): Promise<void> {
+  const now = Date.now();
+  if (now - _chromeVersionLastFetch < _CHROME_VERSION_CACHE_TTL) return Promise.resolve();
+
+  // Coalesce concurrent callers: return the same in-flight promise.
+  if (_chromeVersionInFlight) return _chromeVersionInFlight;
+
+  // Google Version History API — no key required, public endpoint.
+  // Returns the latest Android stable Chrome version sorted descending.
+  const url =
+    "https://versionhistory.googleapis.com/v1/chrome/platforms/android" +
+    "/channels/stable/versions?filter=endtime=none&orderBy=version%20desc&pageSize=1";
+
+  _chromeVersionInFlight = new Promise<void>((resolve) => {
+    const req = https.get(url, { timeout: 8000 }, (res) => {
+      let raw = "";
+      res.on("data", (chunk: string) => { raw += chunk; });
+      res.on("end", () => {
+        try {
+          const json  = JSON.parse(raw);
+          const ver: string | undefined = json?.versions?.[0]?.version;
+          if (ver && /^\d+\.\d+\.\d+\.\d+$/.test(ver)) {
+            const major  = ver.split(".")[0];
+            const majorN = parseInt(major, 10);
+
+            // Extend the lookup table if this is a version we don't know yet.
+            if (!CHROME_BUILD_INFO[major]) {
+              CHROME_BUILD_INFO[major] = { full: ver, ..._inferGrease(majorN) };
+              console.log(`[chromeVersion] Added Chrome ${major} (${ver}) to build table`);
+            }
+
+            // Update the fallback only if the fetched major is ≥ current.
+            if (majorN >= parseInt(CURRENT_CHROME_MAJOR, 10)) {
+              if (CURRENT_CHROME_MAJOR !== major) {
+                console.log(`[chromeVersion] Updated CURRENT_CHROME_MAJOR: ${CURRENT_CHROME_MAJOR} → ${major}`);
+                CURRENT_CHROME_MAJOR = major;
+              }
+            }
+
+            // Mark attempt regardless of whether major advanced — prevents
+            // hammering the endpoint when API returns a valid-but-older version.
+            _chromeVersionLastFetch = Date.now();
+          }
+        } catch {
+          // Parse error — leave table untouched, do not update cache timestamp
+          // so the next interval can try again.
+        }
+        resolve();
+      });
+    });
+    req.on("error", () => resolve()); // Network error — leave table untouched.
+    req.on("timeout", () => { req.destroy(); resolve(); });
+  }).finally(() => { _chromeVersionInFlight = null; });
+
+  return _chromeVersionInFlight;
 }
 
 // ── Desktop Client-Hints metadata resolver ────────────────────────────────────
@@ -8843,12 +8946,12 @@ export function startEbIpcServer(
                 platform: "Linux armv8l",
                 userAgentMetadata: {
                   brands: [
-                    { brand: "Not_A Brand",   version: "8" },
+                    { brand: getChromeBuildInfo(CURRENT_CHROME_MAJOR).grease,   version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).greaseVer },
                     { brand: "Chromium",       version: CURRENT_CHROME_MAJOR },
                     { brand: "Google Chrome",  version: CURRENT_CHROME_MAJOR },
                   ],
                   fullVersionList: [
-                    { brand: "Not_A Brand",   version: "8.0.0.0" },
+                    { brand: getChromeBuildInfo(CURRENT_CHROME_MAJOR).grease,   version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).greaseVer + ".0.0.0" },
                     { brand: "Chromium",       version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).full },
                     { brand: "Google Chrome",  version: getChromeBuildInfo(CURRENT_CHROME_MAJOR).full },
                   ],
@@ -9710,6 +9813,11 @@ export function startEbIpcServer(
   // so the IPC connection stays open for as long as the handler needs.
   server.requestTimeout = 0;
   server.headersTimeout = 0;
+
+  // Fetch the latest stable Chrome version immediately at startup, then
+  // refresh every 24 h so UAs never drift stale again without manual bumps.
+  refreshChromeVersion();
+  setInterval(refreshChromeVersion, _CHROME_VERSION_CACHE_TTL).unref();
 
   return new Promise((resolve, reject) => {
     server.listen(0, "127.0.0.1", () => {
