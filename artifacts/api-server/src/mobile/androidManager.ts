@@ -698,23 +698,38 @@ function escapeForAdbInput(s: string): string {
     .replace(/>/g, "\\>");
 }
 
-export async function inputText(serial: string, text: string): Promise<void> {
+// `adb shell input ...` fails silently far more often than you'd expect —
+// wrong/no focused window, a locked secure keyguard, "Injecting to another
+// application requires INJECT_EVENTS permission" on some OEM builds/Android
+// versions, BlueStacks nested-VM quirks, etc. It always exits 0 from adb's
+// own point of view even when the on-device `input` binary printed an error
+// to its stderr, so we must inspect stdout+stderr ourselves and surface it —
+// otherwise the client sees "200 OK" for a tap that did nothing on-device,
+// which is exactly the "clicks do nothing, no error anywhere" symptom this
+// is fixing.
+function runInputShell(serial: string, args: string[], label: string): void {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "input", ...args], { encoding: "utf8", timeout: 5000 });
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
+  if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
+    throw new Error(
+      `adb shell input ${label} failed (exit=${r.status ?? "spawn-error"})${out ? `: ${out}` : r.error ? `: ${r.error.message}` : ""}`
+    );
+  }
+}
+
+export async function inputText(serial: string, text: string): Promise<void> {
   const escaped = escapeForAdbInput(text);
-  spawnSync(adb, ["-s", serial, "shell", "input", "text", escaped], { encoding: "utf8", timeout: 5000 });
+  runInputShell(serial, ["text", escaped], "text");
 }
 
 export async function tap(serial: string, x: number, y: number): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  spawnSync(adb, ["-s", serial, "shell", "input", "tap", String(x), String(y)], { encoding: "utf8", timeout: 5000 });
+  runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
 export async function keyevent(serial: string, code: string | number): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", String(code)], { encoding: "utf8", timeout: 5000 });
+  runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }
 
 export function startScrcpy(serial: string, opts: { windowTitle?: string; maxSize?: number } = {}): { pid: number } {

@@ -75,7 +75,10 @@ async function sendKey(serial: string, code: number, label: string, onLog?: (msg
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
     });
-    if (!r.ok) onLog?.(`Key ${label} FAILED — server returned ${r.status}`);
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      onLog?.(`Key ${label} FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+    }
   } catch (err: any) {
     onLog?.(`Key ${label} FAILED — ${err?.message ?? "network error"}`);
   }
@@ -338,7 +341,10 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: 224 /* KEYCODE_WAKEUP */ }),
       });
-      if (!r.ok) addLog(`Wake FAILED — server returned ${r.status}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        addLog(`Wake FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+      }
     } catch (err: any) {
       addLog(`Wake FAILED — ${err?.message ?? "network error"}`);
     }
@@ -400,7 +406,10 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ x, y, videoW: phoneW, videoH: phoneH }),
       });
-      if (!r.ok) addLog(`Tap FAILED — server returned ${r.status}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+      }
     } catch (err: any) {
       addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
     }
