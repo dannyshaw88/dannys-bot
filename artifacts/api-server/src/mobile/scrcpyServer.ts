@@ -225,19 +225,44 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     "raw_stream=false",
   ];
   const serverProc: ChildProcess = spawn(adb, ["-s", serial, ...serverArgs], { stdio: ["ignore", "pipe", "pipe"] });
-  let serverStderr = "";
-  serverProc.stderr?.on("data", (d: Buffer) => { serverStderr += d.toString(); });
+  let serverOut = "";
+  let serverExitCode: number | null | undefined;
+  let serverExited = false;
+  serverProc.stdout?.on("data", (d: Buffer) => { serverOut += d.toString(); });
+  serverProc.stderr?.on("data", (d: Buffer) => { serverOut += d.toString(); });
   serverProc.on("exit", (code) => {
-    logger.info({ serial, code, stderr: serverStderr.trim().slice(-2000) }, "[scrcpy] server process exited");
+    serverExited = true;
+    serverExitCode = code;
+    logger.info({ serial, code, output: serverOut.trim().slice(-4000) }, "[scrcpy] server process exited");
   });
+
+  // The on-device server prints exactly why it aborted (e.g. a version
+  // mismatch between the `SCRCPY_VERSION` arg we pass and the vendored
+  // jar's own embedded version check, a permission/API failure grabbing the
+  // display, etc.) to stdout/stderr and then exits almost immediately —
+  // well before the connect-retry loop's ~3s budget would time out on its
+  // own. Surface that instead of a generic timeout so real failures are
+  // diagnosable from the client log without shelling in.
+  const failIfServerDied = (): string | null => {
+    if (!serverExited) return null;
+    const tail = serverOut.trim().slice(-1500);
+    return `scrcpy server exited (code=${serverExitCode})${tail ? `: ${tail}` : " with no output"}`;
+  };
 
   let videoSock: net.Socket;
   let controlSock: net.Socket;
   try {
     // 4. Connect twice, in order: video first, then control (audio is
-    // disabled so it never opens a socket).
-    videoSock = await connectRetry(port);
-    controlSock = await connectRetry(port);
+    // disabled so it never opens a socket). Race each connect attempt
+    // against the server process dying so a crash surfaces immediately.
+    videoSock = await Promise.race([
+      connectRetry(port),
+      new Promise<net.Socket>((_, reject) => serverProc.once("exit", () => reject(new Error(failIfServerDied() ?? "scrcpy server exited before video connection")))),
+    ]);
+    controlSock = await Promise.race([
+      connectRetry(port),
+      new Promise<net.Socket>((_, reject) => serverProc.once("exit", () => reject(new Error(failIfServerDied() ?? "scrcpy server exited before control connection")))),
+    ]);
   } catch (err) {
     try { serverProc.kill(); } catch { /* ignore */ }
     removeForward();
@@ -261,7 +286,8 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     videoSock.destroy();
     controlSock.destroy();
     removeForward();
-    throw new Error(`Failed to read scrcpy video header: ${err instanceof Error ? err.message : String(err)}`);
+    const diedReason = failIfServerDied();
+    throw new Error(diedReason ?? `Failed to read scrcpy video header: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   logger.info({ serial, deviceName, width, height, port }, "[scrcpy] session established");
