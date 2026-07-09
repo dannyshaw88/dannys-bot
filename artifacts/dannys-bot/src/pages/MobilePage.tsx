@@ -185,8 +185,13 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
           frameSeenRef.current = true;
           if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
           addLog(`First frame! (${(ev.data as ArrayBuffer).byteLength} bytes)`);
-          setStatus("live");
         }
+        // Any valid binary frame means the stream is live right now — always
+        // re-assert this, not just on the first frame. Without this, a status
+        // of "asleep"/"error" set by an earlier text message would latch
+        // forever even after the phone woke up and frames resumed, leaving
+        // clicks stuck in wake-only mode instead of sending real taps.
+        setStatus("live");
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -527,17 +532,26 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
     return () => { active = false; };
   }, [phone?.serial]);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const save = async () => {
     if (!phone) return;
-    setSaving(true); setSaved(false);
+    setSaving(true); setSaved(false); setSaveError(null);
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !body?.ok) {
+        setSaveError(body?.error ?? `Server rejected the settings (${r.status})`);
+        return;
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e: any) {
+      setSaveError(e?.message ?? "Couldn't reach the server");
     } finally { setSaving(false); }
   };
 
@@ -620,6 +634,7 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
         <Button className="w-full" onClick={save} disabled={saving || loading}>
           {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
         </Button>
+        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
     </div>
   );
