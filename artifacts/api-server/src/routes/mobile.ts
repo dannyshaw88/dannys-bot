@@ -149,9 +149,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       let running = true;
       let frameCount = 0;
+      let screenOffStreak = 0; // consecutive 0-byte frames
+
+      // Helper: fire-and-forget ADB shell command (non-blocking)
+      const adbShell = (...args: string[]) =>
+        spawn(adbPath, ["-s", serial, "shell", ...args], { stdio: "ignore" });
+
+      // Disable screen timeout for this session so the phone stays awake.
+      // We save the original value and restore it on disconnect.
+      let originalScreenTimeout = "30000"; // fallback default
+      try {
+        const st = spawnSync(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], { encoding: "utf8", timeout: 3000 });
+        const val = st.stdout?.trim();
+        if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
+      } catch { /* ignore */ }
+      adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
+      // Also wake+unlock the screen right now
+      adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
+      logger.info({ serial, originalScreenTimeout }, "[mobile-ws] screen timeout disabled for session");
+
       ws.on("close", (code, reason) => {
         logger.info({ serial, code, reason: reason?.toString() }, "[mobile-ws] client disconnected");
         running = false;
+        // Restore original screen timeout
+        try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
+        logger.info({ serial, originalScreenTimeout }, "[mobile-ws] screen timeout restored");
       });
       ws.on("error", (err) => {
         logger.error({ serial, err }, "[mobile-ws] WebSocket error");
@@ -194,13 +216,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 frameCount++;
 
                 if (validPng && ws.readyState === 1) {
+                  if (screenOffStreak > 0) {
+                    // Screen came back — clear streak and tell client
+                    screenOffStreak = 0;
+                    if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Screen woke up" }));
+                  }
                   ws.send(frame, (err) => { if (err) { logger.error({ serial, err }, "[mobile-ws] send error"); running = false; } });
                 } else if (!validPng && ws.readyState === 1) {
-                  const msg = rawLen === 0
-                    ? "screencap returned 0 bytes — phone screen may be off or locked"
-                    : `screencap returned ${rawLen} bytes but not a valid PNG (first bytes: ${first4}) — ${stderrOut.trim() || "no stderr"}`;
-                  logger.warn({ serial, rawLen, first4, stderrOut: stderrOut.trim() }, `[mobile-ws] ${msg}`);
-                  ws.send(JSON.stringify({ error: msg }));
+                  if (rawLen === 0) {
+                    screenOffStreak++;
+                    // Only notify client once when it first goes dark, then every 10s
+                    if (screenOffStreak === 1 || screenOffStreak % 20 === 0) {
+                      const msg = "Screen is off or locked — waking…";
+                      logger.warn({ serial, screenOffStreak }, `[mobile-ws] ${msg}`);
+                      ws.send(JSON.stringify({ error: msg }));
+                    }
+                    // Send KEYCODE_WAKEUP to wake the screen
+                    adbShell("input", "keyevent", "224");
+                  } else {
+                    screenOffStreak = 0;
+                    const msg = `screencap returned ${rawLen} bytes but not a valid PNG (first bytes: ${first4}) — ${stderrOut.trim() || "no stderr"}`;
+                    logger.warn({ serial, rawLen, first4, stderrOut: stderrOut.trim() }, `[mobile-ws] ${msg}`);
+                    ws.send(JSON.stringify({ error: msg }));
+                  }
                 }
                 resolve();
               });
@@ -208,7 +246,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } catch (err) {
             logger.error({ serial, err }, "[mobile-ws] screencap loop error");
           }
-          if (running) await new Promise<void>(r => setTimeout(r, 250));
+          // Back off when the screen is off — no point hammering every 250ms
+          const delay = screenOffStreak > 0 ? 1000 : 250;
+          if (running) await new Promise<void>(r => setTimeout(r, delay));
         }
         logger.info({ serial, frameCount }, "[mobile-ws] screencap loop ended");
       })();

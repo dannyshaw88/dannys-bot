@@ -4,6 +4,37 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.428] — 2026-07-09
+
+### Mobile Farm — auto-wake screen + back-off when screen is off
+
+**Problem:** `screencap` returns 0 bytes when the phone screen turns off.  The
+old loop treated every 0-byte frame identically to other errors — sending the
+same JSON error message to the client every 250 ms (dozens of messages per
+second) and never attempting to wake the screen.
+
+**Fix — three changes in the screencap WebSocket handler:**
+
+1. **Disable screen timeout on connect** — immediately after the WS handshake,
+   save the current `screen_off_timeout` value then set it to `2147483647` ms
+   (~24 days) via `adb shell settings put system screen_off_timeout`.  This
+   prevents the phone from sleeping while the mirror is open.  The original
+   value is restored in the `ws.on("close")` handler.
+
+2. **Auto-wake on 0 bytes** — when `screencap` returns 0 bytes, send
+   `adb shell input keyevent 224` (KEYCODE_WAKEUP) to turn the screen back on.
+   The first WAKEUP is also sent immediately on connect so the screen is on
+   from the moment the session starts.
+
+3. **Back-off + deduplicated errors** — a `screenOffStreak` counter tracks
+   consecutive 0-byte frames.  The loop delays 1 000 ms (instead of 250 ms)
+   between attempts while the screen is off, and the client error message is
+   sent only once per streak + every 20th iteration (~20 s) rather than on
+   every frame.  When a valid PNG comes back, a `{ info: "Screen woke up" }`
+   message is sent once and the streak resets.
+
+---
+
 ## [1.1.427] — 2026-07-09
 
 ### Mobile Farm — fix instant WS disconnect (socket.destroy race) + 1-slot layout
