@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build-web:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -48,9 +48,48 @@ jobs:
       - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
 
+      - name: Upload API server dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist/
+          retention-days: 1
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: artifacts/dannys-bot/dist/public/
+          retention-days: 1
+
+  build-windows:
+    runs-on: windows-latest
+    needs: build-web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download API server dist
+        uses: actions/download-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist/
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: artifacts/dannys-bot/dist/public/
+
       - name: Install Electron dependencies
         working-directory: artifacts/electron
-        run: pnpm install --frozen-lockfile
+        run: npm install
 
       - name: Build Electron main process
         working-directory: artifacts/electron
@@ -63,7 +102,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
-        run: pnpm run package
+        run: npx --yes electron-builder --win --publish always
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
