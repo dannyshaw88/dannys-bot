@@ -1,14 +1,18 @@
 import type { Express, Request, Response } from "express";
-import { spawnSync } from "child_process";
+import { spawnSync, spawn, execFile } from "child_process";
+import { promisify } from "util";
 import { z } from "zod/v4";
 import fs from "fs";
 import path from "path";
 import * as http from "http";
 import * as os from "os";
+import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
+
+const execFileP = promisify(execFile);
 
 // In-memory cache for android IDs — avoids repeated slow ADB reads after a
 // successful write. Keyed by device serial. Cleared only on server restart or
@@ -66,7 +70,61 @@ function saveInstanceConfigs(cfg: InstanceConfigMap): void {
   fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2));
 }
 
-export function registerMobileRoutes(app: Express) {
+export function registerMobileRoutes(httpServer: http.Server, app: Express) {
+  // ── Screen mirror WebSocket stream ─────────────────────────────────────────
+  const screenWss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request, socket, head) => {
+    const url = request.url ?? "";
+    const m = url.match(/^\/api\/mobile\/screen\/([^/?#]+)/);
+    if (!m) return;
+    const serial = decodeURIComponent(m[1]);
+    screenWss.handleUpgrade(request, socket as any, head, (ws) => {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) {
+        ws.send(JSON.stringify({ error: "ADB not found" }));
+        ws.close();
+        return;
+      }
+      let running = true;
+      ws.on("close", () => { running = false; });
+      ws.on("error", () => { running = false; });
+      (async () => {
+        while (running) {
+          try {
+            await new Promise<void>((resolve) => {
+              const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
+              const chunks: Buffer[] = [];
+              child.stdout.on("data", (d: Buffer) => chunks.push(d));
+              child.on("close", () => {
+                const frame = Buffer.concat(chunks);
+                if (frame.length > 100 && ws.readyState === 1) {
+                  ws.send(frame, (err) => { if (err) running = false; });
+                }
+                resolve();
+              });
+              child.on("error", () => resolve());
+            });
+          } catch { /* ignore */ }
+          if (running) await new Promise<void>(r => setTimeout(r, 200));
+        }
+      })();
+    });
+  });
+
+  // ── Screen size ────────────────────────────────────────────────────────────
+  app.get("/api/mobile/devices/:serial/screen-size", async (req: Request, res: Response) => {
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
+      const { stdout } = await execFileP(adbPath, ["-s", p(req, "serial"), "shell", "wm", "size"], { timeout: 5000 } as any);
+      const m = String(stdout).match(/(\d+)x(\d+)/);
+      if (m) { res.json({ width: parseInt(m[1]), height: parseInt(m[2]) }); }
+      else { res.status(500).json({ error: "Could not parse screen size" }); }
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
   // ── Network interfaces (for source-adapter picker in UI) ───────────────────
   app.get("/api/network/interfaces", (_req: Request, res: Response) => {
     const raw = os.networkInterfaces();

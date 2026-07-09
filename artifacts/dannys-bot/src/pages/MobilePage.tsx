@@ -4,18 +4,18 @@
  * Isolated from all other parts of the application.
  * Only imports: React, UI primitives, lucide icons.
  * No shared contexts, no profile/proxy queries, no Instagram API calls.
- *
- * This page detects real Android phones connected via USB cable using ADB.
  */
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
-  WifiOff, Loader2, Terminal, ExternalLink, Usb, Cast, UserPlus, Check,
+  WifiOff, Loader2, Terminal, ExternalLink, Usb, X,
+  ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX,
+  Monitor, Check, UserPlus,
 } from "lucide-react";
 
-// ─── Isolated API helper (no shared queryClient) ──────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface UsbPhone {
   serial:          string;
@@ -27,12 +27,14 @@ interface UsbPhone {
 }
 
 interface PhonesResponse {
-  adbFound:  boolean;
-  adbPath:   string | null;
-  phones:    UsbPhone[];
+  adbFound:   boolean;
+  adbPath:    string | null;
+  phones:     UsbPhone[];
   rawOutput?: string | null;
-  checkedAt: string;
+  checkedAt:  string;
 }
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
 async function fetchPhones(): Promise<PhonesResponse> {
   const r = await fetch("/api/mobile/usb-phones");
@@ -40,7 +42,192 @@ async function fetchPhones(): Promise<PhonesResponse> {
   return r.json() as Promise<PhonesResponse>;
 }
 
-// ─── State badge ─────────────────────────────────────────────────────────────
+// ─── Screen mirror overlay ────────────────────────────────────────────────────
+
+function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () => void }) {
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
+  const fpsCountRef  = useRef(0);
+  const [fps, setFps]             = useState(0);
+  const [connected, setConnected] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [phoneSize, setPhoneSize] = useState<{ w: number; h: number } | null>(null);
+
+  // FPS counter
+  useEffect(() => {
+    const t = setInterval(() => {
+      setFps(fpsCountRef.current);
+      fpsCountRef.current = 0;
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // WebSocket screen stream
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(
+      `${proto}//${window.location.host}/api/mobile/screen/${encodeURIComponent(phone.serial)}`
+    );
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen  = () => setConnected(true);
+    ws.onerror = () => setError("Connection failed — check ADB is running");
+    ws.onclose = () => setConnected(false);
+
+    ws.onmessage = (ev) => {
+      const data = ev.data;
+      if (typeof data === "string") {
+        try { const j = JSON.parse(data); if (j.error) setError(j.error); } catch { /* ok */ }
+        return;
+      }
+      fpsCountRef.current++;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const blob = new Blob([data as ArrayBuffer], { type: "image/png" });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload = () => {
+        if (!phoneSizeRef.current) {
+          const sz = { w: img.naturalWidth, h: img.naturalHeight };
+          phoneSizeRef.current = sz;
+          setPhoneSize(sz);
+          canvas.width  = sz.w;
+          canvas.height = sz.h;
+        }
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    };
+
+    return () => ws.close();
+  }, [phone.serial]);
+
+  // Tap handler — maps canvas display coords to phone coords
+  const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!phoneSizeRef.current) return;
+    const rect  = canvasRef.current!.getBoundingClientRect();
+    const scaleX = phoneSizeRef.current.w / rect.width;
+    const scaleY = phoneSizeRef.current.h / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top)  * scaleY);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/tap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ x, y }),
+      });
+    } catch { /* ignore */ }
+  }, [phone.serial]);
+
+  const sendKey = useCallback(async (code: number) => {
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+    } catch { /* ignore */ }
+  }, [phone.serial]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const label = phone.model
+    ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
+    : phone.serial;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col select-none">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-3">
+          <Smartphone className="w-4 h-4 text-cyan-400" />
+          <span className="text-sm font-semibold text-white">{label}</span>
+          {phone.androidVersion && (
+            <span className="text-xs text-white/40">Android {phone.androidVersion}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          {phoneSize && (
+            <span className="text-[11px] text-white/30 font-mono hidden sm:block">
+              {phoneSize.w}×{phoneSize.h}
+            </span>
+          )}
+          <span className={`text-[11px] font-mono ${connected ? "text-green-400" : "text-white/40"}`}>
+            {connected ? `${fps} fps` : "connecting…"}
+          </span>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg bg-white/8 hover:bg-white/15 flex items-center justify-center transition-colors"
+            title="Close (Esc)"
+          >
+            <X className="w-4 h-4 text-white/70" />
+          </button>
+        </div>
+      </div>
+
+      {/* Phone screen */}
+      <div className="flex-1 flex items-center justify-center min-h-0 bg-zinc-900">
+        {error && !connected && (
+          <div className="text-center px-6">
+            <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+            <p className="text-white text-sm font-semibold mb-1">{error}</p>
+            <p className="text-white/40 text-xs">Make sure the phone is connected and USB Debugging is on.</p>
+          </div>
+        )}
+        {!error && !connected && (
+          <div className="flex items-center gap-3 text-white/50">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Connecting to {label}…</span>
+          </div>
+        )}
+        <canvas
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          style={{
+            display: connected ? "block" : "none",
+            maxHeight: "100%",
+            maxWidth: "100%",
+            objectFit: "contain",
+            cursor: "pointer",
+          }}
+        />
+      </div>
+
+      {/* Android nav bar */}
+      <div className="flex items-center justify-center gap-8 py-3 bg-zinc-950 border-t border-white/10 shrink-0">
+        <NavBtn icon={<ChevronLeft className="w-5 h-5" />} label="Back"   onClick={() => sendKey(4)}   />
+        <NavBtn icon={<Home        className="w-5 h-5" />} label="Home"   onClick={() => sendKey(3)}   />
+        <NavBtn icon={<LayoutGrid  className="w-5 h-5" />} label="Recent" onClick={() => sendKey(187)} />
+        <div className="w-px h-6 bg-white/10" />
+        <NavBtn icon={<Power       className="w-4 h-4" />} label="Power"  onClick={() => sendKey(26)}  />
+        <NavBtn icon={<Volume2     className="w-4 h-4" />} label="Vol +"  onClick={() => sendKey(24)}  />
+        <NavBtn icon={<VolumeX     className="w-4 h-4" />} label="Vol −"  onClick={() => sendKey(25)}  />
+      </div>
+    </div>
+  );
+}
+
+function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 text-white/50 hover:text-white transition-colors px-2"
+    >
+      {icon}
+      <span className="text-[9px] font-medium tracking-wide uppercase">{label}</span>
+    </button>
+  );
+}
+
+// ─── State badge ──────────────────────────────────────────────────────────────
 
 function StateBadge({ state }: { state: string }) {
   if (state === "device") {
@@ -67,66 +254,19 @@ function StateBadge({ state }: { state: string }) {
   );
 }
 
-// ─── Phone card ───────────────────────────────────────────────────────────────
-
-const CARD_COLORS = [
-  "from-blue-600  to-blue-800",
-  "from-violet-600 to-violet-800",
-  "from-teal-600  to-teal-800",
-  "from-orange-500 to-orange-700",
-  "from-pink-600  to-pink-800",
-  "from-green-600 to-green-800",
-];
-
-function MirrorButton({ serial }: { serial: string }) {
-  const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const toggle = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/scrcpy/${open ? "stop" : "start"}`, { method: "POST" });
-      const j = await r.json();
-      if (!r.ok || j?.error) throw new Error(j?.error ?? "Failed");
-      setOpen(!open);
-    } catch (e: any) {
-      setErr(e?.message ?? "Could not open screen mirror. Is scrcpy installed?");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1">
-      <button
-        onClick={toggle}
-        disabled={busy}
-        className={`w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
-          open ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground hover:opacity-90"
-        }`}
-      >
-        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cast className="w-3.5 h-3.5" />}
-        {open ? "Close screen mirror" : "Open screen mirror"}
-      </button>
-      {err && <p className="text-[10px] text-destructive leading-snug">{err}</p>}
-    </div>
-  );
-}
+// ─── Bind account form ────────────────────────────────────────────────────────
 
 function BindAccountForm({ serial }: { serial: string }) {
-  const [show, setShow] = useState(false);
+  const [show,     setShow]     = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [err,      setErr]      = useState<string | null>(null);
 
   const save = async () => {
     if (!username.trim() || !password.trim()) { setErr("Enter a username and password."); return; }
-    setSaving(true);
-    setErr(null);
+    setSaving(true); setErr(null);
     try {
       const r = await fetch("/api/mobile/accounts", {
         method: "POST",
@@ -135,9 +275,7 @@ function BindAccountForm({ serial }: { serial: string }) {
       });
       const j = await r.json();
       if (!r.ok || j?.error) throw new Error(j?.error ?? "Failed to save account");
-      setSaved(true);
-      setUsername("");
-      setPassword("");
+      setSaved(true); setUsername(""); setPassword("");
     } catch (e: any) {
       setErr(e?.message ?? "Failed to save account");
     } finally {
@@ -160,7 +298,7 @@ function BindAccountForm({ serial }: { serial: string }) {
   if (saved) {
     return (
       <div className="flex items-center gap-2 text-xs text-green-600 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-        <Check className="w-3.5 h-3.5" /> Account linked to this phone — find it in Accounts.
+        <Check className="w-3.5 h-3.5" /> Account linked — find it in Accounts.
       </div>
     );
   }
@@ -171,14 +309,14 @@ function BindAccountForm({ serial }: { serial: string }) {
         value={username}
         onChange={e => setUsername(e.target.value)}
         placeholder="Instagram username"
-        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5"
+        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
       />
       <input
         value={password}
         onChange={e => setPassword(e.target.value)}
         placeholder="Password"
         type="password"
-        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5"
+        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
       />
       {err && <p className="text-[10px] text-destructive leading-snug">{err}</p>}
       <div className="flex gap-1.5">
@@ -197,76 +335,96 @@ function BindAccountForm({ serial }: { serial: string }) {
           Cancel
         </button>
       </div>
-      <p className="text-[10px] text-muted-foreground leading-snug">
-        This saves the account to Equinox — logging it into the Instagram app on the phone is a separate manual step for now.
-      </p>
     </div>
   );
 }
 
+// ─── Phone card ───────────────────────────────────────────────────────────────
+
+const CARD_COLORS = [
+  "from-blue-600  to-blue-800",
+  "from-violet-600 to-violet-800",
+  "from-teal-600  to-teal-800",
+  "from-orange-500 to-orange-700",
+  "from-pink-600  to-pink-800",
+  "from-green-600 to-green-800",
+];
+
 function PhoneCard({ phone, idx }: { phone: UsbPhone; idx: number }) {
   const color = CARD_COLORS[idx % CARD_COLORS.length];
+  const [mirroring, setMirroring] = useState(false);
   const label = phone.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : (phone.product ?? phone.serial);
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-      {/* Gradient header */}
-      <div className={`bg-gradient-to-br ${color} px-4 py-4 flex items-center gap-3`}>
-        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-          <Smartphone className="w-5 h-5 text-white" />
+    <>
+      {mirroring && (
+        <ScreenMirrorOverlay phone={phone} onClose={() => setMirroring(false)} />
+      )}
+      <div className="rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
+        {/* Gradient header */}
+        <div className={`bg-gradient-to-br ${color} px-4 py-4 flex items-center gap-3`}>
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-white text-sm truncate">{label}</div>
+            {phone.androidVersion && (
+              <div className="text-xs text-white/70 mt-0.5">Android {phone.androidVersion}</div>
+            )}
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-white text-sm truncate">{label}</div>
-          {phone.androidVersion && (
-            <div className="text-xs text-white/70 mt-0.5">Android {phone.androidVersion}</div>
+
+        {/* Details */}
+        <div className="bg-card px-4 py-3 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <StateBadge state={phone.state} />
+          </div>
+
+          <div className="text-[10px] font-mono text-muted-foreground truncate" title={phone.serial}>
+            {phone.serial}
+          </div>
+
+          {phone.state === "unauthorized" && (
+            <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-yellow-600 leading-relaxed">
+                Check your phone screen and tap <strong>"Allow USB Debugging"</strong>,
+                then tick <em>"Always allow from this computer"</em>.
+              </p>
+            </div>
+          )}
+
+          {phone.state === "offline" && (
+            <div className="flex items-start gap-2 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2">
+              <WifiOff className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-red-500 leading-relaxed">
+                Phone is offline. Try unplugging and reconnecting the USB cable.
+              </p>
+            </div>
+          )}
+
+          {phone.state === "device" && (
+            <div className="space-y-2 pt-1">
+              {/* View screen button */}
+              <button
+                onClick={() => setMirroring(true)}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                View Screen
+              </button>
+              <BindAccountForm serial={phone.serial} />
+            </div>
           )}
         </div>
       </div>
-
-      {/* Details */}
-      <div className="bg-card px-4 py-3 space-y-2.5">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <StateBadge state={phone.state} />
-        </div>
-
-        <div className="text-[10px] font-mono text-muted-foreground truncate"
-          title={phone.serial}>
-          {phone.serial}
-        </div>
-
-        {phone.state === "unauthorized" && (
-          <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-yellow-600 leading-relaxed">
-              Check your phone screen and tap <strong>"Allow USB Debugging"</strong>,
-              then tick <em>"Always allow from this computer"</em>.
-            </p>
-          </div>
-        )}
-
-        {phone.state === "offline" && (
-          <div className="flex items-start gap-2 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2">
-            <WifiOff className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-red-500 leading-relaxed">
-              Phone is offline. Try unplugging and reconnecting the USB cable.
-            </p>
-          </div>
-        )}
-
-        {phone.state === "device" && (
-          <div className="space-y-2 pt-1">
-            <MirrorButton serial={phone.serial} />
-            <BindAccountForm serial={phone.serial} />
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 
-// ─── Setup instructions ───────────────────────────────────────────────────────
+// ─── Setup panels ─────────────────────────────────────────────────────────────
 
 function SetupStep({ n, title, body }: { n: number; title: string; body: ReactNode }) {
   return (
@@ -283,16 +441,14 @@ function SetupStep({ n, title, body }: { n: number; title: string; body: ReactNo
 }
 
 function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
-  const [folder, setFolder]   = useState("");
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [folder,  setFolder]  = useState("");
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const submit = async () => {
     if (!folder.trim()) return;
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
+    setSaving(true); setError(null); setSuccess(null);
     try {
       const r = await fetch("/api/mobile/adb-path", {
         method: "POST",
@@ -300,14 +456,11 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
         body: JSON.stringify({ folder: folder.trim() }),
       });
       const body = await r.json();
-      if (!r.ok || !body.ok) {
-        setError(body.error ?? "Something went wrong — double-check the folder path.");
-        return;
-      }
-      setSuccess("Found it! Checking for phones now…");
+      if (!r.ok || !body.ok) { setError(body.error ?? "Double-check the folder path."); return; }
+      setSuccess("Found it! Checking for phones…");
       onSaved();
     } catch {
-      setError("Couldn't reach Equinox's server. Try again in a moment.");
+      setError("Couldn't reach the server. Try again.");
     } finally {
       setSaving(false);
     }
@@ -326,15 +479,13 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
         </p>
       </div>
 
-      {/* Easiest path: paste the folder directly, no Windows settings required */}
       <div className="text-left bg-card border border-primary/30 rounded-xl p-5 space-y-3">
         <p className="text-sm font-semibold text-foreground">
-          Easiest way: paste the folder path — no PATH editing needed
+          Easiest: paste the platform-tools folder path
         </p>
         <p className="text-xs text-muted-foreground">
           Already downloaded and extracted "platform-tools"? Open that folder,
-          click once in the address bar at the top to select the full path,
-          copy it (Ctrl+C), and paste it below.
+          click once in the address bar to select the full path, copy it (Ctrl+C), paste below.
         </p>
         <div className="flex gap-2">
           <input
@@ -353,8 +504,8 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
             {saving ? "Checking…" : "Use this folder"}
           </button>
         </div>
-        {error && <p className="text-xs text-destructive text-left">{error}</p>}
-        {success && <p className="text-xs text-green-500 text-left">{success}</p>}
+        {error   && <p className="text-xs text-destructive">{error}</p>}
+        {success && <p className="text-xs text-green-500">{success}</p>}
       </div>
 
       <a
@@ -364,32 +515,18 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:border-primary/40 transition-colors"
       >
         <ExternalLink className="w-4 h-4" />
-        Haven't downloaded it yet? Get "SDK Platform-Tools for Windows"
+        Haven't downloaded it? Get "SDK Platform-Tools for Windows"
       </a>
 
       <details className="text-left bg-card border border-border rounded-xl p-5">
         <summary className="text-sm font-semibold text-foreground cursor-pointer">
-          Prefer the traditional Windows PATH method instead?
+          Prefer the traditional Windows PATH method?
         </summary>
         <ol className="mt-4 space-y-3 text-sm text-muted-foreground list-decimal list-inside">
-          <li>
-            Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> file
-            and choose <strong>"Extract All..."</strong>. Pick a simple, permanent
-            spot (not a temp folder) — for example <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.
-          </li>
-          <li>
-            Confirm you see a file named <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> inside
-            it (open subfolders if needed), then copy the full folder path.
-          </li>
-          <li>
-            Press <strong>Windows key + R</strong>, type{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">rundll32.exe sysdm.cpl,EditEnvironmentVariables</code>,
-            press Enter.
-          </li>
-          <li>
-            In the top box, click <strong>Path</strong> then <strong>Edit...</strong>,
-            add the folder path, and click <strong>OK</strong> everywhere.
-          </li>
+          <li>Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> and choose <strong>"Extract All..."</strong>. Pick a permanent spot, e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.</li>
+          <li>Confirm <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> is inside, then copy the full folder path.</li>
+          <li>Press <strong>Windows key + R</strong>, type <code className="text-xs bg-muted px-1 py-0.5 rounded">rundll32.exe sysdm.cpl,EditEnvironmentVariables</code>, press Enter.</li>
+          <li>In the top box, click <strong>Path → Edit... → New</strong>, paste the path, click OK everywhere.</li>
           <li>Fully close Equinox and open it again.</li>
         </ol>
       </details>
@@ -398,7 +535,6 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
 }
 
 function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
-  const hasRawSignal = !!rawOutput && rawOutput.trim().length > 0;
   return (
     <div className="max-w-xl mx-auto mt-12 space-y-6 px-4">
       <div className="text-center">
@@ -406,16 +542,12 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
           <Usb className="w-8 h-8 text-muted-foreground" />
         </div>
         <h2 className="text-lg font-bold text-foreground">No phones detected</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Follow these steps to connect your Android phone.
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Follow these steps to connect your Android phone.</p>
       </div>
 
-      {hasRawSignal && (
+      {rawOutput && rawOutput.trim().length > 0 && (
         <div className="bg-card border border-border rounded-xl p-4 text-left">
-          <p className="text-xs font-semibold text-foreground mb-2">
-            What Equinox sees right now (no command prompt needed — this updates automatically):
-          </p>
+          <p className="text-xs font-semibold text-foreground mb-2">What Equinox sees right now:</p>
           <pre className="text-[11px] font-mono text-muted-foreground bg-muted/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
             {rawOutput}
           </pre>
@@ -424,40 +556,26 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <SetupStep n={1} title="Enable Developer Mode" body={
-          <>
-            On your phone, go to <strong>Settings → About Phone</strong> and tap
-            <strong> Build Number</strong> seven times in a row. You'll see a message
-            saying "You are now a developer".
-          </>
+          <>On your phone go to <strong>Settings → About Phone</strong> and tap <strong>Build Number</strong> seven times. You'll see "You are now a developer".</>
         } />
         <div className="border-t border-border/50" />
         <SetupStep n={2} title="Enable USB Debugging" body={
-          <>
-            Go back to <strong>Settings → Developer Options</strong> (sometimes under
-            "Additional Settings") and turn on <strong>USB Debugging</strong>.
-          </>
+          <>Go to <strong>Settings → Developer Options</strong> and turn on <strong>USB Debugging</strong>.</>
         } />
         <div className="border-t border-border/50" />
         <SetupStep n={3} title="Connect via USB" body={
-          <>
-            Plug the phone into your computer with a USB data cable — not just a
-            charging cable. When your phone asks <strong>"Allow USB Debugging?"</strong>,
-            tap <strong>Allow</strong> and tick "Always allow from this computer".
-          </>
+          <>Plug the phone in with a USB data cable. When the phone asks <strong>"Allow USB Debugging?"</strong> tap <strong>Allow</strong> and tick "Always allow from this computer".</>
         } />
         <div className="border-t border-border/50" />
         <SetupStep n={4} title="Wait for detection" body={
-          <>
-            This page checks for devices every 3 seconds automatically. Your phone
-            should appear above once it's authorised.
-          </>
+          <>This page checks every 3 seconds. Your phone will appear above once authorised.</>
         } />
       </div>
 
       <div className="bg-blue-500/8 border border-blue-500/20 rounded-xl p-4 text-sm text-blue-600">
         <strong>Tip:</strong> Make sure the phone uses its own SIM card for mobile data.
         Equinox routes Instagram traffic through the phone's SIM, not your computer's
-        network — this is what gives each account a unique, mobile IP address.
+        network — this gives each account a unique mobile IP address.
       </div>
     </div>
   );
@@ -482,7 +600,6 @@ export function MobilePage() {
     }
   }, []);
 
-  // Initial load + auto-poll every 3 s
   useEffect(() => {
     refresh(true);
     const id = setInterval(() => refresh(false), 3_000);
@@ -519,7 +636,6 @@ export function MobilePage() {
 
         {/* Body */}
         <div className="p-6">
-          {/* Initial loading */}
           {loading && !data && (
             <div className="flex items-center justify-center mt-24 gap-3 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -527,7 +643,6 @@ export function MobilePage() {
             </div>
           )}
 
-          {/* Error */}
           {error && (
             <div className="max-w-lg mx-auto mt-12 flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-xl p-4">
               <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
@@ -538,16 +653,12 @@ export function MobilePage() {
             </div>
           )}
 
-          {/* ADB not installed */}
           {data && !data.adbFound && <NoAdbPanel onSaved={() => refresh(true)} />}
 
-          {/* ADB found, no phones */}
           {data && data.adbFound && data.phones.length === 0 && <NoPhonesPanel rawOutput={data.rawOutput} />}
 
-          {/* Phones list */}
           {data && data.adbFound && data.phones.length > 0 && (
             <div className="space-y-6">
-              {/* Status row */}
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -555,18 +666,10 @@ export function MobilePage() {
                 </span>
               </div>
 
-              {/* Phone cards grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {data.phones.map((phone, i) => (
                   <PhoneCard key={phone.serial} phone={phone} idx={i} />
                 ))}
-              </div>
-
-              {/* Next steps hint */}
-              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground max-w-2xl">
-                <strong className="text-foreground">Phone connected ✓</strong> — Full automation
-                features (Instagram account binding, SIM traffic routing, proxy per device) will
-                appear here once connection is stable. Keep the USB cable plugged in.
               </div>
             </div>
           )}
