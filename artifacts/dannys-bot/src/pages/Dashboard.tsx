@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.421",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "Mobile Farm now has a screen mirror button and a 'Link Instagram account' form on each connected phone card. Click 'Open screen mirror' to pop up a live view/control window for that phone (uses scrcpy — no extra setup beyond the ADB folder you already configured). Linking an account saves it into Equinox's Accounts list tied to that phone; logging it into the Instagram app itself is still a manual step for this first version.",
+        technical: [
+          "MobilePage.tsx: new MirrorButton (POST /api/mobile/devices/:serial/scrcpy/start|stop) and BindAccountForm (POST /api/mobile/accounts) components added to PhoneCard for state==='device'",
+          "androidManager.ts findAdbPath() now also checks the same adb-path-override.json used by usb-phones.ts, so scrcpy/Instagram automation resolve the same adb binary as device detection",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.420",
     date: "9 Jul 2026",
     items: [

@@ -198,15 +198,35 @@ function emulatorAdbCandidates(): string[] {
   ];
 }
 
+/**
+ * Manual ADB path override — shared with routes/usb-phones.ts.
+ * Lets a user paste the folder containing adb.exe directly in the UI instead
+ * of editing the Windows PATH. Read from the same on-disk file so both
+ * detection paths (USB phone list + emulator/scrcpy/Instagram automation)
+ * agree on which adb binary to use.
+ */
+function loadAdbOverridePath(): string | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), "adb-path-override.json"), "utf8"));
+    const folder = typeof raw?.folder === "string" ? raw.folder.trim() : "";
+    if (!folder) return null;
+    const candidate = path.join(folder, process.platform === "win32" ? "adb.exe" : "adb");
+    return fs.statSync(candidate).isFile() ? candidate : null;
+  } catch { return null; }
+}
+
 function findAdbPath(): string | null {
-  // 1. PATH / env
+  // 1. User-provided override always wins.
+  const override = loadAdbOverridePath();
+  if (override) return override;
+  // 2. PATH / env
   let p = which("adb");
   if (p) return p;
-  // 2. Android SDK
+  // 3. Android SDK
   const sdkCandidates = candidateSdkRoots();
   const sdkRoot = sdkCandidates.find(r => { try { return fs.statSync(r).isDirectory(); } catch { return false; } }) ?? null;
   if (sdkRoot) { p = findInSdk("adb", sdkRoot); if (p) return p; }
-  // 3. Emulator bundled adb
+  // 4. Emulator bundled adb
   for (const c of emulatorAdbCandidates()) {
     try { if (fs.statSync(c).isFile()) return c; } catch { /* ignore */ }
   }

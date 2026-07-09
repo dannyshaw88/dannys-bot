@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
-  WifiOff, Loader2, Terminal, ExternalLink, Usb,
+  WifiOff, Loader2, Terminal, ExternalLink, Usb, Cast, UserPlus, Check,
 } from "lucide-react";
 
 // ─── Isolated API helper (no shared queryClient) ──────────────────────────────
@@ -78,6 +78,132 @@ const CARD_COLORS = [
   "from-green-600 to-green-800",
 ];
 
+function MirrorButton({ serial }: { serial: string }) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const toggle = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/scrcpy/${open ? "stop" : "start"}`, { method: "POST" });
+      const j = await r.json();
+      if (!r.ok || j?.error) throw new Error(j?.error ?? "Failed");
+      setOpen(!open);
+    } catch (e: any) {
+      setErr(e?.message ?? "Could not open screen mirror. Is scrcpy installed?");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={toggle}
+        disabled={busy}
+        className={`w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+          open ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground hover:opacity-90"
+        }`}
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cast className="w-3.5 h-3.5" />}
+        {open ? "Close screen mirror" : "Open screen mirror"}
+      </button>
+      {err && <p className="text-[10px] text-destructive leading-snug">{err}</p>}
+    </div>
+  );
+}
+
+function BindAccountForm({ serial }: { serial: string }) {
+  const [show, setShow] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!username.trim() || !password.trim()) { setErr("Enter a username and password."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/mobile/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password, serial }),
+      });
+      const j = await r.json();
+      if (!r.ok || j?.error) throw new Error(j?.error ?? "Failed to save account");
+      setSaved(true);
+      setUsername("");
+      setPassword("");
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to save account");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!show) {
+    return (
+      <button
+        onClick={() => setShow(true)}
+        className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+      >
+        <UserPlus className="w-3.5 h-3.5" />
+        Link Instagram account
+      </button>
+    );
+  }
+
+  if (saved) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-green-600 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+        <Check className="w-3.5 h-3.5" /> Account linked to this phone — find it in Accounts.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5 bg-muted/30 border border-border rounded-lg p-2.5">
+      <input
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+        placeholder="Instagram username"
+        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5"
+      />
+      <input
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        placeholder="Password"
+        type="password"
+        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5"
+      />
+      {err && <p className="text-[10px] text-destructive leading-snug">{err}</p>}
+      <div className="flex gap-1.5">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+          Save
+        </button>
+        <button
+          onClick={() => setShow(false)}
+          className="px-2 py-1.5 rounded-md border border-border text-xs text-muted-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        This saves the account to Equinox — logging it into the Instagram app on the phone is a separate manual step for now.
+      </p>
+    </div>
+  );
+}
+
 function PhoneCard({ phone, idx }: { phone: UsbPhone; idx: number }) {
   const color = CARD_COLORS[idx % CARD_COLORS.length];
   const label = phone.model
@@ -126,6 +252,13 @@ function PhoneCard({ phone, idx }: { phone: UsbPhone; idx: number }) {
             <p className="text-[11px] text-red-500 leading-relaxed">
               Phone is offline. Try unplugging and reconnecting the USB cable.
             </p>
+          </div>
+        )}
+
+        {phone.state === "device" && (
+          <div className="space-y-2 pt-1">
+            <MirrorButton serial={phone.serial} />
+            <BindAccountForm serial={phone.serial} />
           </div>
         )}
       </div>
