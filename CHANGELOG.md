@@ -4,6 +4,82 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.422] — 2026-07-09
+
+### Mobile Farm — Live In-App Phone Screen Mirror
+
+#### Root cause of "Unexpected token '<', '<!DOCTYPE...' is not valid JSON" error
+Every button on the Mobile page (View Screen, Link Instagram account, etc.) was returning
+a raw HTML 404 page instead of JSON because `registerMobileRoutes()` was never called
+in `src/index.ts`. The function existed but was completely disconnected from the Express
+app, so every `/api/mobile/devices/...` request hit the frontend's catch-all 404 handler
+and returned the Vite dev HTML page. Calling `r.json()` on that HTML produced the
+"Unexpected token '<'" error. Fixed by importing and calling `registerMobileRoutes(httpServer, app)`
+in `index.ts` before `registerInstagramRoutes`.
+
+#### Live phone screen streaming (WebSocket, no external tools)
+Previous behaviour: "Open screen mirror" spawned an external `scrcpy` process that opened
+a separate OS-level window outside of Equinox. If scrcpy was not installed the call threw
+and produced the JSON error above (compounded with the missing route registration).
+
+New behaviour: the phone screen is streamed **inside** Equinox with no external tools:
+
+- New WebSocket endpoint `/api/mobile/screen/:serial` registered on the `httpServer`
+  upgrade event. On connection the server opens a loop: `adb -s <serial> exec-out screencap -p`
+  → collect stdout (raw PNG bytes) → send as a binary WebSocket frame → sleep 200 ms → repeat.
+  Runs at approximately 4–5 fps. The loop terminates cleanly when the WebSocket closes.
+
+- New REST endpoint `GET /api/mobile/devices/:serial/screen-size` — runs
+  `adb shell wm size` and parses the `WxH` result. Used by the frontend to report
+  the phone's native resolution in the overlay header.
+
+- Vite dev-server proxy updated to `ws: true` so WebSocket upgrades on `/api/*` paths
+  are correctly forwarded to the API server during development.
+
+#### New "View Screen" UI — full-screen overlay inside Equinox
+The small "Open screen mirror" button that launched an external window is replaced by a
+**"View Screen"** button on each phone card (only visible when state is `device` / Ready).
+
+Clicking it opens a full-screen dark overlay that covers the entire Equinox window:
+
+- **Live canvas** — binary PNG frames from the WebSocket are decoded via `createObjectURL`
+  and drawn onto a `<canvas>` element. The canvas preserves the phone's native aspect ratio
+  and scales to fill the available area.
+
+- **Click-to-tap** — a click anywhere on the canvas maps the display coordinates back to
+  native phone coordinates using the canvas's `getBoundingClientRect()` and the stored
+  natural resolution, then fires `POST /api/mobile/devices/:serial/input/tap` with the
+  exact `{x, y}` pixel position. The phone receives a real ADB tap at that location.
+
+- **Android nav buttons** at the bottom bar:
+  - Back (KEYCODE 4)
+  - Home (KEYCODE 3)
+  - Recent apps (KEYCODE 187)
+  - Power / lock screen (KEYCODE 26)
+  - Volume up (KEYCODE 24)
+  - Volume down (KEYCODE 25)
+  All send `POST /api/mobile/devices/:serial/input/key`.
+
+- **Keyboard shortcut** — pressing `Escape` closes the overlay.
+
+- **Status bar** — shows phone model, Android version, live FPS counter (updated every second),
+  and the phone's native resolution once the first frame arrives.
+
+- **Error states** — if ADB is not found or the WebSocket fails to connect, a clear error
+  message is shown inside the overlay rather than a silent blank screen.
+
+#### Files changed
+- `artifacts/api-server/src/index.ts` — import + call `registerMobileRoutes`
+- `artifacts/api-server/src/routes/mobile.ts` — signature changed to `(httpServer, app)`;
+  added `ws`, `spawn`, `execFile` imports; added WebSocket screen-stream handler; added
+  `GET /api/mobile/devices/:serial/screen-size` endpoint
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — rewrote `MirrorButton` → `ScreenMirrorOverlay`;
+  added `PhoneCard` mirror state; added `NavBtn` component; added click-to-tap; added
+  Escape-key handler; removed dead scrcpy toggle logic
+- `artifacts/dannys-bot/vite.config.ts` — `ws: true` on `/api` proxy entry
+
+---
+
 ## [1.1.417] — 2026-07-09
 
 ### Critical Fix — `navigator.webdriver` returning wrong value from wrong location

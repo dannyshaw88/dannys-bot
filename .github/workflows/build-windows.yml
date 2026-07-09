@@ -1,0 +1,74 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store path
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build frontend
+        run: pnpm --filter @workspace/dannys-bot run build
+
+      - name: Install Electron dependencies
+        working-directory: artifacts/electron
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Electron main process
+        working-directory: artifacts/electron
+        env:
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
+        run: node build.mjs
+
+      - name: Package Windows installer
+        working-directory: artifacts/electron
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
+        run: pnpm run package
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: equinox-windows-installer
+          path: artifacts/electron/release/*.exe
+          if-no-files-found: warn
+          retention-days: 30
