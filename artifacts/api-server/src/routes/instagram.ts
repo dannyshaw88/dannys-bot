@@ -150,7 +150,7 @@ function pickDesktopUAForAccount(username: string): { api: string; embedded: str
 // Last-resort desktop Chrome UA — used ONLY for the Clear EB Session cleanup path when
 // no per-account UA is stored (so the session can still be wiped even if UA is unset).
 // NEVER use this for a new login, verify, or WS attach — those must block instead.
-const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
+const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 // Per-account verify lock — prevents concurrent logins for the same account.
 // Multiple simultaneous IgApiClient instances logging in with the same device
@@ -1131,33 +1131,180 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── Chrome version utilities (shared by bump + check endpoints) ──────────────
+  // Fetches the current stable Android Chrome version from Google's public API.
+  // Cached 24 h in-memory — no secrets required.
+  let _apiChromeCurrentMajor: string | null = null;
+  let _apiChromeCurrentFull:  string | null = null;
+  let _apiChromeLastFetch = 0;
+  const _API_CHROME_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+  async function fetchCurrentChromeMajor(): Promise<{ major: string; full: string } | null> {
+    const now = Date.now();
+    if (_apiChromeCurrentMajor && now - _apiChromeLastFetch < _API_CHROME_CACHE_TTL) {
+      return { major: _apiChromeCurrentMajor, full: _apiChromeCurrentFull! };
+    }
+    try {
+      const url =
+        "https://versionhistory.googleapis.com/v1/chrome/platforms/android" +
+        "/channels/stable/versions?filter=endtime=none&orderBy=version%20desc&pageSize=1";
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return _apiChromeCurrentMajor ? { major: _apiChromeCurrentMajor, full: _apiChromeCurrentFull! } : null;
+      const json = await r.json() as any;
+      const ver: string | undefined = json?.versions?.[0]?.version;
+      if (ver && /^\d+\.\d+\.\d+\.\d+$/.test(ver)) {
+        _apiChromeCurrentMajor = ver.split(".")[0];
+        _apiChromeCurrentFull  = ver;
+        _apiChromeLastFetch    = now;
+        return { major: _apiChromeCurrentMajor, full: _apiChromeCurrentFull };
+      }
+    } catch { /* network error — return cached value if available */ }
+    return _apiChromeCurrentMajor ? { major: _apiChromeCurrentMajor, full: _apiChromeCurrentFull! } : null;
+  }
+
   // Chrome UA version bump — called by the Electron EB manager when it detects
   // an account's stored UA is behind the current stable Chrome major.
+  // Also called from the ChromeVersionCheck UI "Bump Now" button.
   // Updates ONLY userAgentEmbedded + ebFingerprint.  accountStatus, cookies,
   // device state, and credentialsDirty are intentionally left untouched — a
   // Chrome version bump is indistinguishable from a phone auto-updating Chrome,
   // so it must never trigger a re-verify loop.
   app.post("/api/profiles/:id/bump-chrome-ua", async (req, res) => {
     const id = Number(req.params.id);
-    const { userAgentEmbedded } = (req.body ?? {}) as { userAgentEmbedded?: string };
-    if (!userAgentEmbedded || typeof userAgentEmbedded !== "string") {
-      return res.status(400).json({ error: "userAgentEmbedded required" });
-    }
+    const { userAgentEmbedded, requestCurrentBump } =
+      (req.body ?? {}) as { userAgentEmbedded?: string; requestCurrentBump?: boolean };
+
     const profile = await storage.getProfile(id).catch(() => null);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
 
-    const isDesktopUA = !userAgentEmbedded.includes("Mobile");
+    let newEmbeddedUA = userAgentEmbedded;
+
+    // "requestCurrentBump": caller asks us to fetch current stable Chrome and
+    // rewrite the stored UA automatically — used by the UI "Bump Now" button.
+    if (requestCurrentBump && !newEmbeddedUA) {
+      const current = await fetchCurrentChromeMajor();
+      if (!current) return res.status(503).json({ error: "Could not fetch current Chrome version" });
+      const storedUA = (profile as any).userAgentEmbedded as string | null;
+      if (!storedUA) return res.status(400).json({ error: "No stored UA to bump" });
+      newEmbeddedUA = storedUA.replace(/Chrome\/[\d.]+/, `Chrome/${current.full}`);
+      const newMajor = current.major;
+      const isDesktopUA = !newEmbeddedUA.includes("Mobile");
+      const newFingerprint = JSON.stringify(
+        generateEbFingerprint((profile as any).userAgentApi ?? undefined, isDesktopUA, newEmbeddedUA)
+      );
+      await storage.updateProfile(id, { userAgentEmbedded: newEmbeddedUA, ebFingerprint: newFingerprint } as any);
+      console.log(`[bump-chrome-ua] profile=${id} UI-bumped to Chrome ${newMajor}: "${newEmbeddedUA.slice(0, 80)}"`);
+      return res.json({ ok: true, newMajor });
+    }
+
+    if (!newEmbeddedUA || typeof newEmbeddedUA !== "string") {
+      return res.status(400).json({ error: "userAgentEmbedded required (or set requestCurrentBump:true)" });
+    }
+
+    const isDesktopUA = !newEmbeddedUA.includes("Mobile");
     const newFingerprint = JSON.stringify(
-      generateEbFingerprint((profile as any).userAgentApi ?? undefined, isDesktopUA, userAgentEmbedded)
+      generateEbFingerprint((profile as any).userAgentApi ?? undefined, isDesktopUA, newEmbeddedUA)
     );
-
-    await storage.updateProfile(id, {
-      userAgentEmbedded,
-      ebFingerprint: newFingerprint,
-    } as any);
-
-    console.log(`[bump-chrome-ua] profile=${id} bumped embedded UA to "${userAgentEmbedded.slice(0, 80)}"`);
+    await storage.updateProfile(id, { userAgentEmbedded: newEmbeddedUA, ebFingerprint: newFingerprint } as any);
+    console.log(`[bump-chrome-ua] profile=${id} bumped embedded UA to "${newEmbeddedUA.slice(0, 80)}"`);
     return res.json({ ok: true });
+  });
+
+  // Chrome version check — reads the account's stored Chrome major vs the current
+  // stable and returns structured pass/warn/fail results for the CHECKS tab UI.
+  app.get("/api/profiles/:id/chrome-version-check", async (req, res) => {
+    const id = Number(req.params.id);
+    const profile = await storage.getProfile(id).catch(() => null);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    const storedUA     = (profile as any).userAgentEmbedded as string | null;
+    const storedMajorStr = storedUA?.match(/Chrome\/(\d+)/)?.[1] ?? null;
+    const storedMajor  = storedMajorStr ? parseInt(storedMajorStr, 10) : null;
+
+    const current      = await fetchCurrentChromeMajor();
+    const currentMajor = current ? parseInt(current.major, 10) : null;
+    const majorsBehind = (storedMajor !== null && currentMajor !== null)
+      ? Math.max(0, currentMajor - storedMajor) : 0;
+    const isStale      = majorsBehind > 0;
+
+    // ── Build checks ──────────────────────────────────────────────────────────
+
+    const checks: Record<string, { title: string; status: "pass"|"warn"|"fail"|"info"; label: string; detail: Record<string, unknown> }> = {};
+
+    // 1. Browser (EB) Chrome version
+    {
+      let status: "pass"|"warn"|"fail"|"info" = "info";
+      let label  = "No UA stored for this account";
+      if (storedMajor !== null && currentMajor !== null) {
+        if (majorsBehind === 0) {
+          status = "pass";
+          label  = `Chrome ${storedMajor} — up to date`;
+        } else if (majorsBehind <= 2) {
+          status = "warn";
+          label  = `Chrome ${storedMajor} — ${majorsBehind} version${majorsBehind > 1 ? "s" : ""} behind (current: ${currentMajor})`;
+        } else {
+          status = "fail";
+          label  = `Chrome ${storedMajor} — ${majorsBehind} versions behind (current: ${currentMajor}) — stale, update now`;
+        }
+      } else if (storedMajor !== null && currentMajor === null) {
+        status = "warn";
+        label  = `Chrome ${storedMajor} — could not fetch current stable version to compare`;
+      }
+      checks.browserChrome = {
+        title:  "Browser (EB) Chrome Version",
+        status, label,
+        detail: {
+          storedChromeMajor:   storedMajor !== null ? String(storedMajor) : "none",
+          currentStableMajor:  currentMajor !== null ? String(currentMajor) : "unavailable",
+          versionsBehind:      String(majorsBehind),
+          fullStoredUA:        storedUA ?? "none",
+        },
+      };
+    }
+
+    // 2. Current stable Chrome (source info)
+    {
+      checks.stableSource = {
+        title:  "Current Stable Chrome (Live)",
+        status: current ? "pass" : "warn",
+        label:  current
+          ? `Chrome ${current.major} (${current.full}) — fetched from Google Version History`
+          : "Could not fetch current Chrome version from Google — check network",
+        detail: {
+          source:       "versionhistory.googleapis.com",
+          currentFull:  current?.full ?? "unavailable",
+          cachedFor:    "24 hours",
+        },
+      };
+    }
+
+    // 3. API UA (Instagram private API format — Chrome version not embedded)
+    {
+      const apiUA = (profile as any).userAgentApi as string | null;
+      const hasApiUA = !!apiUA && apiUA.length > 0;
+      checks.apiUA = {
+        title:  "Instagram API User-Agent",
+        status: hasApiUA ? "pass" : "info",
+        label:  hasApiUA
+          ? "API UA present — Instagram app format (Chrome version not embedded in this format)"
+          : "No API UA stored — account may be EB-only (disableApi)",
+        detail: {
+          apiUA:      apiUA ?? "none",
+          note:       "The Instagram private API UA uses its own versioning (app/SDK version), not Chrome. Chrome version staleness only applies to the browser (EB) UA above.",
+        },
+      };
+    }
+
+    return res.json({
+      profileId:    id,
+      storedMajor:  storedMajorStr,
+      currentMajor: current?.major ?? null,
+      storedUA,
+      isStale,
+      majorsBehind,
+      checks,
+      checkedAt:    new Date().toISOString(),
+    });
   });
 
   // Migration: reset all disableApi accounts that still carry a desktop Chrome UA

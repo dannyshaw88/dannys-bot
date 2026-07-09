@@ -4,6 +4,64 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.415] — 2026-07-09
+
+### Added
+
+#### Chrome Version Check — new CHECKS tab card for every account
+
+A new **Chrome Version Check** card appears on the CHECKS tab of every account's detail page. It shows:
+
+- **Browser (EB) Chrome Version** — the Chrome major stored in the account's browser identity vs the current stable release, with a `PASS` / `WARN` / `FAIL` verdict. `WARN` = 1–2 versions behind; `FAIL` = 3+ versions behind (static bot signal on every login).
+- **Current Stable Chrome (Live)** — fetched from Google's public Version History API at check time (24 h in-memory cache on the API server, no secrets required). Shows the full version string (e.g. `140.0.7312.45`).
+- **Instagram API User-Agent** — confirms the API UA is present. Notes that Chrome version is not embedded in Instagram's private API format (app/SDK version only) so the browser check is the relevant signal.
+- **Bump to Current Chrome Now** button — one click rewrites the stored UA to the current stable version and regenerates the account fingerprint. Equivalent to a phone auto-updating Chrome — no re-verify, no status change, no cookie wipe.
+
+**Files:**
+- `artifacts/api-server/src/routes/instagram.ts` — `GET /api/profiles/:id/chrome-version-check` (structured check endpoint with live Google API fetch + 24 h cache)
+- `artifacts/api-server/src/routes/instagram.ts` — `POST /api/profiles/:id/bump-chrome-ua` extended to support `requestCurrentBump: true` (auto-fetches current version and rewrites UA without caller needing to supply it)
+- `artifacts/dannys-bot/src/components/ChromeVersionCheck.tsx` — new check component (pass/warn/fail cards, detail expansion, Bump Now button)
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx` — ChromeVersionCheck added to CHECKS tab alongside ApiLeakCheck, BrowserCheck, HeaderCheck
+
+---
+
+#### Chrome version auto-refreshes at runtime — no more manual bumps
+
+The app now fetches the real current stable Chrome version from Google's public Version History API at startup and every 24 hours. When a new Chrome release ships the app picks it up automatically — no code push, no manual constant bump, no guessing.
+
+**What this solves:** Stale Chrome versions were a static, session-independent bot signal present on every login regardless of IP, proxy, or account history. Discovering this required weeks of ban investigation. The auto-refresh makes it impossible to silently drift stale again.
+
+**How it works:**
+- `refreshChromeVersion()` in `ebManager.ts` fetches `versionhistory.googleapis.com` at startup and on a 24 h interval. If a newer major is detected it extends the `CHROME_BUILD_INFO` lookup table with the correct full build number and GREASE brand, then updates `CURRENT_CHROME_MAJOR`.
+- GREASE brand uses the real Chromium rotation algorithm: `greaseBrands[floor(major/8) % 8]` across an 8-entry confirmed cycle — future-proof for any upcoming Chrome milestone, not a 3-band approximation.
+- Concurrent calls coalesce into a single in-flight request (no duplicate fetches on rapid startup).
+- On any network/parse error the existing table is left untouched — silent fallback, never a crash.
+- `CURRENT_CHROME_MAJOR` default bumped from `"139"` to `"140"` to match the newest bundled `CHROME_BUILD_INFO` entry (better offline fallback).
+
+---
+
+#### Existing accounts auto-bump Chrome version on next EB open
+
+When an existing account's EB window is opened, its stored Chrome major is compared to `CURRENT_CHROME_MAJOR`. If it's behind, the UA is rewritten to the new version *before* CDP applies it — the entire session (UA string, Client-Hints brands, GREASE, injected fingerprint script) uses the updated version from the first request. The bumped UA is then persisted to the database so Mode-B silent windows (follow/post/DM automation) pick it up on their next run too.
+
+**What this mimics:** Real Android phones auto-update Chrome within days of a release. An account still reporting Chrome 137 in July 2026 when the phone would naturally be on 140+ is a static tell. This closes that gap transparently.
+
+**What it does NOT touch:** `accountStatus`, cookies (`igApiCookies`), device state (`igDeviceState`), or `credentialsDirty`. A Chrome version bump is indistinguishable from normal phone behavior — it must never trigger a re-verify loop.
+
+**Ghost browser** (profileId = -1) and **verifyMode** windows are explicitly excluded: ghost generates a fresh identity each time; verifyMode must not change the UA mid-flow.
+
+**Files:**
+- `artifacts/electron/src/ebManager.ts` — `rewriteChromeMajorInUA()`, `pushUABumpToServer()`, bump block inside `openEbWindow()`
+- `artifacts/electron/src/ebManager.ts` — `refreshChromeVersion()`, `_GREASE_BRANDS[]`, `_inferGrease()`, startup + interval hook in `startEbIpcServer()`
+- `artifacts/api-server/src/routes/instagram.ts` — `POST /api/profiles/:id/bump-chrome-ua` (updates `userAgentEmbedded` + `ebFingerprint` only)
+
+### Fixed
+
+- **Ghost mobile setup GREASE brand** — the hardcoded `"Not_A Brand"` in the ghost browser's `Emulation.setUserAgentOverride` Client-Hints metadata was replaced with `getChromeBuildInfo(CURRENT_CHROME_MAJOR).grease`. The ghost path now uses the same dynamically-correct GREASE as every other EB window.
+- **Desktop fallback Chrome UA** — `DESKTOP_BROWSER_UA` in `routes/instagram.ts` updated from `Chrome/139.0.0.0` to `Chrome/140.0.0.0` to match the rest of the UA pool.
+
+---
+
 ## [1.1.406] — 2026-07-08
 
 ### Added

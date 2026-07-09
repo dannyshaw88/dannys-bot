@@ -78,6 +78,46 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.415",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "New Chrome Version Check on every account's CHECKS tab. Shows the Chrome version stored in the account's browser identity vs. the current stable Chrome release, with a pass/warn/fail verdict and a one-click 'Bump to Current Chrome' button. Catching stale Chrome versions required weeks of ban investigation — this check makes it impossible to miss going forward.",
+        technical: [
+          "GET /api/profiles/:id/chrome-version-check — fetches current stable Chrome from Google Version History API (24 h cache), compares against stored userAgentEmbedded, returns structured browserChrome/stableSource/apiUA checks",
+          "POST /api/profiles/:id/bump-chrome-ua extended to support requestCurrentBump:true — auto-fetches current stable and rewrites the stored UA without requiring the caller to supply a new version string",
+          "ChromeVersionCheck.tsx — new component added to the CHECKS tab in ProfileDetailsPage.tsx alongside ApiLeakCheck, BrowserCheck, HeaderCheck",
+        ],
+      },
+      {
+        category: "Added",
+        text: "Chrome version now auto-updates at runtime — the app fetches the real current stable Chrome version from Google's public API at startup and every 24 hours. When a new Chrome release ships, every new account and every account whose EB window is opened will automatically use the new version. No more manual code pushes or guessing.",
+        technical: [
+          "ebManager.ts: refreshChromeVersion() — fetches versionhistory.googleapis.com at startup + 24 h interval, extends CHROME_BUILD_INFO table with new entries, updates CURRENT_CHROME_MAJOR",
+          "GREASE brand uses real Chromium floor(major/8)%8 rotation algorithm across 8-entry cycle — future-proof for any Chrome milestone",
+          "In-flight guard coalesces concurrent refresh calls into a single request",
+        ],
+      },
+      {
+        category: "Added",
+        text: "Existing accounts automatically get their Chrome version updated the next time their browser window is opened — no re-verify, no status change, just a silent UA bump like a real phone auto-updating Chrome. Mode-B silent windows (follow/post/DM automation) also pick up the new version automatically on their next run.",
+        technical: [
+          "openEbWindow() checks stored Chrome major vs CURRENT_CHROME_MAJOR — if behind, rewrites _browserUA before CDP applies it and fires pushUABumpToServer() to persist the change",
+          "POST /api/profiles/:id/bump-chrome-ua updates userAgentEmbedded + regenerates ebFingerprint only — accountStatus/cookies/device state untouched",
+          "Ghost browser and verifyMode windows excluded from auto-bump (ghost generates fresh identity each time; verifyMode must not change UA mid-flow)",
+        ],
+      },
+      {
+        category: "Fix",
+        text: "Hardcoded desktop Chrome fallback UA updated from Chrome 139 to Chrome 140 to match the rest of the UA pool.",
+        technical: [
+          "DESKTOP_BROWSER_UA in routes/instagram.ts: Chrome/139.0.0.0 → Chrome/140.0.0.0",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.414",
     date: "9 Jul 2026",
     items: [

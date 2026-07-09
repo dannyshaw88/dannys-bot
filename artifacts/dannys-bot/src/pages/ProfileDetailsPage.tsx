@@ -39,6 +39,7 @@ import { shouldWarnForNewAccount, recordLoginEvent } from "@/lib/ipLoginTracker"
 import { ApiLeakCheck } from "@/components/ApiLeakCheck";
 import { BrowserCheck } from "@/components/BrowserCheck";
 import { HeaderCheck } from "@/components/HeaderCheck";
+import { ChromeVersionCheck } from "@/components/ChromeVersionCheck";
 import { LoginRateLimitDialog } from "@/components/LoginRateLimitDialog";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
@@ -2435,6 +2436,9 @@ export function ProfileDetailsPage() {
             </div>
             <div className="border-t border-slate-200 pt-8">
               <HeaderCheck profileId={profile.id} />
+            </div>
+            <div className="border-t border-slate-200 pt-8">
+              <ChromeVersionCheck profileId={profile.id} />
             </div>
           </div>
         </Tabs.Content>
