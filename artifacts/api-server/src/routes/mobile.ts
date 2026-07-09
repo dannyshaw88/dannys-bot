@@ -329,26 +329,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
       adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
 
-      // `screenrecord` silently downscales to a default cap (commonly
-      // 720x1280) whenever the device's native resolution is larger, unless
-      // told otherwise. `adb shell input tap` always expects coordinates in
-      // the device's REAL screen-pixel space — so without forcing the video
-      // to render at that same native size, every tap the browser computes
-      // (against the downscaled canvas) lands on the wrong physical pixel.
-      // This is why taps looked like they "did nothing": they were real taps,
-      // just at the wrong (scaled-down) location. Query the actual size and
-      // pin --size to it so the video and tap coordinate spaces always match.
-      let sizeArg: string | null = null;
-      try {
-        const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-        const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
-        if (m) sizeArg = `${m[1]}x${m[2]}`;
-      } catch { /* ignore — fall back to screenrecord's own default */ }
-      if (sizeArg) {
-        logger.info({ serial, sizeArg }, "[mobile-video] pinning stream to native device resolution");
-      } else {
-        logger.warn({ serial }, "[mobile-video] could not read device resolution — screenrecord may downscale, causing tap misalignment");
-      }
+      // NOTE: we intentionally do NOT force `--size` to the device's exact
+      // `wm size` here. screenrecord's encoder on many devices requires
+      // width/height to be 16-pixel-aligned; most phone resolutions (e.g.
+      // 1080x2400) are NOT multiples of 16, so pinning the raw wm-size value
+      // made screenrecord fail to start at all (symptom: stream never
+      // produces data — "waiting for screen data" forever). Instead we let
+      // screenrecord pick its own (possibly downscaled) size, and correct
+      // tap coordinates for the mismatch server-side in the /input/tap route
+      // by scaling from the video's reported size to the device's real size.
 
       let cleanedUp = false;
       const cleanup = (reason: string) => {
@@ -372,9 +361,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "--output-format=h264",
           "--bit-rate", "8000000",
           "--time-limit", "180",
+          "-",
         ];
-        if (sizeArg) args.push("--size", sizeArg);
-        args.push("-");
         const child = spawn(adbPath, args);
         currentChild = child;
         let sawAnyData = false;
@@ -794,11 +782,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  const tapSchema = z.object({ x: z.number(), y: z.number() });
+  // videoW/videoH are optional: the client's decoded video frame size at the
+  // moment it computed x/y. screenrecord may stream at a downscaled size
+  // relative to the device's real screen (see comment in the video WS route
+  // above), so if the client's video size doesn't match the device's actual
+  // `wm size`, we rescale x/y into real device pixels before tapping —
+  // otherwise every tap silently lands on the wrong spot.
+  const tapSchema = z.object({
+    x: z.number(),
+    y: z.number(),
+    videoW: z.number().optional(),
+    videoH: z.number().optional(),
+  });
   app.post("/api/mobile/devices/:serial/input/tap", async (req: Request, res: Response) => {
     try {
       const input = tapSchema.parse(req.body);
-      await android.tap(p(req, "serial"), input.x, input.y);
+      const serial = p(req, "serial");
+      let { x, y } = input;
+      if (input.videoW && input.videoH) {
+        try {
+          const tools = android.detectToolset();
+          const adbPath = tools.adb.path;
+          if (adbPath) {
+            const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+            const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+            if (m) {
+              const realW = parseInt(m[1]);
+              const realH = parseInt(m[2]);
+              if (realW !== input.videoW || realH !== input.videoH) {
+                x = Math.round((x / input.videoW) * realW);
+                y = Math.round((y / input.videoH) * realH);
+                logger.info({ serial, from: [input.x, input.y], to: [x, y], video: [input.videoW, input.videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
+              }
+            }
+          }
+        } catch { /* fall back to unscaled coordinates */ }
+      }
+      await android.tap(serial, x, y);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

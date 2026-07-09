@@ -398,7 +398,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x, y }),
+        body: JSON.stringify({ x, y, videoW: phoneW, videoH: phoneH }),
       });
       if (!r.ok) addLog(`Tap FAILED — server returned ${r.status}`);
     } catch (err: any) {
