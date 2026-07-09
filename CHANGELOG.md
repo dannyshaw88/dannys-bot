@@ -4,6 +4,56 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.424] — 2026-07-09
+
+### Mobile Farm — Inline Phone Slots & Screencap CRLF Fix
+
+#### Problem: screen mirror opened as a full-screen modal instead of inline
+"View Screen" replaced the entire Equinox window with a black overlay.
+The user couldn't see other slots while a phone was streaming, and the
+size (340 px wide modal) made it impossible to fit multiple phones on screen.
+
+**Fix — 8 inline phone slots, always visible:**
+The Mobile Farm page now shows a **4 × 2 grid of fixed phone slots** (220 px each),
+styled as portrait phone frames. There is no "View Screen" button and no modal overlay.
+
+- **Auto-stream** — as soon as a phone reaches `device` (Ready) state the canvas inside
+  its slot starts streaming automatically. No click required.
+- **Empty slots** — the remaining slots (up to 8 total) show a faint phone outline SVG
+  and a "Slot N" label so the grid always fills the screen.
+- **33 % smaller** — slots are 220 px wide (vs the previous 340 px modal), allowing
+  four across in the content area at common resolutions.
+- **Nav bar per slot** — Back, Home, Recent, Power, Vol+, Vol− appear at the bottom of
+  each slot only when a phone is streaming.
+- **State labels in slot header** — "Live" (green pulse), "Auth needed" (yellow),
+  "Offline" (red), "empty" (dim) — at a glance without opening anything.
+- **Setup panels unchanged** — the ADB-not-found and no-phones-detected panels continue
+  to appear in the main area below the grid header.
+
+#### Problem: phone screen stays black / keeps reconnecting on Xiaomi
+On Windows, `adb exec-out screencap -p` passes binary PNG data through a pseudo-TTY
+layer that on some ADB versions converts bare `\n` (0x0A) bytes to `\r\n` (0x0D 0x0A).
+Because PNG files contain `\n` bytes inside their zlib-compressed data blocks, this
+CRLF insertion corrupts the PNG header and/or the compressed stream — resulting in an
+image that cannot be decoded (black canvas), or a PNG that fails the `length > 100` check
+and is silently discarded.
+
+**Fix — server-side CRLF stripping + PNG signature validation:**
+- New `isPng(buf)` helper — checks the first 4 bytes for the PNG magic number
+  (`\x89 P N G`, i.e. `0x89 0x50 0x4E 0x47`). Used as a gate before sending.
+- New `stripCrlf(buf)` helper — single-pass O(n) strip using `Buffer.allocUnsafe`
+  and direct byte indexing (no JS array push) for efficiency on 5–8 MB frames.
+  Returns the original buffer unchanged if no CRLF pairs are found (zero-copy).
+- **Detection & application:** after collecting stdout chunks into `frame`, the server
+  checks `isPng(frame)`. If the check fails it calls `stripCrlf(frame)` and rechecks.
+  Only a validated PNG is sent over the WebSocket. If the frame is still not a valid PNG
+  after stripping, a JSON error message is sent to the client instead of silently dropping
+  the frame — so the user sees "screencap returned invalid data" rather than an eternally
+  blank screen.
+- Frame interval bumped from 200 ms to 250 ms to reduce ADB pressure on the phone.
+
+---
+
 ## [1.1.423] — 2026-07-09
 
 ### Mobile Farm — Phone-Sized Screen Mirror & Reliable Stream Recovery

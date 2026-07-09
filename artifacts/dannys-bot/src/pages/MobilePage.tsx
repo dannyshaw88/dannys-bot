@@ -6,14 +6,16 @@
  * No shared contexts, no profile/proxy queries, no Instagram API calls.
  */
 
-import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import React, { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
-  WifiOff, Loader2, Terminal, ExternalLink, Usb, X,
+  WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX,
-  Monitor, Check, UserPlus,
 } from "lucide-react";
+
+// Injected by Vite at build time
+declare const __API_PORT__: string;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,34 +44,79 @@ async function fetchPhones(): Promise<PhonesResponse> {
   return r.json() as Promise<PhonesResponse>;
 }
 
-// Injected by Vite at build time — declared here so TypeScript doesn't complain
-declare const __API_PORT__: string;
+async function sendKey(serial: string, code: number) {
+  try {
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+  } catch { /* ignore */ }
+}
 
-// ─── Screen mirror overlay ────────────────────────────────────────────────────
+// ─── Empty phone shell SVG ───────────────────────────────────────────────────
 
-function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () => void }) {
+function EmptyShell({ idx }: { idx: number }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 select-none">
+      <svg
+        viewBox="0 0 80 160"
+        className="w-14 h-28 text-white/10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {/* Phone body */}
+        <rect x="6" y="6" width="68" height="148" rx="10" ry="10" />
+        {/* Speaker */}
+        <line x1="28" y1="16" x2="52" y2="16" />
+        {/* Home button area */}
+        <circle cx="40" cy="144" r="5" />
+      </svg>
+      <span className="text-[9px] font-mono text-white/15 uppercase tracking-widest">
+        Slot {idx + 1}
+      </span>
+    </div>
+  );
+}
+
+// ─── Nav button ───────────────────────────────────────────────────────────────
+
+function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className="flex flex-col items-center gap-0.5 text-white/40 hover:text-white/80 transition-colors px-1.5"
+    >
+      {icon}
+      <span className="text-[8px] font-medium tracking-wide uppercase">{label}</span>
+    </button>
+  );
+}
+
+// ─── Live canvas — inline streaming inside a slot ────────────────────────────
+
+const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
 
-  const [fps,       setFps]       = useState(0);
-  const [connected, setConnected] = useState(false);
-  const [hasFrame,  setHasFrame]  = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
-  const [phoneSize, setPhoneSize] = useState<{ w: number; h: number } | null>(null);
+  const [status,   setStatus]   = useState<"connecting" | "waiting" | "live" | "error">("connecting");
+  const [fps,      setFps]      = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // FPS counter
+  // FPS ticker
   useEffect(() => {
-    const t = setInterval(() => {
-      setFps(fpsCountRef.current);
-      fpsCountRef.current = 0;
-    }, 1000);
+    const t = setInterval(() => { setFps(fpsCountRef.current); fpsCountRef.current = 0; }, 1000);
     return () => clearInterval(t);
   }, []);
 
-  // WebSocket screen stream — reconnects automatically on drop
+  // WebSocket stream with auto-reconnect
   useEffect(() => {
     let active = true;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,57 +124,49 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
 
     const connect = () => {
       if (!active) return;
-
-      // Reset per-connection state
       frameSeenRef.current = false;
-      setHasFrame(false);
-      setError(null);
+      phoneSizeRef.current = null;
+      setStatus("connecting");
+      setErrorMsg(null);
 
-      // In Electron the app is served from the API server itself, so
-      // window.location.host is already the right host. Fallback to
-      // the injected build-time API port in case host is empty (file://).
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host  = window.location.host || `127.0.0.1:${typeof __API_PORT__ !== "undefined" ? __API_PORT__ : "8082"}`;
+      const host  = window.location.host
+        || `127.0.0.1:${typeof __API_PORT__ !== "undefined" ? __API_PORT__ : "8082"}`;
       const ws = new WebSocket(
-        `${proto}//${host}/api/mobile/screen/${encodeURIComponent(phone.serial)}`
+        `${proto}//${host}/api/mobile/screen/${encodeURIComponent(serial)}`
       );
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (!active) { ws.close(); return; }
-        setConnected(true);
-        // If no first frame arrives within 10 s the phone's screencap is likely
-        // hung (common on locked screens). Surface a clear message.
+        setStatus("waiting");
         noFrameTimer = setTimeout(() => {
           if (!frameSeenRef.current && active) {
-            setError(
-              "No screen data received. Make sure the phone is unlocked — " +
-              "screencap doesn't work on the lock screen on some devices."
-            );
+            setStatus("error");
+            setErrorMsg("No screen data. Unlock the phone — screencap is blocked on the lock screen.");
           }
         }, 10_000);
       };
 
       ws.onerror = () => {
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
-        setError("Couldn't reach the phone stream. Check it's plugged in with USB Debugging enabled.");
+        setStatus("error");
+        setErrorMsg("Stream failed — check ADB is running");
       };
 
       ws.onclose = () => {
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
         if (!active) return;
-        setConnected(false);
-        // Auto-reconnect after 2 s so a brief USB glitch recovers on its own
+        if (status !== "error") setStatus("connecting");
         reconnectTimer = setTimeout(connect, 2_000);
       };
 
       ws.onmessage = (ev) => {
-        const data = ev.data;
-        if (typeof data === "string") {
+        if (typeof ev.data === "string") {
           try {
-            const j = JSON.parse(data);
-            if (j.error) setError(j.error);
+            const j = JSON.parse(ev.data as string);
+            if (j.error) { setStatus("error"); setErrorMsg(j.error); }
           } catch { /* ok */ }
           return;
         }
@@ -135,14 +174,14 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
         if (!frameSeenRef.current) {
           frameSeenRef.current = true;
           if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
-          setHasFrame(true);
-          setError(null);
+          setStatus("live");
+          setErrorMsg(null);
         }
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-        const blob = new Blob([data as ArrayBuffer], { type: "image/png" });
+        const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
         const url  = URL.createObjectURL(blob);
         const img  = new Image();
         const revoke = () => URL.revokeObjectURL(url);
@@ -151,7 +190,6 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
           if (!phoneSizeRef.current) {
             const sz = { w: img.naturalWidth, h: img.naturalHeight };
             phoneSizeRef.current = sz;
-            setPhoneSize(sz);
             canvas.width  = sz.w;
             canvas.height = sz.h;
           }
@@ -164,380 +202,169 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
     };
 
     connect();
-
     return () => {
       active = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (noFrameTimer)   clearTimeout(noFrameTimer);
       wsRef.current?.close();
     };
-  }, [phone.serial]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serial]);
 
-  // Tap handler — maps canvas display coords → native phone coords
-  const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!phoneSizeRef.current) return;
+  // Click-to-tap
+  const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!phoneSizeRef.current || status !== "live") return;
     const rect   = canvasRef.current!.getBoundingClientRect();
     const scaleX = phoneSizeRef.current.w / rect.width;
     const scaleY = phoneSizeRef.current.h / rect.height;
     const x = Math.round((e.clientX - rect.left) * scaleX);
     const y = Math.round((e.clientY - rect.top)  * scaleY);
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/tap`, {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ x, y }),
       });
     } catch { /* ignore */ }
-  }, [phone.serial]);
-
-  const sendKey = useCallback(async (code: number) => {
-    try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/key`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-    } catch { /* ignore */ }
-  }, [phone.serial]);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  const label = phone.model
-    ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
-    : phone.serial;
-
-  // Status line shown in the header
-  const statusText = error
-    ? "error"
-    : !connected
-      ? "connecting…"
-      : !hasFrame
-        ? "waiting for screen…"
-        : `${fps} fps`;
-  const statusColor = error
-    ? "text-yellow-400"
-    : connected && hasFrame
-      ? "text-green-400"
-      : "text-white/40";
+  }, [serial, status]);
 
   return (
-    /* Dimmed backdrop — click outside the phone to close */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm select-none"
-      onClick={onClose}
-    >
-      {/*
-        Phone-shaped panel — ~340 px wide, portrait aspect ratio.
-        We stop click propagation so tapping inside doesn't close the overlay.
-      */}
-      <div
-        className="flex flex-col bg-zinc-950 rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden"
-        style={{ width: 340, maxHeight: "calc(100vh - 48px)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* ── Top status bar ── */}
-        <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="text-xs font-semibold text-white truncate">{label}</span>
-            {phone.androidVersion && (
-              <span className="text-[10px] text-white/40 shrink-0">Android {phone.androidVersion}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2.5 shrink-0 ml-2">
-            <span className={`text-[10px] font-mono ${statusColor}`}>{statusText}</span>
-            {phoneSize && (
-              <span className="text-[10px] font-mono text-white/25 hidden sm:block">
-                {phoneSize.w}×{phoneSize.h}
-              </span>
-            )}
-            <button
-              onClick={onClose}
-              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-              title="Close (Esc)"
-            >
-              <X className="w-3 h-3 text-white/70" />
-            </button>
-          </div>
+    <div className="absolute inset-0 bg-black flex items-center justify-center">
+      {/* Overlay states */}
+      {status === "connecting" && (
+        <div className="flex flex-col items-center gap-1.5">
+          <Loader2 className="w-4 h-4 animate-spin text-white/25" />
+          <span className="text-[9px] text-white/25 select-none">Connecting…</span>
         </div>
-
-        {/* ── Phone screen ── */}
-        <div
-          className="relative bg-black overflow-hidden"
-          style={{
-            // Lock to the phone's native aspect ratio once known; default to 9:16
-            aspectRatio: phoneSize ? `${phoneSize.w} / ${phoneSize.h}` : "9 / 16",
-            width: "100%",
-            flexShrink: 0,
-          }}
-        >
-          {/* Error state */}
-          {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
-              <AlertTriangle className="w-7 h-7 text-yellow-400 shrink-0" />
-              <p className="text-white/80 text-xs leading-relaxed">{error}</p>
-              <button
-                onClick={() => {
-                  setError(null);
-                  // Force a fresh connection attempt
-                  wsRef.current?.close();
-                }}
-                className="mt-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition-colors"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {/* Connecting / waiting for first frame */}
-          {!error && (!connected || !hasFrame) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-6 h-6 animate-spin text-white/40" />
-              <span className="text-white/40 text-xs">
-                {!connected ? `Connecting to ${label}…` : "Waiting for screen…"}
-              </span>
-            </div>
-          )}
-
-          {/* Live canvas */}
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            style={{
-              display: hasFrame ? "block" : "none",
-              width: "100%",
-              height: "auto",
-              cursor: "crosshair",
-            }}
-          />
-        </div>
-
-        {/* ── Android nav bar ── */}
-        <div className="flex items-center justify-center gap-5 py-3 bg-zinc-900 border-t border-white/8 shrink-0">
-          <NavBtn icon={<ChevronLeft className="w-4 h-4" />} label="Back"   onClick={() => sendKey(4)}   />
-          <NavBtn icon={<Home        className="w-4 h-4" />} label="Home"   onClick={() => sendKey(3)}   />
-          <NavBtn icon={<LayoutGrid  className="w-4 h-4" />} label="Recent" onClick={() => sendKey(187)} />
-          <div className="w-px h-5 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3.5 h-3.5" />} label="Power"  onClick={() => sendKey(26)}  />
-          <NavBtn icon={<Volume2     className="w-3.5 h-3.5" />} label="Vol +"  onClick={() => sendKey(24)}  />
-          <NavBtn icon={<VolumeX     className="w-3.5 h-3.5" />} label="Vol −"  onClick={() => sendKey(25)}  />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex flex-col items-center gap-1 text-white/50 hover:text-white transition-colors px-2"
-    >
-      {icon}
-      <span className="text-[9px] font-medium tracking-wide uppercase">{label}</span>
-    </button>
-  );
-}
-
-// ─── State badge ──────────────────────────────────────────────────────────────
-
-function StateBadge({ state }: { state: string }) {
-  if (state === "device") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-500/15 text-green-500 border border-green-500/30">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-        Ready
-      </span>
-    );
-  }
-  if (state === "unauthorized") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30">
-        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-        Needs approval
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/15 text-red-500 border border-red-500/30">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-      {state}
-    </span>
-  );
-}
-
-// ─── Bind account form ────────────────────────────────────────────────────────
-
-function BindAccountForm({ serial }: { serial: string }) {
-  const [show,     setShow]     = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [saving,   setSaving]   = useState(false);
-  const [saved,    setSaved]    = useState(false);
-  const [err,      setErr]      = useState<string | null>(null);
-
-  const save = async () => {
-    if (!username.trim() || !password.trim()) { setErr("Enter a username and password."); return; }
-    setSaving(true); setErr(null);
-    try {
-      const r = await fetch("/api/mobile/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password, serial }),
-      });
-      const j = await r.json();
-      if (!r.ok || j?.error) throw new Error(j?.error ?? "Failed to save account");
-      setSaved(true); setUsername(""); setPassword("");
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to save account");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!show) {
-    return (
-      <button
-        onClick={() => setShow(true)}
-        className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-      >
-        <UserPlus className="w-3.5 h-3.5" />
-        Link Instagram account
-      </button>
-    );
-  }
-
-  if (saved) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-green-600 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-        <Check className="w-3.5 h-3.5" /> Account linked — find it in Accounts.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5 bg-muted/30 border border-border rounded-lg p-2.5">
-      <input
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-        placeholder="Instagram username"
-        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
-      />
-      <input
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        placeholder="Password"
-        type="password"
-        className="w-full text-xs bg-background border border-border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
-      />
-      {err && <p className="text-[10px] text-destructive leading-snug">{err}</p>}
-      <div className="flex gap-1.5">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-          Save
-        </button>
-        <button
-          onClick={() => setShow(false)}
-          className="px-2 py-1.5 rounded-md border border-border text-xs text-muted-foreground"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Phone card ───────────────────────────────────────────────────────────────
-
-const CARD_COLORS = [
-  "from-blue-600  to-blue-800",
-  "from-violet-600 to-violet-800",
-  "from-teal-600  to-teal-800",
-  "from-orange-500 to-orange-700",
-  "from-pink-600  to-pink-800",
-  "from-green-600 to-green-800",
-];
-
-function PhoneCard({ phone, idx }: { phone: UsbPhone; idx: number }) {
-  const color = CARD_COLORS[idx % CARD_COLORS.length];
-  const [mirroring, setMirroring] = useState(false);
-  const label = phone.model
-    ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
-    : (phone.product ?? phone.serial);
-
-  return (
-    <>
-      {mirroring && (
-        <ScreenMirrorOverlay phone={phone} onClose={() => setMirroring(false)} />
       )}
-      <div className="rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
-        {/* Gradient header */}
-        <div className={`bg-gradient-to-br ${color} px-4 py-4 flex items-center gap-3`}>
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-            <Smartphone className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white text-sm truncate">{label}</div>
-            {phone.androidVersion && (
-              <div className="text-xs text-white/70 mt-0.5">Android {phone.androidVersion}</div>
-            )}
-          </div>
+      {status === "waiting" && (
+        <div className="flex flex-col items-center gap-1.5">
+          <Loader2 className="w-4 h-4 animate-spin text-white/25" />
+          <span className="text-[9px] text-white/25 select-none">Waiting for screen…</span>
         </div>
+      )}
+      {status === "error" && (
+        <div className="flex flex-col items-center gap-2 px-3 text-center">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span className="text-[9px] text-yellow-400/80 leading-snug select-none">{errorMsg}</span>
+        </div>
+      )}
 
-        {/* Details */}
-        <div className="bg-card px-4 py-3 space-y-2.5">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <StateBadge state={phone.state} />
-          </div>
+      {/* Live canvas */}
+      <canvas
+        ref={canvasRef}
+        onClick={handleClick}
+        style={{
+          display:    status === "live" ? "block" : "none",
+          position:   "absolute",
+          inset:      0,
+          width:      "100%",
+          height:     "100%",
+          objectFit:  "contain",
+          cursor:     "crosshair",
+        }}
+      />
 
-          <div className="text-[10px] font-mono text-muted-foreground truncate" title={phone.serial}>
-            {phone.serial}
-          </div>
+      {/* FPS badge */}
+      {status === "live" && (
+        <span className="absolute top-1 right-1.5 text-[8px] font-mono text-white/20 select-none z-10">
+          {fps} fps
+        </span>
+      )}
+    </div>
+  );
+});
 
-          {phone.state === "unauthorized" && (
-            <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-yellow-600 leading-relaxed">
-                Check your phone screen and tap <strong>"Allow USB Debugging"</strong>,
-                then tick <em>"Always allow from this computer"</em>.
-              </p>
-            </div>
+// ─── Phone slot ───────────────────────────────────────────────────────────────
+
+const SLOT_W = 220; // px — four of these fit across at ≥960 px content width
+
+function PhoneSlot({ phone, idx }: { phone: UsbPhone | null; idx: number }) {
+  const label = phone?.model
+    ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
+    : phone?.product ?? phone?.serial ?? null;
+
+  const isReady        = phone?.state === "device";
+  const isUnauthorized = phone?.state === "unauthorized";
+  const isOffline      = phone?.state === "offline";
+  const isEmpty        = !phone;
+
+  return (
+    <div
+      className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-lg"
+      style={{ width: SLOT_W, flexShrink: 0 }}
+    >
+      {/* ── Slot header ── */}
+      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-white/6 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[9px] font-mono text-white/25 shrink-0">S{idx + 1}</span>
+          {label && (
+            <span className="text-[10px] font-semibold text-white/70 truncate">{label}</span>
           )}
-
-          {phone.state === "offline" && (
-            <div className="flex items-start gap-2 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2">
-              <WifiOff className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-red-500 leading-relaxed">
-                Phone is offline. Try unplugging and reconnecting the USB cable.
-              </p>
-            </div>
-          )}
-
-          {phone.state === "device" && (
-            <div className="space-y-2 pt-1">
-              {/* View screen button */}
-              <button
-                onClick={() => setMirroring(true)}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
-              >
-                <Monitor className="w-3.5 h-3.5" />
-                View Screen
-              </button>
-              <BindAccountForm serial={phone.serial} />
-            </div>
+          {phone?.androidVersion && (
+            <span className="text-[9px] text-white/25 shrink-0">A{phone.androidVersion}</span>
           )}
         </div>
+        {/* Status pill */}
+        {isReady && (
+          <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-green-400 shrink-0">
+            <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />
+            Live
+          </span>
+        )}
+        {isUnauthorized && (
+          <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>
+        )}
+        {isOffline && (
+          <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>
+        )}
+        {isEmpty && (
+          <span className="text-[9px] font-mono text-white/15 shrink-0">empty</span>
+        )}
       </div>
-    </>
+
+      {/* ── Screen area — 9:16 portrait ── */}
+      <div
+        className="relative bg-zinc-900"
+        style={{ width: "100%", aspectRatio: "9 / 16" }}
+      >
+        {isEmpty && <EmptyShell idx={idx} />}
+
+        {isUnauthorized && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+            <AlertTriangle className="w-5 h-5 text-yellow-500" />
+            <p className="text-[10px] text-yellow-400/80 leading-relaxed">
+              Tap <strong>"Allow USB Debugging"</strong> on the phone screen
+            </p>
+          </div>
+        )}
+
+        {isOffline && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+            <WifiOff className="w-5 h-5 text-red-500" />
+            <p className="text-[10px] text-red-400/80 leading-relaxed">
+              Phone offline — unplug and reconnect
+            </p>
+          </div>
+        )}
+
+        {/* Auto-stream — no button needed */}
+        {isReady && phone && <LiveCanvas serial={phone.serial} />}
+      </div>
+
+      {/* ── Android nav bar — only when ready ── */}
+      {isReady && phone && (
+        <div className="flex items-center justify-center gap-3 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
+          <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4)}   />
+          <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3)}   />
+          <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187)} />
+          <div className="w-px h-4 bg-white/10" />
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => sendKey(phone.serial, 26)}  />
+          <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24)}  />
+          <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25)}  />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -640,10 +467,10 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
           Prefer the traditional Windows PATH method?
         </summary>
         <ol className="mt-4 space-y-3 text-sm text-muted-foreground list-decimal list-inside">
-          <li>Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> and choose <strong>"Extract All..."</strong>. Pick a permanent spot, e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.</li>
+          <li>Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> and choose <strong>"Extract All…"</strong>. Pick a permanent spot, e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.</li>
           <li>Confirm <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> is inside, then copy the full folder path.</li>
           <li>Press <strong>Windows key + R</strong>, type <code className="text-xs bg-muted px-1 py-0.5 rounded">rundll32.exe sysdm.cpl,EditEnvironmentVariables</code>, press Enter.</li>
-          <li>In the top box, click <strong>Path → Edit... → New</strong>, paste the path, click OK everywhere.</li>
+          <li>In the top box, click <strong>Path → Edit… → New</strong>, paste the path, click OK everywhere.</li>
           <li>Fully close Equinox and open it again.</li>
         </ol>
       </details>
@@ -700,6 +527,8 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+const TOTAL_SLOTS = 8;
+
 export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -723,43 +552,54 @@ export function MobilePage() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // Build the 8-slot array — connected phones fill from the left
+  const phones = data?.phones ?? [];
+  const slots: (UsbPhone | null)[] = Array.from(
+    { length: TOTAL_SLOTS },
+    (_, i) => phones[i] ?? null
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
       <main className="ml-[133px] flex-1 overflow-y-auto">
+
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Smartphone className="w-5 h-5 text-primary" />
             <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
             {data && (
               <span className="text-xs text-muted-foreground">
-                {data.phones.length === 0
+                {phones.length === 0
                   ? "No phones connected"
-                  : `${data.phones.length} phone${data.phones.length !== 1 ? "s" : ""} connected`}
+                  : `${phones.length} / ${TOTAL_SLOTS} connected`}
               </span>
             )}
           </div>
-
-          <button
-            onClick={() => refresh(true)}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            {data?.adbFound && data.adbPath && (
+              <div className="hidden sm:flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                <span className="text-xs text-muted-foreground font-mono truncate max-w-[240px]">
+                  {data.adbPath}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={() => refresh(true)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div className="p-6">
-          {loading && !data && (
-            <div className="flex items-center justify-center mt-24 gap-3 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">Checking for connected phones…</span>
-            </div>
-          )}
-
+        <div className="p-5">
+          {/* Server error */}
           {error && (
             <div className="max-w-lg mx-auto mt-12 flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-xl p-4">
               <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
@@ -770,24 +610,25 @@ export function MobilePage() {
             </div>
           )}
 
-          {data && !data.adbFound && <NoAdbPanel onSaved={() => refresh(true)} />}
+          {/* ADB not found */}
+          {data && !data.adbFound && !error && (
+            <NoAdbPanel onSaved={() => refresh(true)} />
+          )}
 
-          {data && data.adbFound && data.phones.length === 0 && <NoPhonesPanel rawOutput={data.rawOutput} />}
+          {/* ADB found, no phones, no slots to show — show setup guide */}
+          {data && data.adbFound && phones.length === 0 && !loading && (
+            <NoPhonesPanel rawOutput={data.rawOutput} />
+          )}
 
-          {data && data.adbFound && data.phones.length > 0 && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-muted-foreground">
-                  ADB connected — <span className="text-foreground font-medium">{data.adbPath}</span>
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {data.phones.map((phone, i) => (
-                  <PhoneCard key={phone.serial} phone={phone} idx={i} />
-                ))}
-              </div>
+          {/* Slot grid — visible as soon as ADB is found (even with 0 phones) */}
+          {data && data.adbFound && (
+            <div
+              className="grid gap-3"
+              style={{ gridTemplateColumns: `repeat(4, ${SLOT_W}px)` }}
+            >
+              {slots.map((phone, i) => (
+                <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} />
+              ))}
             </div>
           )}
         </div>

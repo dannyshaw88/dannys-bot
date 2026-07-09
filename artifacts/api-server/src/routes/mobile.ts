@@ -70,6 +70,33 @@ function saveInstanceConfigs(cfg: InstanceConfigMap): void {
   fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2));
 }
 
+/**
+ * Strip CRLF pairs injected by Windows ADB exec-out into binary streams.
+ * On Windows, ADB exec-out can convert \n (0x0A) bytes to \r\n (0x0D 0x0A),
+ * which corrupts PNG files whose zlib blocks happen to contain 0x0A bytes.
+ * We detect this by checking the PNG magic header: a valid PNG always starts
+ * with 0x89 0x50 (the first two bytes of \x89PNG).  If the buffer doesn't
+ * start with those bytes we strip all 0x0D 0x0A → 0x0A pairs and recheck.
+ */
+function stripCrlf(buf: Buffer): Buffer {
+  const out = Buffer.allocUnsafe(buf.length);
+  let j = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0D && i + 1 < buf.length && buf[i + 1] === 0x0A) {
+      out[j++] = 0x0A;
+      i++; // skip the extra \r
+    } else {
+      out[j++] = buf[i]!;
+    }
+  }
+  return j === buf.length ? buf : out.subarray(0, j);
+}
+
+/** Returns true when buf starts with the PNG magic number (\x89PNG). */
+function isPng(buf: Buffer): boolean {
+  return buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+}
+
 export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Screen mirror WebSocket stream ─────────────────────────────────────────
   const screenWss = new WebSocketServer({ noServer: true });
@@ -98,16 +125,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const chunks: Buffer[] = [];
               child.stdout.on("data", (d: Buffer) => chunks.push(d));
               child.on("close", () => {
-                const frame = Buffer.concat(chunks);
-                if (frame.length > 100 && ws.readyState === 1) {
+                let frame = Buffer.concat(chunks);
+                // Windows ADB exec-out can corrupt PNG by inserting \r before \n.
+                // If the PNG signature is missing, attempt CRLF stripping.
+                if (frame.length > 8 && !isPng(frame)) {
+                  frame = stripCrlf(frame);
+                }
+                if (isPng(frame) && ws.readyState === 1) {
                   ws.send(frame, (err) => { if (err) running = false; });
+                } else if (frame.length > 100 && !isPng(frame) && ws.readyState === 1) {
+                  // Still not a valid PNG — send an error so the client knows
+                  ws.send(JSON.stringify({ error: "screencap returned invalid data — unlock the phone and retry" }));
                 }
                 resolve();
               });
               child.on("error", () => resolve());
             });
           } catch { /* ignore */ }
-          if (running) await new Promise<void>(r => setTimeout(r, 200));
+          if (running) await new Promise<void>(r => setTimeout(r, 250));
         }
       })();
     });
