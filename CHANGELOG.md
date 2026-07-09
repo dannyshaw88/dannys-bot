@@ -4,6 +4,27 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.417] — 2026-07-09
+
+### Critical Fix — `navigator.webdriver` returning wrong value from wrong location
+
+The suppressor introduced previously had two bugs that were described in the v1.1.415 changelog as fixed, but were never actually applied to the code:
+
+**Bug 1 — Wrong value (`undefined` instead of `false`)**
+Real Chrome always returns `false` for `navigator.webdriver` when not under automation. Returning `undefined` is a value no real browser ever produces — Instagram's JS fingerprinting explicitly distinguishes `true` / `false` / `undefined` and treats `undefined` as a broken suppression attempt. This is arguably worse than returning `true` because `undefined` is a specific signature of a tool that tried and failed to hide itself.
+
+**Bug 2 — Own-property on `navigator` instance instead of `Navigator.prototype`**
+In real Chrome, `navigator.webdriver` lives only on `Navigator.prototype`. That means `Object.getOwnPropertyDescriptor(navigator, 'webdriver')` returns `undefined` on a real browser — there is no own-property descriptor on the instance. Our `Object.defineProperty(navigator, 'webdriver', ...)` call created an own-property descriptor on the instance. Anti-bot scripts (including Instagram's) probe this specifically: finding an own descriptor on `navigator` is an independent automation signal even when the returned value is `false`.
+
+**Fix:**
+- `delete navigator.webdriver` first (clears any Electron-placed own descriptor)
+- `Object.defineProperty(Navigator.prototype, 'webdriver', {get: () => false})` — prototype only, matches real Chrome exactly
+- Leak check enhanced: now captures `webdriverOwnDesc` (own-property signal) separately and flags `webdriver !== false` as a distinct leak entry
+
+**Impact:** Every EB session was leaking an unambiguous automation signal on every page load, passively, with no actions required — explaining bans within 30 minutes of login.
+
+---
+
 ## [1.1.416] — 2026-07-09
 
 ### Security — Equinox Global Leak Fix (EB Environment Hardening)
