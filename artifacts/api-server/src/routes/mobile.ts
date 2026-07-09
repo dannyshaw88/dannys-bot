@@ -329,6 +329,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
       adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
 
+      // `screenrecord` silently downscales to a default cap (commonly
+      // 720x1280) whenever the device's native resolution is larger, unless
+      // told otherwise. `adb shell input tap` always expects coordinates in
+      // the device's REAL screen-pixel space — so without forcing the video
+      // to render at that same native size, every tap the browser computes
+      // (against the downscaled canvas) lands on the wrong physical pixel.
+      // This is why taps looked like they "did nothing": they were real taps,
+      // just at the wrong (scaled-down) location. Query the actual size and
+      // pin --size to it so the video and tap coordinate spaces always match.
+      let sizeArg: string | null = null;
+      try {
+        const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+        const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+        if (m) sizeArg = `${m[1]}x${m[2]}`;
+      } catch { /* ignore — fall back to screenrecord's own default */ }
+      if (sizeArg) {
+        logger.info({ serial, sizeArg }, "[mobile-video] pinning stream to native device resolution");
+      } else {
+        logger.warn({ serial }, "[mobile-video] could not read device resolution — screenrecord may downscale, causing tap misalignment");
+      }
+
       let cleanedUp = false;
       const cleanup = (reason: string) => {
         if (cleanedUp) return; // idempotent — close fires after error too
@@ -346,13 +367,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // --output-format=h264: raw Annex-B elementary stream (no MP4 container)
         // straight to stdout via `exec-out` — this is what lets us pipe it
         // directly into a WebSocket frame-by-frame with zero temp files.
-        const child = spawn(adbPath, [
+        const args = [
           "-s", serial, "exec-out", "screenrecord",
           "--output-format=h264",
           "--bit-rate", "8000000",
           "--time-limit", "180",
-          "-",
-        ]);
+        ];
+        if (sizeArg) args.push("--size", sizeArg);
+        args.push("-");
+        const child = spawn(adbPath, args);
         currentChild = child;
         let sawAnyData = false;
         let stderrOut = "";
