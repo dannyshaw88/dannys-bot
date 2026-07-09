@@ -164,7 +164,19 @@ export async function startScrcpySession(serial: string, opts: { maxSize?: numbe
   }
   startingSerials.add(serial);
   try {
-    return await startScrcpySessionInner(serial, opts);
+    // The very first launch of app_process right after a fresh `adb forward`
+    // occasionally loses the header race on some devices (the server hasn't
+    // finished binding its display capture before we connect) — a single
+    // clean retry clears that without ever surfacing it to the user as a
+    // screenshot fallback. A second consecutive failure is treated as real.
+    try {
+      return await startScrcpySessionInner(serial, opts);
+    } catch (firstErr) {
+      logger.warn({ serial, err: firstErr }, "[scrcpy] first session attempt failed, retrying once");
+      cleanupStaleSession(serial);
+      await new Promise((r) => setTimeout(r, 300));
+      return await startScrcpySessionInner(serial, opts);
+    }
   } finally {
     startingSerials.delete(serial);
   }
