@@ -103,47 +103,110 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   httpServer.on("upgrade", (request, socket, head) => {
     const url = request.url ?? "";
+    logger.info({ url }, "[mobile-ws] upgrade request received");
     const m = url.match(/^\/api\/mobile\/screen\/([^/?#]+)/);
-    if (!m) return;
+    if (!m) {
+      logger.info({ url }, "[mobile-ws] URL did not match screen route — ignoring");
+      return;
+    }
     const serial = decodeURIComponent(m[1]);
+    logger.info({ serial }, "[mobile-ws] upgrading connection for device");
     screenWss.handleUpgrade(request, socket as any, head, (ws) => {
+      logger.info({ serial }, "[mobile-ws] WebSocket handshake complete");
       const tools = android.detectToolset();
       const adbPath = tools.adb.path;
+      logger.info({ adbFound: !!adbPath, adbPath }, "[mobile-ws] ADB toolset check");
       if (!adbPath) {
-        ws.send(JSON.stringify({ error: "ADB not found" }));
+        logger.warn({ serial }, "[mobile-ws] ADB not found — closing socket");
+        ws.send(JSON.stringify({ error: "ADB not found on this machine" }));
         ws.close();
         return;
       }
+
+      // Check that the device is actually connected before starting the loop
+      const deviceCheck = spawnSync(adbPath, ["devices"], { encoding: "utf8", timeout: 5000 });
+      const devicesOutput = deviceCheck.stdout ?? "";
+      logger.info({ serial, devicesOutput }, "[mobile-ws] adb devices output at connection time");
+      const deviceLine = devicesOutput.split("\n").find(l => l.startsWith(serial));
+      if (!deviceLine) {
+        logger.warn({ serial, devicesOutput }, "[mobile-ws] serial not found in adb devices — closing");
+        ws.send(JSON.stringify({ error: `Device ${serial} not found in adb devices list` }));
+        ws.close();
+        return;
+      }
+      const deviceState = deviceLine.split("\t")[1]?.trim() ?? "unknown";
+      logger.info({ serial, deviceState }, "[mobile-ws] device state from adb devices");
+      if (deviceState !== "device") {
+        logger.warn({ serial, deviceState }, "[mobile-ws] device not in ready state");
+        ws.send(JSON.stringify({ error: `Device state is "${deviceState}" — expected "device". Check USB Debugging.` }));
+        ws.close();
+        return;
+      }
+
       let running = true;
-      ws.on("close", () => { running = false; });
-      ws.on("error", () => { running = false; });
+      let frameCount = 0;
+      ws.on("close", (code, reason) => {
+        logger.info({ serial, code, reason: reason?.toString() }, "[mobile-ws] client disconnected");
+        running = false;
+      });
+      ws.on("error", (err) => {
+        logger.error({ serial, err }, "[mobile-ws] WebSocket error");
+        running = false;
+      });
+
+      logger.info({ serial, adbPath }, "[mobile-ws] starting screencap loop");
       (async () => {
         while (running) {
           try {
             await new Promise<void>((resolve) => {
               const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
               const chunks: Buffer[] = [];
+              let stderrOut = "";
               child.stdout.on("data", (d: Buffer) => chunks.push(d));
-              child.on("close", () => {
+              child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
+              child.on("error", (err) => {
+                logger.error({ serial, err }, "[mobile-ws] spawn error for screencap");
+                resolve();
+              });
+              child.on("close", (code) => {
                 let frame = Buffer.concat(chunks);
-                // Windows ADB exec-out can corrupt PNG by inserting \r before \n.
-                // If the PNG signature is missing, attempt CRLF stripping.
+                const rawLen = frame.length;
+                const first4 = frame.length >= 4
+                  ? [...frame.subarray(0, 4)].map(b => b.toString(16).padStart(2, "0")).join(" ")
+                  : "too short";
+
                 if (frame.length > 8 && !isPng(frame)) {
                   frame = stripCrlf(frame);
                 }
-                if (isPng(frame) && ws.readyState === 1) {
-                  ws.send(frame, (err) => { if (err) running = false; });
-                } else if (frame.length > 100 && !isPng(frame) && ws.readyState === 1) {
-                  // Still not a valid PNG — send an error so the client knows
-                  ws.send(JSON.stringify({ error: "screencap returned invalid data — unlock the phone and retry" }));
+                const validPng = isPng(frame);
+
+                if (frameCount === 0 || frameCount % 20 === 0) {
+                  // Log every 20th frame to avoid flooding — always log the first
+                  logger.info({
+                    serial, frameCount, code, rawLen, frameLen: frame.length,
+                    first4bytes: first4, validPng, stderr: stderrOut.trim() || null,
+                  }, "[mobile-ws] screencap frame");
+                }
+                frameCount++;
+
+                if (validPng && ws.readyState === 1) {
+                  ws.send(frame, (err) => { if (err) { logger.error({ serial, err }, "[mobile-ws] send error"); running = false; } });
+                } else if (!validPng && ws.readyState === 1) {
+                  const msg = rawLen === 0
+                    ? "screencap returned 0 bytes — phone screen may be off or locked"
+                    : `screencap returned ${rawLen} bytes but not a valid PNG (first bytes: ${first4}) — ${stderrOut.trim() || "no stderr"}`;
+                  logger.warn({ serial, rawLen, first4, stderrOut: stderrOut.trim() }, `[mobile-ws] ${msg}`);
+                  ws.send(JSON.stringify({ error: msg }));
                 }
                 resolve();
               });
-              child.on("error", () => resolve());
             });
-          } catch { /* ignore */ }
+          } catch (err) {
+            logger.error({ serial, err }, "[mobile-ws] screencap loop error");
+          }
           if (running) await new Promise<void>(r => setTimeout(r, 250));
         }
+        logger.info({ serial, frameCount }, "[mobile-ws] screencap loop ended");
       })();
     });
   });

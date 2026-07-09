@@ -4,6 +4,59 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.425] — 2026-07-09
+
+### Mobile Farm — 4-slot row, Electron WebSocket fix, visible debug log
+
+#### Layout: 4 slots in a single centred row (was 8 in 4×2 grid)
+- `TOTAL_SLOTS` reduced to 4 — one row, slots flex-centred with `justify-center`
+- Each slot is `max-w-[260px] flex-1` so they fill available space evenly and
+  stay centred at any window width
+- Empty slot phone outline and "Slot N" label remain for unoccupied positions
+
+#### Root cause of "never connects" — wrong WebSocket host in Electron
+In Electron the frontend is loaded from a local file or internal server.
+`window.location.host` is either empty (`""`) or a `localhost:PORT` that points
+at the renderer/dev server, **not** the Express API.  The Vite proxy (`ws: true`)
+is only present in the Replit dev environment — it is absent in the built Electron
+app.  So every WebSocket connection was going to the wrong host and silently
+failing before the server ever saw it.
+
+**Fix — `makeWsUrl()` always uses `127.0.0.1:__API_PORT__`:**
+```ts
+function makeWsUrl(serial: string): string {
+  const port = __API_PORT__ || "8082";
+  return `ws://127.0.0.1:${port}/api/mobile/screen/${encodeURIComponent(serial)}`;
+}
+```
+`__API_PORT__` is injected by Vite at build time from `process.env.API_PORT`,
+so it is always correct regardless of environment.  No dependency on
+`window.location.host`.
+
+#### Visible debug log panel inside each slot
+Every LiveCanvas now renders a scrollable green-on-black log panel in the
+lower half of the slot, showing timestamped events in real time:
+- `[N] Connecting → ws://127.0.0.1:8082/api/mobile/screen/…`
+- `WS open — waiting for first frame…`
+- `SERVER ERROR: <message forwarded from server>`
+- `WS closed — code=NNN reason="…"`
+- `First frame! (NNNN bytes)`  /  `10s timeout — no frames received`
+No dev tools required — the log is visible directly in the running Electron window.
+
+#### Server-side debug logging (mobile.ts)
+The WebSocket upgrade handler now emits structured `logger.info/warn/error`
+entries at every lifecycle stage so they appear in the Electron log file:
+- upgrade URL received + regex match result
+- ADB toolset path at connection time
+- `adb devices` output at the moment of WS upgrade (shows actual device state)
+- Device-not-ready guard: closes WS immediately with a descriptive error message
+  if state ≠ `"device"` instead of spawning a silent loop
+- Per-frame log (every 1st and then every 20th frame): raw byte count, first 4
+  bytes as hex, CRLF-strip applied, valid PNG result, stderr from ADB
+- Send errors, spawn errors, loop-end summary
+
+---
+
 ## [1.1.424] — 2026-07-09
 
 ### Mobile Farm — Inline Phone Slots & Screencap CRLF Fix
