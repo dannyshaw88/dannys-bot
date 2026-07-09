@@ -272,6 +272,128 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     });
   });
 
+  // ── Live H.264 video mirror (real-time stream, not screenshot polling) ─────
+  // Uses the on-device `screenrecord` binary (built into Android since API 19,
+  // no scrcpy/root/extra install required) to continuously encode the screen
+  // as raw H.264 and pipe it straight to the browser over this WebSocket. The
+  // browser demuxes Annex-B access units and decodes them with WebCodecs —
+  // this is what gives near-instant (~30fps) mirroring instead of the old
+  // "adb exec-out screencap" polling loop, which paid a full PNG capture cost
+  // (150-400ms) per frame.
+  //
+  // `screenrecord` has a hard --time-limit cap (180s on most Android builds)
+  // per invocation, so we transparently respawn it when it exits and keep
+  // streaming — the browser-side decoder just sees a short gap.
+  const videoWss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request, socket, head) => {
+    const url = request.url ?? "";
+    const m = url.match(/^\/api\/mobile\/video\/([^/?#]+)/);
+    if (!m) return;
+    const serial = decodeURIComponent(m[1]);
+    (socket as any).__wsHandled = true;
+    logger.info({ serial }, "[mobile-video] upgrading connection for device");
+    videoWss.handleUpgrade(request, socket as any, head, (ws) => {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) {
+        ws.send(JSON.stringify({ error: "ADB not found on this machine" }));
+        ws.close();
+        return;
+      }
+
+      const deviceCheck = spawnSync(adbPath, ["devices"], { encoding: "utf8", timeout: 5000 });
+      const deviceLine = (deviceCheck.stdout ?? "").split("\n").find(l => l.startsWith(serial));
+      if (!deviceLine || deviceLine.split("\t")[1]?.trim() !== "device") {
+        ws.send(JSON.stringify({ error: `Device ${serial} not found or not ready` }));
+        ws.close();
+        return;
+      }
+
+      let running = true;
+      let restartCount = 0;
+      let currentChild: ReturnType<typeof spawn> | null = null;
+
+      const adbShell = (...args: string[]) =>
+        spawn(adbPath, ["-s", serial, "shell", ...args], { stdio: "ignore" });
+
+      // Keep the screen awake for the duration of the mirror session — same
+      // trick as the PNG endpoint, but doubly important here: if the display
+      // actually powers off, screenrecord stops producing frames entirely.
+      let originalScreenTimeout = "30000";
+      try {
+        const st = spawnSync(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], { encoding: "utf8", timeout: 3000 });
+        const val = st.stdout?.trim();
+        if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
+      } catch { /* ignore */ }
+      adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
+      adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
+
+      let cleanedUp = false;
+      const cleanup = (reason: string) => {
+        if (cleanedUp) return; // idempotent — close fires after error too
+        cleanedUp = true;
+        running = false;
+        try { currentChild?.kill(); } catch { /* ignore */ }
+        try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
+        logger.info({ serial, reason }, "[mobile-video] session cleaned up");
+      };
+      ws.on("close", () => cleanup("close"));
+      ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
+
+      const spawnStream = () => {
+        if (!running || ws.readyState !== 1) return;
+        // --output-format=h264: raw Annex-B elementary stream (no MP4 container)
+        // straight to stdout via `exec-out` — this is what lets us pipe it
+        // directly into a WebSocket frame-by-frame with zero temp files.
+        const child = spawn(adbPath, [
+          "-s", serial, "exec-out", "screenrecord",
+          "--output-format=h264",
+          "--bit-rate", "8000000",
+          "--time-limit", "180",
+          "-",
+        ]);
+        currentChild = child;
+        let sawAnyData = false;
+        let stderrOut = "";
+        child.stdout.on("data", (chunk: Buffer) => {
+          sawAnyData = true;
+          if (ws.readyState === 1) ws.send(chunk);
+        });
+        child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
+        child.on("error", (err) => {
+          logger.error({ serial, err }, "[mobile-video] spawn error for screenrecord");
+          if (ws.readyState === 1) ws.send(JSON.stringify({ error: `Failed to start screenrecord: ${err.message}` }));
+          running = false;
+        });
+        child.on("close", (code) => {
+          currentChild = null;
+          if (!running) return;
+          if (!sawAnyData) {
+            // screenrecord never produced a byte — likely unsupported on this
+            // device/Android version. Tell the client so it can fall back to
+            // the PNG polling stream instead of retrying forever.
+            logger.warn({ serial, code, stderr: stderrOut.trim() }, "[mobile-video] screenrecord produced no data — unsupported?");
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({ error: `screenrecord unavailable on this device (${stderrOut.trim() || `exit ${code}`})`, fatal: true }));
+              ws.close();
+            }
+            running = false;
+            return;
+          }
+          // Hit the --time-limit (or was killed for some other transient
+          // reason) — restart immediately to keep the stream continuous.
+          restartCount++;
+          logger.info({ serial, restartCount, code }, "[mobile-video] screenrecord cycle ended — restarting");
+          spawnStream();
+        });
+      };
+
+      logger.info({ serial, adbPath }, "[mobile-video] starting screenrecord stream");
+      spawnStream();
+    });
+  });
+
   // ── Screen size ────────────────────────────────────────────────────────────
   app.get("/api/mobile/devices/:serial/screen-size", async (req: Request, res: Response) => {
     try {

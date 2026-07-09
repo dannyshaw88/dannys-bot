@@ -14,6 +14,8 @@ import {
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX,
 } from "lucide-react";
 
+import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
+
 declare const __API_PORT__: string;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,20 +57,28 @@ function makeWsUrl(serial: string): string {
   return `${proto}//${host}/api/mobile/screen/${encodeURIComponent(serial)}`;
 }
 
+function makeVideoWsUrl(serial: string): string {
+  return makeWsUrl(serial).replace("/api/mobile/screen/", "/api/mobile/video/");
+}
+
 async function fetchPhones(): Promise<PhonesResponse> {
   const r = await fetch("/api/mobile/usb-phones");
   if (!r.ok) throw new Error(`Server error ${r.status}`);
   return r.json() as Promise<PhonesResponse>;
 }
 
-async function sendKey(serial: string, code: number) {
+async function sendKey(serial: string, code: number, label: string, onLog?: (msg: string) => void) {
+  onLog?.(`Key → ${label} (${code})`);
   try {
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+    const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
     });
-  } catch { /* ignore */ }
+    if (!r.ok) onLog?.(`Key ${label} FAILED — server returned ${r.status}`);
+  } catch (err: any) {
+    onLog?.(`Key ${label} FAILED — ${err?.message ?? "network error"}`);
+  }
 }
 
 // ─── Nav button ───────────────────────────────────────────────────────────────
@@ -88,12 +98,21 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 // ─── Live Canvas ──────────────────────────────────────────────────────────────
 
+const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in window;
+
 const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: string; onLog?: (msg: string) => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
+  // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
+  // Falls back to the legacy PNG-polling endpoint if screenrecord/WebCodecs
+  // isn't available on this machine/device.
+  const useVideoRef  = useRef(WEBCODECS_SUPPORTED);
+  const demuxerRef   = useRef<AnnexBDemuxer | null>(null);
+  const decoderRef   = useRef<VideoDecoder | null>(null);
+  const configuredRef = useRef(false);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -114,14 +133,55 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let noFrameTimer:   ReturnType<typeof setTimeout> | null = null;
     let attemptCount = 0;
+    // Reset per mount (i.e. per device serial — LiveCanvas is keyed by
+    // serial in the parent) so a fallback on one phone never sticks around
+    // and silently skips the video path for a different phone reusing this
+    // component instance.
+    useVideoRef.current = WEBCODECS_SUPPORTED;
+
+    const closeDecoder = () => {
+      try { decoderRef.current?.close(); } catch { /* ignore */ }
+      decoderRef.current = null;
+      configuredRef.current = false;
+      demuxerRef.current = null;
+    };
+
+    const drawFrame = (frame: VideoFrame) => {
+      const canvas = canvasRef.current;
+      if (!canvas) { frame.close(); return; }
+      if (!phoneSizeRef.current || phoneSizeRef.current.w !== frame.displayWidth || phoneSizeRef.current.h !== frame.displayHeight) {
+        const sz = { w: frame.displayWidth, h: frame.displayHeight };
+        phoneSizeRef.current = sz;
+        canvas.width  = sz.w;
+        canvas.height = sz.h;
+        addLog(`Canvas set ${sz.w}×${sz.h}`);
+      }
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(frame, 0, 0);
+      frame.close();
+      fpsCountRef.current++;
+      setStatus("live");
+    };
+
+    const ensureDecoder = () => {
+      if (decoderRef.current) return decoderRef.current;
+      demuxerRef.current = new AnnexBDemuxer();
+      const decoder = new VideoDecoder({
+        output: drawFrame,
+        error: (e) => { addLog(`Decoder error: ${e.message} — falling back to screenshot stream`); useVideoRef.current = false; if (active) { closeDecoder(); wsRef.current?.close(); } },
+      });
+      decoderRef.current = decoder;
+      return decoder;
+    };
 
     const connect = () => {
       if (!active) return;
       frameSeenRef.current = false;
       phoneSizeRef.current = null;
+      closeDecoder();
       attemptCount++;
-      const url = makeWsUrl(serial);
-      addLog(`[${attemptCount}] Connecting → ${url}`);
+      const url = useVideoRef.current ? makeVideoWsUrl(serial) : makeWsUrl(serial);
+      addLog(`[${attemptCount}] Connecting (${useVideoRef.current ? "video" : "screenshot"}) → ${url}`);
       setStatus("connecting");
 
       let ws: WebSocket;
@@ -149,7 +209,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
         }, 10_000);
       };
 
-      ws.onerror = (ev) => {
+      ws.onerror = () => {
         addLog(`WS error (readyState=${ws.readyState})`);
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
         setStatus("error");
@@ -158,6 +218,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
       ws.onclose = (ev) => {
         addLog(`WS closed — code=${ev.code} reason="${ev.reason || "none"}"`);
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+        closeDecoder();
         if (!active) return;
         setStatus("connecting");
         reconnectTimer = setTimeout(connect, 2_000);
@@ -168,10 +229,12 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
           try {
             const j = JSON.parse(ev.data as string);
             if (j.error) {
-              // "Screen is off or locked" is not a real error — the server is
-              // already sending wake keyevents on a loop. Show a dedicated
-              // clickable "asleep" state instead of the generic error state.
               addLog(`SERVER ERROR: ${j.error}`);
+              if (j.fatal && useVideoRef.current) {
+                // Video path unsupported on this device — drop to screenshot mode.
+                addLog("Video stream unavailable on this device — falling back to screenshot mirroring.");
+                useVideoRef.current = false;
+              }
               setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
             } else if (j.info) {
               addLog(j.info);
@@ -180,41 +243,75 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
           return;
         }
 
-        fpsCountRef.current++;
         if (!frameSeenRef.current) {
           frameSeenRef.current = true;
           if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
           addLog(`First frame! (${(ev.data as ArrayBuffer).byteLength} bytes)`);
         }
-        // Any valid binary frame means the stream is live right now — always
-        // re-assert this, not just on the first frame. Without this, a status
-        // of "asleep"/"error" set by an earlier text message would latch
-        // forever even after the phone woke up and frames resumed, leaving
-        // clicks stuck in wake-only mode instead of sending real taps.
-        setStatus("live");
 
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
-        const url  = URL.createObjectURL(blob);
-        const img  = new Image();
-        const revoke = () => URL.revokeObjectURL(url);
-        img.onload = () => {
-          if (!active) { revoke(); return; }
-          if (!phoneSizeRef.current) {
-            const sz = { w: img.naturalWidth, h: img.naturalHeight };
-            phoneSizeRef.current = sz;
-            canvas.width  = sz.w;
-            canvas.height = sz.h;
-            addLog(`Canvas set ${sz.w}×${sz.h}`);
+        if (!useVideoRef.current) {
+          // Legacy PNG-per-frame path.
+          fpsCountRef.current++;
+          setStatus("live");
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
+          const url  = URL.createObjectURL(blob);
+          const img  = new Image();
+          const revoke = () => URL.revokeObjectURL(url);
+          img.onload = () => {
+            if (!active) { revoke(); return; }
+            if (!phoneSizeRef.current) {
+              const sz = { w: img.naturalWidth, h: img.naturalHeight };
+              phoneSizeRef.current = sz;
+              canvas.width  = sz.w;
+              canvas.height = sz.h;
+              addLog(`Canvas set ${sz.w}×${sz.h}`);
+            }
+            ctx.drawImage(img, 0, 0);
+            revoke();
+          };
+          img.onerror = revoke;
+          img.src = url;
+          return;
+        }
+
+        // Real H.264 stream: demux Annex-B bytes into access units and feed
+        // WebCodecs. This is what gives ~30fps live mirroring instead of the
+        // 150-400ms-per-screenshot polling loop.
+        const decoder = ensureDecoder();
+        const demuxer = demuxerRef.current!;
+        const units = demuxer.push(new Uint8Array(ev.data as ArrayBuffer));
+        for (const unit of units) {
+          if (!configuredRef.current) {
+            const sps = demuxer.getSps();
+            if (!sps) continue; // wait for an SPS before configuring
+            try {
+              decoder.configure({ codec: spsToCodecString(sps), optimizeForLatency: true });
+              configuredRef.current = true;
+            } catch (e: any) {
+              addLog(`Decoder configure failed: ${e?.message} — falling back to screenshot stream`);
+              useVideoRef.current = false;
+              closeDecoder();
+              ws.close();
+              return;
+            }
           }
-          ctx.drawImage(img, 0, 0);
-          revoke();
-        };
-        img.onerror = revoke;
-        img.src = url;
+          if (!configuredRef.current) continue;
+          try {
+            decoder.decode(new EncodedVideoChunk({
+              type: unit.keyFrame ? "key" : "delta",
+              timestamp: performance.now() * 1000,
+              data: unit.data,
+            }));
+          } catch (e: any) {
+            // A stray non-key chunk before the first keyframe, or a decoder
+            // hiccup after a stream restart — safe to drop and keep going.
+            addLog(`Decode chunk dropped: ${e?.message}`);
+          }
+        }
       };
     };
 
@@ -224,6 +321,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (noFrameTimer)   clearTimeout(noFrameTimer);
       wsRef.current?.close();
+      closeDecoder();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);
@@ -446,13 +544,13 @@ function PhoneSlot({ phone, idx, onLog }: { phone: UsbPhone | null; idx: number;
       {/* Nav bar */}
       {isReady && phone && (
         <div className="flex items-center justify-center gap-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
-          <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4)}   />
-          <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3)}   />
-          <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187)} />
+          <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4,   "Back",   onLog)} />
+          <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
+          <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187, "Recent", onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => sendKey(phone.serial, 26)}  />
-          <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24)}  />
-          <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25)}  />
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => sendKey(phone.serial, 26,  "Power",  onLog)} />
+          <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
+          <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
         </div>
       )}
     </div>

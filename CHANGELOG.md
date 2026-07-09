@@ -4,6 +4,45 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.431] — 2026-07-09
+
+### Mobile Farm — real-time H.264 video mirroring (replaces screenshot polling)
+
+**The ask:** the mirror was built on `adb exec-out screencap -p` — one full PNG
+capture per frame, 150–400ms each. Even at a 150ms poll interval that's a hard
+ceiling on responsiveness that no amount of tuning could remove; the previous
+release's notes said as much. Instant, on-the-fly mobile automation needs a
+real video stream, not repeated screenshots.
+
+**What changed:** a new `/api/mobile/video/:serial` WebSocket endpoint spawns
+the on-device `screenrecord` binary (built into Android since API 19 — no
+scrcpy, root, or extra install needed) with `--output-format=h264` and pipes
+its raw Annex-B elementary stream straight from `adb exec-out` to the browser,
+frame by frame, with no polling loop and no per-frame process spawn. Because
+`screenrecord` has a hard ~180s `--time-limit`, the server transparently
+respawns it on exit and keeps streaming — the client sees at most a brief gap.
+
+On the frontend, a small Annex-B demuxer (`src/lib/h264Stream.ts`) buffers
+incoming bytes, splits them into per-frame access units, and feeds them to the
+browser's native WebCodecs `VideoDecoder` (Electron/Chromium have full
+hardware-accelerated support). Decoded frames are drawn straight to the
+existing mirror `<canvas>`, so tap-mapping, letterboxing, and the nav bar are
+unchanged. If WebCodecs isn't available, or `screenrecord` isn't supported on
+a given device/Android build, the client automatically falls back to the old
+PNG-polling endpoint — nothing regresses on unsupported setups.
+
+This also incidentally removes the old "screen is off or locked" false-asleep
+state during normal use: because the video stream keeps flowing continuously
+(and the session still disables the screen timeout + sends a wake keyevent on
+connect, same as before), there's no more discrete "0-byte capture" signal to
+misinterpret as the phone being asleep while it's actually just idle.
+
+**Nav bar buttons now log their attempts:** Back/Home/Recent/Power/Vol+/Vol−
+previously fired silently with no confirmation of success or failure. They now
+write to the stream log panel exactly like taps already did, so a failed
+keyevent (bad serial, adb hiccup, etc.) is visible instead of looking like a
+dead button.
+
 ## [1.1.430] — 2026-07-09
 
 ### Mobile Farm — fixed click mapping, added click logging, faster frame cadence
