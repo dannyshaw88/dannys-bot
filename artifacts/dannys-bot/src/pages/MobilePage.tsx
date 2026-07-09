@@ -235,34 +235,78 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
   // black/asleep screen never reached the server at all).
   const wake = useCallback(async () => {
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: 224 /* KEYCODE_WAKEUP */ }),
       });
-    } catch { /* ignore */ }
-  }, [serial]);
+      if (!r.ok) addLog(`Wake FAILED — server returned ${r.status}`);
+    } catch (err: any) {
+      addLog(`Wake FAILED — ${err?.message ?? "network error"}`);
+    }
+  }, [serial, addLog]);
 
   const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (status !== "live" || !phoneSizeRef.current) {
       // Asleep / not-yet-live: clicking wakes the phone instead of tapping
       // a coordinate we can't map yet.
+      addLog(`Click while status="${status}" — sending wake instead of tap`);
       wake();
       return;
     }
-    const rect   = canvasRef.current!.getBoundingClientRect();
-    const scaleX = phoneSizeRef.current.w / rect.width;
-    const scaleY = phoneSizeRef.current.h / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top)  * scaleY);
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const { w: phoneW, h: phoneH } = phoneSizeRef.current;
+    if (rect.width <= 0 || rect.height <= 0 || phoneW <= 0 || phoneH <= 0) {
+      addLog(`Click ignored — degenerate geometry (rect ${rect.width}×${rect.height}, phone ${phoneW}×${phoneH})`);
+      return;
+    }
+
+    // The canvas is styled with object-fit: contain, so its rendered content
+    // is letterboxed inside `rect` whenever the box's aspect ratio doesn't
+    // exactly match the phone's aspect ratio (which is now the norm, since
+    // the box is a flexible flex-1 area, not a locked 9:16 wrapper). Mapping
+    // clicks against the *full* `rect` (as before) silently produced wrong
+    // coordinates across the whole surface — this is the "nothing is
+    // clickable" bug. We must first find the actual displayed image
+    // rectangle inside `rect`, then map relative to that.
+    const boxRatio   = rect.width / rect.height;
+    const phoneRatio = phoneW / phoneH;
+    let dispW = rect.width, dispH = rect.height, offsetX = 0, offsetY = 0;
+    if (boxRatio > phoneRatio) {
+      // Box is wider than the phone → letterboxed left/right.
+      dispH = rect.height;
+      dispW = dispH * phoneRatio;
+      offsetX = (rect.width - dispW) / 2;
+    } else {
+      // Box is taller than the phone → letterboxed top/bottom.
+      dispW = rect.width;
+      dispH = dispW / phoneRatio;
+      offsetY = (rect.height - dispH) / 2;
+    }
+
+    const localX = e.clientX - rect.left - offsetX;
+    const localY = e.clientY - rect.top  - offsetY;
+
+    if (localX < 0 || localY < 0 || localX > dispW || localY > dispH) {
+      // Click landed in the letterbox padding, not on the actual phone image.
+      addLog(`Click ignored — landed in letterbox padding (local ${Math.round(localX)},${Math.round(localY)} outside ${Math.round(dispW)}×${Math.round(dispH)})`);
+      return;
+    }
+
+    const x = Math.min(phoneW - 1, Math.max(0, Math.round((localX / dispW) * phoneW)));
+    const y = Math.min(phoneH - 1, Math.max(0, Math.round((localY / dispH) * phoneH)));
+    addLog(`Tap → (${x}, ${y})`);
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ x, y }),
       });
-    } catch { /* ignore */ }
-  }, [serial, status, wake]);
+      if (!r.ok) addLog(`Tap FAILED — server returned ${r.status}`);
+    } catch (err: any) {
+      addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
+    }
+  }, [serial, status, wake, addLog]);
 
   const clickable = status === "live" || status === "asleep" || status === "error";
 

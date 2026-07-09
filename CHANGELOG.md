@@ -4,6 +4,40 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.430] — 2026-07-09
+
+### Mobile Farm — fixed click mapping, added click logging, faster frame cadence
+
+**Root cause of "nothing is clickable":** the phone screen area was made
+flexible (`flex-1`) in 1.1.429 to fix a height-collapse bug, but the canvas
+keeps `object-fit: contain`. Once the screen area's box stopped being a
+locked 9:16 rectangle, its aspect ratio almost never matches the phone's
+real aspect ratio, so the canvas image gets letterboxed inside the box.
+Tap coordinates were still being computed against the *full* box
+(`getBoundingClientRect()`), not the actual letterboxed image rectangle —
+so every tap landed on the wrong on-device pixel. Fixed by computing the
+real displayed image rectangle (accounting for the letterbox offset) and
+mapping clicks relative to that instead.
+
+**Debug log now captures clicks:** tapping, waking, and their
+success/failure are now written to the stream log panel — previously the
+log only recorded WebSocket/connection events, so a failed tap left no
+trace at all. Clicks that land in letterbox padding (outside the actual
+phone image) are also logged instead of silently doing nothing.
+
+**Frame cadence:** the screencap loop's idle delay was lowered from 250ms
+to 150ms between frames. Note: the dominant part of the mirror's latency
+is the per-frame `adb exec-out screencap -p` capture itself (typically
+150–400ms on-device, depending on the phone), which is inherent to using
+discrete PNG screenshots rather than a continuous video stream. This
+change makes the loop responsive without further scrcpy work.
+Truly "instant" (~30fps) mirroring would require switching to a
+continuous H.264 stream (e.g. scrcpy, already stubbed as
+`/api/mobile/devices/:serial/scrcpy/start`) instead of screencap polling
+— worth a follow-up if sub-100ms feedback is required for automation.
+
+---
+
 ## [1.1.429] — 2026-07-09
 
 ### Mobile Farm — layout split, on-device debug log removed, click-to-wake fixed

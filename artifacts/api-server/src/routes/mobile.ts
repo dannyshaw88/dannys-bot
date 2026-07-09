@@ -255,8 +255,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
           // Back off when the screen is off, but not so much that a click-to-wake
           // feels unresponsive — 400ms keeps the "did my tap wake it" feedback loop
-          // fast while still not hammering adb every 250ms while asleep.
-          const delay = screenOffStreak > 0 ? 400 : 250;
+          // fast while still not hammering adb every 150ms while asleep.
+          // NOTE: this loop delay is only part of the latency budget — each
+          // frame also costs the time for `adb exec-out screencap -p` to run
+          // on the device itself (PNG capture + USB transfer), typically
+          // 150-400ms depending on the phone. That per-frame cost is inherent
+          // to the screencap approach and is NOT eliminated by lowering this
+          // delay; a truly "instant" (~30fps) mirror requires switching to a
+          // continuous H.264 stream (e.g. scrcpy) instead of discrete PNG
+          // captures. See CHANGELOG for details.
+          const delay = screenOffStreak > 0 ? 400 : 150;
           if (running) await new Promise<void>(r => setTimeout(r, delay));
         }
         logger.info({ serial, frameCount }, "[mobile-ws] screencap loop ended");
