@@ -5579,12 +5579,72 @@ export function startEbIpcServer(
           detail: { "user-agent": ua },
         };
 
-        // 6. Raw header dump for manual audit — header ORDER also matters to
+        // 6. Sec-CH-UA (the un-suffixed brand-list header — distinct from
+        // Sec-CH-UA-Mobile/-Platform checked above). Chrome always sends it on
+        // any request once client hints are active; its brand list must match
+        // the Chrome version implied by the User-Agent.
+        const chUa = h["sec-ch-ua"];
+        const chromeMajor = ua.match(/Chrome\/(\d+)/)?.[1];
+        const chUaMismatch = !!chUa && !!chromeMajor && !chUa.includes(chromeMajor);
+        checks.chUaBrands = {
+          title:  "Sec-CH-UA Brand List",
+          status: chUa === undefined ? "fail" : chUaMismatch ? "fail" : "pass",
+          label:  chUa === undefined
+            ? "Sec-CH-UA header missing — real Chrome sends this on every request"
+            : chUaMismatch
+            ? `Sec-CH-UA brand version doesn't include Chrome/${chromeMajor} from the User-Agent`
+            : `Sec-CH-UA: ${chUa}`,
+          detail: { "sec-ch-ua": String(chUa), chromeMajorFromUA: String(chromeMajor) },
+        };
+
+        // 7. Accept / Accept-Encoding — always present on real navigations;
+        // missing Accept-Encoding in particular is a classic non-browser tell
+        // (most HTTP client libraries omit brotli/gzip negotiation Chrome sends).
+        const accept = h["accept"];
+        const acceptEncoding = h["accept-encoding"];
+        checks.acceptHeaders = {
+          title:  "Accept / Accept-Encoding",
+          status: (!accept || !acceptEncoding) ? "fail" : "pass",
+          label:  (!accept || !acceptEncoding)
+            ? `Missing: ${[!accept && "Accept", !acceptEncoding && "Accept-Encoding"].filter(Boolean).join(", ")}`
+            : `Accept: ${accept} · Accept-Encoding: ${acceptEncoding}`,
+          detail: { accept: String(accept), "accept-encoding": String(acceptEncoding) },
+        };
+
+        // 8. Cookie header — must be present once a session exists, and must
+        // NOT be present as an empty string (proxy stripping Set-Cookie upstream
+        // shows up here as a request that never carries a session cookie back).
+        const cookieHeader = h["cookie"];
+        checks.cookieHeader = {
+          title:  "Cookie Header",
+          status: cookieHeader === undefined ? "info" : cookieHeader.length === 0 ? "warn" : "pass",
+          label:  cookieHeader === undefined
+            ? "No Cookie header on this request (expected before any session cookies are set)"
+            : cookieHeader.length === 0
+            ? "Cookie header present but EMPTY — a proxy or session issue may be stripping cookies"
+            : `Cookie header present (${cookieHeader.split(";").length} cookie(s))`,
+          detail: { cookiePresent: String(cookieHeader !== undefined), cookieCount: String(cookieHeader ? cookieHeader.split(";").length : 0) },
+        };
+
+        // 9. Header count sanity — a real Chrome navigation to instagram.com
+        // carries roughly 10-15 headers (host, connection, sec-ch-ua*, upgrade-
+        // insecure-requests, user-agent, accept, sec-fetch-*, accept-encoding,
+        // accept-language, cookie). A request with far fewer is missing some of
+        // the above individually-checked headers AND likely others besides.
+        const headerCount = Object.keys(latest.headers).length;
+        checks.headerCount = {
+          title:  "Header Count Sanity",
+          status: headerCount < 8 ? "fail" : headerCount < 10 ? "warn" : "pass",
+          label:  `${headerCount} headers captured — real Chrome sends ~10-15 on an instagram.com request`,
+          detail: { headerCount: String(headerCount), headerNames: Object.keys(latest.headers) },
+        };
+
+        // 10. Raw header dump for manual audit — header ORDER also matters to
         // Instagram's fingerprinting and can only be judged by eye here.
         checks.rawHeaders = {
           title:  "All Real Request Headers (raw)",
           status: "info",
-          label:  `${Object.keys(latest.headers).length} headers captured for ${latest.method} ${latest.url}`,
+          label:  `${headerCount} headers captured for ${latest.method} ${latest.url}`,
           detail: latest.headers,
         };
 

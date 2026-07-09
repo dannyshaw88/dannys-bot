@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.411",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Improved",
+        text: "Header Check now scores every real header individually instead of leaving most of them buried in the raw dump with no verdict. A real Chrome request to instagram.com carries roughly 10-15 headers; the first version of this check only gave a pass/fail verdict on 5 of them. Added explicit checks for Sec-CH-UA brand list (vs the Chrome version in the User-Agent), Accept/Accept-Encoding presence, Cookie header presence/emptiness, and an overall header-count sanity check (fewer than 8 real headers on an instagram.com request is a strong non-browser tell).",
+        technical: [
+          "Added chUaBrands, acceptHeaders, cookieHeader, and headerCount checks to /eb/header-check in ebManager.ts",
+          "Sec-CH-UA brand check cross-references the Chrome major version parsed from User-Agent against the brand list",
+          "Header count check flags <8 headers as fail, <10 as warn, matching the ~10-15 real Chrome sends on an instagram.com navigation",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.410",
     date: "9 Jul 2026",
     items: [
