@@ -1428,7 +1428,23 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   // Electron injects $cdc_* / $chrome_* properties even with AutomationControlled
   // disabled.  These are the first thing bot-detection scripts check.
   try{var _dK=Object.keys(window).filter(function(k){return k.indexOf('$cdc_')===0||k.indexOf('$chrome_')===0||k==='__driver_evaluate'||k==='__webdriver_evaluate'||k==='__selenium_evaluate'||k==='__fxdriver_evaluate';});_dK.forEach(function(k){try{delete window[k];}catch(_e){}});}catch(_e){}
-  try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
+  // navigator.webdriver — patch the PROTOTYPE, not the instance.
+  // Real Chrome (non-automated) exposes webdriver only on Navigator.prototype → false.
+  // With --disable-blink-features=AutomationControlled the runtime value is already
+  // false, but any Object.defineProperty() on the navigator *instance* creates a
+  // detectable OWN property: Object.getOwnPropertyDescriptor(navigator,'webdriver')
+  // returns undefined on a real browser, but would return our getter if we patched
+  // the instance — a clear automation signal even when the returned value is false.
+  // Fix: delete any accidental instance-level descriptor first, then enforce false
+  // on the prototype so the own-property check returns undefined (clean).
+  try{
+    // Remove own-property descriptor if Electron somehow placed one.
+    try{delete navigator.webdriver;}catch(_e){}
+    // Redefine on the prototype so reads return false with no own-property trace.
+    Object.defineProperty(Navigator.prototype,'webdriver',{
+      get:function(){return false;},configurable:true,enumerable:true
+    });
+  }catch(e){}
   // Android Chrome 129 removed Java-plugin support — javaEnabled() must return false.
   // Electron returns true by default, which is a hard desktop/bot signal.
   // Direct assignment (navigator.javaEnabled = fn) silently fails — the Navigator
@@ -5515,6 +5531,15 @@ export function startEbIpcServer(
             } catch (_) {}
             // ── Automation hints ──────────────────────────────────────────────
             R.puppeteerDetect = !!(navigator.webdriver);
+            // Check for an OWN-property descriptor on the navigator instance.
+            // Real Chrome: Object.getOwnPropertyDescriptor(navigator,'webdriver') === undefined
+            //              (the property lives on Navigator.prototype only).
+            // Broken suppression: defineProperty on the instance creates an own
+            // descriptor that detector scripts probe to identify automation tools
+            // even when the returned value is false/undefined.
+            try {
+              R.webdriverOwnDesc = Object.getOwnPropertyDescriptor(navigator, 'webdriver') !== undefined;
+            } catch (_) { R.webdriverOwnDesc = false; }
             R.permissions = null;
             try {
               // Checking notification permission synchronously
@@ -5547,7 +5572,9 @@ export function startEbIpcServer(
         if (raw.hasRequire)  leaks.push("window.require");
         if (raw.hasModule)   leaks.push("window.module");
         if (raw.hasElectron) leaks.push("window._electron");
-        if (raw.webdriver === true) leaks.push("navigator.webdriver=true");
+        if (raw.webdriver === true)  leaks.push("navigator.webdriver=true");
+        if (raw.webdriver !== false) leaks.push(`navigator.webdriver=${JSON.stringify(raw.webdriver)} (should be false)`);
+        if (raw.webdriverOwnDesc)    leaks.push("navigator.webdriver is an own-property (prototype-only in real Chrome)");
         checks.electronLeak = {
           title:  "Electron Leak",
           status: leaks.length > 0 ? "fail" : "pass",
