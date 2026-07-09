@@ -1,115 +1,28 @@
-name: Build Windows Installer
+name: (Deprecated) Build Windows Installer
+
+# DEPRECATED — 9 Jul 2026: this file was a second, independently-triggered
+# near-duplicate of `build-windows-installer.yml` (different secret names —
+# UPDATER_TOKEN vs DANNY_BOT_UPDATER_TOKEN/GH_TOKEN — and no `ignore-scripts`
+# on install). Both ran on every push to main, racing two Windows installer
+# builds against each other and confusing "which run actually failed"
+# debugging. Consolidated into `build-windows-installer.yml`, the single
+# canonical workflow. Deletion of this tracked file is blocked in the
+# current environment, so it is kept as an inert stub with no triggers.
+#
+# Do not add a `push` or `workflow_dispatch` trigger back to this file — use
+# `build-windows-installer.yml` for any future changes to the build/release
+# pipeline.
 
 on:
-  push:
-    branches: [main]
-    tags:
-      - "v*"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      note:
+        required: false
+        type: string
+        default: "deprecated — see build-windows-installer.yml"
 
 jobs:
-  build-web:
+  deprecated-noop:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Get pnpm store path
-        id: pnpm-cache
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
-
-      - name: Install root dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build API server
-        run: pnpm --filter @workspace/api-server run build
-
-      - name: Build frontend
-        env:
-          REPL_ID: ci
-        run: pnpm --filter @workspace/dannys-bot run build
-
-      - name: Upload API server dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-server-dist
-          path: artifacts/api-server/dist/
-          retention-days: 1
-
-      - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: artifacts/dannys-bot/dist/public/
-          retention-days: 1
-
-  build-windows:
-    runs-on: windows-latest
-    needs: build-web
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Download API server dist
-        uses: actions/download-artifact@v4
-        with:
-          name: api-server-dist
-          path: artifacts/api-server/dist/
-
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: artifacts/dannys-bot/dist/public/
-
-      - name: Install Electron dependencies
-        working-directory: artifacts/electron
-        run: npm install
-
-      - name: Build Electron main process
-        working-directory: artifacts/electron
-        env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
-        run: node build.mjs
-
-      - name: Package Windows installer
-        working-directory: artifacts/electron
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
-        run: npx --yes electron-builder --win --publish always
-
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: equinox-windows-installer
-          path: artifacts/electron/release/*.exe
-          if-no-files-found: warn
-          retention-days: 30
+      - run: echo "This workflow is deprecated. See build-windows-installer.yml."

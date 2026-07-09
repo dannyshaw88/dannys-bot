@@ -54,7 +54,14 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 
 // ── Per-instance config (proxy assignment) ────────────────────────────────────
 // Stored in mobile-instances.json next to the DB so it survives restarts.
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null };
+type AutomationSettings = {
+  actionDelayMin: number;
+  actionDelayMax: number;
+  maxActionsPerDay: number;
+  autoReplyEnabled: boolean;
+  notes?: string;
+};
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -246,8 +253,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } catch (err) {
             logger.error({ serial, err }, "[mobile-ws] screencap loop error");
           }
-          // Back off when the screen is off — no point hammering every 250ms
-          const delay = screenOffStreak > 0 ? 1000 : 250;
+          // Back off when the screen is off, but not so much that a click-to-wake
+          // feels unresponsive — 400ms keeps the "did my tap wake it" feedback loop
+          // fast while still not hammering adb every 250ms while asleep.
+          const delay = screenOffStreak > 0 ? 400 : 250;
           if (running) await new Promise<void>(r => setTimeout(r, delay));
         }
         logger.info({ serial, frameCount }, "[mobile-ws] screencap loop ended");
@@ -344,6 +353,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const results = await android.autoDiscoverEmulators();
       res.json({ results });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  // ── Per-device automation settings (isolated to the Mobile tab) ─────────────
+  const automationSchema = z.object({
+    actionDelayMin: z.number().min(0),
+    actionDelayMax: z.number().min(0),
+    maxActionsPerDay: z.number().min(0),
+    autoReplyEnabled: z.boolean(),
+    notes: z.string().optional(),
+  });
+  app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
+    const cfg = loadInstanceConfigs();
+    const defaults: AutomationSettings = { actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, autoReplyEnabled: false, notes: "" };
+    res.json(cfg[p(req, "serial")]?.automation ?? defaults);
+  });
+  app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
+    try {
+      const input = automationSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], automation: input };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true, automation: input });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
   });
 
   // ── Instance config (proxy assignment) ───────────────────────────────────────

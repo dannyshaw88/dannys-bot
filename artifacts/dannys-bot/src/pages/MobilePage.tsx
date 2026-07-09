@@ -4,6 +4,10 @@
 
 import React, { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
@@ -91,14 +95,13 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
 
-  const [status,   setStatus]   = useState<"connecting" | "waiting" | "live" | "error">("connecting");
-  const [fps,      setFps]      = useState(0);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
+  const [fps,    setFps]    = useState(0);
 
-  const addLog = useCallback((msg: string) => {
-    const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
-    setDebugLog(prev => [...prev.slice(-14), `${ts}  ${msg}`]);
-  }, []);
+  // No-op logger kept as a name so the effect below reads cleanly; the debug
+  // log panel was removed from the phone UI itself (moved out — nothing to
+  // render on-device anymore).
+  const addLog = useCallback((_msg: string) => {}, []);
 
   // FPS ticker
   useEffect(() => {
@@ -165,8 +168,13 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
           try {
             const j = JSON.parse(ev.data as string);
             if (j.error) {
+              // "Screen is off or locked" is not a real error — the server is
+              // already sending wake keyevents on a loop. Show a dedicated
+              // clickable "asleep" state instead of the generic error state.
               addLog(`SERVER ERROR: ${j.error}`);
-              setStatus("error");
+              setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
+            } else if (j.info) {
+              addLog(j.info);
             }
           } catch { /* ok */ }
           return;
@@ -215,8 +223,28 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);
 
+  // Sends an immediate wake keyevent — used when the phone is asleep so the
+  // very first tap doesn't have to wait for the backend's own poll loop
+  // (which was the "clicks don't register, feedback is slow" bug: the
+  // canvas was unmounted whenever the screen wasn't live, so clicks on a
+  // black/asleep screen never reached the server at all).
+  const wake = useCallback(async () => {
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: 224 /* KEYCODE_WAKEUP */ }),
+      });
+    } catch { /* ignore */ }
+  }, [serial]);
+
   const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!phoneSizeRef.current || status !== "live") return;
+    if (status !== "live" || !phoneSizeRef.current) {
+      // Asleep / not-yet-live: clicking wakes the phone instead of tapping
+      // a coordinate we can't map yet.
+      wake();
+      return;
+    }
     const rect   = canvasRef.current!.getBoundingClientRect();
     const scaleX = phoneSizeRef.current.w / rect.width;
     const scaleY = phoneSizeRef.current.h / rect.height;
@@ -229,23 +257,12 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
         body: JSON.stringify({ x, y }),
       });
     } catch { /* ignore */ }
-  }, [serial, status]);
+  }, [serial, status, wake]);
+
+  const clickable = status === "live" || status === "asleep" || status === "error";
 
   return (
     <div className="absolute inset-0 bg-black flex flex-col">
-      {/* ── Debug log panel — always visible, scrolls inside the slot ── */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/80 backdrop-blur-sm max-h-[45%] overflow-y-auto p-1.5">
-        {debugLog.map((line, i) => (
-          <div key={i} className="text-[9px] font-mono text-green-400/80 leading-tight whitespace-pre-wrap break-all">
-            {line}
-          </div>
-        ))}
-        {debugLog.length === 0 && (
-          <div className="text-[9px] font-mono text-white/20">debug log will appear here…</div>
-        )}
-      </div>
-
-      {/* ── Overlay states (above canvas, below debug log) ── */}
       {status === "connecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
           <Loader2 className="w-5 h-5 animate-spin text-white/30" />
@@ -258,28 +275,36 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial }: { serial: string }
           <span className="text-[10px] text-white/30 select-none">Waiting for screen data…</span>
         </div>
       )}
+      {status === "asleep" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
+          <Loader2 className="w-5 h-5 animate-spin text-white/30" />
+          <span className="text-[10px] text-white/40 select-none">Screen is asleep — tap to wake</span>
+        </div>
+      )}
       {status === "error" && (
-        <div className="absolute inset-0 flex flex-col items-start justify-start gap-1 p-2 z-10">
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
-            <span className="text-[10px] text-yellow-400 font-semibold">Stream error — see log below</span>
-          </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2 z-10 pointer-events-none">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span className="text-[10px] text-yellow-400 font-semibold text-center">Stream error — tap to retry waking the phone</span>
         </div>
       )}
 
-      {/* ── Live canvas ── */}
+      {/* ── Screen canvas — stays mounted (not display:none) in every state
+             once we've reached "waiting" or later, so a tap on a black/asleep
+             screen is still captured by the click handler instead of being
+             swallowed by an overlay with no listener. ── */}
       <canvas
         ref={canvasRef}
         onClick={handleClick}
         style={{
-          display:   status === "live" ? "block" : "none",
-          position:  "absolute",
-          inset:     0,
-          width:     "100%",
-          height:    "100%",
-          objectFit: "contain",
-          cursor:    "crosshair",
-          zIndex:    5,
+          display:      status === "connecting" ? "none" : "block",
+          position:     "absolute",
+          inset:        0,
+          width:        "100%",
+          height:       "100%",
+          objectFit:    "contain",
+          cursor:       clickable ? "pointer" : "default",
+          pointerEvents: clickable ? "auto" : "none",
+          zIndex:       5,
         }}
       />
 
@@ -470,6 +495,136 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
   );
 }
 
+// ─── Automation settings panel (right column, per device) ────────────────────
+
+interface AutomationSettingsData {
+  actionDelayMin: number;
+  actionDelayMax: number;
+  maxActionsPerDay: number;
+  autoReplyEnabled: boolean;
+  notes?: string;
+}
+
+const AUTOMATION_DEFAULTS: AutomationSettingsData = {
+  actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, autoReplyEnabled: false, notes: "",
+};
+
+function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
+  const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
+  const [loading,  setLoading]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+
+  useEffect(() => {
+    if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }
+    let active = true;
+    setLoading(true);
+    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`)
+      .then(r => r.json())
+      .then(d => { if (active) setSettings({ ...AUTOMATION_DEFAULTS, ...d }); })
+      .catch(() => { /* keep defaults */ })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [phone?.serial]);
+
+  const save = async () => {
+    if (!phone) return;
+    setSaving(true); setSaved(false);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
+  };
+
+  if (!phone) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
+        <Smartphone className="w-8 h-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Connect a phone via USB to configure its automation settings.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-6 space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-foreground">Automation Settings</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
+        </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Auto-reply</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Respond to incoming DMs automatically</div>
+          </div>
+          <Switch
+            checked={settings.autoReplyEnabled}
+            onCheckedChange={(v) => setSettings(s => ({ ...s, autoReplyEnabled: v }))}
+            disabled={loading}
+          />
+        </div>
+
+        <div className="border-t border-border/50" />
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              value={settings.actionDelayMin}
+              onChange={e => setSettings(s => ({ ...s, actionDelayMin: Number(e.target.value) }))}
+              disabled={loading}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              value={settings.actionDelayMax}
+              onChange={e => setSettings(s => ({ ...s, actionDelayMax: Number(e.target.value) }))}
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Maximum actions per day</Label>
+          <Input
+            type="number"
+            value={settings.maxActionsPerDay}
+            onChange={e => setSettings(s => ({ ...s, maxActionsPerDay: Number(e.target.value) }))}
+            disabled={loading}
+          />
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Notes</Label>
+          <textarea
+            value={settings.notes ?? ""}
+            onChange={e => setSettings(s => ({ ...s, notes: e.target.value }))}
+            disabled={loading}
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40"
+            placeholder="Anything worth remembering about this device…"
+          />
+        </div>
+
+        <Button className="w-full" onClick={save} disabled={saving || loading}>
+          {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TOTAL_SLOTS = 1;
@@ -543,18 +698,23 @@ export function MobilePage() {
           {data && data.adbFound && phones.length === 0 && !loading && (
             <NoPhonesPanel rawOutput={data.rawOutput} />
           )}
+        </div>
 
-          {/* Single slot — left side, vertically centred */}
-          {data && data.adbFound && (
-            <div className="flex items-center justify-start" style={{ minHeight: "calc(100vh - 120px)" }}>
-              <div style={{ width: 280 }}>
+        {/* Phone (left half, full height) + automation settings (right half) */}
+        {data && data.adbFound && (
+          <div className="flex" style={{ minHeight: "calc(100vh - 57px)" }}>
+            <div className="flex items-stretch justify-center p-6" style={{ width: "50%" }}>
+              <div className="h-full" style={{ aspectRatio: "9 / 16", maxWidth: "100%" }}>
                 {slots.map((phone, i) => (
                   <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} />
                 ))}
               </div>
             </div>
-          )}
-        </div>
+            <div className="border-l border-border" style={{ width: "50%" }}>
+              <AutomationSettingsPanel phone={slots[0]} />
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

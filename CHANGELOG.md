@@ -4,6 +4,54 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.429] — 2026-07-09
+
+### Mobile Farm — layout split, on-device debug log removed, click-to-wake fixed
+
+**Layout:** the phone slot now sits in the left half of the page at full
+available height (aspect-ratio locked to 9:16, capped by whichever of the
+half-width or full-height is the tighter constraint). The right half is a
+new "Automation Settings" panel — per-device auto-reply toggle, action delay
+range, max actions/day, and a free-text notes field. Settings persist
+server-side per serial in `mobile-instances.json` via two new endpoints,
+`GET/POST /api/mobile/devices/:serial/automation-settings`, following the
+same pattern already used for proxy assignment.
+
+**Debug log removed from the phone screen itself:** the always-visible
+green-text debug log that used to overlay the bottom ~45% of the phone
+canvas is gone. The phone slot now only shows connection/asleep/error
+state text; verbose per-frame logging still happens (kept as a no-op-safe
+internal log function for future use) but nothing is rendered on the phone
+screen anymore.
+
+**Click-to-wake fixed — root cause:** the phone `<canvas>` was rendered with
+`display: none` whenever the stream wasn't in the "live" state. When the
+screen went to sleep, the server-side auto-wake loop (added in 1.1.428) kept
+running, but the client dropped straight to an overlay `<div>` with no click
+handler — so a user's tap to help wake the phone was never sent anywhere,
+and the visible "waking up" feedback only ever came from the slow ~1s
+backend poll. Fixed by: (1) keeping the canvas mounted and clickable in
+every state past "connecting", (2) treating server messages matching
+"screen is off / locked" as a distinct `asleep` status with its own "tap to
+wake" hint instead of the generic error state, (3) sending an immediate
+`KEYCODE_WAKEUP` keyevent request on click when not live, instead of
+silently dropping the tap, and (4) reducing the backend's off-screen poll
+back-off from 1000ms to 400ms so the wake feedback loop feels responsive.
+
+### CI — removed a second, independently-triggered Windows installer workflow
+
+`build-windows.yml` was a real (non-stub) duplicate of the canonical
+`build-windows-installer.yml` — different secret names, no
+`--ignore-scripts` on install — that also ran on every push to `main`. Two
+installer builds racing on every push made "which run actually failed" hard
+to diagnose. Deprecated it the same way the three earlier duplicates were
+handled: header comment + inert `workflow_call`-only stub, kept in the repo
+because deletion of tracked workflow files is blocked in this environment.
+`build-windows-installer.yml` remains the single source of truth for the
+Windows installer pipeline.
+
+---
+
 ## [1.1.428] — 2026-07-09
 
 ### Mobile Farm — auto-wake screen + back-off when screen is off
