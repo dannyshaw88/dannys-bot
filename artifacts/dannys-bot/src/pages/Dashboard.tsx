@@ -78,6 +78,26 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.419",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "USB phones that were properly connected and authorized weren't showing up in the Mobile tab. The detection logic was too strict about how it identified a real USB connection and was silently dropping some phones depending on their Windows USB driver.",
+        technical: [
+          "usb-phones.ts: removed the hard requirement for a `usb:` token in `adb devices -l` output (some Windows driver stacks omit it for genuine USB connections) — now only rejects entries that look like emulators or network/TCP (Wi-Fi) devices",
+        ],
+      },
+      {
+        category: "Added",
+        text: "The Mobile tab now shows exactly what Equinox sees from ADB directly in the app when no phone is detected — no need to open a command prompt to diagnose a connection problem.",
+        technical: [
+          "GET /api/mobile/usb-phones now returns rawOutput (the raw `adb devices -l` text); MobilePage's NoPhonesPanel renders it live",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.418",
     date: "9 Jul 2026",
     items: [

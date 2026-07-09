@@ -107,8 +107,9 @@ export interface UsbPhone {
 
 // ── Core logic ────────────────────────────────────────────────────────────────
 
-function listUsbPhones(adbPath: string): UsbPhone[] {
+function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[] {
   const out = runAdb(adbPath, ["devices", "-l"]);
+  if (diag) diag.rawOutput = out ?? "(adb devices -l produced no output or failed to run)";
   if (!out) return [];
 
   const phones: UsbPhone[] = [];
@@ -130,18 +131,16 @@ function listUsbPhones(adbPath: string): UsbPhone[] {
     const state  = parts[1];
 
     // ── USB-only filter ──────────────────────────────────────────────────────
-    // `adb devices -l` includes a `usb:<path>` token for real USB devices.
-    // This is the authoritative signal — more reliable than serial heuristics.
-    // If the token is absent the entry is a TCP/network/emulator device.
-    const hasUsbToken = parts.slice(2).some(p => p.startsWith("usb:"));
-    if (!hasUsbToken) {
-      // Belt-and-suspenders: also reject obvious emulator/TCP serials so
-      // older ADB versions (which may omit usb: in some states) don't slip through.
-      if (serial.startsWith("emulator-")) continue;
-      if (/:\d+$/.test(serial)) continue; // any host:port pattern
-      // If neither the usb: token nor a safe serial exists, skip it.
-      continue;
-    }
+    // `adb devices -l` includes a `usb:<path>` token for most real USB devices,
+    // but some Windows USB driver stacks (generic "ADB Interface" driver,
+    // certain OEM drivers) omit it even for a genuine cable connection — the
+    // token is a nice-to-have signal, not guaranteed. Rejecting on its absence
+    // caused real phones to be silently dropped. Instead, only reject entries
+    // that look like emulators or network/TCP devices (accept everything else,
+    // including a bare "usb:" token check as a bonus label, not a requirement).
+    const looksLikeEmulator = serial.startsWith("emulator-");
+    const looksLikeNetwork  = /^[\w.-]+:\d+$/.test(serial); // host:port pattern (adb connect over Wi-Fi/TCP)
+    if (looksLikeEmulator || looksLikeNetwork) continue;
 
     // Parse key:value pairs from -l suffix
     const kv: Record<string, string> = {};
@@ -189,12 +188,14 @@ const router = Router();
  */
 router.get("/mobile/usb-phones", (_req, res) => {
   const adbPath = findAdb();
-  const phones  = adbPath ? listUsbPhones(adbPath) : [];
+  const diag = { rawOutput: "" };
+  const phones = adbPath ? listUsbPhones(adbPath, diag) : [];
 
   res.json({
     adbFound:  adbPath !== null,
     adbPath:   adbPath,
     phones,
+    rawOutput: adbPath ? diag.rawOutput : null,
     checkedAt: new Date().toISOString(),
   });
 });

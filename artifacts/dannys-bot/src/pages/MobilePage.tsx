@@ -30,6 +30,7 @@ interface PhonesResponse {
   adbFound:  boolean;
   adbPath:   string | null;
   phones:    UsbPhone[];
+  rawOutput?: string | null;
   checkedAt: string;
 }
 
@@ -263,7 +264,8 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-function NoPhonesPanel() {
+function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
+  const hasRawSignal = !!rawOutput && rawOutput.trim().length > 0;
   return (
     <div className="max-w-xl mx-auto mt-12 space-y-6 px-4">
       <div className="text-center">
@@ -275,6 +277,17 @@ function NoPhonesPanel() {
           Follow these steps to connect your Android phone.
         </p>
       </div>
+
+      {hasRawSignal && (
+        <div className="bg-card border border-border rounded-xl p-4 text-left">
+          <p className="text-xs font-semibold text-foreground mb-2">
+            What Equinox sees right now (no command prompt needed — this updates automatically):
+          </p>
+          <pre className="text-[11px] font-mono text-muted-foreground bg-muted/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+            {rawOutput}
+          </pre>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <SetupStep n={1} title="Enable Developer Mode" body={
@@ -396,7 +409,7 @@ export function MobilePage() {
           {data && !data.adbFound && <NoAdbPanel onSaved={() => refresh(true)} />}
 
           {/* ADB found, no phones */}
-          {data && data.adbFound && data.phones.length === 0 && <NoPhonesPanel />}
+          {data && data.adbFound && data.phones.length === 0 && <NoPhonesPanel rawOutput={data.rawOutput} />}
 
           {/* Phones list */}
           {data && data.adbFound && data.phones.length > 0 && (
