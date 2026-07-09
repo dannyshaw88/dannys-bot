@@ -17,11 +17,6 @@
       "from": "resources/bin",
       "to": "bin",
       "filter": ["**/*"]
-    },
-    {
-      "from": "resources/WebDriverAgent.ipa",
-      "to": "WebDriverAgent.ipa",
-      "filter": ["**/*"]
     }
   ],
   "npmRebuild": true,

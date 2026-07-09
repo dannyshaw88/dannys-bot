@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.420",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Removed",
+        text: "Deleted the old iPhone Mirror feature entirely. It never reliably worked and was abandoned — the leftover WebDriverAgent download step in the Windows installer build and its packaged .ipa resource were dead weight left in the build pipeline. Removing them makes the installer build lighter and removes a source of confusing build-log noise.",
+        technical: [
+          "build-windows-installer.yml: removed the 'Fetch WDA IPA' PowerShell step",
+          "electron-builder.json: removed the resources/WebDriverAgent.ipa extraResources entry",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.419",
     date: "9 Jul 2026",
     items: [
