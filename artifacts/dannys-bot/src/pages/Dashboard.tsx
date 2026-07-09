@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.413",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Fix",
+        text: "Header Check no longer flags a false-positive Sec-Fetch-* failure on real login/session AJAX calls. Real Chrome only sends Sec-Fetch-User on a top-level navigation with user activation — it's correctly absent on fetch/XHR calls (mode=cors/no-cors/same-origin), which is most of Instagram's login and session traffic. The check was treating that correct absence as a bot tell.",
+        technical: [
+          "Sec-Fetch-* check in /eb/header-check (ebManager.ts) now only requires Sec-Fetch-User when sec-fetch-mode=navigate, and flags it as WRONG if present on a non-navigate request",
+          "Sec-Fetch-Site/Mode/Dest remain required on every request as before",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.412",
     date: "9 Jul 2026",
     items: [

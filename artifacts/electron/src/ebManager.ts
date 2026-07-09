@@ -5559,16 +5559,41 @@ export function startEbIpcServer(
           detail: { "accept-language": acceptLang },
         };
 
-        // 4. Sec-Fetch-* headers — Chrome always sends these; absence = non-Chrome network stack
-        const secFetchKeys = ["sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user"];
-        const missingSecFetch = secFetchKeys.filter(k => h[k] === undefined);
+        // 4. Sec-Fetch-* headers — Chrome always sends Site/Mode/Dest on every
+        // request. Sec-Fetch-User is the exception: real Chrome ONLY sends it
+        // on a top-level navigation with user activation (mode=navigate) — it
+        // is correctly ABSENT on fetch/XHR calls (mode=cors/no-cors/same-origin),
+        // which is most of what Instagram's login/session traffic actually is.
+        // Treating its absence on a non-navigate request as a fail was a false
+        // positive in the original version of this check.
+        const alwaysRequired = ["sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest"];
+        const missingAlways  = alwaysRequired.filter(k => h[k] === undefined);
+        const isNavigate     = h["sec-fetch-mode"] === "navigate";
+        const secFetchUser   = h["sec-fetch-user"];
+        const userHeaderWrong = isNavigate ? secFetchUser === undefined : secFetchUser !== undefined;
+        const secFetchIssues = [
+          ...missingAlways,
+          ...(userHeaderWrong ? ["sec-fetch-user"] : []),
+        ];
         checks.secFetch = {
           title:  "Sec-Fetch-* Headers",
-          status: missingSecFetch.length > 0 ? "fail" : "pass",
-          label:  missingSecFetch.length > 0
-            ? `Missing: ${missingSecFetch.join(", ")} — real Chrome always sends all Sec-Fetch-* headers`
-            : "All Sec-Fetch-* headers present",
-          detail: Object.fromEntries(secFetchKeys.map(k => [k, String(h[k])])),
+          status: secFetchIssues.length > 0 ? "fail" : "pass",
+          label:  secFetchIssues.length > 0
+            ? isNavigate && secFetchUser === undefined
+              ? "Missing Sec-Fetch-User on a navigation request — real Chrome always sends it on top-level navigations"
+              : !isNavigate && secFetchUser !== undefined
+              ? `Sec-Fetch-User present on a non-navigation (mode=${h["sec-fetch-mode"]}) request — real Chrome never sends it outside navigation`
+              : `Missing: ${missingAlways.join(", ")} — real Chrome always sends Sec-Fetch-Site/Mode/Dest`
+            : isNavigate
+            ? "All Sec-Fetch-* headers present and correct for a navigation request"
+            : `Sec-Fetch-Site/Mode/Dest present and correct for a ${h["sec-fetch-mode"]} request (Sec-Fetch-User correctly absent — not a navigation)`,
+          detail: {
+            "sec-fetch-site": String(h["sec-fetch-site"]),
+            "sec-fetch-mode": String(h["sec-fetch-mode"]),
+            "sec-fetch-dest": String(h["sec-fetch-dest"]),
+            "sec-fetch-user": String(secFetchUser),
+            isNavigationRequest: String(isNavigate),
+          },
         };
 
         // 5. User-Agent header vs CDP override
