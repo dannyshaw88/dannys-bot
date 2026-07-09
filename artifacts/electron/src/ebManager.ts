@@ -2040,6 +2040,39 @@ async function saveCookiesToFile(profileId: number, ses: Electron.Session): Prom
   }
 }
 
+// ── Chrome UA version bump helpers ────────────────────────────────────────────
+
+/**
+ * Rewrites the Chrome version inside a browser UA string.
+ * e.g. "…Chrome/137.0.7151.55 Mobile…" → "…Chrome/140.0.7312.45 Mobile…"
+ */
+function rewriteChromeMajorInUA(ua: string, newFull: string): string {
+  return ua.replace(/Chrome\/[\d.]+/, `Chrome/${newFull}`);
+}
+
+/**
+ * Fire-and-forget: tell the API server to persist a Chrome-bumped UA for an
+ * account. Only updates userAgentEmbedded + ebFingerprint — account status,
+ * cookies, and device state are untouched.
+ */
+function pushUABumpToServer(profileId: number, newEmbeddedUA: string): void {
+  if (!_serverPort) return;
+  const body = JSON.stringify({ userAgentEmbedded: newEmbeddedUA });
+  const req = http.request({
+    hostname: "127.0.0.1",
+    port:     _serverPort,
+    path:     `/api/profiles/${profileId}/bump-chrome-ua`,
+    method:   "POST",
+    headers: {
+      "Content-Type":   "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
+  });
+  req.on("error", () => {});
+  req.write(body);
+  req.end();
+}
+
 function pushCookiesToServer(profileId: number, cookies: { name: string; value: string }[]): void {
   if (!_serverPort) return;
   const body = JSON.stringify({ cookies });
@@ -3101,7 +3134,34 @@ export async function openEbWindow(opts: {
   // desktop-only UI is ever required again, it must be scoped to a single
   // short-lived action (not the account's persistent identity) and must not
   // touch `_browserUA`/`_fpIsMobile` used for the account's real session.
-  const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajor);
+  // ── Chrome version bump: keep existing accounts on a current Chrome ──────────
+  // Real Android phones auto-update Chrome within days of a new stable release.
+  // An account that was verified on Chrome 137 will genuinely be running 140+ by
+  // now — Instagram sees no Chrome version continuity because it auto-updates.
+  // We therefore bump the Chrome major in _browserUA to CURRENT_CHROME_MAJOR
+  // whenever the stored UA is behind, before applying any CDP overrides, so the
+  // entire session (UA, Client-Hints, GREASE, fingerprint script) uses the same
+  // up-to-date version.  The updated UA is persisted to the DB via a lightweight
+  // fire-and-forget call so Mode-B silent windows pick it up automatically too.
+  //
+  // Ghost browser (-1) and verifyMode windows are excluded: ghost generates a
+  // fresh UA each time, and verifyMode must not change the UA mid-verify flow.
+  if (!isGhostBrowser && !verifyMode && _browserUA) {
+    const storedMajorN = parseInt(_fpChromeMajor, 10);
+    const currentMajorN = parseInt(CURRENT_CHROME_MAJOR, 10);
+    if (storedMajorN < currentMajorN) {
+      const newBuildInfo = getChromeBuildInfo(CURRENT_CHROME_MAJOR);
+      const newBrowserUA = rewriteChromeMajorInUA(_browserUA, newBuildInfo.full);
+      console.log(`[ebManager:${profileId}] Chrome UA bump: ${_fpChromeMajor} → ${CURRENT_CHROME_MAJOR} (${_browserUA.slice(0,60)} → ${newBrowserUA.slice(0,60)})`);
+      _browserUA = newBrowserUA;
+      // Persist to DB so Mode-B silent windows and future sessions use the
+      // bumped UA.  Fire-and-forget — don't block window creation.
+      pushUABumpToServer(profileId, newBrowserUA);
+    }
+  }
+  // Re-derive _fpChromeMajor from _browserUA after any bump above.
+  const _fpChromeMajorFinal = _browserUA?.match(/Chrome\/(\d+)/)?.[1] ?? CURRENT_CHROME_MAJOR;
+  const _fpBuildInfo   = getChromeBuildInfo(_fpChromeMajorFinal);
   // _fpScript is built AFTER timezone resolution below so the resolved timezone
   // can be baked into the Intl.DateTimeFormat override inside the injected script.
   // Declared here so it's in scope for the fire-and-forget injection block.
@@ -3396,8 +3456,8 @@ export async function openEbWindow(opts: {
           userAgentMetadata: {
             brands: [
               { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer },
-              { brand: "Chromium",            version: _fpChromeMajor },
-              { brand: "Google Chrome",       version: _fpChromeMajor },
+              { brand: "Chromium",            version: _fpChromeMajorFinal },
+              { brand: "Google Chrome",       version: _fpChromeMajorFinal },
             ],
             fullVersionList: [
               { brand: _fpBuildInfo.grease,  version: _fpBuildInfo.greaseVer + ".0.0.0" },

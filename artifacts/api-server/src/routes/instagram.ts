@@ -1131,6 +1131,35 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Chrome UA version bump — called by the Electron EB manager when it detects
+  // an account's stored UA is behind the current stable Chrome major.
+  // Updates ONLY userAgentEmbedded + ebFingerprint.  accountStatus, cookies,
+  // device state, and credentialsDirty are intentionally left untouched — a
+  // Chrome version bump is indistinguishable from a phone auto-updating Chrome,
+  // so it must never trigger a re-verify loop.
+  app.post("/api/profiles/:id/bump-chrome-ua", async (req, res) => {
+    const id = Number(req.params.id);
+    const { userAgentEmbedded } = (req.body ?? {}) as { userAgentEmbedded?: string };
+    if (!userAgentEmbedded || typeof userAgentEmbedded !== "string") {
+      return res.status(400).json({ error: "userAgentEmbedded required" });
+    }
+    const profile = await storage.getProfile(id).catch(() => null);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    const isDesktopUA = !userAgentEmbedded.includes("Mobile");
+    const newFingerprint = JSON.stringify(
+      generateEbFingerprint((profile as any).userAgentApi ?? undefined, isDesktopUA, userAgentEmbedded)
+    );
+
+    await storage.updateProfile(id, {
+      userAgentEmbedded,
+      ebFingerprint: newFingerprint,
+    } as any);
+
+    console.log(`[bump-chrome-ua] profile=${id} bumped embedded UA to "${userAgentEmbedded.slice(0, 80)}"`);
+    return res.json({ ok: true });
+  });
+
   // Migration: reset all disableApi accounts that still carry a desktop Chrome UA
   // (no "Mobile" in the UA string) back to a mobile Android Chrome UA + fresh fingerprint.
   // Credentials (cookies, device state) are NOT cleared so active sessions survive.
