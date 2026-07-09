@@ -328,6 +328,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } catch { /* ignore */ }
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
       adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
+      // Some OEM skins (MIUI in particular) keep the keyguard engaged even
+      // after the display wakes, which freezes screenrecord's virtual
+      // display on the lock-screen frame (or a black frame, if the lock
+      // screen itself is flagged secure) — the client then sees exactly one
+      // initial frame and nothing ever again. Explicitly dismiss it too.
+      adbShell("wm", "dismiss-keyguard");
 
       // NOTE: we intentionally do NOT force `--size` to the device's exact
       // `wm size` here. screenrecord's encoder on many devices requires
@@ -366,18 +372,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const child = spawn(adbPath, args);
         currentChild = child;
         let sawAnyData = false;
+        let bytesTotal = 0;
         let stderrOut = "";
+
+        // screenrecord on some OEM builds (MIUI especially) will hand back
+        // SPS/PPS and then go completely silent — no more stdout, no exit,
+        // no error — if the virtual display it's mirroring stops producing
+        // new frames (keyguard re-engaging, always-on-display swallowing the
+        // real screen, DRM/secure-surface blocking, etc). That looks exactly
+        // like "connected but frozen forever" from the client's side. Watch
+        // for a stall and force a fresh screenrecord + re-poke the device
+        // rather than hanging indefinitely.
+        let stallTimer: NodeJS.Timeout | null = null;
+        const armStall = (ms: number) => {
+          if (stallTimer) clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => {
+            logger.warn({ serial, bytesTotal }, "[mobile-video] stream stalled — no data for 6s, forcing restart");
+            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled (screen locked / not updating?) — retrying…" }));
+            adbShell("input", "keyevent", "224");
+            adbShell("wm", "dismiss-keyguard");
+            try { child.kill(); } catch { /* ignore — close handler restarts */ }
+          }, ms);
+        };
+        armStall(6_000);
+
         child.stdout.on("data", (chunk: Buffer) => {
           sawAnyData = true;
+          bytesTotal += chunk.length;
+          armStall(6_000);
           if (ws.readyState === 1) ws.send(chunk);
         });
-        child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
+        child.stderr?.on("data", (d: Buffer) => {
+          const line = d.toString().trim();
+          stderrOut += line;
+          if (line && ws.readyState === 1) ws.send(JSON.stringify({ info: `[screenrecord] ${line}` }));
+        });
         child.on("error", (err) => {
+          if (stallTimer) clearTimeout(stallTimer);
           logger.error({ serial, err }, "[mobile-video] spawn error for screenrecord");
           if (ws.readyState === 1) ws.send(JSON.stringify({ error: `Failed to start screenrecord: ${err.message}` }));
           running = false;
         });
         child.on("close", (code) => {
+          if (stallTimer) clearTimeout(stallTimer);
           currentChild = null;
           if (!running) return;
           if (!sawAnyData) {
@@ -392,10 +429,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             running = false;
             return;
           }
-          // Hit the --time-limit (or was killed for some other transient
-          // reason) — restart immediately to keep the stream continuous.
+          // Hit the --time-limit, was stalled, or was killed for some other
+          // transient reason — restart immediately to keep the stream going.
           restartCount++;
-          logger.info({ serial, restartCount, code }, "[mobile-video] screenrecord cycle ended — restarting");
+          logger.info({ serial, restartCount, code, bytesTotal }, "[mobile-video] screenrecord cycle ended — restarting");
           spawnStream();
         });
       };
