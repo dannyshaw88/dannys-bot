@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.410",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "New Header Check on the Checks tab. Login for this product runs entirely through the real EB browser window (never the CycleTLS/API path), and the Browser Fingerprint Check only reads JS-visible window/navigator properties — it says nothing about the actual HTTP request bytes Chrome puts on the wire. This new check captures the real headers via CDP Network.requestWillBeSentExtraInfo (the wire-level headers, including ones the network layer adds after JS/webRequest hooks run) for every request to instagram.com/facebook.com, and flags mismatches: Sec-CH-UA-Mobile vs the User-Agent's mobile claim, Sec-CH-UA-Platform vs the claimed device, missing Accept-Language, missing Sec-Fetch-* headers, and a raw header dump for manual audit.",
+        technical: [
+          "Added wireHeaderCapture() in ebManager.ts — CDP Network.requestWillBeSentExtraInfo + requestWillBeSent listener pairing, keyed by requestId, filtered to instagram.com/facebook.com hosts, capped to last 25 requests per profile",
+          "Wired into the main EB window open flow and doAutoLogin so headers are captured on both regular sessions and the login flow itself",
+          "New GET /eb/header-check endpoint in ebManager.ts's local IPC server, proxied via GET /api/profiles/:id/header-check in instagram.ts",
+          "New HeaderCheck.tsx component, added to the Checks tab in ProfileDetailsPage.tsx alongside the existing Browser Fingerprint Check and API Leak Check",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.409",
     date: "8 Jul 2026",
     items: [

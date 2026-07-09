@@ -249,6 +249,74 @@ interface EbEntry {
 }
 export const ebMap = new Map<number, EbEntry>();
 
+// ── Real outgoing HTTP header capture ─────────────────────────────────────────
+// The "Browser Fingerprint Check" only reads JS-visible window/navigator
+// properties — it says NOTHING about the actual bytes Chrome puts on the wire.
+// Instagram's server-side fingerprinting inspects the real request headers
+// (Sec-CH-UA-*, Sec-Fetch-*, Accept-Language, User-Agent, header ORDER),
+// which JS running in the page can never see and the old check never audited.
+// Network.requestWillBeSentExtraInfo gives the actual wire-level headers,
+// including ones Chrome's network layer adds after JS/webRequest hooks run —
+// unlike Network.requestWillBeSent, which shows pre-network-layer headers.
+interface CapturedHeaderSet {
+  url:        string;
+  method:     string;
+  headers:    Record<string, string>;
+  capturedAt: string;
+}
+const _headerCaptures = new Map<number, CapturedHeaderSet[]>();
+const HEADER_CAPTURE_LIMIT = 25;
+
+function _recordHeaderCapture(profileId: number, url: string, method: string, headers: Record<string, string>) {
+  // Only keep requests to Instagram hosts — the ones Instagram's own fraud
+  // system actually inspects. Ignore CDN/analytics noise.
+  try {
+    const host = new URL(url).hostname;
+    if (!/(^|\.)instagram\.com$/.test(host) && !/(^|\.)facebook\.com$/.test(host)) return;
+  } catch { return; }
+  const list = _headerCaptures.get(profileId) ?? [];
+  list.push({ url, method, headers, capturedAt: new Date().toISOString() });
+  while (list.length > HEADER_CAPTURE_LIMIT) list.shift();
+  _headerCaptures.set(profileId, list);
+}
+
+// Attaches a Network-domain listener that records every real outgoing request
+// header set for this profile's EB window. Safe to call multiple times per
+// window — CDP listener registration is idempotent per debugger instance and
+// we guard with a WeakSet so we never double-subscribe the same webContents.
+const _headerCaptureWired = new WeakSet<Electron.WebContents>();
+function wireHeaderCapture(wc: Electron.WebContents, profileId: number) {
+  if (_headerCaptureWired.has(wc)) return;
+  _headerCaptureWired.add(wc);
+  try {
+    wc.debugger.sendCommand("Network.enable").catch(() => {});
+  } catch { /* debugger not attached yet — Network.enable no-ops harmlessly */ }
+  const onMessage = (_event: unknown, method: string, params: any) => {
+    if (method !== "Network.requestWillBeSentExtraInfo") return;
+    // associatedRequestId's actual URL/method comes from a matching
+    // requestWillBeSent event, but extra-info headers are what's really sent
+    // (Sec-Fetch-*, Cookie, Sec-CH-UA — added by the network layer after JS
+    // and webRequest hooks run). We don't have the URL on this event alone,
+    // so pair it via requestId with the most recent requestWillBeSent seen.
+    const pending = _pendingReqMeta.get(params.requestId);
+    if (!pending) return;
+    _recordHeaderCapture(profileId, pending.url, pending.method, params.headers ?? {});
+    _pendingReqMeta.delete(params.requestId);
+  };
+  const _pendingReqMeta = new Map<string, { url: string; method: string }>();
+  const onMeta = (_event: unknown, method: string, params: any) => {
+    if (method !== "Network.requestWillBeSent") return;
+    _pendingReqMeta.set(params.requestId, { url: params.request?.url ?? "", method: params.request?.method ?? "GET" });
+    // Cap map growth — drop stale entries after 200 pending
+    if (_pendingReqMeta.size > 200) {
+      const firstKey = _pendingReqMeta.keys().next().value;
+      if (firstKey) _pendingReqMeta.delete(firstKey);
+    }
+  };
+  wc.debugger.on("message", onMeta);
+  wc.debugger.on("message", onMessage);
+}
+
 // ── ip-api.com timezone cache ─────────────────────────────────────────────────
 // ip-api.com free tier allows 1,000 requests/day.  Without a cache, every
 // openEbWindow call (one per account per EB open) consumes one request.
@@ -1967,6 +2035,7 @@ async function doAutoLogin(
   if (userAgent) {
     try {
       try { wc.debugger.attach("1.3"); } catch {}
+      wireHeaderCapture(wc, profileId);
       const _chromeMajor = (userAgent.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
       const _isMob = userAgent.includes("Mobile") || userAgent.includes("Android");
       const _buildInfo = getChromeBuildInfo(_chromeMajor);
@@ -3112,6 +3181,7 @@ export async function openEbWindow(opts: {
   // because those CAN hang in the packaged build. A dom-ready fallback below
   // covers the rare case where they fire after the first navigation starts.
   try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
+  wireHeaderCapture(win.webContents, profileId);
 
   if (proxy) {
     // Resolve proxy timezone — awaited here (max 5 s) so it's ready before loadURL.
@@ -5397,6 +5467,136 @@ export function startEbIpcServer(
           checkedAt: new Date().toISOString(),
           checks,
           raw,
+        });
+      }
+
+      // ── GET /eb/header-check ─────────────────────────────────────────────────
+      // Audits the ACTUAL bytes Chrome puts on the wire for requests to Instagram/
+      // Facebook — not JS-visible window/navigator properties. The Browser
+      // Fingerprint Check above can pass 100% while the real HTTP headers are
+      // still wrong: Sec-CH-UA-* mismatched with the UA string, Accept-Language
+      // header not matching navigator.languages, missing Sec-Fetch-* headers,
+      // Sec-CH-UA-Mobile disagreeing with the claimed device — these are exactly
+      // the things Instagram's server-side fingerprinting checks, and login never
+      // goes through the CycleTLS/API path at all, so the "API Leak Check" tab
+      // audits an entirely different — and for this flow, unused — code path.
+      if (req.method === "GET" && u.pathname === "/eb/header-check") {
+        const pid   = Number(u.searchParams.get("profileId") ?? "-1");
+        const entry = ebMap.get(pid);
+        if (!entry || entry.win.isDestroyed()) {
+          return send(res, 200, {
+            open:      false,
+            error:     "EB window not open — open the browser for this account first, then re-run",
+            captures:  [],
+            checkedAt: new Date().toISOString(),
+          });
+        }
+        // Ensure capture is wired even if the window was opened before this
+        // endpoint existed (e.g. long-running session).
+        wireHeaderCapture(entry.win.webContents, pid);
+
+        const captures = _headerCaptures.get(pid) ?? [];
+        if (captures.length === 0) {
+          return send(res, 200, {
+            open:      true,
+            url:       entry.win.webContents.getURL(),
+            profileId: pid,
+            checkedAt: new Date().toISOString(),
+            captures:  [],
+            checks:    null,
+            note:      "No requests to instagram.com/facebook.com captured yet — navigate or re-run login, then re-check.",
+          });
+        }
+
+        const latest = captures[captures.length - 1];
+        const h = Object.fromEntries(
+          Object.entries(latest.headers).map(([k, v]) => [k.toLowerCase(), v]),
+        );
+        const ua = h["user-agent"] ?? "";
+        const isMobileUA = /Android|iPhone|iPad/.test(ua);
+
+        type HcStatus = "pass" | "fail" | "warn" | "info";
+        interface HcCheck { title: string; status: HcStatus; label: string; detail: Record<string, unknown> }
+        const checks: Record<string, HcCheck> = {};
+
+        // 1. Sec-CH-UA-Mobile vs UA string
+        const chMobile = h["sec-ch-ua-mobile"];
+        const chMobileWrong = isMobileUA ? chMobile !== "?1" : chMobile === "?1";
+        checks.chUaMobile = {
+          title:  "Sec-CH-UA-Mobile Consistency",
+          status: chMobile === undefined ? "warn" : chMobileWrong ? "fail" : "pass",
+          label:  chMobile === undefined
+            ? "Sec-CH-UA-Mobile header missing from the real request"
+            : chMobileWrong
+            ? `Sec-CH-UA-Mobile=${chMobile} contradicts User-Agent (isMobileUA=${isMobileUA}) — a real wire-level tell`
+            : `Sec-CH-UA-Mobile=${chMobile} — consistent with UA`,
+          detail: { "sec-ch-ua-mobile": String(chMobile), userAgentSnip: ua.slice(0, 80) },
+        };
+
+        // 2. Sec-CH-UA-Platform vs claimed device
+        const chPlatform = h["sec-ch-ua-platform"];
+        const expectedPlatform = isMobileUA ? "Android" : null;
+        const chPlatformWrong = expectedPlatform !== null && chPlatform !== `"${expectedPlatform}"` && chPlatform !== expectedPlatform;
+        checks.chUaPlatform = {
+          title:  "Sec-CH-UA-Platform Consistency",
+          status: chPlatform === undefined ? "warn" : chPlatformWrong ? "fail" : "pass",
+          label:  chPlatform === undefined
+            ? "Sec-CH-UA-Platform header missing from the real request"
+            : chPlatformWrong
+            ? `Sec-CH-UA-Platform=${chPlatform} does not match expected "${expectedPlatform}"`
+            : `Sec-CH-UA-Platform=${chPlatform} — consistent`,
+          detail: { "sec-ch-ua-platform": String(chPlatform) },
+        };
+
+        // 3. Accept-Language header consistency (server-side, not just navigator.languages)
+        const acceptLang = h["accept-language"] ?? "";
+        checks.acceptLanguage = {
+          title:  "Accept-Language Header",
+          status: acceptLang ? "pass" : "warn",
+          label:  acceptLang
+            ? `Accept-Language: ${acceptLang}`
+            : "Accept-Language header missing from the real outgoing request",
+          detail: { "accept-language": acceptLang },
+        };
+
+        // 4. Sec-Fetch-* headers — Chrome always sends these; absence = non-Chrome network stack
+        const secFetchKeys = ["sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user"];
+        const missingSecFetch = secFetchKeys.filter(k => h[k] === undefined);
+        checks.secFetch = {
+          title:  "Sec-Fetch-* Headers",
+          status: missingSecFetch.length > 0 ? "fail" : "pass",
+          label:  missingSecFetch.length > 0
+            ? `Missing: ${missingSecFetch.join(", ")} — real Chrome always sends all Sec-Fetch-* headers`
+            : "All Sec-Fetch-* headers present",
+          detail: Object.fromEntries(secFetchKeys.map(k => [k, String(h[k])])),
+        };
+
+        // 5. User-Agent header vs CDP override
+        checks.userAgentHeader = {
+          title:  "User-Agent Header",
+          status: ua ? "pass" : "fail",
+          label:  ua ? ua : "User-Agent header missing entirely — cannot have come from a real browser",
+          detail: { "user-agent": ua },
+        };
+
+        // 6. Raw header dump for manual audit — header ORDER also matters to
+        // Instagram's fingerprinting and can only be judged by eye here.
+        checks.rawHeaders = {
+          title:  "All Real Request Headers (raw)",
+          status: "info",
+          label:  `${Object.keys(latest.headers).length} headers captured for ${latest.method} ${latest.url}`,
+          detail: latest.headers,
+        };
+
+        console.log(`[EB:header-check:${pid}] url=${latest.url} headers=${Object.keys(latest.headers).length} captures=${captures.length}`);
+
+        return send(res, 200, {
+          open:      true,
+          url:       entry.win.webContents.getURL(),
+          profileId: pid,
+          checkedAt: new Date().toISOString(),
+          checks,
+          captures,
         });
       }
 

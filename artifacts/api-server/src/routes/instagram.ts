@@ -3665,6 +3665,46 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Header Check ────────────────────────────────────────────────────────────
+  // Proxies GET /eb/header-check from the Electron IPC server.
+  // Unlike the Browser Fingerprint Check (JS-visible window/navigator properties
+  // only), this audits the ACTUAL bytes Chrome puts on the wire for requests to
+  // instagram.com/facebook.com — captured via CDP Network.requestWillBeSentExtraInfo,
+  // which reflects headers as really sent (including ones added by the network
+  // layer after JS/webRequest hooks run). Login for this product happens entirely
+  // through the real EB browser window (doAutoLogin in ebManager.ts) — never
+  // through the CycleTLS/API path — so this is the only check that inspects what
+  // Instagram's server-side fingerprinting actually sees during login.
+  app.get("/api/profiles/:id/header-check", async (req, res) => {
+    const profileId = Number(req.params.id);
+    if (!profileId) return res.status(400).json({ error: "Invalid profileId" });
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) {
+      return res.json({
+        open:  false,
+        error: "Not running in Electron mode — header check requires the desktop app",
+        checks: null,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+    try {
+      const r = await fetch(
+        `http://127.0.0.1:${ipcPort}/eb/header-check?profileId=${profileId}`,
+        { signal: AbortSignal.timeout(12000) },
+      );
+      const data = await r.json();
+      res.json(data);
+    } catch (err: any) {
+      req.log.error({ err }, "[header-check] IPC error");
+      res.status(500).json({
+        open:  false,
+        error: err?.message ?? "IPC error",
+        checks: null,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+  });
+
   // ── API Leak Check ─────────────────────────────────────────────────────────
   // Server-side checks for mobile API traffic integrity:
   //   1. Proxy IP   — hit an IP-echo service through the proxy; confirm exit IP
