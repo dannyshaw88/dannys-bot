@@ -145,7 +145,9 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
         const blob = new Blob([data as ArrayBuffer], { type: "image/png" });
         const url  = URL.createObjectURL(blob);
         const img  = new Image();
+        const revoke = () => URL.revokeObjectURL(url);
         img.onload = () => {
+          if (!active) { revoke(); return; }
           if (!phoneSizeRef.current) {
             const sz = { w: img.naturalWidth, h: img.naturalHeight };
             phoneSizeRef.current = sz;
@@ -154,8 +156,9 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
             canvas.height = sz.h;
           }
           ctx.drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
+          revoke();
         };
+        img.onerror = revoke;
         img.src = url;
       };
     };
