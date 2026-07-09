@@ -87,19 +87,24 @@ renderTabs();
 // Also auto-dismisses Instagram's cookie consent banner.
 // autoFill is only supplied when called from inside openEbWindow (main EB window).
 // Tab BrowserViews and other callers pass nothing so they only get cookie dismiss + focus tracking.
-function buildPageUtilsJs(autoFill?: { username: string; password: string }): string {
+// jsToken is a per-session random string (6 alphanumeric chars) baked into every
+// __eq_* global name so Instagram's JS cannot fingerprint us by a fixed symbol name.
+// Pass the same token for all executeJavaScript calls that read __eq_* globals
+// (e.g. typeIntoFocused reads __eq${jsToken}_li for the last focused input).
+function buildPageUtilsJs(autoFill?: { username: string; password: string }, jsToken = ""): string {
   const afJson = autoFill ? JSON.stringify(autoFill) : "null";
+  const t = jsToken;
   return `(function(){
-  if(window.__eq_utils_loaded)return;window.__eq_utils_loaded=true;
+  if(window.__eq${t}_u)return;window.__eq${t}_u=true;
 
   // ── Push body below the native 92-px Equinox toolbar ─────────────────────
-  if(!document.getElementById('__eq_tb')){var _eq_s=document.createElement('style');_eq_s.id='__eq_tb';_eq_s.textContent='body{padding-top:92px!important;box-sizing:border-box!important}';(document.head||document.documentElement).appendChild(_eq_s);}
+  if(!document.getElementById('__eq${t}_tb')){var _eq_s=document.createElement('style');_eq_s.id='__eq${t}_tb';_eq_s.textContent='body{padding-top:92px!important;box-sizing:border-box!important}';(document.head||document.documentElement).appendChild(_eq_s);}
 
   // ── Focus tracking (for toolbar paste buttons) ───────────────────────────
-  window.__eq_lastInput=null;
+  window.__eq${t}_li=null;
   document.addEventListener('focusin',function(e){
-    var t=e.target;
-    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')){window.__eq_lastInput=t;}
+    var _el=e.target;
+    if(_el&&(_el.tagName==='INPUT'||_el.tagName==='TEXTAREA')){window.__eq${t}_li=_el;}
   },true);
 
   // ── Credential-aware auto-fill ───────────────────────────────────────────
@@ -107,16 +112,16 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   // login forms. Uses MutationObserver for instant reaction + polling fallback.
   var AF=${afJson};
 
-  if(AF&&!window.__eq_fill_done){
+  if(AF&&!window.__eq${t}_fd){
     var _doFill=function(){
-      if(window.__eq_fill_done)return;
+      if(window.__eq${t}_fd)return;
       var uInp=document.querySelector('input[name="username"]');
       var pInp=document.querySelector('input[name="password"]');
       if(!uInp||!pInp)return;
       if(!uInp.getBoundingClientRect().width)return; // hidden / not yet visible
-      window.__eq_fill_done=true;
-      if(window.__eq_mo){window.__eq_mo.disconnect();window.__eq_mo=null;}
-      if(window.__eq_fill_poll){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}
+      window.__eq${t}_fd=true;
+      if(window.__eq${t}_mo){window.__eq${t}_mo.disconnect();window.__eq${t}_mo=null;}
+      if(window.__eq${t}_fp){clearInterval(window.__eq${t}_fp);window.__eq${t}_fp=null;}
       var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
       setter.call(uInp,AF.username);
       uInp.dispatchEvent(new Event('input',{bubbles:true}));
@@ -127,7 +132,7 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
         var _bp=0;var _bi=setInterval(function(){
           if(++_bp>20){clearInterval(_bi);return;}
           var btn=document.querySelector('button[type="submit"]')
-            ||Array.from(document.querySelectorAll('button')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return/log[\s-]*in|sign[\s-]*in/i.test(t)&&b.getBoundingClientRect().width>50;});
+            ||Array.from(document.querySelectorAll('button')).find(function(b){var _bt=(b.innerText||b.textContent||'').trim();return/log[\s-]*in|sign[\s-]*in/i.test(_bt)&&b.getBoundingClientRect().width>50;});
           if(btn&&!btn.disabled){clearInterval(_bi);btn.click();}
         },250);
       },300);
@@ -135,18 +140,18 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
     // 1. Try immediately (form may already be in the DOM)
     _doFill();
     // 2. MutationObserver — fires instantly whenever DOM changes
-    if(!window.__eq_fill_done&&!window.__eq_mo){
-      window.__eq_mo=new MutationObserver(function(){_doFill();});
-      window.__eq_mo.observe(document.documentElement,{childList:true,subtree:true});
-      setTimeout(function(){if(window.__eq_mo){window.__eq_mo.disconnect();window.__eq_mo=null;}},120000);
+    if(!window.__eq${t}_fd&&!window.__eq${t}_mo){
+      window.__eq${t}_mo=new MutationObserver(function(){_doFill();});
+      window.__eq${t}_mo.observe(document.documentElement,{childList:true,subtree:true});
+      setTimeout(function(){if(window.__eq${t}_mo){window.__eq${t}_mo.disconnect();window.__eq${t}_mo=null;}},120000);
     }
     // 3. Polling fallback every 800 ms (belt-and-suspenders)
-    if(!window.__eq_fill_done&&!window.__eq_fill_poll){
-      window.__eq_fill_poll=setInterval(function(){
-        if(window.__eq_fill_done){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;return;}
+    if(!window.__eq${t}_fd&&!window.__eq${t}_fp){
+      window.__eq${t}_fp=setInterval(function(){
+        if(window.__eq${t}_fd){clearInterval(window.__eq${t}_fp);window.__eq${t}_fp=null;return;}
         _doFill();
       },800);
-      setTimeout(function(){if(window.__eq_fill_poll){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}},120000);
+      setTimeout(function(){if(window.__eq${t}_fp){clearInterval(window.__eq${t}_fp);window.__eq${t}_fp=null;}},120000);
     }
   }
 
@@ -155,12 +160,12 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   // sendInputEvent (isTrusted=true, required for Instagram's React handlers).
   // This in-page interval only watches for the banner to disappear, then
   // navigates to the login page if needed (one time).
-  if(!window.__eq_cookie_tick){var __eq_ck_seen=false;window.__eq_cookie_tick=setInterval(function(){
+  if(!window.__eq${t}_ct){var _cks${t}=false;window.__eq${t}_ct=setInterval(function(){
     var __ACCEPT=['allow all cookies','accept all cookies','allow all','accept all','allow essential and optional cookies','accept cookies','allow cookies','alle cookies akzeptieren','accepter tout','aceptar todo','accetta tutto','tillåt alla','alle accepteren'];
     function _isCookieAcceptBtn(b){
       if(!b||!b.getBoundingClientRect||b.getBoundingClientRect().width<=0)return false;
-      var t=(b.innerText||b.textContent||'').trim().toLowerCase();
-      return __ACCEPT.indexOf(t)!==-1;
+      var _bt=(b.innerText||b.textContent||'').trim().toLowerCase();
+      return __ACCEPT.indexOf(_bt)!==-1;
     }
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
     if(!btn){
@@ -169,20 +174,20 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
     }
     if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"],a')).find(_isCookieAcceptBtn)||null;}
     if(btn){
-      __eq_ck_seen=true;
+      _cks${t}=true;
       // Do NOT click from here — untrusted JS events are ignored by Instagram's
       // React app. The main-process sendInputEvent timer handles the click.
-    }else if(__eq_ck_seen){
+    }else if(_cks${t}){
       // Banner was visible and is now gone (main process clicked it) — navigate to login.
-      clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;
+      clearInterval(window.__eq${t}_ct);window.__eq${t}_ct=null;
       setTimeout(function(){
-        if(AF&&window.__eq_fill_done)return;
+        if(AF&&window.__eq${t}_fd)return;
         var LOGIN_RE=/^log\s*in$/i;
         var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
-        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button,[role="button"]')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
+        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button,[role="button"]')).find(function(el){var _et=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(_et)&&el.getBoundingClientRect().width>0;});}
         if(loginEl){
           var r2=loginEl.getBoundingClientRect();
-          window.__eq_postCkLoginPos={x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2)};
+          window.__eq${t}_pl={x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2)};
           loginEl.click();
         }
       },800);
@@ -246,6 +251,8 @@ interface EbEntry {
   proxy?: { host: string; port: number; user?: string; pass?: string; type?: string };
   partition: string;
   warmupActive?: boolean;
+  /** Per-session random token baked into every __eq_* global name injected into the Instagram page. */
+  jsToken?: string;
 }
 export const ebMap = new Map<number, EbEntry>();
 
@@ -721,7 +728,7 @@ function getMobileDeviceProfile(
 // Running this at document_start (before any page script) ensures they are invisible.
 const ELECTRON_LEAK_SUPPRESSOR_JS = `(function () {
   // Names probed by Instagram's login JS to detect Electron/automation.
-  var _ELEC = ['require','process','module','exports','_electron','__electron'];
+  var _ELEC = ['require','process','module','exports','_electron','__electron','__eq'];
   for (var _i = 0; _i < _ELEC.length; _i++) {
     var _k = _ELEC[_i];
     // Fast-path: already absent — nothing to do.
@@ -2634,6 +2641,9 @@ export async function openEbWindow(opts: {
 }): Promise<void> {
   const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp, silentMode, disableApi } = opts;
   const isGhostBrowser = profileId === -1;
+  // Per-session random token baked into every __eq_* global injected into the Instagram page.
+  // Using a random suffix prevents Instagram's JS from fingerprinting us by a fixed symbol name.
+  const jsToken = Math.random().toString(36).slice(2, 8);
   _ebCrashLog(profileId, `STEP-1: openEbWindow entry — username=@${username} proxy=${proxy ? proxy.host + ":" + proxy.port : "none"}`);
 
   // Focus existing window if already open (or hidden via close→hide handler)
@@ -3220,7 +3230,11 @@ export async function openEbWindow(opts: {
       // Without this flag, waitFor() always times out, DOM elements never appear,
       // and every browser action (follow, stories, reels) silently returns 0.
       partition,
-      preload: path.join(__dirname, "ebToolbarPreload.js"),
+      // NOTE: ebToolbarPreload.js is intentionally NOT loaded on the main window.
+      // That preload runs contextBridge.exposeInMainWorld("__eq", ...) which would
+      // place window.__eq on the Instagram page's main world — a detectable branded
+      // global.  The toolbar BrowserView (created below) carries the preload instead;
+      // it has its own isolated renderer context so __eq stays out of the page.
     },
   });
   win.once("ready-to-show", () => {
@@ -3263,7 +3277,7 @@ export async function openEbWindow(opts: {
   // visibly on screen — causing the frontend status poll to incorrectly
   // conclude the browser isn't open.  Registering here ensures the VERY NEXT
   // poll (within 5 s) sees { open:true } and the UI reflects reality.
-  ebMap.set(profileId, { win, username, proxy, partition });
+  ebMap.set(profileId, { win, username, proxy, partition, jsToken });
   _ebCrashLog(profileId, "STEP-13: ebMap early-registration done");
 
   // Belt-and-suspenders proxy re-apply after first page load.
@@ -3617,8 +3631,8 @@ export async function openEbWindow(opts: {
     win.webContents.setUserAgent(_browserUA);
   }
 
-  // Store in map
-  ebMap.set(profileId, { win, username, proxy, partition });
+  // Store in map (include jsToken so executeJavaScript callers can look up the right __eq_* names)
+  ebMap.set(profileId, { win, username, proxy, partition, jsToken });
 
   // Belt-and-suspenders WebRTC block: if CDP injection didn't complete before
   // the first navigation (e.g. debugger attach failed silently in packaged app),
@@ -3702,9 +3716,10 @@ export async function openEbWindow(opts: {
         win.webContents.executeJavaScript(`
           (function() {
             if (document.body && document.body.children.length > 0) return; // page has content
-            if (document.getElementById('__eq-scraping-warn')) return;
+            var _swId = '__eq${jsToken}_sw';
+            if (document.getElementById(_swId)) return;
             var d = document.createElement('div');
-            d.id = '__eq-scraping-warn';
+            d.id = _swId;
             d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:32px;text-align:center;box-sizing:border-box;';
             d.innerHTML = '<div style="font-size:40px;margin-bottom:12px">⚠️</div>'
               + '<div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px">Automated Behaviour Detected</div>'
@@ -3849,7 +3864,7 @@ export async function openEbWindow(opts: {
     // Do NOT pass autoFill here — JS-injected form events have isTrusted = false,
     // which Instagram detects as bot input. The did-navigate handler below fills
     // the form via CDP Input events (isTrusted = true) instead.
-    win.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {});
+    win.webContents.executeJavaScript(buildPageUtilsJs(undefined, jsToken)).catch(() => {});
   };
   win.webContents.on("dom-ready",       () => injectPageUtils());
   win.webContents.on("did-finish-load", () => injectPageUtils());
@@ -4756,8 +4771,9 @@ function setupToolbarIpc(): void {
       try { wc.debugger.attach("1.3"); } catch {}
       // Re-focus the last input the user was in (clicking the toolbar button
       // shifted browser focus to the toolbar BrowserView).
+      const _fpt = ebMap.get(foundPid)?.jsToken ?? "";
       const focusPos = await wc.executeJavaScript(`(function(){
-        var el=window.__eq_lastInput||null;
+        var el=window['__eq${_fpt}_li']||null;
         if(!el||el.tagName==='BUTTON'||el===document.body)return null;
         var r=el.getBoundingClientRect();
         if(r.width<=0||r.height<=0)return null;
@@ -5002,7 +5018,7 @@ function setupToolbarIpc(): void {
                   });
                   if(visible.length===1){el=visible[0];}
                   else{el=visible.find(function(i){return i.type==='tel'||i.inputMode==='numeric'||/code|verif|otp|totp/i.test(i.name+' '+i.id+' '+i.placeholder);});}
-                  if(!el&&window.__eq_lastInput&&window.__eq_lastInput.tagName==='INPUT')el=window.__eq_lastInput;
+                  var _li=window['__eq${ebMap.get(foundPid)?.jsToken ?? ""}_li'];if(!el&&_li&&_li.tagName==='INPUT')el=_li;
                 }
                 if(!el||el.tagName!=='INPUT')return null;
                 var r=el.getBoundingClientRect();
@@ -5105,8 +5121,8 @@ function setupToolbarIpc(): void {
           tpl.push({ type: "separator" }, { role: "selectAll" });
           Menu.buildFromTemplate(tpl).popup({ window: tabWin });
         });
-        tabView.webContents.on("dom-ready",       () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
-        tabView.webContents.on("did-finish-load", () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
+        tabView.webContents.on("dom-ready",       () => tabView.webContents.executeJavaScript(buildPageUtilsJs(undefined, ebMap.get(foundPid)?.jsToken ?? "")).catch(() => {}));
+        tabView.webContents.on("did-finish-load", () => tabView.webContents.executeJavaScript(buildPageUtilsJs(undefined, ebMap.get(foundPid)?.jsToken ?? "")).catch(() => {}));
         // Supply proxy credentials for authenticated proxies in tab BrowserViews.
         // The main EB window has a login handler on win.webContents, but tab views
         // are separate webContents and need their own handler for the 407 response.
@@ -7176,6 +7192,9 @@ export function startEbIpcServer(
           // normal state. The Share button is identified as the topmost "Share"
           // candidate by minimum getBoundingClientRect().top (header = smallest Y).
           _ipcLog(`[eb:silent-post:${pid}] clicking Share`);
+          // Random per-post key so the overlay-save property on the page window
+          // is not a fixed detectable name (same principle as __eq jsToken).
+          const spOvlKey = '__sp' + Math.random().toString(36).slice(2, 8);
           const spShareClickOk = await (async () => {
             const deadline = Date.now() + 15_000;
             while (Date.now() < deadline) {
@@ -7208,7 +7227,7 @@ export function startEbIpcServer(
                       saved.push({ el: el, prev: el.style.pointerEvents });
                       el.style.pointerEvents = 'none';
                     }
-                    window.__shareOverlaysSaved = saved;
+                    window['${spOvlKey}'] = saved;
                     return { found: true, x: cx, y: cy };
                   })()
                 `, true).catch(() => ({ found: false, x: 0, y: 0 }));
@@ -7221,11 +7240,11 @@ export function startEbIpcServer(
               const spRestore = () => spWin.isDestroyed() ? Promise.resolve() :
                 spWin.webContents.executeJavaScript(`
                   (function() {
-                    var saved = window.__shareOverlaysSaved || [];
+                    var saved = window['${spOvlKey}'] || [];
                     for (var i = 0; i < saved.length; i++) {
                       saved[i].el.style.pointerEvents = saved[i].prev;
                     }
-                    delete window.__shareOverlaysSaved;
+                    delete window['${spOvlKey}'];
                   })()
                 `, true).catch(() => {});
               try {

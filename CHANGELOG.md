@@ -4,6 +4,60 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.416] — 2026-07-09
+
+### Security — Equinox Global Leak Fix (EB Environment Hardening)
+
+#### `window.__eq` removed from Instagram's page context
+
+The main EB `BrowserWindow` was loading `ebToolbarPreload.js` as its preload, which calls `contextBridge.exposeInMainWorld("__eq", ...)`. This placed a permanent, named `window.__eq` object on the Instagram page's main world — a branded global that any JavaScript running on the page (including Instagram's own detection scripts) could probe to definitively identify the browser as Equinox.
+
+**What changed:**
+- `ebToolbarPreload.js` is now loaded **only** on the toolbar `BrowserView`, which has its own isolated renderer context. The main `BrowserWindow` no longer carries the preload, so Instagram's page world never receives `window.__eq`.
+- `'__eq'` added to the `_ELEC` array in `ELECTRON_LEAK_SUPPRESSOR_JS` as a belt-and-suspenders measure: even if `window.__eq` were somehow re-introduced by a future preload misconfiguration, it would be deleted/shadowed before any page script could read it.
+
+**Files:** `artifacts/electron/src/ebManager.ts`
+
+---
+
+#### All `__eq_*` globals and DOM IDs randomized per EB session
+
+`buildPageUtilsJs()` injected a fixed set of global variables and DOM element IDs into every Instagram page it ran on:
+
+| Before (fixed, detectable) | Role |
+|---|---|
+| `window.__eq_utils_loaded` | Sentinel — prevents double-injection |
+| `window.__eq_lastInput` | Last focused `<input>` / `<textarea>` |
+| `window.__eq_fill_done` | Auto-fill completion flag |
+| `window.__eq_mo` | MutationObserver reference |
+| `window.__eq_fill_poll` | Polling interval reference |
+| `window.__eq_cookie_tick` | Cookie-banner polling interval |
+| `window.__eq_postCkLoginPos` | Login-link click coordinates |
+| DOM ID `__eq_tb` | Toolbar padding `<style>` tag |
+| DOM ID `__eq-scraping-warn` | Scraping-warning overlay |
+
+Instagram's detection JS (loaded on every page) could probe for any of these fixed names with a simple `typeof window.__eq_lastInput !== 'undefined'` check and instantly fingerprint the session as Equinox-automated.
+
+**What changed:**
+- `buildPageUtilsJs()` now accepts a `jsToken` parameter (6-char random alphanumeric string, e.g. `"k4m8rx"`) generated once per EB window open.
+- Every `__eq_*` global name and DOM ID bakes the token in: `__eq_utils_loaded` → `__eq${token}_u`, `__eq_lastInput` → `__eq${token}_li`, `__eq_tb` (DOM ID) → `__eq${token}_tb`, etc.
+- The token is stored in `EbEntry.jsToken` so that all other `executeJavaScript` calls outside `buildPageUtilsJs` — `typeIntoFocused`, OTP field detection, scraping-warning overlay, tab BrowserViews — look up the correct randomized name from `ebMap`.
+- A new session generates a new token, so even if Instagram records global names from one session, they are useless for the next.
+
+**Files:** `artifacts/electron/src/ebManager.ts` — `EbEntry` interface, `buildPageUtilsJs()`, `openEbWindow()`, `typeIntoFocused`, OTP detection, `injectPageUtils`, tab view injection
+
+---
+
+#### `window.__shareOverlaysSaved` renamed to a random key per post
+
+The silent-post Share-button click handler temporarily saved pointer-event state to `window.__shareOverlaysSaved` — another fixed, detectable global name on the post window's page.
+
+**What changed:** A random `spOvlKey` is generated per Share-click attempt (`'__sp' + Math.random().toString(36).slice(2, 8)`). The overlay state is stored and retrieved under this random key for the duration of the CDP click, then deleted.
+
+**Files:** `artifacts/electron/src/ebManager.ts` — silent-post Share click block
+
+---
+
 ## [1.1.415] — 2026-07-09
 
 ### Added
