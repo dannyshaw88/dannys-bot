@@ -4,6 +4,58 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.432] — 2026-07-09
+
+### Mobile Farm — mirror is now a real scrcpy session, not `screenrecord`
+
+**The ask:** v1.1.431 replaced screenshot-polling with `adb exec-out
+screenrecord --output-format=h264`, which was a real improvement in framerate
+but had a fatal flaw on the hardware actually being used to test this: MIUI
+(and other OEM skins) freeze `screenrecord`'s *virtual* display the moment the
+keyguard re-engages or the real screen sleeps. The previous release masked
+this with a stall-detector that force-restarted `screenrecord` every time it
+went silent — which meant the mirror never actually looked "live," it looked
+like it kept reverting to screenshots, because it was constantly restarting a
+short-lived recording rather than streaming continuously.
+
+**What changed:** the mirror now runs the real `scrcpy` server
+(https://github.com/Genymobile/scrcpy) — the same server nearly every phone
+farm/emulator dashboard is built on — instead of `screenrecord`. Its capture
+path uses Android's native `SurfaceControl`/display APIs against the *real*
+display (the same path system screen recording itself uses), so it doesn't
+have the virtual-display freeze mode that made the previous approach flaky.
+
+Concretely:
+- The official prebuilt `scrcpy-server-v3.1` jar is now vendored in the repo
+  (`artifacts/api-server/vendor/`) and copied into the build output — no
+  scrcpy installation or root is required on either the host or the phone.
+- A new module implements scrcpy's wire protocol directly (no shelling out to
+  the scrcpy client binary): pushes the jar to `/data/local/tmp/`, launches it
+  via `app_process`, opens the tunneled video + control sockets, and parses
+  the one-time device-name/codec/resolution header before treating the rest
+  as a continuous raw H.264 Annex-B stream.
+- The existing WebCodecs-based frontend decoder is unchanged — scrcpy's
+  stream is Annex-B just like `screenrecord`'s was, so the same demuxer
+  (`src/lib/h264Stream.ts`) and `<canvas>` pipeline just keep working.
+- **Taps and key presses now go through scrcpy's own control socket** instead
+  of `adb shell input tap`/`input keyevent`. Scrcpy's touch-injection protocol
+  takes the coordinates *plus* the frame size they were computed against and
+  scales to real touchscreen pixels on-device, which replaces the old manual
+  `wm size`-based rescale hack entirely — that hack was a likely source of
+  "taps land slightly off" reports on devices where the mirrored resolution
+  didn't exactly match `wm size`.
+- If no scrcpy session is active for a device yet, tap/key routes still fall
+  back to plain `adb shell` calls, so the on-screen buttons keep working even
+  before/without a live mirror connection.
+
+**Not yet verified against physical hardware from this environment** — the
+protocol implementation is written against scrcpy's documented, versioned
+wire format (confirmed against the exact vendored v3.1 server binary's option
+table), but this change needs a real USB-connected phone to confirm frame
+delivery and touch accuracy end-to-end.
+
+---
+
 ## [1.1.431] — 2026-07-09
 
 ### Mobile Farm — real-time H.264 video mirroring (replaces screenshot polling)

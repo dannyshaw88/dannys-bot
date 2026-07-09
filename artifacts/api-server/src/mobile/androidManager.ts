@@ -302,7 +302,7 @@ export async function autoDiscoverEmulators(): Promise<Array<{ address: string; 
   return results;
 }
 
-function requireTool(t: ToolStatus, name: string): string {
+export function requireTool(t: ToolStatus, name: string): string {
   if (!t.found || !t.path) throw new Error(`${name} is not installed or not found on this system`);
   return t.path;
 }

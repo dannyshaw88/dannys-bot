@@ -11,4 +11,5 @@
 - [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills
 - [DM inbox host fix](dm-warmup-sequence.md) — direct_v2/inbox must use webGet (www.instagram.com + EB cookies), NOT mobileSessionGet (i.instagram.com) — same root cause as follow/repost host mismatch; warm-up sequence does NOT fix 4415001
 - [API Leak Check socks5 geo](api-leak-check-socks5.md) — resolveProxyGeo uses raw TCP HTTP CONNECT (HTTP proxies only); for socks5 fall back to fetching ip-api.com through SocksProxyAgent directly
-- [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses screenrecord+WebCodecs H.264 stream, PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
+- [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses WebCodecs H.264 decode (client side); PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
+- [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — mirror now uses real scrcpy-server (not adb screenrecord); ALWAYS verify control-message byte layout against the server's own decompiled ControlMessageReader, not memory

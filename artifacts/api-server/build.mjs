@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, mkdir, copyFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -123,7 +123,23 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   });
 }
 
-buildAll().catch((err) => {
+async function copyVendorAssets() {
+  // The real scrcpy-server binary is pushed onto Android devices at runtime
+  // (see src/mobile/scrcpyServer.ts). It's a plain file, not JS, so esbuild
+  // won't touch it — copy it next to the bundle so the runtime path
+  // (__dirname/vendor/...) resolves the same in dev and in the built dist/.
+  const srcDir = path.resolve(artifactDir, "vendor");
+  const destDir = path.resolve(artifactDir, "dist/vendor");
+  await mkdir(destDir, { recursive: true });
+  await copyFile(
+    path.join(srcDir, "scrcpy-server-v3.1"),
+    path.join(destDir, "scrcpy-server-v3.1"),
+  );
+}
+
+buildAll()
+  .then(copyVendorAssets)
+  .catch((err) => {
   console.error(err);
   process.exit(1);
 });
