@@ -88,6 +88,19 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
   );
 }
 
+function FilledSmartphoneIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      {/* Phone body */}
+      <rect x="5" y="1" width="14" height="22" rx="2.5" fill="currentColor"/>
+      {/* Screen cutout */}
+      <rect x="7" y="3.5" width="10" height="15" rx="1" fill="var(--card,#1e293b)"/>
+      {/* Home indicator */}
+      <rect x="10" y="20" width="4" height="1.2" rx="0.6" fill="var(--card,#1e293b)"/>
+    </svg>
+  );
+}
+
 export function Sidebar() {
   const [location, setLocation] = useLocation();
   const slot = useSidebarSlot();
@@ -108,9 +121,9 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon    },
-    { name: "EB IP Audit",     shortLabel: "EB IP AUDIT",    path: "/eb-audit",       icon: FilledShieldAlertIcon    },
-    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",          icon: FilledHammerIcon         },
+    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",  icon: FilledShieldAlertIcon  },
+    { name: "Mobile",          shortLabel: "MOBILE",         path: "/mobile",   icon: FilledSmartphoneIcon   },
+    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",    icon: FilledHammerIcon       },
   ];
 
   return (
