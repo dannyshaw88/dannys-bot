@@ -42,15 +42,22 @@ async function fetchPhones(): Promise<PhonesResponse> {
   return r.json() as Promise<PhonesResponse>;
 }
 
+// Injected by Vite at build time — declared here so TypeScript doesn't complain
+declare const __API_PORT__: string;
+
 // ─── Screen mirror overlay ────────────────────────────────────────────────────
 
 function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
   const fpsCountRef  = useRef(0);
-  const [fps, setFps]             = useState(0);
+  const frameSeenRef = useRef(false);
+
+  const [fps,       setFps]       = useState(0);
   const [connected, setConnected] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [hasFrame,  setHasFrame]  = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
   const [phoneSize, setPhoneSize] = useState<{ w: number; h: number } | null>(null);
 
   // FPS counter
@@ -62,53 +69,111 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
     return () => clearInterval(t);
   }, []);
 
-  // WebSocket screen stream
+  // WebSocket screen stream — reconnects automatically on drop
   useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${proto}//${window.location.host}/api/mobile/screen/${encodeURIComponent(phone.serial)}`
-    );
-    ws.binaryType = "arraybuffer";
+    let active = true;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let noFrameTimer:   ReturnType<typeof setTimeout> | null = null;
 
-    ws.onopen  = () => setConnected(true);
-    ws.onerror = () => setError("Connection failed — check ADB is running");
-    ws.onclose = () => setConnected(false);
+    const connect = () => {
+      if (!active) return;
 
-    ws.onmessage = (ev) => {
-      const data = ev.data;
-      if (typeof data === "string") {
-        try { const j = JSON.parse(data); if (j.error) setError(j.error); } catch { /* ok */ }
-        return;
-      }
-      fpsCountRef.current++;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const blob = new Blob([data as ArrayBuffer], { type: "image/png" });
-      const url  = URL.createObjectURL(blob);
-      const img  = new Image();
-      img.onload = () => {
-        if (!phoneSizeRef.current) {
-          const sz = { w: img.naturalWidth, h: img.naturalHeight };
-          phoneSizeRef.current = sz;
-          setPhoneSize(sz);
-          canvas.width  = sz.w;
-          canvas.height = sz.h;
-        }
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
+      // Reset per-connection state
+      frameSeenRef.current = false;
+      setHasFrame(false);
+      setError(null);
+
+      // In Electron the app is served from the API server itself, so
+      // window.location.host is already the right host. Fallback to
+      // the injected build-time API port in case host is empty (file://).
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host  = window.location.host || `127.0.0.1:${typeof __API_PORT__ !== "undefined" ? __API_PORT__ : "8082"}`;
+      const ws = new WebSocket(
+        `${proto}//${host}/api/mobile/screen/${encodeURIComponent(phone.serial)}`
+      );
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!active) { ws.close(); return; }
+        setConnected(true);
+        // If no first frame arrives within 10 s the phone's screencap is likely
+        // hung (common on locked screens). Surface a clear message.
+        noFrameTimer = setTimeout(() => {
+          if (!frameSeenRef.current && active) {
+            setError(
+              "No screen data received. Make sure the phone is unlocked — " +
+              "screencap doesn't work on the lock screen on some devices."
+            );
+          }
+        }, 10_000);
       };
-      img.src = url;
+
+      ws.onerror = () => {
+        if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+        setError("Couldn't reach the phone stream. Check it's plugged in with USB Debugging enabled.");
+      };
+
+      ws.onclose = () => {
+        if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+        if (!active) return;
+        setConnected(false);
+        // Auto-reconnect after 2 s so a brief USB glitch recovers on its own
+        reconnectTimer = setTimeout(connect, 2_000);
+      };
+
+      ws.onmessage = (ev) => {
+        const data = ev.data;
+        if (typeof data === "string") {
+          try {
+            const j = JSON.parse(data);
+            if (j.error) setError(j.error);
+          } catch { /* ok */ }
+          return;
+        }
+        fpsCountRef.current++;
+        if (!frameSeenRef.current) {
+          frameSeenRef.current = true;
+          if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+          setHasFrame(true);
+          setError(null);
+        }
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const blob = new Blob([data as ArrayBuffer], { type: "image/png" });
+        const url  = URL.createObjectURL(blob);
+        const img  = new Image();
+        img.onload = () => {
+          if (!phoneSizeRef.current) {
+            const sz = { w: img.naturalWidth, h: img.naturalHeight };
+            phoneSizeRef.current = sz;
+            setPhoneSize(sz);
+            canvas.width  = sz.w;
+            canvas.height = sz.h;
+          }
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      };
     };
 
-    return () => ws.close();
+    connect();
+
+    return () => {
+      active = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (noFrameTimer)   clearTimeout(noFrameTimer);
+      wsRef.current?.close();
+    };
   }, [phone.serial]);
 
-  // Tap handler — maps canvas display coords to phone coords
+  // Tap handler — maps canvas display coords → native phone coords
   const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!phoneSizeRef.current) return;
-    const rect  = canvasRef.current!.getBoundingClientRect();
+    const rect   = canvasRef.current!.getBoundingClientRect();
     const scaleX = phoneSizeRef.current.w / rect.width;
     const scaleY = phoneSizeRef.current.h / rect.height;
     const x = Math.round((e.clientX - rect.left) * scaleX);
@@ -132,7 +197,7 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
     } catch { /* ignore */ }
   }, [phone.serial]);
 
-  // Close on Escape key
+  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -143,73 +208,122 @@ function ScreenMirrorOverlay({ phone, onClose }: { phone: UsbPhone; onClose: () 
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone.serial;
 
+  // Status line shown in the header
+  const statusText = error
+    ? "error"
+    : !connected
+      ? "connecting…"
+      : !hasFrame
+        ? "waiting for screen…"
+        : `${fps} fps`;
+  const statusColor = error
+    ? "text-yellow-400"
+    : connected && hasFrame
+      ? "text-green-400"
+      : "text-white/40";
+
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col select-none">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-3">
-          <Smartphone className="w-4 h-4 text-cyan-400" />
-          <span className="text-sm font-semibold text-white">{label}</span>
-          {phone.androidVersion && (
-            <span className="text-xs text-white/40">Android {phone.androidVersion}</span>
-          )}
+    /* Dimmed backdrop — click outside the phone to close */
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm select-none"
+      onClick={onClose}
+    >
+      {/*
+        Phone-shaped panel — ~340 px wide, portrait aspect ratio.
+        We stop click propagation so tapping inside doesn't close the overlay.
+      */}
+      <div
+        className="flex flex-col bg-zinc-950 rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden"
+        style={{ width: 340, maxHeight: "calc(100vh - 48px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── Top status bar ── */}
+        <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="text-xs font-semibold text-white truncate">{label}</span>
+            {phone.androidVersion && (
+              <span className="text-[10px] text-white/40 shrink-0">Android {phone.androidVersion}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0 ml-2">
+            <span className={`text-[10px] font-mono ${statusColor}`}>{statusText}</span>
+            {phoneSize && (
+              <span className="text-[10px] font-mono text-white/25 hidden sm:block">
+                {phoneSize.w}×{phoneSize.h}
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              title="Close (Esc)"
+            >
+              <X className="w-3 h-3 text-white/70" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          {phoneSize && (
-            <span className="text-[11px] text-white/30 font-mono hidden sm:block">
-              {phoneSize.w}×{phoneSize.h}
-            </span>
-          )}
-          <span className={`text-[11px] font-mono ${connected ? "text-green-400" : "text-white/40"}`}>
-            {connected ? `${fps} fps` : "connecting…"}
-          </span>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg bg-white/8 hover:bg-white/15 flex items-center justify-center transition-colors"
-            title="Close (Esc)"
-          >
-            <X className="w-4 h-4 text-white/70" />
-          </button>
-        </div>
-      </div>
 
-      {/* Phone screen */}
-      <div className="flex-1 flex items-center justify-center min-h-0 bg-zinc-900">
-        {error && !connected && (
-          <div className="text-center px-6">
-            <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
-            <p className="text-white text-sm font-semibold mb-1">{error}</p>
-            <p className="text-white/40 text-xs">Make sure the phone is connected and USB Debugging is on.</p>
-          </div>
-        )}
-        {!error && !connected && (
-          <div className="flex items-center gap-3 text-white/50">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Connecting to {label}…</span>
-          </div>
-        )}
-        <canvas
-          ref={canvasRef}
-          onClick={handleCanvasClick}
+        {/* ── Phone screen ── */}
+        <div
+          className="relative bg-black overflow-hidden"
           style={{
-            display: connected ? "block" : "none",
-            maxHeight: "100%",
-            maxWidth: "100%",
-            objectFit: "contain",
-            cursor: "pointer",
+            // Lock to the phone's native aspect ratio once known; default to 9:16
+            aspectRatio: phoneSize ? `${phoneSize.w} / ${phoneSize.h}` : "9 / 16",
+            width: "100%",
+            flexShrink: 0,
           }}
-        />
-      </div>
+        >
+          {/* Error state */}
+          {error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
+              <AlertTriangle className="w-7 h-7 text-yellow-400 shrink-0" />
+              <p className="text-white/80 text-xs leading-relaxed">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null);
+                  // Force a fresh connection attempt
+                  wsRef.current?.close();
+                }}
+                className="mt-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
-      {/* Android nav bar */}
-      <div className="flex items-center justify-center gap-8 py-3 bg-zinc-950 border-t border-white/10 shrink-0">
-        <NavBtn icon={<ChevronLeft className="w-5 h-5" />} label="Back"   onClick={() => sendKey(4)}   />
-        <NavBtn icon={<Home        className="w-5 h-5" />} label="Home"   onClick={() => sendKey(3)}   />
-        <NavBtn icon={<LayoutGrid  className="w-5 h-5" />} label="Recent" onClick={() => sendKey(187)} />
-        <div className="w-px h-6 bg-white/10" />
-        <NavBtn icon={<Power       className="w-4 h-4" />} label="Power"  onClick={() => sendKey(26)}  />
-        <NavBtn icon={<Volume2     className="w-4 h-4" />} label="Vol +"  onClick={() => sendKey(24)}  />
-        <NavBtn icon={<VolumeX     className="w-4 h-4" />} label="Vol −"  onClick={() => sendKey(25)}  />
+          {/* Connecting / waiting for first frame */}
+          {!error && (!connected || !hasFrame) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+              <span className="text-white/40 text-xs">
+                {!connected ? `Connecting to ${label}…` : "Waiting for screen…"}
+              </span>
+            </div>
+          )}
+
+          {/* Live canvas */}
+          <canvas
+            ref={canvasRef}
+            onClick={handleCanvasClick}
+            style={{
+              display: hasFrame ? "block" : "none",
+              width: "100%",
+              height: "auto",
+              cursor: "crosshair",
+            }}
+          />
+        </div>
+
+        {/* ── Android nav bar ── */}
+        <div className="flex items-center justify-center gap-5 py-3 bg-zinc-900 border-t border-white/8 shrink-0">
+          <NavBtn icon={<ChevronLeft className="w-4 h-4" />} label="Back"   onClick={() => sendKey(4)}   />
+          <NavBtn icon={<Home        className="w-4 h-4" />} label="Home"   onClick={() => sendKey(3)}   />
+          <NavBtn icon={<LayoutGrid  className="w-4 h-4" />} label="Recent" onClick={() => sendKey(187)} />
+          <div className="w-px h-5 bg-white/10" />
+          <NavBtn icon={<Power       className="w-3.5 h-3.5" />} label="Power"  onClick={() => sendKey(26)}  />
+          <NavBtn icon={<Volume2     className="w-3.5 h-3.5" />} label="Vol +"  onClick={() => sendKey(24)}  />
+          <NavBtn icon={<VolumeX     className="w-3.5 h-3.5" />} label="Vol −"  onClick={() => sendKey(25)}  />
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,66 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.423] — 2026-07-09
+
+### Mobile Farm — Phone-Sized Screen Mirror & Reliable Stream Recovery
+
+#### Problem 1: Screen mirror opened full-window instead of phone-sized
+The "View Screen" overlay covered the entire Equinox window with a full-screen black
+background (CSS `fixed inset-0`). The phone's screen canvas was centred in it but still
+filled the available area, which on a wide monitor stretched the portrait phone image
+across hundreds of pixels and looked nothing like a phone screen.
+
+**Fix:** The overlay now uses a **phone-shaped panel** — 340 px wide with a rounded
+frame (`border-radius: 2.5rem`) — centred over a semi-transparent dimmed backdrop.
+The panel is divided into three sections:
+- Compact status bar at the top (device name, Android version, fps/status, × close button)
+- Phone screen area whose `aspect-ratio` is locked to the phone's native resolution once
+  the first frame arrives (default `9/16` while waiting). The canvas fills it at `width: 100%`.
+- Android nav buttons in a compact row at the bottom of the panel, matching the phone width.
+
+Clicking anywhere outside the phone panel closes the overlay (same as Escape).
+
+#### Problem 2: "Connecting…" spinner stuck forever with no useful feedback
+The previous WebSocket implementation opened a single connection and never recovered if
+it failed silently. On Xiaomi devices (and some others), `adb exec-out screencap -p` can
+take several seconds to produce the first frame, or the lock screen can cause it to hang
+entirely with no error output — leaving the WebSocket open but silent.
+
+**Root causes:**
+- No timeout: if the WebSocket connected successfully but ADB never returned a frame,
+  `connected` became `true` and the canvas was shown (empty), but if the connection was
+  lost before `onopen` fired, `connected` stayed `false` and the spinner ran forever.
+- No reconnect: once the WebSocket closed (USB glitch, server restart, ADB hiccup),
+  the component stayed dead.
+
+**Fixes:**
+
+1. **Two-phase loading state** — `connected` (WebSocket handshake done) and `hasFrame`
+   (at least one PNG frame received) are tracked separately. The UI now shows distinct
+   messages for each state:
+   - "Connecting to Xiaomi…" — WebSocket not yet open
+   - "Waiting for screen…" — WebSocket open but no frame yet
+   - `N fps` — live stream running normally
+
+2. **10-second no-frame timeout** — started the moment `ws.onopen` fires. If no binary
+   frame arrives within 10 s the user sees: *"No screen data received. Make sure the
+   phone is unlocked — screencap doesn't work on the lock screen on some devices."*
+   This covers the silent-hang case on Xiaomi/MIUI.
+
+3. **Auto-reconnect loop** — `ws.onclose` schedules a fresh `connect()` call after 2 s,
+   so a brief USB disconnect or server hiccup recovers without any user action.
+
+4. **Inline Retry button** — shown in the error state alongside the error message.
+   Clicking it closes the stale WebSocket immediately (triggering the reconnect path)
+   rather than waiting for the 2-second timer.
+
+5. **Electron host fallback** — the WebSocket URL now falls back to
+   `127.0.0.1:${__API_PORT__}` if `window.location.host` is empty, which can happen
+   under certain Electron protocol configurations.
+
+---
+
 ## [1.1.422] — 2026-07-09
 
 ### Mobile Farm — Live In-App Phone Screen Mirror
