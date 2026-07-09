@@ -472,7 +472,7 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const TOTAL_SLOTS = 4;
+const TOTAL_SLOTS = 1;
 
 export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
@@ -544,14 +544,14 @@ export function MobilePage() {
             <NoPhonesPanel rawOutput={data.rawOutput} />
           )}
 
-          {/* 4-slot single row, centered */}
+          {/* Single slot — left side, vertically centred */}
           {data && data.adbFound && (
-            <div className="flex items-start justify-center gap-4">
-              {slots.map((phone, i) => (
-                <div key={phone?.serial ?? `empty-${i}`} className="flex-1 min-w-0 max-w-[260px]">
-                  <PhoneSlot phone={phone} idx={i} />
-                </div>
-              ))}
+            <div className="flex items-center justify-start" style={{ minHeight: "calc(100vh - 120px)" }}>
+              <div style={{ width: 280 }}>
+                {slots.map((phone, i) => (
+                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} />
+                ))}
+              </div>
             </div>
           )}
         </div>

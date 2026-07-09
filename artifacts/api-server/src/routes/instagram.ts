@@ -4560,8 +4560,9 @@ export async function registerInstagramRoutes(
 
     const match = url.pathname.match(/^\/api\/browser\/(\d+)\/stream$/);
     if (!match) {
-      // No other upgrade handlers — destroy unrecognised upgrade sockets
-      socket.destroy();
+      // Only destroy if no other upgrade handler has already claimed this socket
+      // (e.g. the mobile screen-stream handler marks it with __wsHandled).
+      if (!(socket as any).__wsHandled) socket.destroy();
       return;
     }
     const profileId = Number(match[1]);

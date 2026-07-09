@@ -111,6 +111,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     const serial = decodeURIComponent(m[1]);
     logger.info({ serial }, "[mobile-ws] upgrading connection for device");
+    // Mark the socket so the instagram upgrade handler (registered later) knows
+    // not to call socket.destroy() on it — it destroys every socket it doesn't
+    // recognise, which kills this connection after we've already claimed it.
+    (socket as any).__wsHandled = true;
     screenWss.handleUpgrade(request, socket as any, head, (ws) => {
       logger.info({ serial }, "[mobile-ws] WebSocket handshake complete");
       const tools = android.detectToolset();

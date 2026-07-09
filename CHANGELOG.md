@@ -4,6 +4,37 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.427] — 2026-07-09
+
+### Mobile Farm — fix instant WS disconnect (socket.destroy race) + 1-slot layout
+
+#### Root cause of "WS open → immediately closed code=1006"
+`registerInstagramRoutes` registers its own `httpServer.on("upgrade")` listener
+**after** the mobile one.  Node EventEmitter calls all listeners in registration
+order.  When a `/api/mobile/screen/…` upgrade arrives:
+
+1. Mobile handler runs first → calls `screenWss.handleUpgrade(...)`, takes
+   ownership of the socket, starts the screencap loop.
+2. Instagram handler runs second → URL doesn't match its patterns → hits the
+   catch-all `socket.destroy()` that was written with the comment
+   "No other upgrade handlers".  This destroys the socket the mobile WS server
+   already owns → client sees `code=1006` (no close frame, TCP reset).
+
+**Fix (two lines):**
+- `mobile.ts`: set `(socket as any).__wsHandled = true` before calling
+  `handleUpgrade` so the flag is on the socket before the instagram listener runs.
+- `instagram.ts`: guard the `socket.destroy()` with
+  `if (!(socket as any).__wsHandled)` — if the mobile handler already claimed
+  it, skip the destroy entirely.
+
+#### UI: single slot, left side, vertically centred
+- `TOTAL_SLOTS` reduced to 1
+- Slot container changed from `justify-center` row to `items-center justify-start`
+  with `minHeight: calc(100vh - 120px)` so the slot sits vertically centred on
+  the left side of the page at a fixed 280 px width
+
+---
+
 ## [1.1.426] — 2026-07-09
 
 ### Mobile Farm — fix WebSocket port (Electron serves frontend + API on same port)
