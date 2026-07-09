@@ -148,7 +148,37 @@ function SetupStep({ n, title, body }: { n: number; title: string; body: ReactNo
   );
 }
 
-function NoAdbPanel() {
+function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
+  const [folder, setFolder]   = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!folder.trim()) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const r = await fetch("/api/mobile/adb-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folder.trim() }),
+      });
+      const body = await r.json();
+      if (!r.ok || !body.ok) {
+        setError(body.error ?? "Something went wrong — double-check the folder path.");
+        return;
+      }
+      setSuccess("Found it! Checking for phones now…");
+      onSaved();
+    } catch {
+      setError("Couldn't reach Equinox's server. Try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto mt-16 space-y-6 text-center px-4">
       <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto">
@@ -158,62 +188,77 @@ function NoAdbPanel() {
         <h2 className="text-lg font-bold text-foreground">One more thing before phones can connect</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Equinox needs a small free tool from Google called <strong>ADB</strong> to
-          talk to Android phones over USB. It's not installed yet — here's exactly
-          how to set it up (takes about 2 minutes).
+          talk to Android phones over USB.
         </p>
       </div>
+
+      {/* Easiest path: paste the folder directly, no Windows settings required */}
+      <div className="text-left bg-card border border-primary/30 rounded-xl p-5 space-y-3">
+        <p className="text-sm font-semibold text-foreground">
+          Easiest way: paste the folder path — no PATH editing needed
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Already downloaded and extracted "platform-tools"? Open that folder,
+          click once in the address bar at the top to select the full path,
+          copy it (Ctrl+C), and paste it below.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="e.g. E:\Equinox\platform-tools"
+            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <button
+            onClick={submit}
+            disabled={saving || !folder.trim()}
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+          >
+            {saving ? "Checking…" : "Use this folder"}
+          </button>
+        </div>
+        {error && <p className="text-xs text-destructive text-left">{error}</p>}
+        {success && <p className="text-xs text-green-500 text-left">{success}</p>}
+      </div>
+
       <a
         href="https://developer.android.com/tools/releases/platform-tools"
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:border-primary/40 transition-colors"
       >
         <ExternalLink className="w-4 h-4" />
-        1. Download "SDK Platform-Tools for Windows"
+        Haven't downloaded it yet? Get "SDK Platform-Tools for Windows"
       </a>
-      <div className="text-left bg-card border border-border rounded-xl p-5 space-y-4">
-        <p className="text-sm font-semibold text-foreground">
-          2. If you already downloaded it, do this next:
-        </p>
-        <ol className="space-y-3 text-sm text-muted-foreground list-decimal list-inside">
+
+      <details className="text-left bg-card border border-border rounded-xl p-5">
+        <summary className="text-sm font-semibold text-foreground cursor-pointer">
+          Prefer the traditional Windows PATH method instead?
+        </summary>
+        <ol className="mt-4 space-y-3 text-sm text-muted-foreground list-decimal list-inside">
           <li>
             Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> file
             and choose <strong>"Extract All..."</strong>. Pick a simple, permanent
-            spot like your <strong>C: drive</strong> (not a temp folder, not a USB
-            stick) — for example <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.
-            Do not delete this folder later — Equinox needs it to stay there.
+            spot (not a temp folder) — for example <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.
           </li>
           <li>
-            Open that folder and confirm you see a file named{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> inside
-            it. If you only see another folder (sometimes it extracts one level
-            deep), open that one until you find <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code>. Click once on the address bar at the top of that window and copy the full path shown (e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>).
+            Confirm you see a file named <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> inside
+            it (open subfolders if needed), then copy the full folder path.
           </li>
           <li>
-            Press the <strong>Windows key</strong>, type{" "}
-            <strong>env</strong>, and open <strong>"Edit the system environment
-            variables"</strong>.
+            Press <strong>Windows key + R</strong>, type{" "}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">rundll32.exe sysdm.cpl,EditEnvironmentVariables</code>,
+            press Enter.
           </li>
           <li>
-            Click the <strong>"Environment Variables..."</strong> button. In the
-            top box ("User variables"), click on <strong>Path</strong> then
-            click <strong>Edit... → New</strong>, and paste the folder path you
-            copied in step 2. Click <strong>OK</strong> on every window to save.
+            In the top box, click <strong>Path</strong> then <strong>Edit...</strong>,
+            add the folder path, and click <strong>OK</strong> everywhere.
           </li>
-          <li>
-            Fully close Equinox (not just minimize) and open it again.
-          </li>
+          <li>Fully close Equinox and open it again.</li>
         </ol>
-        <div className="flex items-start gap-2 bg-blue-500/8 border border-blue-500/20 rounded-lg px-3 py-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-blue-600 leading-relaxed">
-            Still says "ADB not found" after restarting? You most likely pasted
-            the wrong folder in step 4 — go back and double-check it's the exact
-            folder that contains <code className="bg-muted px-1 rounded">adb.exe</code>, not a parent
-            or subfolder.
-          </p>
-        </div>
-      </div>
+      </details>
     </div>
   );
 }
@@ -348,7 +393,7 @@ export function MobilePage() {
           )}
 
           {/* ADB not installed */}
-          {data && !data.adbFound && <NoAdbPanel />}
+          {data && !data.adbFound && <NoAdbPanel onSaved={() => refresh(true)} />}
 
           {/* ADB found, no phones */}
           {data && data.adbFound && data.phones.length === 0 && <NoPhonesPanel />}

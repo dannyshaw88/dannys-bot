@@ -11,10 +11,43 @@ import { spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
+// ── Manual ADB path override ───────────────────────────────────────────────────
+// Lets a user paste the folder containing adb.exe directly in the UI instead of
+// editing the Windows PATH environment variable. Persisted so it survives restarts.
+
+function overrideFilePath(): string {
+  return path.join(process.cwd(), "adb-path-override.json");
+}
+
+function loadOverridePath(): string | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(overrideFilePath(), "utf8"));
+    return typeof raw?.folder === "string" && raw.folder.trim() ? raw.folder.trim() : null;
+  } catch { return null; }
+}
+
+function saveOverridePath(folder: string | null): void {
+  fs.writeFileSync(overrideFilePath(), JSON.stringify({ folder }, null, 2));
+}
+
+function resolveAdbInFolder(folder: string): string | null {
+  const isWin = process.platform === "win32";
+  const candidate = path.join(folder, isWin ? "adb.exe" : "adb");
+  try { if (fs.statSync(candidate).isFile()) return candidate; } catch { /* not here */ }
+  return null;
+}
+
 // ── ADB discovery ─────────────────────────────────────────────────────────────
 
 function findAdb(): string | null {
   const isWin = process.platform === "win32";
+
+  // 1. User-provided override always wins — most reliable, no PATH needed.
+  const override = loadOverridePath();
+  if (override) {
+    const found = resolveAdbInFolder(override);
+    if (found) return found;
+  }
 
   // On Windows we only accept the real binary (.exe) so spawnSync works without
   // shell semantics.  .cmd/.bat wrappers require `cmd.exe /c` to execute and
@@ -164,6 +197,43 @@ router.get("/mobile/usb-phones", (_req, res) => {
     phones,
     checkedAt: new Date().toISOString(),
   });
+});
+
+/**
+ * POST /api/mobile/adb-path
+ * Body: { folder: string }  — folder containing adb.exe (or adb on mac/linux)
+ * Saves the override and validates it immediately so the UI can show a clear
+ * error rather than silently failing on the next poll.
+ */
+router.post("/mobile/adb-path", (req, res) => {
+  const folder = String(req.body?.folder ?? "").trim();
+  if (!folder) {
+    res.status(400).json({ ok: false, error: "Please paste a folder path." });
+    return;
+  }
+
+  let stat;
+  try { stat = fs.statSync(folder); } catch {
+    res.status(400).json({ ok: false, error: "That folder doesn't exist. Double-check the path." });
+    return;
+  }
+  if (!stat.isDirectory()) {
+    res.status(400).json({ ok: false, error: "That's not a folder — paste the folder that contains adb.exe, not the file itself." });
+    return;
+  }
+
+  const found = resolveAdbInFolder(folder);
+  if (!found) {
+    const isWin = process.platform === "win32";
+    res.status(400).json({
+      ok: false,
+      error: `No ${isWin ? "adb.exe" : "adb"} found in that folder. Make sure you're pointing at the exact folder that has the file in it.`,
+    });
+    return;
+  }
+
+  saveOverridePath(folder);
+  res.json({ ok: true, adbPath: found });
 });
 
 export default router;
