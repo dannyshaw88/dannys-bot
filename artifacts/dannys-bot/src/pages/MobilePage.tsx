@@ -155,10 +155,11 @@ function NoAdbPanel() {
         <Terminal className="w-8 h-8 text-orange-500" />
       </div>
       <div>
-        <h2 className="text-lg font-bold text-foreground">ADB not found</h2>
+        <h2 className="text-lg font-bold text-foreground">One more thing before phones can connect</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Android Debug Bridge (ADB) must be installed and on your PATH before
-          Equinox can detect USB-connected phones.
+          Equinox needs a small free tool from Google called <strong>ADB</strong> to
+          talk to Android phones over USB. It's not installed yet — here's exactly
+          how to set it up (takes about 2 minutes).
         </p>
       </div>
       <a
@@ -168,16 +169,50 @@ function NoAdbPanel() {
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
       >
         <ExternalLink className="w-4 h-4" />
-        Download Platform Tools (ADB)
+        1. Download "SDK Platform-Tools for Windows"
       </a>
       <div className="text-left bg-card border border-border rounded-xl p-5 space-y-4">
-        <p className="text-sm font-semibold text-foreground">After installing:</p>
-        <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-          <li>Unzip the downloaded archive somewhere permanent (e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>)</li>
-          <li>Add that folder to your system PATH (Windows: Search → "Edit the system environment variables" → Environment Variables → Path → New)</li>
-          <li>Open a new terminal and run <code className="text-xs bg-muted px-1 py-0.5 rounded">adb devices</code> to verify</li>
-          <li>Restart Equinox</li>
+        <p className="text-sm font-semibold text-foreground">
+          2. If you already downloaded it, do this next:
+        </p>
+        <ol className="space-y-3 text-sm text-muted-foreground list-decimal list-inside">
+          <li>
+            Right-click the downloaded <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> file
+            and choose <strong>"Extract All..."</strong>. Pick a simple, permanent
+            spot like your <strong>C: drive</strong> (not a temp folder, not a USB
+            stick) — for example <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>.
+            Do not delete this folder later — Equinox needs it to stay there.
+          </li>
+          <li>
+            Open that folder and confirm you see a file named{" "}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code> inside
+            it. If you only see another folder (sometimes it extracts one level
+            deep), open that one until you find <code className="text-xs bg-muted px-1 py-0.5 rounded">adb.exe</code>. Click once on the address bar at the top of that window and copy the full path shown (e.g. <code className="text-xs bg-muted px-1 py-0.5 rounded">C:\platform-tools</code>).
+          </li>
+          <li>
+            Press the <strong>Windows key</strong>, type{" "}
+            <strong>env</strong>, and open <strong>"Edit the system environment
+            variables"</strong>.
+          </li>
+          <li>
+            Click the <strong>"Environment Variables..."</strong> button. In the
+            top box ("User variables"), click on <strong>Path</strong> then
+            click <strong>Edit... → New</strong>, and paste the folder path you
+            copied in step 2. Click <strong>OK</strong> on every window to save.
+          </li>
+          <li>
+            Fully close Equinox (not just minimize) and open it again.
+          </li>
         </ol>
+        <div className="flex items-start gap-2 bg-blue-500/8 border border-blue-500/20 rounded-lg px-3 py-2">
+          <AlertTriangle className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-blue-600 leading-relaxed">
+            Still says "ADB not found" after restarting? You most likely pasted
+            the wrong folder in step 4 — go back and double-check it's the exact
+            folder that contains <code className="bg-muted px-1 rounded">adb.exe</code>, not a parent
+            or subfolder.
+          </p>
+        </div>
       </div>
     </div>
   );
