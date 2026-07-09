@@ -78,6 +78,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.418",
+    date: "9 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "The Mobile tab's USB phone setup screen now lets you paste the folder containing adb.exe directly into a box in the app, instead of editing Windows' PATH setting. Click \"Use this folder\" and Equinox finds it immediately — no restart needed. The old PATH method is still available under a \"prefer the traditional way\" option for anyone who wants it.",
+        technical: [
+          "POST /api/mobile/adb-path — validates the folder exists, contains adb(.exe), and persists the override to adb-path-override.json (survives restarts)",
+          "usb-phones.ts findAdb() checks the saved override before falling back to PATH scan and known install locations",
+          "MobilePage.tsx NoAdbPanel rewritten with an inline path input + save button; PATH-editing steps moved into a collapsed <details> section",
+        ],
+      },
+      {
+        category: "Fix",
+        text: "Rewrote the ADB setup instructions in plain language for non-technical users, including the common \"zip extracts into a nested folder\" mistake and a Windows+R shortcut to open Environment Variables directly when Windows search is broken.",
+      },
+    ],
+  },
+  {
     version: "1.1.415",
     date: "9 Jul 2026",
     items: [
