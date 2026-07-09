@@ -3979,6 +3979,52 @@ export async function registerInstagramRoutes(
       })(),
     ]);
 
+    // ── Check 5: Mobile App Header Presence (sync) ──────────────────────────
+    // The API path impersonates the real Instagram Android app, which means it
+    // MUST send the full Android header set on every mobile call —
+    // X-Pigeon-Session-Id, X-Pigeon-Rawclienttime, X-Bloks-Version-Id,
+    // X-IG-Device-ID, X-IG-Android-ID, X-IG-Connection-Speed/-Type,
+    // X-IG-Bandwidth-*. This is the opposite of the EB browser Header Check —
+    // there, these headers must NEVER appear (a real Chrome browser doesn't
+    // send them); here, on the mobile-API path, their absence is the bot tell,
+    // since a genuine Instagram app always includes them. This check is a
+    // static readiness check (are the values available to be sent), not a
+    // live wire capture, because these calls happen server-side, not in a
+    // window we can attach CDP to.
+    const mobileHeaderResult: HeaderCheckResult = (() => {
+      const issues: string[] = [];
+      const igDid    = deviceState?.igDid ?? deviceState?.ig_did ?? null;
+      const deviceId = deviceState?.deviceId ?? deviceState?.device_id ?? null;
+
+      if (!deviceState) {
+        issues.push("No device state stored — X-IG-Device-ID/-Android-ID cannot be sent until account verify runs");
+      } else {
+        if (!igDid)    issues.push("X-IG-Device-ID unavailable — igDid missing from stored device state");
+        if (!deviceId) issues.push("X-IG-Android-ID unavailable — deviceId missing from stored device state");
+      }
+
+      // Pigeon session ID, Bloks version ID, bandwidth headers, and
+      // Connection-Type/-Speed are always generated at call time by
+      // _buildMobileHeaders() regardless of stored device state — they're
+      // process-local (Pigeon session ID is stable for the client instance's
+      // lifetime, matching how a real app keeps it fixed per app launch).
+      const detail: Record<string, any> = {
+        "X-Pigeon-Session-Id":   "generated per client instance, stable for its lifetime — always sent",
+        "X-Pigeon-Rawclienttime": "generated fresh per call — always sent",
+        "X-Bloks-Version-Id":    "static, matches current Instagram app build — always sent",
+        "X-IG-Connection-Speed": "measured once per session, drifts ~8% every 20 calls — always sent",
+        "X-IG-Connection-Type":  "derived from connection state — always sent",
+        "X-IG-Device-ID":        igDid    ? `${String(igDid).slice(0, 8)}…`    : "MISSING",
+        "X-IG-Android-ID":       deviceId ?? "MISSING",
+        issues,
+      };
+
+      if (issues.length === 0) {
+        return { status: "pass", label: "Full Android mobile-app header set will be sent on every call (Pigeon, Bloks, device IDs, bandwidth)", detail };
+      }
+      return { status: "warn", label: issues.join("; "), detail };
+    })();
+
     // ── Check 4: Device ID sanity (sync) ────────────────────────────────────
     const deviceIdResult: DeviceCheckResult = (() => {
       if (!deviceState) {
@@ -4036,10 +4082,11 @@ export async function registerInstagramRoutes(
       proxyConfigured: !!proxyUrl,
       proxy:           proxyHost && proxyPort ? `${proxyHost}:${proxyPort}` : null,
       checks: {
-        ip:        { title: "Proxy IP",           ...ipResult },
-        headers:   { title: "Header Consistency", ...headerResult },
-        tls:       { title: "TLS / JA3",          ...tlsResult },
-        deviceIds: { title: "Device IDs",         ...deviceIdResult },
+        ip:            { title: "Proxy IP",                 ...ipResult },
+        headers:       { title: "Header Consistency",       ...headerResult },
+        tls:           { title: "TLS / JA3",                ...tlsResult },
+        deviceIds:     { title: "Device IDs",               ...deviceIdResult },
+        mobileHeaders: { title: "Mobile App Header Set",    ...mobileHeaderResult },
       },
     });
   });

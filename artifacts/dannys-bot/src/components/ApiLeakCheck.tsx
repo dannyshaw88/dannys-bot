@@ -20,10 +20,11 @@ interface ApiLeakCheckResponse {
   proxyConfigured: boolean;
   proxy: string | null;
   checks: {
-    ip:        CheckResult;
-    headers:   CheckResult;
-    tls:       CheckResult;
-    deviceIds: CheckResult;
+    ip:            CheckResult;
+    headers:       CheckResult;
+    tls:           CheckResult;
+    deviceIds:     CheckResult;
+    mobileHeaders: CheckResult;
   };
 }
 
