@@ -46,6 +46,8 @@ jobs:
         run: pnpm --filter @workspace/api-server run build
 
       - name: Build frontend
+        env:
+          REPL_ID: ci
         run: pnpm --filter @workspace/dannys-bot run build
 
       - name: Upload API server dist
