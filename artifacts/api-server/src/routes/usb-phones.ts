@@ -15,8 +15,12 @@ import fs from "fs";
 
 function findAdb(): string | null {
   const isWin = process.platform === "win32";
-  const exts  = isWin ? [".exe", ".cmd", ".bat"] : [""];
-  const dirs  = (process.env.PATH ?? "").split(path.delimiter);
+
+  // On Windows we only accept the real binary (.exe) so spawnSync works without
+  // shell semantics.  .cmd/.bat wrappers require `cmd.exe /c` to execute and
+  // would silently fail when spawned directly.
+  const exts = isWin ? [".exe"] : [""];
+  const dirs = (process.env.PATH ?? "").split(path.delimiter);
 
   for (const dir of dirs) {
     for (const ext of exts) {
@@ -83,6 +87,8 @@ function listUsbPhones(adbPath: string): UsbPhone[] {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
+    // Skip ADB daemon startup noise ("* daemon not running…", "* daemon started…")
+    if (line.startsWith("*")) continue;
 
     const parts = line.split(/\s+/);
     if (parts.length < 2) continue;
@@ -90,10 +96,19 @@ function listUsbPhones(adbPath: string): UsbPhone[] {
     const serial = parts[0];
     const state  = parts[1];
 
-    // Skip Android emulators — only real USB hardware
-    if (serial.startsWith("emulator-")) continue;
-    // Skip localhost TCP devices (these are typically emulators too)
-    if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(serial) || /^localhost:\d+$/.test(serial)) continue;
+    // ── USB-only filter ──────────────────────────────────────────────────────
+    // `adb devices -l` includes a `usb:<path>` token for real USB devices.
+    // This is the authoritative signal — more reliable than serial heuristics.
+    // If the token is absent the entry is a TCP/network/emulator device.
+    const hasUsbToken = parts.slice(2).some(p => p.startsWith("usb:"));
+    if (!hasUsbToken) {
+      // Belt-and-suspenders: also reject obvious emulator/TCP serials so
+      // older ADB versions (which may omit usb: in some states) don't slip through.
+      if (serial.startsWith("emulator-")) continue;
+      if (/:\d+$/.test(serial)) continue; // any host:port pattern
+      // If neither the usb: token nor a safe serial exists, skip it.
+      continue;
+    }
 
     // Parse key:value pairs from -l suffix
     const kv: Record<string, string> = {};
