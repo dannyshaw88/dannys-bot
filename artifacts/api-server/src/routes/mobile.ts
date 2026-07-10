@@ -186,8 +186,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
       } catch { /* ignore */ }
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
-      // Also wake+unlock the screen right now
-      adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
       logger.info({ serial, originalScreenTimeout }, "[mobile-ws] screen timeout disabled for session");
 
       ws.on("close", (code, reason) => {
@@ -253,8 +251,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       logger.warn({ serial, screenOffStreak }, `[mobile-ws] ${msg}`);
                       ws.send(JSON.stringify({ error: msg }));
                     }
-                    // Send KEYCODE_WAKEUP to wake the screen
-                    adbShell("input", "keyevent", "224");
+                    // Do NOT send WAKEUP here — the screencap loop must never
+                    // fight against the phone sleeping between automation cycles.
                   } else {
                     screenOffStreak = 0;
                     const msg = `screencap returned ${rawLen} bytes but not a valid PNG (first bytes: ${first4}) — ${stderrOut.trim() || "no stderr"}`;
@@ -354,13 +352,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
       } catch { /* ignore */ }
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
-      adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
-      // Some OEM skins (MIUI in particular) keep the keyguard engaged even
-      // after the display wakes, which freezes screenrecord's virtual
-      // display on the lock-screen frame (or a black frame, if the lock
-      // screen itself is flagged secure) — the client then sees exactly one
-      // initial frame and nothing ever again. Explicitly dismiss it too.
-      adbShell("wm", "dismiss-keyguard");
+      // WAKEUP and dismiss-keyguard intentionally removed: auto-waking on
+      // connect was the root cause of the phone constantly waking between
+      // automation cycles. Wake is now exclusively user-triggered (canvas tap).
 
       // NOTE: we intentionally do NOT force `--size` to the device's exact
       // `wm size` here. screenrecord's encoder on many devices requires
@@ -415,9 +409,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (stallTimer) clearTimeout(stallTimer);
           stallTimer = setTimeout(() => {
             logger.warn({ serial, bytesTotal }, "[mobile-video] stream stalled — no data for 6s, forcing restart");
-            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled (screen locked / not updating?) — retrying…" }));
-            adbShell("input", "keyevent", "224");
-            adbShell("wm", "dismiss-keyguard");
+            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled — screen may be off. Tap the mirror to wake." }));
+            // WAKEUP intentionally omitted: wake must only come from user input.
             try { child.kill(); } catch { /* ignore — close handler restarts */ }
           }, ms);
         };
