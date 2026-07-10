@@ -15,3 +15,4 @@
 - [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — mirror now uses real scrcpy-server (not adb screenrecord); ALWAYS verify control-message byte layout against the server's own decompiled ControlMessageReader, not memory
 - [Manual vs automated input parity](mobile-manual-vs-automated-input-parity.md) — a gesture-timing fix in one input path (automated) doesn't fix the same bug in another (manual UI); check all call sites
 - [Mobile tab explicit power-on](mobile-tab-explicit-power-on.md) — phone mirror stream must only start on Power button press or automation toggle, never on tab mount alone
+- [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — master toggle runs power-on→open IG→run tools→close IG→airplane-mode recycle→lock each tick; use WAKEUP/SLEEP keycodes not toggle POWER, verify app close via pidof
