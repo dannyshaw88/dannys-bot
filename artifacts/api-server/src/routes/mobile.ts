@@ -964,7 +964,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 1. Power on the phone.
       await android.wakeScreen(serial);
       steps.push("power-on");
-      await sleepOrAbort(serial, 1200);
+      await sleepOrAbort(serial, 1200); // let the screen finish waking
+
+      // 1b. Swipe up from the bottom to dismiss the lock screen.  On MIUI
+      // (Xiaomi) and similar OEM skins, `am start` alone does NOT clear the
+      // keyguard — the app launches behind the lock screen and all subsequent
+      // taps land on the keyguard instead of Instagram.  A real swipe gesture
+      // also resets the screen-off timeout so the display stays on while the
+      // cycle runs (KEYCODE_WAKEUP alone does not count as touch input).
+      await android.swipeUpFromBottom(serial);
+      steps.push("unlock-swipe");
+      await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
       // 2. Open Instagram.
       await android.launchInstagram(serial);
