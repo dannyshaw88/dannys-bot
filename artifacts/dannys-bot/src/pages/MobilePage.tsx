@@ -650,7 +650,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx, onLog, onDimensions }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }) {
+function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void }) {
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
@@ -703,8 +703,17 @@ function PhoneSlot({ phone, idx, onLog, onDimensions }: { phone: UsbPhone | null
           </div>
         )}
 
-        {/* Auto-stream — always mounts when phone is ready */}
-        {isReady && phone && <LiveCanvas serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
+        {/* Live stream only mounts once explicitly turned on — either by the
+            automation toggle or by pressing the Power button below. Merely
+            opening the Mobile tab / having a phone plugged in must never by
+            itself wake the device or start pulling frames. */}
+        {isReady && phone && live && <LiveCanvas serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
+        {isReady && phone && !live && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+            <Power className="w-5 h-5 text-white/25" />
+            <p className="text-[10px] text-white/40 leading-relaxed">Press Power to view this phone's screen</p>
+          </div>
+        )}
       </div>
 
       {/* Nav bar */}
@@ -714,7 +723,10 @@ function PhoneSlot({ phone, idx, onLog, onDimensions }: { phone: UsbPhone | null
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187, "Recent", onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => sendKey(phone.serial, 26,  "Power",  onLog)} />
+          {/* Power both sends the real hardware keyevent AND is the one
+              explicit user action allowed to turn the live view on — never
+              triggered automatically by mounting/visiting this tab. */}
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
           <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
         </div>
@@ -1236,6 +1248,11 @@ export function MobilePage() {
   const [loading, setLoading] = useState(true);
   const [phoneDims, setPhoneDims] = useState<{ w: number; h: number } | null>(null);
   const [activeTab, setActiveTab] = useState<MobileTab>("tool");
+  // Per-serial "user explicitly turned the live view on" flag. Visiting the
+  // Mobile tab, or a phone simply being connected, must never by itself
+  // start streaming/waking the device — only pressing Power (below) or the
+  // automation toggle being enabled does.
+  const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
   const [logLines, setLogLines] = useState<string[]>([]);
   const addLog = useCallback((msg: string) => {
     const stamp = new Date().toLocaleTimeString();
@@ -1351,7 +1368,15 @@ export function MobilePage() {
                 }}
               >
                 {slots.map((phone, i) => (
-                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onLog={addLog} onDimensions={(w, h) => setPhoneDims({ w, h })} />
+                  <PhoneSlot
+                    key={phone?.serial ?? `empty-${i}`}
+                    phone={phone}
+                    idx={i}
+                    onLog={addLog}
+                    onDimensions={(w, h) => setPhoneDims({ w, h })}
+                    live={!!(phone && (liveOn[phone.serial] || automation.settings.enabled))}
+                    onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
+                  />
                 ))}
               </div>
             </div>

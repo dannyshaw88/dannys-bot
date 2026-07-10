@@ -655,21 +655,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const cy = Math.round(h / 2);    // center of screen, for double-tap-to-like
 
       let likes = 0;
+      let likeFailures = 0;
       for (let i = 0; i < count; i++) {
-        await android.swipe(serial, x, y1, x, y2, 350 + Math.round(Math.random() * 150));
+        // A longer, slower swipe (was 350-500ms) so the device doesn't add
+        // its own fling/momentum scroll on top of the gesture — with a
+        // short fast swipe, Android keeps scrolling the feed for a moment
+        // after the finger lifts, which is why a run configured for N
+        // scrolls visibly moved the feed by what looked like 2-3x that.
+        await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
+        // Let any fling from the swipe fully settle before the next action
+        // reads/acts on the screen.
+        await new Promise(r => setTimeout(r, 180));
 
         if (likeChance > 0 && Math.random() < likeChance) {
-          // Small jitter around screen center so every like doesn't land on
-          // the exact same pixel — looks less like a scripted double-tap.
-          const jx = x + Math.round((Math.random() - 0.5) * w * 0.08);
-          const jy = cy + Math.round((Math.random() - 0.5) * h * 0.06);
+          // Jitter stays tight around screen center — never enough to reach
+          // near the bottom nav bar/edges, which is what could leave a
+          // stray highlighted control if a tap landed outside the feed.
+          const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
+          const jy = cy + Math.round((Math.random() - 0.5) * h * 0.03);
           await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
-          // Both taps must land inside one adb shell call (see
-          // androidManager.doubleTap) — two separate `tap()` calls each pay
-          // their own adb/USB round-trip, which pushed the real on-device
-          // gap past Instagram's double-tap window and the like never fired.
-          await android.doubleTap(serial, jx, jy);
-          likes++;
+          try {
+            // Both taps must land inside one adb shell call (see
+            // androidManager.doubleTap) — two separate `tap()` calls each
+            // pay their own adb/USB round-trip, which pushed the real
+            // on-device gap past Instagram's double-tap window and the
+            // like never fired.
+            await android.doubleTap(serial, jx, jy);
+            likes++;
+          } catch (e: any) {
+            // A single failed double-tap (transient adb/USB hiccup, brief
+            // permission blip, etc.) must not kill the rest of the run —
+            // previously this threw out of the loop entirely, so one bad
+            // tap silently ended the whole Check Feed cycle early with 0
+            // likes recorded on every post after it.
+            likeFailures++;
+          }
         }
 
         if (i < count - 1) {
@@ -678,7 +698,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      res.json({ ok: true, count, likes });
+      res.json({ ok: true, count, likes, likeFailures });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to check feed" }); }
     finally { checkFeedInProgress.delete(serial); }
   });

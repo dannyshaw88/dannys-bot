@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.440] — 2026-07-10
+
+### Human Session Tool — Mobile tab no longer auto-wakes the phone; Check Feed resilience fixes
+
+- **Fixed: opening the Mobile tab instantly woke the phone and started
+  streaming the feed**, as if a click had happened off-screen. The phone
+  mirror (`LiveCanvas`) used to mount and connect automatically the moment
+  a device showed as ready, regardless of which tab you were even looking
+  at. It now only starts once you explicitly press the on-screen **Power**
+  button, or the Human Session Tool's automation toggle is switched on —
+  simply having a phone plugged in or visiting the tab never starts the
+  stream by itself anymore. A "Press Power to view this phone's screen"
+  placeholder shows in the idle state.
+- **Fixed: a failed double-tap during a Check Feed run silently ended the
+  entire cycle early.** `doubleTap` failures (transient adb/USB hiccups)
+  were thrown out of the run loop uncaught, aborting every scroll/like
+  after the first failure — which looked like "100% like chance did
+  nothing" even though the like-chance math itself was already correct.
+  Each double-tap attempt is now wrapped so one bad tap is logged and
+  skipped instead of killing the rest of the run; the response now also
+  reports `likeFailures` alongside `likes`.
+- **Reduced the "3 scrolls turned into ~8" over-scroll.** Swipe gestures
+  were short and fast enough (350-500ms) that Android kept flinging the
+  feed for a moment after the finger lifted, stacking extra scroll
+  distance on top of each configured scroll. Swipes are now slower
+  (550-750ms) with a short settle pause afterward so the feed stops
+  exactly where the gesture ends, and the like double-tap jitter radius
+  was tightened so a jittered tap can never land near the screen edges/nav
+  bar.
+
 ## [1.1.439] — 2026-07-10
 
 ### Human Session Tool — real fix for double-tap-to-like, tabs (Account Settings / Human Session Tool / Log)
