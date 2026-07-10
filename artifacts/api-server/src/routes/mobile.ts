@@ -882,6 +882,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  const swipeSchema = z.object({
+    x1: z.number(),
+    y1: z.number(),
+    x2: z.number(),
+    y2: z.number(),
+    durationMs: z.number().optional(),
+    videoW: z.number().optional(),
+    videoH: z.number().optional(),
+  });
+  app.post("/api/mobile/devices/:serial/input/swipe", async (req: Request, res: Response) => {
+    try {
+      const input = swipeSchema.parse(req.body);
+      const serial = p(req, "serial");
+      let { x1, y1, x2, y2 } = input;
+      if (input.videoW && input.videoH) {
+        try {
+          const tools = android.detectToolset();
+          const adbPath = tools.adb.path;
+          if (adbPath) {
+            const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+            const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+            if (m) {
+              const realW = parseInt(m[1]);
+              const realH = parseInt(m[2]);
+              if (realW !== input.videoW || realH !== input.videoH) {
+                x1 = Math.round((x1 / input.videoW) * realW);
+                y1 = Math.round((y1 / input.videoH) * realH);
+                x2 = Math.round((x2 / input.videoW) * realW);
+                y2 = Math.round((y2 / input.videoH) * realH);
+                logger.info({ serial, video: [input.videoW, input.videoH], real: [realW, realH] }, "[mobile-swipe] rescaled swipe for downscaled video");
+              }
+            }
+          }
+        } catch { /* fall back to unscaled coordinates */ }
+      }
+      await android.swipe(serial, x1, y1, x2, y2, input.durationMs);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   const keySchema = z.object({ code: z.union([z.string(), z.number()]) });
   app.post("/api/mobile/devices/:serial/input/key", async (req: Request, res: Response) => {
     try {

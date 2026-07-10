@@ -728,6 +728,21 @@ export async function tap(serial: string, x: number, y: number): Promise<void> {
   runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
+export async function swipe(
+  serial: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  durationMs: number = 300,
+): Promise<void> {
+  runInputShell(
+    serial,
+    ["swipe", String(x1), String(y1), String(x2), String(y2), String(Math.max(1, Math.round(durationMs)))],
+    "swipe",
+  );
+}
+
 export async function keyevent(serial: string, code: string | number): Promise<void> {
   runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }

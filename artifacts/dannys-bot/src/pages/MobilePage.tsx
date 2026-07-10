@@ -350,70 +350,162 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
     }
   }, [serial, addLog]);
 
-  const handleClick = useCallback(async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (status !== "live" || !phoneSizeRef.current) {
-      // Asleep / not-yet-live: clicking wakes the phone instead of tapping
-      // a coordinate we can't map yet.
-      addLog(`Click while status="${status}" — sending wake instead of tap`);
-      wake();
-      return;
-    }
-    const rect = canvasRef.current!.getBoundingClientRect();
+  // Maps a client (viewport) point to phone-panel coordinates, accounting
+  // for the canvas's object-fit: contain letterboxing. Returns null if the
+  // point falls outside the actual displayed image (in the letterbox
+  // padding) or geometry isn't ready yet.
+  const mapToPhone = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    if (!canvasRef.current || !phoneSizeRef.current) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
     const { w: phoneW, h: phoneH } = phoneSizeRef.current;
-    if (rect.width <= 0 || rect.height <= 0 || phoneW <= 0 || phoneH <= 0) {
-      addLog(`Click ignored — degenerate geometry (rect ${rect.width}×${rect.height}, phone ${phoneW}×${phoneH})`);
-      return;
-    }
+    if (rect.width <= 0 || rect.height <= 0 || phoneW <= 0 || phoneH <= 0) return null;
 
-    // The canvas is styled with object-fit: contain, so its rendered content
-    // is letterboxed inside `rect` whenever the box's aspect ratio doesn't
-    // exactly match the phone's aspect ratio (which is now the norm, since
-    // the box is a flexible flex-1 area, not a locked 9:16 wrapper). Mapping
-    // clicks against the *full* `rect` (as before) silently produced wrong
-    // coordinates across the whole surface — this is the "nothing is
-    // clickable" bug. We must first find the actual displayed image
-    // rectangle inside `rect`, then map relative to that.
     const boxRatio   = rect.width / rect.height;
     const phoneRatio = phoneW / phoneH;
     let dispW = rect.width, dispH = rect.height, offsetX = 0, offsetY = 0;
     if (boxRatio > phoneRatio) {
-      // Box is wider than the phone → letterboxed left/right.
       dispH = rect.height;
       dispW = dispH * phoneRatio;
       offsetX = (rect.width - dispW) / 2;
     } else {
-      // Box is taller than the phone → letterboxed top/bottom.
       dispW = rect.width;
       dispH = dispW / phoneRatio;
       offsetY = (rect.height - dispH) / 2;
     }
 
-    const localX = e.clientX - rect.left - offsetX;
-    const localY = e.clientY - rect.top  - offsetY;
-
-    if (localX < 0 || localY < 0 || localX > dispW || localY > dispH) {
-      // Click landed in the letterbox padding, not on the actual phone image.
-      addLog(`Click ignored — landed in letterbox padding (local ${Math.round(localX)},${Math.round(localY)} outside ${Math.round(dispW)}×${Math.round(dispH)})`);
-      return;
-    }
+    const localX = clientX - rect.left - offsetX;
+    const localY = clientY - rect.top  - offsetY;
+    if (localX < 0 || localY < 0 || localX > dispW || localY > dispH) return null;
 
     const x = Math.min(phoneW - 1, Math.max(0, Math.round((localX / dispW) * phoneW)));
     const y = Math.min(phoneH - 1, Math.max(0, Math.round((localY / dispH) * phoneH)));
-    addLog(`Tap → (${x}, ${y})`);
+    return { x, y };
+  }, []);
+
+  // Tracks an in-progress pointer gesture so we can tell a tap from a swipe:
+  // mouse/touch down records the start point, move accumulates distance,
+  // and up decides whether to send a tap or a swipe based on how far the
+  // pointer traveled. A drag that never crosses the threshold still fires
+  // as a tap (this preserves all prior click-to-tap behavior exactly).
+  // `startClientX/Y` track raw viewport pixels (used for the tap/swipe
+  // threshold, so it behaves consistently regardless of mirror scale).
+  // `lastX/Y` track the last point that successfully mapped onto the phone
+  // image, updated on every pointermove — this is what we actually send to
+  // the device, so a pointerup that drifts into the letterbox padding still
+  // resolves to a real on-screen endpoint instead of collapsing to the tap.
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number; startY: number;
+    startClientX: number; startClientY: number;
+    lastX: number; lastY: number;
+    startedAt: number;
+  } | null>(null);
+  const DRAG_THRESHOLD_PX = 10; // in viewport (client) pixels
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (status !== "live" || !phoneSizeRef.current) {
+      // Asleep / not-yet-live: pressing wakes the phone instead of tapping
+      // a coordinate we can't map yet.
+      addLog(`Pointer down while status="${status}" — sending wake instead of tap`);
+      wake();
+      return;
+    }
+    const p = mapToPhone(e.clientX, e.clientY);
+    if (!p) {
+      addLog(`Pointer down ignored — outside displayed phone image`);
+      return;
+    }
+    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: p.x, startY: p.y,
+      startClientX: e.clientX, startClientY: e.clientY,
+      lastX: p.x, lastY: p.y,
+      startedAt: Date.now(),
+    };
+  }, [status, wake, addLog, mapToPhone]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const p = mapToPhone(e.clientX, e.clientY);
+    if (p) { drag.lastX = p.x; drag.lastY = p.y; }
+    // If the pointer is currently over the letterbox padding, keep the last
+    // known-good mapped point rather than overwriting it — the phone-side
+    // gesture should track the edge of the screen it last touched.
+  }, [mapToPhone]);
+
+  const handlePointerUp = useCallback(async (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    endDrag(e);
+    const phoneSize = phoneSizeRef.current;
+    if (!phoneSize) return;
+
+    // Pick up any final move this same event carries (some browsers fire
+    // pointerup without a preceding pointermove at the exact release point).
+    const finalP = mapToPhone(e.clientX, e.clientY);
+    const endX = finalP?.x ?? drag.lastX;
+    const endY = finalP?.y ?? drag.lastY;
+
+    // Classify tap vs. swipe using viewport pixels, so the threshold behaves
+    // the same regardless of how much the mirror image is scaled down.
+    const clientDist = Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY);
+    const durationMs = Math.max(1, Date.now() - drag.startedAt);
+
+    if (clientDist < DRAG_THRESHOLD_PX) {
+      // Short/no movement — treat as a tap at the press point (matches the
+      // previous click-to-tap behavior exactly).
+      addLog(`Tap → (${drag.startX}, ${drag.startY})`);
+      try {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize.w, videoH: phoneSize.h }),
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+        }
+      } catch (err: any) {
+        addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
+      }
+      return;
+    }
+
+    addLog(`Swipe → (${drag.startX}, ${drag.startY}) → (${endX}, ${endY}) over ${durationMs}ms`);
     try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/swipe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x, y, videoW: phoneW, videoH: phoneH }),
+        body: JSON.stringify({
+          x1: drag.startX, y1: drag.startY, x2: endX, y2: endY,
+          durationMs, videoW: phoneSize.w, videoH: phoneSize.h,
+        }),
       });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
-        addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+        addLog(`Swipe FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
       }
     } catch (err: any) {
-      addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
+      addLog(`Swipe FAILED — ${err?.message ?? "network error"}`);
     }
-  }, [serial, status, wake, addLog]);
+  }, [serial, addLog, mapToPhone, endDrag]);
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    // Gesture was interrupted (e.g. browser took over for scroll/multitouch)
+    // — discard it rather than guessing at intent.
+    dragRef.current = null;
+    endDrag(e);
+    addLog(`Gesture cancelled`);
+  }, [addLog, endDrag]);
 
   const clickable = status === "live" || status === "asleep" || status === "error";
 
@@ -450,7 +542,10 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
              swallowed by an overlay with no listener. ── */}
       <canvas
         ref={canvasRef}
-        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         style={{
           display:      status === "connecting" ? "none" : "block",
           position:     "absolute",
