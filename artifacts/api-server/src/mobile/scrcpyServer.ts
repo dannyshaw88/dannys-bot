@@ -269,8 +269,9 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
   // grace window before giving up on getting a real reason.
   const waitBriefly = (ms: number): Promise<void> =>
     serverExited ? Promise.resolve() : new Promise((resolve) => {
-      const t = setTimeout(resolve, ms);
-      serverProc.once("exit", () => { clearTimeout(t); resolve(); });
+      const onExit = () => { clearTimeout(t); resolve(); };
+      const t = setTimeout(() => { serverProc.off("exit", onExit); resolve(); }, ms);
+      serverProc.once("exit", onExit);
     });
 
   let videoSock: net.Socket;
