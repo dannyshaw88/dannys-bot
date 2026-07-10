@@ -1201,6 +1201,19 @@ function _sleep(ms: number): Promise<void> {
 }
 
 /** Dump current UI to XML and return its content. */
+/**
+ * Public wrapper around `_uiDump` for debug tooling — guessing tap
+ * coordinates from screen percentages has repeatedly landed on the wrong
+ * element (Home tab, then the story tray). Exposing the raw accessibility
+ * dump lets us read the actual resource-id/content-desc of an element
+ * instead of guessing again.
+ */
+export async function dumpUi(serial: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  return _uiDump(adb, serial);
+}
+
 async function _uiDump(adb: string, serial: string): Promise<string> {
   const tmpDev = "/sdcard/equinox_ui_dump.xml";
   const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);

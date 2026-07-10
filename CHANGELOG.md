@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.453] — 2026-07-10
+
+### Debug: added a raw UI-dump endpoint to stop guessing story-tray coordinates
+
+- The hold-and-slide gesture in 1.1.452 landed on the Reels tab instead of a
+  story bubble — screen-percentage guesses for the tray position/spacing
+  have now been wrong twice (Home tab, then the story tray).
+- Added `dumpUi()` (exported from `androidManager.ts`) and a debug endpoint,
+  `GET /api/mobile/devices/:serial/ui-dump`, that returns the device's real
+  accessibility tree (resource-ids, content-desc, on-screen bounds) so the
+  next story-tray fix can target the actual elements instead of another
+  percentage guess. No behavior change to the automation cycle itself in
+  this release.
+
+---
+
 ## [1.1.452] — 2026-07-10
 
 ### Fix: Stories step opened the viewer but never picked/clicked a story

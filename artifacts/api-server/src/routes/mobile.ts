@@ -1560,6 +1560,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Debug-only: dump the current accessibility tree (resource-ids,
+  // content-desc, bounds) for whatever screen is showing. Used to find the
+  // *real* selectors for elements (e.g. story tray bubbles) instead of
+  // guessing tap coordinates from screen percentages, which has repeatedly
+  // landed on the wrong element.
+  app.get("/api/mobile/devices/:serial/ui-dump", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const xml = await android.dumpUi(serial);
+      res.type("text/plain").send(xml || "(empty dump)");
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   const swipeSchema = z.object({
     x1: z.number(),
     y1: z.number(),
