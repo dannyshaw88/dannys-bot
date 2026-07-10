@@ -4,6 +4,55 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.445] — 2026-07-10
+
+### Mobile tab — swipe fix (no hold), interval timer, persistent settings, UI polish
+
+#### Bug fix: Instagram recents dismiss — plain swipe, no long press
+
+- **Fixed: the long-press + drag caused MIUI to show a context bubble menu
+  instead of dismissing the Instagram card.** The correct gesture on MIUI is
+  a simple click-drag left — touch down, move left ~40 % of screen width,
+  lift — with no hold at the start point. The gesture is now a plain
+  `input swipe` with 220 ms duration and no preceding hold command. The
+  force-stop fallback (`pidof` check) is still in place for any case where
+  the gesture misses.
+
+#### Bug fix: settings no longer reset on app update
+
+- **Fixed: every time a new version of Equinox was installed, the Human
+  Session Tool settings (scroll count, delays, like %, enabled state) reset
+  to defaults.** Root cause: the config file (`mobile-instances.json`) was
+  stored at `process.cwd()`, which on Windows points at the app's install
+  directory — that directory is overwritten on every update. The file is now
+  stored in the Electron `userData` directory (`%APPDATA%\Equinox`) which is
+  never touched by the installer. Settings survive updates the same way the
+  database and cookies already do.
+  - `EQUINOX_DATA_DIR` env var added to the server spawn block in Electron
+    main, set to `app.getPath("userData")`.
+  - `configFilePath()` in the API server now reads
+    `process.env.EQUINOX_DATA_DIR ?? process.cwd()` so the dev environment
+    (no env var) is unaffected.
+
+#### Feature: "Run every X to Y minutes" cycle interval
+
+- **A new "Run every … minutes" row appears directly below the STEP1 toggle.**
+  When the toggle is switched on, the tool waits a random amount of time
+  between the two configured values (in minutes) before starting each new
+  automation cycle. Previously the gap was derived from the per-action delay
+  seconds, which was the wrong field entirely. The new fields default to
+  20–30 minutes and are saved to `mobile-instances.json` along with all
+  other settings.
+  - Both input fields enforce a minimum of 1 minute; the run loop also
+    defensively clamps to ≥ 1 before scheduling so a stored zero can never
+    produce an immediate tight loop.
+
+#### UI: model name in header top right
+
+- The device model name (e.g. "Xiaomi 23076RN8DY") now sits on the **right
+  side of the "Human Session Tool" title row** instead of below it on a
+  second line, keeping the header compact.
+
 ## [1.1.444] — 2026-07-10
 
 ### Mobile tab — recents swipe fix (MIUI), 5-slot Account Settings, UI polish

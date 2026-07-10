@@ -325,6 +325,10 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       // manual-path override both need a real writable folder, so point
       // them at userData like the database, logs, and cookies already do.
       ADB_TOOLS_DIR: path.join(getUserDataPath(), "adb-tools"),
+      // userData persists across app updates (unlike process.cwd() which
+      // points at the install dir and is wiped on update). Pass it explicitly
+      // so every route that stores per-device config can write there safely.
+      EQUINOX_DATA_DIR: getUserDataPath(),
     },
   });
 

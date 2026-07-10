@@ -60,8 +60,11 @@ function fetchExternalIpViaProxy(host: string, port: number, user?: string, pass
 const p = (req: Request, key: string): string => String((req.params as any)[key] ?? "");
 
 // ── Per-instance config (proxy assignment) ────────────────────────────────────
-// Stored in mobile-instances.json next to the DB so it survives restarts.
+// Stored in userData (via EQUINOX_DATA_DIR env var) so it survives app updates.
+// Falls back to process.cwd() in dev / non-Electron environments.
 type AutomationSettings = {
+  cycleIntervalMin?: number;
+  cycleIntervalMax?: number;
   enabled: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
@@ -76,7 +79,8 @@ type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
-  return path.join(process.cwd(), "mobile-instances.json");
+  const base = process.env.EQUINOX_DATA_DIR ?? process.cwd();
+  return path.join(base, "mobile-instances.json");
 }
 function loadInstanceConfigs(): InstanceConfigMap {
   try {
@@ -562,6 +566,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-device automation settings (isolated to the Mobile tab) ─────────────
   const automationSchema = z.object({
     enabled: z.boolean().default(false),
+    cycleIntervalMin: z.number().min(1).max(9999).optional(),
+    cycleIntervalMax: z.number().min(1).max(9999).optional(),
     actionDelayMin: z.number().min(0).max(9999),
     actionDelayMax: z.number().min(0).max(9999),
     likePercentMin: z.number().min(0).max(100),
@@ -571,7 +577,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const defaults: AutomationSettings = { enabled: false, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
+    const defaults: AutomationSettings = { enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
   app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {

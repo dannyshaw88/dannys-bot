@@ -855,6 +855,8 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 
 interface AutomationSettingsData {
   enabled: boolean;
+  cycleIntervalMin: number;
+  cycleIntervalMax: number;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -864,7 +866,8 @@ interface AutomationSettingsData {
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
-  enabled: false, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
+  enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+  actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -984,8 +987,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
       if (cancelled) return;
       const s2 = settingsRef.current;
-      const gapSec = s2.actionDelayMin + Math.random() * Math.max(0, s2.actionDelayMax - s2.actionDelayMin);
-      timer = setTimeout(runCycle, Math.round(gapSec * 1000));
+      const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
+      const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
+      const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+      timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
     runCycle();
@@ -1019,26 +1024,50 @@ function AutomationSettingsPanel({
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
-      <div>
+      <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold text-foreground">Human Session Tool</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
           {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
-        </p>
+        </span>
       </div>
 
-      {/* Master toggle — turns the whole tool on/off. Everything below is
-          just configuration for what happens while it's active. */}
-      <div className="inline-flex items-center self-start bg-card border border-border rounded-xl p-5 gap-3">
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
-        <Switch
-          checked={settings.enabled}
-          onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
-          disabled={loading}
-          className="shrink-0"
-        />
-        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
-          {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
-        </span>
+      {/* Master toggle — turns the whole tool on/off. */}
+      <div className="space-y-3">
+        <div className="inline-flex items-center self-start bg-card border border-border rounded-xl p-5 gap-3">
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
+          <Switch
+            checked={settings.enabled}
+            onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
+            disabled={loading}
+            className="shrink-0"
+          />
+          <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+            {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
+          </span>
+        </div>
+
+        {/* Cycle interval — how long to wait between runs */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
+          <Input
+            type="number"
+            min={1}
+            className={NUM_INPUT_CLASS}
+            value={settings.cycleIntervalMin}
+            onChange={e => setSettings(s => ({ ...s, cycleIntervalMin: Math.max(1, clamp4(Number(e.target.value))) }))}
+            disabled={loading}
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <Input
+            type="number"
+            min={1}
+            className={NUM_INPUT_CLASS}
+            value={settings.cycleIntervalMax}
+            onChange={e => setSettings(s => ({ ...s, cycleIntervalMax: Math.max(1, clamp4(Number(e.target.value))) }))}
+            disabled={loading}
+          />
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">

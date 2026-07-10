@@ -823,18 +823,13 @@ export async function closeInstagramViaRecents(serial: string): Promise<void> {
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
   await openRecentApps(serial);
-  await new Promise(r => setTimeout(r, 1200)); // MIUI/OEM recents animations are slow — give them time to finish
-  // Long-press the card, then drag it left to dismiss. On MIUI (Xiaomi), a
-  // plain swipe scrolls the recents carousel rather than dismissing the card;
-  // a plain upward swipe scrolls the whole overview screen. The two-step
-  // gesture — hold to enter drag mode, then swipe left — is what MIUI
-  // actually requires. Both input commands run inside the same adb shell
-  // session (no adb reconnection gap between them) so the touch stream is
-  // continuous from Android's perspective.
+  await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
+  // Quick horizontal swipe left — no hold, no long press. The MIUI recents
+  // card just needs a simple click-drag a short distance to the left; a hold
+  // triggers the long-press context menu instead of dismissing the card.
   const cardX = Math.round(w * 0.5);
   const cardY = Math.round(h * 0.45);
-  const shellCmd = `input touchscreen swipe ${cardX} ${cardY} ${cardX} ${cardY} 650; input touchscreen swipe ${cardX} ${cardY} 0 ${cardY} 350`;
-  spawnSync(requireTool(detectToolset().adb, "adb"), ["-s", serial, "shell", shellCmd], { encoding: "utf8", timeout: 5000 });
+  await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
   await new Promise(r => setTimeout(r, 500));
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
