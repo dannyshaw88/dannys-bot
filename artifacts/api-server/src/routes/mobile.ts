@@ -599,7 +599,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     totpSecret: z.string().optional(),
   });
   const deviceAccountSchema = z.object({
-    slots: z.array(deviceSlotSchema).max(SLOT_COUNT),
+    // No upper-bound cap — users can add as many slots as they need via the UI
+    slots: z.array(deviceSlotSchema).min(0),
   });
   const emptySlots = (): DeviceSlot[] => Array.from({ length: SLOT_COUNT }, () => ({ username: "", password: "" }));
   const migrateAccount = (raw: any): DeviceAccount => {
@@ -620,7 +621,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     try {
       const input = deviceAccountSchema.parse(req.body);
-      // Pad to SLOT_COUNT if fewer slots were sent
+      // Ensure at least SLOT_COUNT slots are always stored
       while (input.slots.length < SLOT_COUNT) input.slots.push({ username: "", password: "" });
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();

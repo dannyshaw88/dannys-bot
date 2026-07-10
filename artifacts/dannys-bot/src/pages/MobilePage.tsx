@@ -1205,8 +1205,10 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
         if (!active) return;
         // Server now always returns { slots: [...] }; also handle legacy { username, password }
         let loaded: AccountSlot[];
-        if (d && Array.isArray(d.slots)) {
-          loaded = Array.from({ length: ACCT_SLOT_COUNT }, (_, i) => ({
+        if (d && Array.isArray(d.slots) && d.slots.length > 0) {
+          // Preserve however many slots the server has (user may have added extras)
+          const count = Math.max(ACCT_SLOT_COUNT, d.slots.length);
+          loaded = Array.from({ length: count }, (_, i) => ({
             username: d.slots[i]?.username ?? "",
             password: d.slots[i]?.password ?? "",
             totpSecret: d.slots[i]?.totpSecret ?? "",
@@ -1220,6 +1222,9 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
         }
         lastSavedRef.current = JSON.stringify(loaded);
         setSlots(loaded);
+        setShowPassword(Array(loaded.length).fill(false));
+        setTotpCode(Array(loaded.length).fill(null));
+        setTotpError(Array(loaded.length).fill(null));
       })
       .catch(() => {})
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
@@ -1252,6 +1257,13 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
 
   const updateSlot = (i: number, patch: Partial<AccountSlot>) =>
     setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
+
+  const addSlot = () => {
+    setSlots(s => [...s, emptySlot()]);
+    setShowPassword(s => [...s, false]);
+    setTotpCode(c => [...c, null]);
+    setTotpError(e => [...e, null]);
+  };
 
   const generateTotp = async (slotIdx: number, secret: string) => {
     setTotpCode(c => c.map((v, i) => i === slotIdx ? null : v));
@@ -1306,70 +1318,87 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
 
       <div className="space-y-4">
         {slots.map((slot, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Slot {i + 1}</p>
+          <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
 
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Username</Label>
-              <Input
-                value={slot.username}
-                onChange={e => updateSlot(i, { username: e.target.value })}
-                placeholder="username"
-                disabled={loading}
-                autoComplete="off"
-                className="w-[25ch]"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Password</Label>
-              <div className="flex items-center gap-2">
+            {/* All three fields on one row */}
+            <div className="flex items-end gap-3 flex-wrap">
+              {/* Username */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Username</Label>
                 <Input
-                  type={showPassword[i] ? "text" : "password"}
-                  value={slot.password}
-                  onChange={e => updateSlot(i, { password: e.target.value })}
-                  placeholder="password"
+                  value={slot.username}
+                  onChange={e => updateSlot(i, { username: e.target.value })}
+                  placeholder="username"
                   disabled={loading}
                   autoComplete="off"
-                  className="w-[25ch]"
+                  className="w-[20ch]"
                 />
-                <Button type="button" variant="secondary" size="sm"
-                  onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
-                  {showPassword[i] ? "Hide" : "Show"}
-                </Button>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">2FA OTP Secret</Label>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Input
-                  value={slot.totpSecret}
-                  onChange={e => {
-                    updateSlot(i, { totpSecret: e.target.value });
-                    setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
-                    setTotpError(er => er.map((v, idx) => idx === i ? null : v));
-                  }}
-                  placeholder="JBSWY3DPEHPK3PXP"
-                  disabled={loading}
-                  autoComplete="off"
-                  className="w-[25ch] font-mono text-xs"
-                />
-                <Button type="button" variant="secondary" size="sm"
-                  disabled={!slot.totpSecret.trim()}
-                  onClick={() => generateTotp(i, slot.totpSecret)}>
-                  Generate Code
-                </Button>
-                {totpCode[i] && (
-                  <span className="font-mono text-sm font-bold text-green-500 tracking-widest">{totpCode[i]}</span>
-                )}
-                {totpError[i] && (
-                  <span className="text-xs text-destructive">{totpError[i]}</span>
-                )}
+              {/* Password */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Password</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type={showPassword[i] ? "text" : "password"}
+                    value={slot.password}
+                    onChange={e => updateSlot(i, { password: e.target.value })}
+                    placeholder="password"
+                    disabled={loading}
+                    autoComplete="off"
+                    className="w-[20ch]"
+                  />
+                  <Button type="button" variant="secondary" size="sm"
+                    onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                    {showPassword[i] ? "Hide" : "Show"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* 2FA OTP Secret */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">2FA OTP Secret</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={slot.totpSecret}
+                    onChange={e => {
+                      updateSlot(i, { totpSecret: e.target.value });
+                      setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
+                      setTotpError(er => er.map((v, idx) => idx === i ? null : v));
+                    }}
+                    placeholder="JBSWY3DPEHPK3PXP"
+                    disabled={loading}
+                    autoComplete="off"
+                    className="w-[22ch] font-mono text-xs"
+                  />
+                  <Button type="button" variant="secondary" size="sm"
+                    disabled={!slot.totpSecret.trim()}
+                    onClick={() => generateTotp(i, slot.totpSecret)}>
+                    Generate
+                  </Button>
+                  {totpCode[i] && (
+                    <span className="font-mono text-sm font-bold text-green-500 tracking-widest">{totpCode[i]}</span>
+                  )}
+                  {totpError[i] && (
+                    <span className="text-xs text-destructive">{totpError[i]}</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         ))}
+
+        {/* Add slot button */}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={addSlot}
+          disabled={loading}
+          className="w-full"
+        >
+          + Add Instagram Account Slot
+        </Button>
       </div>
 
       {saved && <p className="text-xs text-green-500">Saved</p>}
