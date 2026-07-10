@@ -4,6 +4,27 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.452] — 2026-07-10
+
+### Fix: Stories step opened the viewer but never picked/clicked a story
+
+- The Home-tab fix landed correctly (stories bar now visible at the top),
+  but the tap that opens a story was still landing on nothing clickable.
+- Replaced the fixed "tap the first story" behavior with a hold-and-slide
+  gesture: press down on the story tray and slide right, releasing on a
+  randomly chosen bubble (position 1-10, 1-indexed after "Your story") so
+  the same bubble isn't always picked — added `pickAndOpenRandomStory()` in
+  `mobile.ts`, which scrolls the tray first if the chosen position isn't yet
+  on screen, then does the slide as one slow drag (900-1400ms) so it reads
+  as a deliberate press-and-drag rather than a flick.
+- Changed the between-users transition: once all slides for the current
+  user are watched and more users remain, the story is closed with a
+  *slight* downward drag back to the feed, and the pick-and-slide-right
+  cycle runs again for the next user (rather than swiping left within the
+  viewer as before). The last user still exits with a full downward swipe.
+
+---
+
 ## [1.1.451] — 2026-07-10
 
 ### Fix: toggling on manually now runs the first cycle immediately again

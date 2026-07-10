@@ -931,6 +931,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // View stories from the stories bar at the top of the feed.
   // Opens the first story, watches N slides per user (each for a randomly
   // chosen % of the typical slide duration), then advances to the next user.
+  /**
+   * Picks and opens one story bubble from the tray using a "hold and slide
+   * right" drag rather than a plain tap. Always tapping the same fixed spot
+   * (the first real story) creates a detectable pattern, so instead this
+   * presses down on the tray and drags right to a *randomly chosen* bubble
+   * among the first 10 (1-indexed, 1 = first real story after "Your
+   * story"), releasing there to open it — the same effect a person gets by
+   * scrubbing across the story tray before letting go on one.
+   *
+   * Returns the 1-based position that was opened (for logging only).
+   */
+  async function pickAndOpenRandomStory(serial: string, w: number, h: number): Promise<number> {
+    // Stories bar sits just below the header, ~10% from the top. The FIRST
+    // slot is always the user's own profile with the "+" create-story button
+    // overlaid — tapping/dragging onto it opens the camera instead of
+    // viewing, so all positions here are 1-indexed starting at the first
+    // *friend's* story (slot 2 on screen).
+    const storyBarY   = Math.round(h * 0.10);
+    const firstStoryX = Math.round(w * 0.22);
+    // Approximate on-device spacing between adjacent story bubbles.
+    const spacing      = Math.round(w * 0.14);
+    // How many bubbles fit on screen at once starting from firstStoryX.
+    const maxVisible   = Math.max(1, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1);
+
+    let target = 1 + Math.floor(Math.random() * 10); // random 1..10
+    const picked = target;
+
+    // If the chosen bubble isn't on screen yet, scroll the tray left
+    // (finger drags right-to-left) a page at a time until it is, keeping
+    // one bubble of overlap as an anchor.
+    while (target > maxVisible) {
+      await android.swipe(serial, Math.round(w * 0.85), storyBarY, Math.round(w * 0.15), storyBarY, 350);
+      await sleepOrAbort(serial, 400 + Math.round(Math.random() * 300));
+      target -= (maxVisible - 1);
+    }
+
+    const targetX = Math.round(firstStoryX + (target - 1) * spacing);
+    // The "hold and slide right" gesture itself: a single slow drag from
+    // the first visible bubble over to the target bubble. A long duration
+    // (vs. the quick flicks used elsewhere) is what makes it read as a
+    // deliberate press-and-drag rather than a flick, and lets Instagram's
+    // tray-scrub gesture land on and open the bubble under the finger when
+    // it lifts.
+    const slideMs = 900 + Math.round(Math.random() * 500);
+    await android.swipe(serial, firstStoryX, storyBarY, targetX, storyBarY, slideMs);
+    return picked;
+  }
+
   async function runViewStoriesFromFeedLoop(serial: string, params: {
     usersMin: number; usersMax: number;
     slidesMin: number; slidesMax: number;
@@ -944,23 +992,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (numUsers <= 0) return { usersWatched: 0, slidesWatched: 0 };
 
     const { w, h } = getScreenSize(serial);
-    // Instagram stories bar sits just below the header, centred at roughly
-    // 10% from the top.  The FIRST slot is always the user's own profile with
-    // the "+" create-story button overlaid — tapping it opens the camera
-    // instead of viewing.  Skip it and target slot 2 (first friend's story)
-    // at ~22% from the left.
-    const storyBarY   = Math.round(h * 0.10);
-    const firstStoryX = Math.round(w * 0.22);
 
     let usersWatched = 0;
     let slidesWatched = 0;
 
-    // Tap the first story to open it.
-    await android.tap(serial, firstStoryX, storyBarY);
-    await sleepOrAbort(serial, 1800); // let story viewer open
-
     for (let u = 0; u < numUsers; u++) {
       if (isCycleAborted(serial)) break;
+
+      // Pick a random bubble (1-10) via the hold-and-slide-right gesture and
+      // let the viewer open. This runs fresh for every user — we're back at
+      // the feed's story bar each time (see the "close" step at the bottom
+      // of the loop), so the same random 1-10 pick applies every round.
+      const picked = await pickAndOpenRandomStory(serial, w, h);
+      logger.info({ serial, target: "stories", picked }, "[view-stories] hold-and-slide picked bubble");
+      await sleepOrAbort(serial, 1800); // let story viewer open
+
       const numSlides = Math.floor(
         Math.min(slidesMin, slidesMax) +
         Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
@@ -980,20 +1026,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       }
       usersWatched++;
-      // Advance to the next user's stories by swiping left.
+
       if (u < numUsers - 1) {
-        await android.swipe(serial,
-          Math.round(w * 0.80), Math.round(h * 0.50),
-          Math.round(w * 0.20), Math.round(h * 0.50),
-          280
-        );
+        // More users left to watch: drag down *slightly* to close this
+        // story back to the feed (not a full dismissive swipe) — then the
+        // pick-and-slide-right cycle runs again for the next user.
+        await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.55), 260);
         await sleepOrAbort(serial, 900 + Math.round(Math.random() * 400));
+      } else {
+        // Last user: exit the story viewer fully by swiping down.
+        await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.50), Math.round(w / 2), Math.round(h * 0.92), 300);
+        await sleepOrAbort(serial, 800);
       }
     }
-
-    // Exit the story viewer by swiping down.
-    await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.50), Math.round(w / 2), Math.round(h * 0.92), 300);
-    await sleepOrAbort(serial, 800);
 
     return { usersWatched, slidesWatched };
   }
