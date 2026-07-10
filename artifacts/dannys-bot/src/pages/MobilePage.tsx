@@ -1028,28 +1028,22 @@ function AutomationSettingsPanel({
 
       {/* Master toggle — turns the whole tool on/off. Everything below is
           just configuration for what happens while it's active. */}
-      <div className="flex items-center bg-card border border-border rounded-xl p-5">
+      <div className="inline-flex items-center self-start bg-card border border-border rounded-xl p-5 gap-3">
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
         <Switch
           checked={settings.enabled}
           onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
           disabled={loading}
           className="shrink-0"
         />
-        <div className="ml-3">
-          <div className="text-sm font-semibold text-foreground">
-            {settings.enabled ? (running ? "Running" : "Active") : "Disabled (STEP1)"}
-          </div>
-          {settings.enabled && (
-            <div className="text-xs text-muted-foreground mt-0.5">
-              Automatically scrolling and liking on this phone
-            </div>
-          )}
-        </div>
+        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+          {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
+        </span>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">View Feed</p>
-        <div className="grid grid-cols-2 gap-5">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2) View Feed</p>
+        <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
             <div className="flex items-center gap-3">
@@ -1133,48 +1127,69 @@ function AutomationSettingsPanel({
   );
 }
 
+const ACCT_SLOT_COUNT = 5;
+const emptySlot = () => ({ username: "", password: "", totpSecret: "" });
+type AccountSlot = { username: string; password: string; totpSecret: string };
+
 function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
-  const [account, setAccount] = useState<{ username: string; password: string }>({ username: "", password: "" });
+  const [slots, setSlots] = useState<AccountSlot[]>(
+    Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
+  );
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
+  const [totpCode, setTotpCode] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
+  const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const hydratedRef = useRef(false);
-  const lastSavedRef = useRef<string>(JSON.stringify({ username: "", password: "" }));
+  const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
 
   useEffect(() => {
     hydratedRef.current = false;
-    if (!phone) { setAccount({ username: "", password: "" }); return; }
+    if (!phone) { setSlots(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)); return; }
     let active = true;
     setLoading(true);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`)
       .then(r => r.json())
       .then(d => {
         if (!active) return;
-        const loaded = d && d.username ? { username: d.username, password: d.password ?? "" } : { username: "", password: "" };
+        // Server now always returns { slots: [...] }; also handle legacy { username, password }
+        let loaded: AccountSlot[];
+        if (d && Array.isArray(d.slots)) {
+          loaded = Array.from({ length: ACCT_SLOT_COUNT }, (_, i) => ({
+            username: d.slots[i]?.username ?? "",
+            password: d.slots[i]?.password ?? "",
+            totpSecret: d.slots[i]?.totpSecret ?? "",
+          }));
+        } else if (d && d.username) {
+          loaded = Array.from({ length: ACCT_SLOT_COUNT }, (_, i) =>
+            i === 0 ? { username: d.username, password: d.password ?? "", totpSecret: "" } : emptySlot()
+          );
+        } else {
+          loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
+        }
         lastSavedRef.current = JSON.stringify(loaded);
-        setAccount(loaded);
+        setSlots(loaded);
       })
-      .catch(() => { /* keep blank */ })
+      .catch(() => {})
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
     return () => { active = false; };
   }, [phone?.serial]);
 
   useEffect(() => {
     if (!phone || !hydratedRef.current) return;
-    if (!account.username.trim() || !account.password.trim()) return; // wait for both fields before saving
-    const serial = phone.serial;
-    const toSaveStr = JSON.stringify(account);
+    const toSaveStr = JSON.stringify(slots);
     if (toSaveStr === lastSavedRef.current) return;
+    const serial = phone.serial;
     const t = setTimeout(() => {
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: toSaveStr,
+        body: JSON.stringify({ slots }),
       })
         .then(async r => {
           const body = await r.json().catch(() => null);
-          if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server rejected the account (${r.status})`); return; }
+          if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server error (${r.status})`); return; }
           lastSavedRef.current = toSaveStr;
           setSaveError(null);
           setSaved(true);
@@ -1183,7 +1198,41 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
         .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
     }, 600);
     return () => clearTimeout(t);
-  }, [account, phone?.serial]);
+  }, [slots, phone?.serial]);
+
+  const updateSlot = (i: number, patch: Partial<AccountSlot>) =>
+    setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
+
+  const generateTotp = async (slotIdx: number, secret: string) => {
+    setTotpCode(c => c.map((v, i) => i === slotIdx ? null : v));
+    setTotpError(e => e.map((v, i) => i === slotIdx ? null : v));
+    try {
+      const b32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      const cleaned = secret.toUpperCase().replace(/\s+/g, "").replace(/=/g, "");
+      let bits = 0, val = 0;
+      const bytes: number[] = [];
+      for (const ch of cleaned) {
+        const idx = b32.indexOf(ch);
+        if (idx < 0) continue;
+        val = (val << 5) | idx; bits += 5;
+        if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
+      }
+      if (!bytes.length) { setTotpError(e => e.map((v, i) => i === slotIdx ? "Invalid secret" : v)); return; }
+      const key = await crypto.subtle.importKey("raw", new Uint8Array(bytes), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+      const counter = Math.floor(Date.now() / 1000 / 30);
+      const buf = new Uint8Array(8);
+      let c = counter;
+      for (let i = 7; i >= 0; i--) { buf[i] = c & 0xff; c = Math.floor(c / 256); }
+      const hmac = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
+      const offset = hmac[19] & 0xf;
+      const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset + 1] << 16 | hmac[offset + 2] << 8 | hmac[offset + 3]) % 1_000_000;
+      const codeStr = code.toString().padStart(6, "0");
+      setTotpCode(cd => cd.map((v, i) => i === slotIdx ? codeStr : v));
+      navigator.clipboard.writeText(codeStr).catch(() => {});
+    } catch {
+      setTotpError(e => e.map((v, i) => i === slotIdx ? "Failed to generate" : v));
+    }
+  };
 
   if (!phone) {
     return (
@@ -1205,39 +1254,76 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
         </p>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-        <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Instagram username</Label>
-          <Input
-            value={account.username}
-            onChange={e => setAccount(a => ({ ...a, username: e.target.value }))}
-            placeholder="username"
-            disabled={loading}
-            autoComplete="off"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Password</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              type={showPassword ? "text" : "password"}
-              value={account.password}
-              onChange={e => setAccount(a => ({ ...a, password: e.target.value }))}
-              placeholder="password"
-              disabled={loading}
-              autoComplete="off"
-            />
-            <Button type="button" variant="secondary" onClick={() => setShowPassword(s => !s)}>
-              {showPassword ? "Hide" : "Show"}
-            </Button>
+      <div className="space-y-4">
+        {slots.map((slot, i) => (
+          <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-4">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Slot {i + 1}</p>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Username</Label>
+              <Input
+                value={slot.username}
+                onChange={e => updateSlot(i, { username: e.target.value })}
+                placeholder="username"
+                disabled={loading}
+                autoComplete="off"
+                className="w-[25ch]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Password</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showPassword[i] ? "text" : "password"}
+                  value={slot.password}
+                  onChange={e => updateSlot(i, { password: e.target.value })}
+                  placeholder="password"
+                  disabled={loading}
+                  autoComplete="off"
+                  className="w-[25ch]"
+                />
+                <Button type="button" variant="secondary" size="sm"
+                  onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                  {showPassword[i] ? "Hide" : "Show"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">2FA OTP Secret</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input
+                  value={slot.totpSecret}
+                  onChange={e => {
+                    updateSlot(i, { totpSecret: e.target.value });
+                    setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
+                    setTotpError(er => er.map((v, idx) => idx === i ? null : v));
+                  }}
+                  placeholder="JBSWY3DPEHPK3PXP"
+                  disabled={loading}
+                  autoComplete="off"
+                  className="w-[25ch] font-mono text-xs"
+                />
+                <Button type="button" variant="secondary" size="sm"
+                  disabled={!slot.totpSecret.trim()}
+                  onClick={() => generateTotp(i, slot.totpSecret)}>
+                  Generate Code
+                </Button>
+                {totpCode[i] && (
+                  <span className="font-mono text-sm font-bold text-green-500 tracking-widest">{totpCode[i]}</span>
+                )}
+                {totpError[i] && (
+                  <span className="text-xs text-destructive">{totpError[i]}</span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Saved automatically as you type — linked to this phone (serial {phone.serial}).
-        </p>
-        {saved && <p className="text-xs text-green-500">Saved</p>}
-        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+        ))}
       </div>
+
+      {saved && <p className="text-xs text-green-500">Saved</p>}
+      {saveError && <p className="text-xs text-destructive">{saveError}</p>}
     </div>
   );
 }

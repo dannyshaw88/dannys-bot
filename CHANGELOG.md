@@ -4,6 +4,62 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.444] — 2026-07-10
+
+### Mobile tab — recents swipe fix (MIUI), 5-slot Account Settings, UI polish
+
+#### Bug fix: Instagram recents dismiss now uses long-press + drag-left (MIUI)
+
+- **Fixed: swiping the Instagram card off the recents screen still wasn't
+  working after the previous upward-swipe attempt.** On Xiaomi MIUI the
+  upward gesture scrolled the recents *overview* rather than dismissing the
+  card; MIUI requires a long-press to enter drag mode followed by a drag-left
+  to dismiss. The gesture is now: hold touch for 650 ms at the card centre
+  (enters drag mode), then drag left to x=0 over 350 ms. Both input commands
+  run inside a single `adb shell` session with no connection gap between them,
+  so the touch stream is continuous from Android's perspective. The force-stop
+  fallback (`pidof` check) is still in place for any device where the gesture
+  doesn't land.
+
+#### Account Settings — 5 slots with 2FA OTP
+
+- **The Account Settings tab now shows 5 independent slots (Slot 1–5)** instead
+  of a single username/password pair. Each slot is a separate card with:
+  - **Username** field (25-character visual width — wider input scrolls but
+    the field itself stays compact).
+  - **Password** field (same 25-character width) with a Show/Hide toggle.
+  - **2FA OTP Secret** field + **Generate Code** button. Entering a TOTP secret
+    key and clicking Generate Code computes the current 6-digit one-time
+    password (SHA-1 HMAC, 30-second window — the same algorithm used in the
+    desktop Accounts Manager). The code is shown inline and copied to the
+    clipboard automatically.
+- Slots save automatically as you type (600 ms debounce), linked to the phone
+  by serial. Any phone that had a single account saved in the old format is
+  automatically migrated into Slot 1 on first load — no data loss.
+- API: `GET /api/mobile/devices/:serial/account` and
+  `POST /api/mobile/devices/:serial/account` now exchange
+  `{ slots: [{ username, password, totpSecret? }, …] }` (5 entries). The GET
+  endpoint also transparently migrates the old `{ username, password }` shape
+  so old saved data is never lost.
+
+#### Human Session Tool UI
+
+- **Toggle border snaps to the width of its content** — the card no longer
+  stretches full-width; it wraps tightly around the (STEP1) label, switch, and
+  state word.
+- **"(STEP1)" label moved before the toggle switch** so the read order is:
+  step label → toggle → state word. Previously it was baked into the state word
+  ("Disabled (STEP1)") which looked odd when the tool became Active/Running.
+- **"Automatically scrolling and liking on this phone" subtitle removed** — the
+  switch state word (Running / Active / Disabled) is sufficient; the extra line
+  added noise.
+- **"(STEP2)" prefix added to the View Feed section title** so the two steps
+  are sequentially numbered: (STEP1) enable the toggle, (STEP2) configure the
+  View Feed settings.
+- **Scroll and Delay fields now sit directly next to each other** (flex layout
+  instead of a two-column grid) — the previous grid gave each group a full
+  50 % column, leaving a large gap between them.
+
 ## [1.1.443] — 2026-07-10
 
 ### Mobile tab — Human Session Tool UI overhaul + MIUI recents-swipe fix

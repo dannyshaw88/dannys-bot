@@ -70,7 +70,8 @@ type AutomationSettings = {
   feedScrollMin: number;
   feedScrollMax: number;
 };
-type DeviceAccount = { username: string; password: string };
+type DeviceSlot = { username: string; password: string; totpSecret?: string };
+type DeviceAccount = { slots: DeviceSlot[] };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
@@ -585,18 +586,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
-  const deviceAccountSchema = z.object({
-    username: z.string().min(1),
-    password: z.string().min(1),
+  const SLOT_COUNT = 5;
+  const deviceSlotSchema = z.object({
+    username: z.string(),
+    password: z.string(),
+    totpSecret: z.string().optional(),
   });
+  const deviceAccountSchema = z.object({
+    slots: z.array(deviceSlotSchema).max(SLOT_COUNT),
+  });
+  const emptySlots = (): DeviceSlot[] => Array.from({ length: SLOT_COUNT }, () => ({ username: "", password: "" }));
+  const migrateAccount = (raw: any): DeviceAccount => {
+    if (raw && Array.isArray(raw.slots)) return raw as DeviceAccount;
+    // Legacy single-account format → migrate into slot 0
+    if (raw && typeof raw.username === "string") {
+      const slots = emptySlots();
+      slots[0] = { username: raw.username, password: raw.password ?? "", totpSecret: raw.totpSecret };
+      return { slots };
+    }
+    return { slots: emptySlots() };
+  };
   app.get("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const account = cfg[p(req, "serial")]?.account ?? null;
-    res.json(account);
+    const raw = cfg[p(req, "serial")]?.account ?? null;
+    res.json(migrateAccount(raw));
   });
   app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     try {
       const input = deviceAccountSchema.parse(req.body);
+      // Pad to SLOT_COUNT if fewer slots were sent
+      while (input.slots.length < SLOT_COUNT) input.slots.push({ username: "", password: "" });
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], account: input };
