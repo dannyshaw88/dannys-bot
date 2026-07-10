@@ -728,6 +728,34 @@ export async function tap(serial: string, x: number, y: number): Promise<void> {
   runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
+/**
+ * Instagram's like gesture needs two taps close enough together to be
+ * recognised as a double-tap (its GestureDetector double-tap window is a
+ * few hundred ms). The previous implementation called `tap()` twice, each
+ * of which is its own `spawnSync adb shell` round-trip — spawning a process
+ * and talking to the adb server/USB link typically costs 100-300ms *per
+ * call* on top of the explicit delay between them, so the real gap between
+ * the two on-device taps was often 300-600ms+ and Instagram registered them
+ * as two independent single taps (no like) instead of a double-tap.
+ *
+ * Fixing this requires both taps to happen inside a *single* adb shell
+ * invocation, with the pause done on-device (`sleep`) rather than in two
+ * separate host-side spawns — that keeps the on-device gap tight and
+ * consistent regardless of adb/USB latency.
+ */
+export async function doubleTap(serial: string, x: number, y: number): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const cmd = `input tap ${x} ${y}; sleep 0.08; input tap ${x} ${y}`;
+  const r = spawnSync(adb, ["-s", serial, "shell", cmd], { encoding: "utf8", timeout: 5000 });
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
+  if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
+    throw new Error(
+      `adb shell double-tap failed (exit=${r.status ?? "spawn-error"})${out ? `: ${out}` : r.error ? `: ${r.error.message}` : ""}`
+    );
+  }
+}
+
 export async function swipe(
   serial: string,
   x1: number,

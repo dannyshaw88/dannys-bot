@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.438] — 2026-07-10
+
+### Human Session Tool — master toggle, autosave, fixed double-tap like
+
+- **Removed the "Save settings" button.** Every field (including the new
+  master toggle) now saves automatically on change, debounced by 500ms so
+  rapid edits don't spam the server. A save error still surfaces inline if
+  one occurs.
+- **Removed the "Check Feed" button.** In its place, a master toggle at the
+  top of the panel switches the whole tool on or off. While on, it runs
+  Check-Feed cycles (scroll count drawn from the configured range) back to
+  back, with the configured delay between both scrolls and cycles, until
+  switched off. The toggle state is persisted per device so it survives a
+  page reload.
+- **Removed** the "Scroll the Instagram feed currently shown on the phone"
+  description text and the scroll-count summary message — neither carried
+  information the toggle/log don't already cover.
+- **Layout:** "Scroll this many times" and "Delay between actions" now sit
+  side by side in the same row instead of stacked.
+- **Fixed: double-tap-to-like didn't actually like posts.** The like
+  gesture sent two separate `adb shell input tap` calls, each its own
+  process spawn / adb round-trip (100-300ms+). That pushed the real gap
+  between the two on-device taps well past Instagram's double-tap
+  recognition window, so Instagram saw two independent single taps instead
+  of a like. Both taps now fire inside one `adb shell` invocation with an
+  on-device `sleep` between them (`androidManager.doubleTap`), keeping the
+  gap tight and consistent regardless of adb/USB latency.
+
 ## [1.1.437] — 2026-07-10
 
 ### Mobile Farm — renamed to "Human Session Tool", real inter-action delay, per-day cap and notes removed, new like-percentage feature

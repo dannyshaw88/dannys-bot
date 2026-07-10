@@ -62,6 +62,7 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 // ── Per-instance config (proxy assignment) ────────────────────────────────────
 // Stored in mobile-instances.json next to the DB so it survives restarts.
 type AutomationSettings = {
+  enabled: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -558,6 +559,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── Per-device automation settings (isolated to the Mobile tab) ─────────────
   const automationSchema = z.object({
+    enabled: z.boolean().default(false),
     actionDelayMin: z.number().min(0).max(9999),
     actionDelayMax: z.number().min(0).max(9999),
     likePercentMin: z.number().min(0).max(100),
@@ -567,8 +569,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const defaults: AutomationSettings = { actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
-    res.json(cfg[p(req, "serial")]?.automation ?? defaults);
+    const defaults: AutomationSettings = { enabled: false, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
+    res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
   app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     try {
@@ -640,9 +642,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const jx = x + Math.round((Math.random() - 0.5) * w * 0.08);
           const jy = cy + Math.round((Math.random() - 0.5) * h * 0.06);
           await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
-          await android.tap(serial, jx, jy);
-          await new Promise(r => setTimeout(r, 90 + Math.round(Math.random() * 60)));
-          await android.tap(serial, jx, jy);
+          // Both taps must land inside one adb shell call (see
+          // androidManager.doubleTap) — two separate `tap()` calls each pay
+          // their own adb/USB round-trip, which pushed the real on-device
+          // gap past Instagram's double-tap window and the like never fired.
+          await android.doubleTap(serial, jx, jy);
           likes++;
         }
 

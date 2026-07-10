@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
@@ -758,6 +759,7 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 // ─── Automation settings panel (right column, per device) ────────────────────
 
 interface AutomationSettingsData {
+  enabled: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -767,7 +769,7 @@ interface AutomationSettingsData {
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
-  actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
+  enabled: false, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -779,75 +781,109 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onLog?: (msg: string) => void }) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
-  const [saving,   setSaving]   = useState(false);
-  const [saved,    setSaved]    = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [checkMsg,  setCheckMsg] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [running,  setRunning]  = useState(false);
+
+  // Loaded settings (including `enabled`) come from the server per phone —
+  // used to detect real user edits vs. the initial load, so autosave never
+  // fires before the fetch resolves.
+  const hydratedRef = useRef(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  // Snapshot of what's actually persisted server-side — lets autosave skip
+  // firing a no-op POST right after hydration (when `settings` merely
+  // mirrors what was just loaded) and only save on real user edits.
+  const lastSavedRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS));
 
   useEffect(() => {
+    hydratedRef.current = false;
     if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }
     let active = true;
     setLoading(true);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`)
       .then(r => r.json())
-      .then(d => { if (active) setSettings({ ...AUTOMATION_DEFAULTS, ...d }); })
+      .then(d => {
+        if (!active) return;
+        const merged = { ...AUTOMATION_DEFAULTS, ...d };
+        lastSavedRef.current = JSON.stringify(merged);
+        setSettings(merged);
+      })
       .catch(() => { /* keep defaults */ })
-      .finally(() => { if (active) setLoading(false); });
+      .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
     return () => { active = false; };
   }, [phone?.serial]);
 
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const runCheckFeed = async () => {
-    if (!phone) return;
-    const min = Math.max(1, Math.min(settings.feedScrollMin, settings.feedScrollMax));
-    const max = Math.max(settings.feedScrollMin, settings.feedScrollMax);
-    const count = Math.floor(Math.random() * (max - min + 1)) + min;
-    setChecking(true); setCheckMsg(null);
-    onLog?.(`Check Feed → ${count} downward scrolls`);
-    try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/check-feed`, {
+  // Save on the fly: every settings change (including the master toggle)
+  // is persisted automatically, debounced so rapid typing doesn't fire a
+  // request per keystroke. No manual "Save" step required.
+  useEffect(() => {
+    if (!phone || !hydratedRef.current) return;
+    const serial = phone.serial;
+    const toSave = settings;
+    const toSaveStr = JSON.stringify(toSave);
+    if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
+    const t = setTimeout(() => {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          count,
-          delayMinSec: settings.actionDelayMin,
-          delayMaxSec: settings.actionDelayMax,
-          likePercentMin: settings.likePercentMin,
-          likePercentMax: settings.likePercentMax,
-        }),
-      });
-      const body = await r.json().catch(() => null);
-      if (!r.ok || !body?.ok) {
-        setCheckMsg(body?.error ?? `Failed (${r.status})`);
-        return;
-      }
-      setCheckMsg(`Scrolled ${count} times${body.likes ? `, liked ${body.likes}` : ""}`);
-    } catch (e: any) {
-      setCheckMsg(e?.message ?? "Couldn't reach the server");
-    } finally { setChecking(false); }
-  };
+        body: toSaveStr,
+      })
+        .then(async r => {
+          const body = await r.json().catch(() => null);
+          if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server rejected the settings (${r.status})`); return; }
+          lastSavedRef.current = toSaveStr;
+          setSaveError(null);
+        })
+        .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [settings, phone?.serial]);
 
-  const save = async () => {
-    if (!phone) return;
-    setSaving(true); setSaved(false); setSaveError(null);
-    try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
-      const body = await r.json().catch(() => null);
-      if (!r.ok || !body?.ok) {
-        setSaveError(body?.error ?? `Server rejected the settings (${r.status})`);
-        return;
+  // While the master toggle is on, repeatedly run a Check-Feed cycle
+  // (random scroll count from the configured range, honoring the delay and
+  // like-percentage settings) back-to-back until the toggle is switched
+  // off or the phone disconnects.
+  useEffect(() => {
+    if (!phone || !settings.enabled) { setRunning(false); return; }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const serial = phone.serial;
+
+    const runCycle = async () => {
+      if (cancelled) return;
+      const s = settingsRef.current;
+      const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
+      const max = Math.max(s.feedScrollMin, s.feedScrollMax);
+      const count = Math.floor(Math.random() * (max - min + 1)) + min;
+      setRunning(true);
+      onLog?.(`Tool active → ${count} downward scrolls`);
+      try {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/check-feed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            count,
+            delayMinSec: s.actionDelayMin,
+            delayMaxSec: s.actionDelayMax,
+            likePercentMin: s.likePercentMin,
+            likePercentMax: s.likePercentMax,
+          }),
+        });
+        const body = await r.json().catch(() => null);
+        if (!r.ok || !body?.ok) onLog?.(`Cycle failed — ${body?.error ?? r.status}`);
+      } catch (e: any) {
+        onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e: any) {
-      setSaveError(e?.message ?? "Couldn't reach the server");
-    } finally { setSaving(false); }
-  };
+      if (cancelled) return;
+      const s2 = settingsRef.current;
+      const gapSec = s2.actionDelayMin + Math.random() * Math.max(0, s2.actionDelayMax - s2.actionDelayMin);
+      timer = setTimeout(runCycle, Math.round(gapSec * 1000));
+    };
+
+    runCycle();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); setRunning(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone?.serial, settings.enabled]);
 
   if (!phone) {
     return (
@@ -869,59 +905,72 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
         </p>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+      {/* Master toggle — turns the whole tool on/off. Everything below is
+          just configuration for what happens while it's active. */}
+      <div className="flex items-center justify-between bg-card border border-border rounded-xl p-5">
         <div>
-          <div className="text-sm font-semibold text-foreground">Check Feed</div>
+          <div className="text-sm font-semibold text-foreground">
+            {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
+          </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Scroll the Instagram feed currently shown on the phone
+            {settings.enabled ? "Automatically scrolling and liking on this phone" : "Tool is idle"}
           </div>
         </div>
+        <Switch
+          checked={settings.enabled}
+          onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
+          disabled={loading}
+        />
+      </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              min={1}
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.feedScrollMin}
-              onChange={e => setSettings(s => ({ ...s, feedScrollMin: clamp4(Number(e.target.value)) }))}
-              disabled={loading}
-            />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input
-              type="number"
-              min={1}
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.feedScrollMax}
-              onChange={e => setSettings(s => ({ ...s, feedScrollMax: clamp4(Number(e.target.value)) }))}
-              disabled={loading}
-            />
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div className="grid grid-cols-2 gap-5">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={1}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.feedScrollMin}
+                onChange={e => setSettings(s => ({ ...s, feedScrollMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={1}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.feedScrollMax}
+                onChange={e => setSettings(s => ({ ...s, feedScrollMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading}
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.actionDelayMin}
-              onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
-              disabled={loading}
-            />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input
-              type="number"
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.actionDelayMax}
-              onChange={e => setSettings(s => ({ ...s, actionDelayMax: clamp4(Number(e.target.value)) }))}
-              disabled={loading}
-            />
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.actionDelayMin}
+                onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.actionDelayMax}
+                onChange={e => setSettings(s => ({ ...s, actionDelayMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading}
+              />
+            </div>
           </div>
         </div>
 
@@ -953,14 +1002,6 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
           </div>
         </div>
 
-        <Button className="w-full" variant="secondary" onClick={runCheckFeed} disabled={checking || loading}>
-          {checking ? "Scrolling…" : "Check Feed"}
-        </Button>
-        {checkMsg && <p className="text-xs text-muted-foreground">{checkMsg}</p>}
-
-        <Button className="w-full" onClick={save} disabled={saving || loading}>
-          {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
-        </Button>
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
     </div>
