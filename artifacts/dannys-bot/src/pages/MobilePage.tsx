@@ -886,6 +886,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [running,  setRunning]  = useState(false);
+  const [nextRunAt, setNextRunAt] = useState<number | null>(null);
 
   // Loaded settings (including `enabled`) come from the server per phone —
   // used to detect real user edits vs. the initial load, so autosave never
@@ -954,6 +955,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
     const runCycle = async () => {
       if (cancelled) return;
+      setNextRunAt(null);
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
@@ -986,23 +988,25 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
       }
       if (cancelled) return;
+      setRunning(false);
       const s2 = settingsRef.current;
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+      setNextRunAt(Date.now() + Math.round(gapMs));
       timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
     runCycle();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); setRunning(false); };
+    return () => { cancelled = true; if (timer) clearTimeout(timer); setRunning(false); setNextRunAt(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, settings.enabled]);
 
-  return { settings, setSettings, loading, saveError, running };
+  return { settings, setSettings, loading, saveError, running, nextRunAt };
 }
 
 function AutomationSettingsPanel({
-  phone, settings, setSettings, loading, saveError, running,
+  phone, settings, setSettings, loading, saveError, running, nextRunAt,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -1010,6 +1014,7 @@ function AutomationSettingsPanel({
   loading: boolean;
   saveError: string | null;
   running: boolean;
+  nextRunAt: number | null;
 }) {
   if (!phone) {
     return (
@@ -1032,8 +1037,9 @@ function AutomationSettingsPanel({
       </div>
 
       {/* Master toggle — turns the whole tool on/off. */}
-      <div className="space-y-3">
-        <div className="inline-flex items-center self-start bg-card border border-border rounded-xl p-5 gap-3">
+      <div className="inline-flex flex-col self-start bg-card border border-border rounded-xl p-5 gap-4">
+        {/* Row 1: toggle + status */}
+        <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
           <Switch
             checked={settings.enabled}
@@ -1041,12 +1047,19 @@ function AutomationSettingsPanel({
             disabled={loading}
             className="shrink-0"
           />
-          <span className="text-sm font-semibold text-foreground whitespace-nowrap">
-            {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+              {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
+            </span>
+            {settings.enabled && !running && nextRunAt && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Next run at {new Date(nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} on {new Date(nextRunAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Cycle interval — how long to wait between runs */}
+        {/* Row 2: cycle interval */}
         <div className="flex items-center gap-3 flex-wrap">
           <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
           <Input
@@ -1151,6 +1164,14 @@ function AutomationSettingsPanel({
         </div>
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+      </div>
+
+      {/* Final Step */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-2">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(FINAL STEP)</p>
+        <p className="text-sm text-foreground">
+          Close the Instagram app and Airplane Mode will be activated for 15–20 seconds, then Airplane Mode will be turned off.
+        </p>
       </div>
     </div>
   );
@@ -1573,6 +1594,7 @@ export function MobilePage() {
                     loading={automation.loading}
                     saveError={automation.saveError}
                     running={automation.running}
+                    nextRunAt={automation.nextRunAt}
                   />
                 )}
                 {activeTab === "log"     && <LogPanel lines={logLines} onClear={() => setLogLines([])} />}
