@@ -4,6 +4,65 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.435] — 2026-07-10
+
+### Mobile Farm — reverted the video mirror back to `screenrecord`; scrcpy never worked on real hardware
+
+**The problem:** v1.1.432 replaced the `screenrecord`-based H.264 mirror with a
+from-scratch scrcpy-server protocol client, intended to fix `screenrecord`'s
+MIUI keyguard-freeze issue. Across every real-device test since (v1.1.432
+through v1.1.434, including a v1.1.433 error-surfacing pass and a v1.1.434
+logcat-fallback pass), the scrcpy session **never once completed its
+handshake** — the client always hit `Failed to read scrcpy video header:
+socket closed before header was fully read` before a single frame arrived.
+The client-side fallback then dropped to the old PNG-polling screenshot
+stream, which is what actually shipped to the user every time: not "a slower
+video," but zero video at all, silently.
+
+**Investigation:** decompiled the vendored `scrcpy-server-v3.1` jar's option
+table and cross-referenced it against the real scrcpy v3.1 server source
+(`Options.java`, `Server.java`, `DesktopConnection.java`, `Streamer.java`).
+The wire protocol implementation in `scrcpyServer.ts` (socket order, header
+layout, control-message byte layout) matches the real server exactly — the
+bug is not a protocol mismatch we could find from static analysis. The most
+likely remaining explanation is that the on-device video capture step itself
+(`SurfaceEncoder`/`MediaCodec` configuration against this specific phone's
+hardware encoder) throws before `writeVideoHeader()` ever runs, closing the
+socket the client is blocked reading from — but confirming that requires
+actual `adb logcat` output from the failing device, which isn't available
+from this environment. No physical Android hardware is reachable here to
+test further.
+
+**The fix:** reverted the `/api/mobile/video/:serial` WebSocket route and the
+`/input/tap` and `/input/key` routes to the `screenrecord`-based
+implementation from v1.1.431 — the last version confirmed to actually stream
+real H.264 frames at close to 30fps on this hardware. This restores:
+- `adb exec-out screenrecord --output-format=h264` piped straight to the
+  browser over WebSocket, decoded client-side with WebCodecs.
+- Automatic respawn on `screenrecord`'s 180s `--time-limit` cap, plus a 6s
+  stall watchdog that force-restarts the stream (re-poking wake + keyguard
+  dismiss) if the OEM virtual-display freeze re-occurs — this was always a
+  known trade-off of the `screenrecord` approach, not a new regression.
+  When it stalls, it recovers in a few seconds rather than going dark.
+- Server-side tap coordinate rescaling: `screenrecord` may downscale its
+  output relative to the device's real `wm size` (encoder alignment
+  constraints), so `/input/tap` now rescales `x`/`y` against `wm size`
+  again when the client's reported video frame size doesn't match.
+
+The scrcpy protocol client (`src/mobile/scrcpyServer.ts` and the vendored
+`scrcpy-server-v3.1` jar) is left in the repo, unused, for whoever picks up
+the logcat root-cause investigation next — do not wire it back into the
+video route without first confirming a real device actually streams frames
+through it.
+
+**Also fixed:** removed the dead `activeScrcpySessions` map and its tap/key
+routing, which had silently fallen back to unscaled `adb shell input tap`
+whenever no scrcpy session existed (i.e. always, in practice) — this is what
+made taps land on the wrong pixel on any device where `screenrecord` streams
+at a size other than the panel's native resolution.
+
+---
+
 ## [1.1.432] — 2026-07-09
 
 ### Mobile Farm — mirror is now a real scrcpy session, not `screenrecord`

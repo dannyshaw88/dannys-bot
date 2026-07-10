@@ -9,16 +9,15 @@ import * as os from "os";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
-import * as scrcpy from "../mobile/scrcpyServer";
+// NOTE: src/mobile/scrcpyServer.ts implements a real scrcpy-server protocol
+// client that was meant to replace the screenrecord-based mirror below (to
+// fix screenrecord's MIUI keyguard-freeze issue), but it has never
+// successfully completed its handshake against real hardware in testing —
+// see the comment above the video WebSocket route. Left unused but in place
+// for whoever picks this up next; do not wire it back in without confirming
+// a real device actually streams frames.
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
-
-// Active scrcpy sessions, keyed by device serial — one live mirror per phone.
-// The tap/swipe/keycode routes reuse the session's control socket (real
-// device-pixel coordinates via scrcpy's own touch-injection protocol)
-// instead of falling back to `adb shell input tap`, which is what silently
-// mis-scaled every tap in the old screenrecord-based mirror.
-const activeScrcpySessions = new Map<string, scrcpy.ScrcpySession>();
 
 const execFileP = promisify(execFile);
 
@@ -280,18 +279,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     });
   });
 
-  // ── Live H.264 video mirror — real scrcpy server, not screenrecord ─────────
-  // `screenrecord` mirrors a *virtual* display, which several OEM skins
-  // (MIUI especially) freeze the instant the keyguard re-engages or the real
-  // screen sleeps — the old code masked this with a restart-on-stall loop,
-  // which is what made the "video" mirror look like it kept reverting to
-  // screenshots (it was constantly restarting, never smooth).
+  // ── Live H.264 video mirror (real-time stream, not screenshot polling) ─────
+  // Reverted to the `screenrecord`-based mirror (confirmed working at ~30fps
+  // on real hardware). We tried replacing this with a real scrcpy-server
+  // protocol client (see src/mobile/scrcpyServer.ts) to fix screenrecord's
+  // MIUI keyguard-freeze issue, but across every test on this hardware the
+  // scrcpy session never completed its handshake — the video socket header
+  // never arrived ("socket closed before header was fully read") even with
+  // a logcat-failure fallback added — so it silently produced *zero* frames,
+  // which is strictly worse than screenrecord's occasional stall-and-restart.
+  // Until scrcpy's handshake failure is root-caused against real device
+  // logcat output, screenrecord is the working path — do not swap this out
+  // again without confirming a real device actually streams frames first.
   //
-  // scrcpy's on-device server captures the REAL display via Android's native
-  // capture APIs (the same path system screen recording uses), so it doesn't
-  // have that freeze mode, and it streams continuously instead of in
-  // 180s-capped chunks. See src/mobile/scrcpyServer.ts for the protocol
-  // implementation and vendored server binary.
+  // Uses the on-device `screenrecord` binary (built into Android since API 19,
+  // no scrcpy/root/extra install required) to continuously encode the screen
+  // as raw H.264 and pipe it straight to the browser over this WebSocket. The
+  // browser demuxes Annex-B access units and decodes them with WebCodecs —
+  // this is what gives near-instant (~30fps) mirroring instead of the old
+  // "adb exec-out screencap" polling loop, which paid a full PNG capture cost
+  // (150-400ms) per frame.
+  //
+  // `screenrecord` has a hard --time-limit cap (180s on most Android builds)
+  // per invocation, so we transparently respawn it when it exits and keep
+  // streaming — the browser-side decoder just sees a short gap.
   const videoWss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (request, socket, head) => {
@@ -318,60 +329,138 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
 
-      let closed = false;
+      let running = true;
+      let restartCount = 0;
+      let currentChild: ReturnType<typeof spawn> | null = null;
 
-      // A reconnecting client can open a new upgrade before the previous
-      // session's close handler has fully torn things down — reject the
-      // overlap outright rather than racing two adb forward/push/spawn
-      // sequences against the same serial.
-      if (scrcpy.isStartingSession(serial)) {
-        ws.send(JSON.stringify({ error: "A mirror session is already starting for this device — retrying…" }));
-        ws.close();
-        return;
-      }
-      const existing = activeScrcpySessions.get(serial);
-      if (existing) existing.stop("superseded by new connection");
-      scrcpy.cleanupStaleSession(serial);
+      const adbShell = (...args: string[]) =>
+        spawn(adbPath, ["-s", serial, "shell", ...args], { stdio: "ignore" });
 
-      logger.info({ serial }, "[mobile-video] starting scrcpy session");
-      scrcpy.startScrcpySession(serial, { bitRate: 8_000_000 })
-        .then((session) => {
-          if (closed || ws.readyState !== 1) { session.stop("ws already closed"); return; }
+      // Keep the screen awake for the duration of the mirror session — same
+      // trick as the PNG endpoint, but doubly important here: if the display
+      // actually powers off, screenrecord stops producing frames entirely.
+      let originalScreenTimeout = "30000";
+      try {
+        const st = spawnSync(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], { encoding: "utf8", timeout: 3000 });
+        const val = st.stdout?.trim();
+        if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
+      } catch { /* ignore */ }
+      adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
+      adbShell("input", "keyevent", "224"); // KEYCODE_WAKEUP
+      // Some OEM skins (MIUI in particular) keep the keyguard engaged even
+      // after the display wakes, which freezes screenrecord's virtual
+      // display on the lock-screen frame (or a black frame, if the lock
+      // screen itself is flagged secure) — the client then sees exactly one
+      // initial frame and nothing ever again. Explicitly dismiss it too.
+      adbShell("wm", "dismiss-keyguard");
 
-          activeScrcpySessions.set(serial, session);
-          ws.send(JSON.stringify({ info: `scrcpy connected — ${session.deviceName} ${session.width}x${session.height}` }));
-          ws.send(JSON.stringify({ deviceSize: { width: session.width, height: session.height } }));
+      // NOTE: we intentionally do NOT force `--size` to the device's exact
+      // `wm size` here. screenrecord's encoder on many devices requires
+      // width/height to be 16-pixel-aligned; most phone resolutions (e.g.
+      // 1080x2400) are NOT multiples of 16, so pinning the raw wm-size value
+      // made screenrecord fail to start at all (symptom: stream never
+      // produces data — "waiting for screen data" forever). Instead we let
+      // screenrecord pick its own (possibly downscaled) size, and correct
+      // tap coordinates for the mismatch server-side in the /input/tap route
+      // by scaling from the video's reported size to the device's real size.
 
-          session.onVideoData((chunk) => { if (ws.readyState === 1) ws.send(chunk); });
-          session.onError((err) => {
-            logger.error({ serial, err }, "[mobile-video] scrcpy session error");
-            if (ws.readyState === 1) ws.send(JSON.stringify({ error: err.message }));
-          });
-          session.onClose((reason) => {
-            logger.info({ serial, reason }, "[mobile-video] scrcpy session closed");
-            if (activeScrcpySessions.get(serial) === session) activeScrcpySessions.delete(serial);
-            if (ws.readyState === 1) ws.close();
-          });
+      let cleanedUp = false;
+      const cleanup = (reason: string) => {
+        if (cleanedUp) return; // idempotent — close fires after error too
+        cleanedUp = true;
+        running = false;
+        try { currentChild?.kill(); } catch { /* ignore */ }
+        try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
+        logger.info({ serial, reason }, "[mobile-video] session cleaned up");
+      };
+      ws.on("close", () => cleanup("close"));
+      ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
 
-          ws.on("close", () => {
-            closed = true;
-            if (activeScrcpySessions.get(serial) === session) activeScrcpySessions.delete(serial);
-            session.stop("client disconnected");
-          });
-          ws.on("error", (err) => {
-            logger.error({ serial, err }, "[mobile-video] WebSocket error");
-            session.stop(`ws error: ${err.message}`);
-          });
-        })
-        .catch((err: Error) => {
-          logger.error({ serial, err }, "[mobile-video] failed to start scrcpy session");
+      const spawnStream = () => {
+        if (!running || ws.readyState !== 1) return;
+        // --output-format=h264: raw Annex-B elementary stream (no MP4 container)
+        // straight to stdout via `exec-out` — this is what lets us pipe it
+        // directly into a WebSocket frame-by-frame with zero temp files.
+        const args = [
+          "-s", serial, "exec-out", "screenrecord",
+          "--output-format=h264",
+          "--bit-rate", "8000000",
+          "--time-limit", "180",
+          "-",
+        ];
+        const child = spawn(adbPath, args);
+        currentChild = child;
+        let sawAnyData = false;
+        let bytesTotal = 0;
+        let stderrOut = "";
+
+        // screenrecord on some OEM builds (MIUI especially) will hand back
+        // SPS/PPS and then go completely silent — no more stdout, no exit,
+        // no error — if the virtual display it's mirroring stops producing
+        // new frames (keyguard re-engaging, always-on-display swallowing the
+        // real screen, DRM/secure-surface blocking, etc). That looks exactly
+        // like "connected but frozen forever" from the client's side. Watch
+        // for a stall and force a fresh screenrecord + re-poke the device
+        // rather than hanging indefinitely.
+        let stallTimer: NodeJS.Timeout | null = null;
+        const armStall = (ms: number) => {
+          if (stallTimer) clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => {
+            logger.warn({ serial, bytesTotal }, "[mobile-video] stream stalled — no data for 6s, forcing restart");
+            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled (screen locked / not updating?) — retrying…" }));
+            adbShell("input", "keyevent", "224");
+            adbShell("wm", "dismiss-keyguard");
+            try { child.kill(); } catch { /* ignore — close handler restarts */ }
+          }, ms);
+        };
+        armStall(6_000);
+
+        child.stdout.on("data", (chunk: Buffer) => {
+          sawAnyData = true;
+          bytesTotal += chunk.length;
+          armStall(6_000);
+          if (ws.readyState === 1) ws.send(chunk);
+        });
+        child.stderr?.on("data", (d: Buffer) => {
+          const line = d.toString().trim();
+          stderrOut += line;
+          if (line && ws.readyState === 1) ws.send(JSON.stringify({ info: `[screenrecord] ${line}` }));
+        });
+        child.on("error", (err) => {
+          if (stallTimer) clearTimeout(stallTimer);
+          logger.error({ serial, err }, "[mobile-video] spawn error for screenrecord");
           if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ error: `Failed to start scrcpy: ${err.message}`, fatal: true }));
+            ws.send(JSON.stringify({ error: `Failed to start screenrecord: ${err.message}`, fatal: true }));
             ws.close();
           }
+          cleanup("screenrecord spawn error");
         });
+        child.on("close", (code) => {
+          if (stallTimer) clearTimeout(stallTimer);
+          currentChild = null;
+          if (!running) return;
+          if (!sawAnyData) {
+            // screenrecord never produced a byte — likely unsupported on this
+            // device/Android version. Tell the client so it can fall back to
+            // the PNG polling stream instead of retrying forever.
+            logger.warn({ serial, code, stderr: stderrOut.trim() }, "[mobile-video] screenrecord produced no data — unsupported?");
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({ error: `screenrecord unavailable on this device (${stderrOut.trim() || `exit ${code}`})`, fatal: true }));
+              ws.close();
+            }
+            running = false;
+            return;
+          }
+          // Hit the --time-limit, was stalled, or was killed for some other
+          // transient reason — restart immediately to keep the stream going.
+          restartCount++;
+          logger.info({ serial, restartCount, code, bytesTotal }, "[mobile-video] screenrecord cycle ended — restarting");
+          spawnStream();
+        });
+      };
 
-      ws.on("close", () => { closed = true; });
+      logger.info({ serial, adbPath }, "[mobile-video] starting screenrecord stream");
+      spawnStream();
     });
   });
 
@@ -752,14 +841,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // videoW/videoH are the client's decoded video frame size at the moment it
-  // computed x/y. When a live scrcpy session is active for this device, we
-  // route the tap through its control socket: scrcpy's own touch-injection
-  // protocol takes x/y *plus* the frame size they were computed against and
-  // scales to real touchscreen coordinates on-device — no separate `wm size`
-  // lookup or manual rescale needed (that manual rescale was the source of
-  // the old "taps land on the wrong pixel" bug). Falls back to a plain
-  // `adb shell input tap` (unscaled) only if no scrcpy session is live.
+  // videoW/videoH are optional: the client's decoded video frame size at the
+  // moment it computed x/y. screenrecord may stream at a downscaled size
+  // relative to the device's real screen (see comment in the video WS route
+  // above), so if the client's video size doesn't match the device's actual
+  // `wm size`, we rescale x/y into real device pixels before tapping —
+  // otherwise every tap silently lands on the wrong spot.
   const tapSchema = z.object({
     x: z.number(),
     y: z.number(),
@@ -770,14 +857,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const session = activeScrcpySessions.get(serial);
-      if (session) {
-        session.tap(input.x, input.y, input.videoW ?? session.width, input.videoH ?? session.height);
-        res.json({ ok: true, via: "scrcpy-control" });
-        return;
+      let { x, y } = input;
+      if (input.videoW && input.videoH) {
+        try {
+          const tools = android.detectToolset();
+          const adbPath = tools.adb.path;
+          if (adbPath) {
+            const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+            const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+            if (m) {
+              const realW = parseInt(m[1]);
+              const realH = parseInt(m[2]);
+              if (realW !== input.videoW || realH !== input.videoH) {
+                x = Math.round((x / input.videoW) * realW);
+                y = Math.round((y / input.videoH) * realH);
+                logger.info({ serial, from: [input.x, input.y], to: [x, y], video: [input.videoW, input.videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
+              }
+            }
+          }
+        } catch { /* fall back to unscaled coordinates */ }
       }
-      await android.tap(serial, input.x, input.y);
-      res.json({ ok: true, via: "adb-shell" });
+      await android.tap(serial, x, y);
+      res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -785,19 +886,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/input/key", async (req: Request, res: Response) => {
     try {
       const input = keySchema.parse(req.body);
-      const serial = p(req, "serial");
-      // Prefer the live scrcpy control socket when available — it injects
-      // via the same on-device InputManager path as touch, with no extra
-      // `adb shell` process spawn per keypress.
-      const session = activeScrcpySessions.get(serial);
-      const code = typeof input.code === "string" ? parseInt(input.code, 10) : input.code;
-      if (session && Number.isFinite(code)) {
-        session.keycode(code);
-        res.json({ ok: true, via: "scrcpy-control" });
-        return;
-      }
-      await android.keyevent(serial, input.code);
-      res.json({ ok: true, via: "adb-shell" });
+      await android.keyevent(p(req, "serial"), input.code);
+      res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
