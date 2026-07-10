@@ -1028,23 +1028,27 @@ function AutomationSettingsPanel({
 
       {/* Master toggle — turns the whole tool on/off. Everything below is
           just configuration for what happens while it's active. */}
-      <div className="flex items-center justify-between bg-card border border-border rounded-xl p-5">
-        <div>
-          <div className="text-sm font-semibold text-foreground">
-            {settings.enabled ? (running ? "Running" : "Active") : "Disabled"}
-          </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {settings.enabled ? "Automatically scrolling and liking on this phone" : "Tool is idle"}
-          </div>
-        </div>
+      <div className="flex items-center bg-card border border-border rounded-xl p-5">
         <Switch
           checked={settings.enabled}
           onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
           disabled={loading}
+          className="shrink-0"
         />
+        <div className="ml-3">
+          <div className="text-sm font-semibold text-foreground">
+            {settings.enabled ? (running ? "Running" : "Active") : "Disabled (STEP1)"}
+          </div>
+          {settings.enabled && (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Automatically scrolling and liking on this phone
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">View Feed</p>
         <div className="grid grid-cols-2 gap-5">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
@@ -1096,7 +1100,7 @@ function AutomationSettingsPanel({
         </div>
 
         <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Like this % of viewed posts</Label>
+          <Label className="text-sm text-muted-foreground">Like % of viewed posts</Label>
           <div className="flex items-center gap-3">
             <Input
               type="number"

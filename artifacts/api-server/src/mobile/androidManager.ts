@@ -823,10 +823,13 @@ export async function closeInstagramViaRecents(serial: string): Promise<void> {
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
   await openRecentApps(serial);
-  await new Promise(r => setTimeout(r, 700)); // let the overview animation finish
-  const cardY = Math.round(h * 0.45); // recent-app cards sit around mid-screen on stock overview UI
-  await swipe(serial, Math.round(w * 0.85), cardY, 0, cardY, 260);
-  await new Promise(r => setTimeout(r, 400));
+  await new Promise(r => setTimeout(r, 1200)); // MIUI/OEM recents animations are slow — give them time to finish
+  // Swipe the card upward to dismiss — MIUI and most modern OEM launchers
+  // use a vertical swipe-up gesture; the old horizontal (right→left) swipe
+  // only works on stock AOSP/Pixel overviews and silently does nothing on Xiaomi.
+  const cardX = Math.round(w * 0.5);
+  await swipe(serial, cardX, Math.round(h * 0.52), cardX, Math.round(h * 0.05), 380);
+  await new Promise(r => setTimeout(r, 500));
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions (some dismiss on a horizontal swipe, some need vertical) — a
