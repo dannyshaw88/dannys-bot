@@ -2,7 +2,7 @@
  * Mobile Farm — USB Phone Management (4-slot single row, Electron-safe WS)
  */
 
-import React, { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -105,7 +105,9 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in window;
 
-const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions }: { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }) {
+type LiveCanvasHandle = { clearToBlack: () => void };
+
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
@@ -121,6 +123,33 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions 
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
+
+  // Expose clearToBlack() so PhoneSlot can immediately black out the canvas
+  // when the user presses Power — before the server has a chance to report
+  // the screen as asleep (which takes a second or two).
+  useImperativeHandle(ref, () => ({
+    clearToBlack() {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    },
+  }), []);
+
+  // Also clear the canvas automatically whenever the status transitions to
+  // "asleep" — this covers automation-triggered sleeps (airplane-mode cycle,
+  // etc.) where the Power button wasn't pressed by the user directly.
+  useEffect(() => {
+    if (status !== "asleep") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, [status]);
 
   // The debug log panel was moved off the phone screen itself — this just
   // forwards messages up to the parent, which renders them in a panel below
@@ -629,7 +658,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions 
       )}
     </div>
   );
-});
+}));
 
 // ─── Empty phone shell ────────────────────────────────────────────────────────
 
@@ -651,6 +680,7 @@ function EmptyShell({ idx }: { idx: number }) {
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
 function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void }) {
+  const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
@@ -707,7 +737,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
             automation toggle or by pressing the Power button below. Merely
             opening the Mobile tab / having a phone plugged in must never by
             itself wake the device or start pulling frames. */}
-        {isReady && phone && live && <LiveCanvas serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
+        {isReady && phone && live && <LiveCanvas ref={liveCanvasRef} serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
         {isReady && phone && !live && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
             <Power className="w-5 h-5 text-white/25" />
@@ -726,7 +756,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
           {/* Power both sends the real hardware keyevent AND is the one
               explicit user action allowed to turn the live view on — never
               triggered automatically by mounting/visiting this tab. */}
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
           <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
         </div>
