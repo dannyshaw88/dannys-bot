@@ -828,10 +828,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (numUsers <= 0) return { usersWatched: 0, slidesWatched: 0 };
 
     const { w, h } = getScreenSize(serial);
-    // Instagram stories bar is at the very top of the feed — approximately
-    // 8% from the top, first avatar at 12% from the left.
-    const storyBarY  = Math.round(h * 0.08);
-    const firstStoryX = Math.round(w * 0.12);
+    // Instagram stories bar sits just below the header, centred at roughly
+    // 10% from the top.  The FIRST slot is always the user's own profile with
+    // the "+" create-story button overlaid — tapping it opens the camera
+    // instead of viewing.  Skip it and target slot 2 (first friend's story)
+    // at ~22% from the left.
+    const storyBarY   = Math.round(h * 0.10);
+    const firstStoryX = Math.round(w * 0.22);
 
     let usersWatched = 0;
     let slidesWatched = 0;
@@ -981,8 +984,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("launch-instagram");
       await sleepOrAbort(serial, 3500); // let the app finish loading before scrolling
 
-      // 3. View stories from the top of the feed (if configured).
+      // 3. Scroll the feed (Step 2 in the UI).
+      const { likes, likeFailures, sharesFeed, sharesDm } = await runCheckFeedLoop(serial, {
+        count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+        shareFeedPercentMin, shareFeedPercentMax,
+        shareDmPercentMin, shareDmPercentMax,
+      });
+      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures)`);
+
+      // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
+      // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
+      // very top of the feed so the stories row is visible again.
       if (viewStoriesUsersMax > 0) {
+        const { w: sw, h: sh } = getScreenSize(serial);
+        // Instagram bottom-nav Home icon: leftmost of 5 items → x ≈ 10% of width.
+        // Nav bar sits at the very bottom of the screen → y ≈ 97.5% of height.
+        await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+        await sleepOrAbort(serial, 1500); // wait for feed to scroll back to top
         const result = await runViewStoriesFromFeedLoop(serial, {
           usersMin: viewStoriesUsersMin, usersMax: viewStoriesUsersMax,
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
@@ -991,14 +1009,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         storiesWatched = result.usersWatched;
         steps.push(`stories(${result.usersWatched} users, ${result.slidesWatched} slides)`);
       }
-
-      // 4. Run the feed scroll/like/share loop.
-      const { likes, likeFailures, sharesFeed, sharesDm } = await runCheckFeedLoop(serial, {
-        count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-        shareFeedPercentMin, shareFeedPercentMax,
-        shareDmPercentMin, shareDmPercentMax,
-      });
-      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures)`);
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
