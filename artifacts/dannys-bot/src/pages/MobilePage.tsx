@@ -1289,6 +1289,22 @@ export function MobilePage() {
   // can briefly letterbox the next one before its first frame arrives.
   useEffect(() => { setPhoneDims(null); }, [activeSerial]);
 
+  // Forget "live" state for any serial that's no longer plugged in, so a
+  // phone unplugged then reconnected (or a different phone reusing a slot)
+  // always starts idle again instead of resuming a stream on its own.
+  useEffect(() => {
+    const connected = new Set(phones.map(p => p.serial));
+    setLiveOn(prev => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+      for (const [serial, on] of Object.entries(prev)) {
+        if (connected.has(serial)) next[serial] = on; else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phones.map(p => p.serial).join(",")]);
+
   // Only true once we have real data AND either a phone is connected or one
   // of the setup panels needs to take over the whole content area.
   const showSplitView = !!(data && data.adbFound && !error && (phones.length > 0 || loading));
