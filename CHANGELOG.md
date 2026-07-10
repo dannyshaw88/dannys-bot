@@ -4,6 +4,37 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.437] — 2026-07-10
+
+### Mobile Farm — renamed to "Human Session Tool", real inter-action delay, per-day cap and notes removed, new like-percentage feature
+
+Follow-up to 1.1.436's Check Feed feature, based on further testing feedback:
+
+- **Fixed: delay between actions wasn't functional.** The "delay between
+  actions" setting (e.g. 5–10 seconds) was saved but never actually used —
+  `check-feed` paused for a hardcoded 600–1100ms between scrolls regardless
+  of what was configured. It now sends `delayMinSec`/`delayMaxSec` to the
+  backend and genuinely waits a random duration in that range (in seconds,
+  converted to ms) between each scroll.
+- **Removed "Maximum actions per day"** — field, type, schema, and UI all
+  dropped.
+- **Removed the "Notes" textarea** — field, type, schema, and UI all dropped.
+- **Input fields narrowed** to a 4-digit width (was full-width) across every
+  number field in the panel, with matching value clamping (0–9999, or 0–100
+  for percentages) enforced in code since HTML `maxLength` isn't reliably
+  applied to `type="number"` inputs.
+- **Panel retitled "Human Session Tool"** — the standalone "Automation
+  Settings" heading is gone; Check Feed is now presented as just the first
+  setting inside this single tool rather than its own separate feature.
+- **New: like a percentage of viewed posts.** Two more inputs — "Like this %
+  of viewed posts" (X to Y%, e.g. 3–5%) — add a like step to Check Feed.
+  Each run draws one random like-rate from that range (e.g. ~4%), then after
+  every scroll independently rolls that chance to double-tap the post left
+  on screen (Instagram's like gesture), with human-like settle/tap timing
+  and small coordinate jitter so every like doesn't land on the exact same
+  pixel. The Check Feed result message now reports how many likes landed
+  alongside the scroll count.
+
 ## [1.1.436] — 2026-07-10
 
 ### Mobile Farm — fixed mirror letterboxing, dropped the Stream log, replaced Auto-reply with Check Feed
