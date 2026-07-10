@@ -13,3 +13,4 @@
 - [API Leak Check socks5 geo](api-leak-check-socks5.md) — resolveProxyGeo uses raw TCP HTTP CONNECT (HTTP proxies only); for socks5 fall back to fetching ip-api.com through SocksProxyAgent directly
 - [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses WebCodecs H.264 decode (client side); PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
 - [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — mirror now uses real scrcpy-server (not adb screenrecord); ALWAYS verify control-message byte layout against the server's own decompiled ControlMessageReader, not memory
+- [Manual vs automated input parity](mobile-manual-vs-automated-input-parity.md) — a gesture-timing fix in one input path (automated) doesn't fix the same bug in another (manual UI); check all call sites
