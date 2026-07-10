@@ -924,6 +924,76 @@ export async function getForegroundPackage(serial: string): Promise<string | nul
   return m ? m[1] : null;
 }
 
+/**
+ * Returns true if the device display is currently on, false if off/asleep,
+ * or null if it can't be determined. Used to explain (and fix) the "first
+ * video connect lags ~5s, retry is instant" symptom: if the display is
+ * still off when the mirror starts, screenrecord can't grab a frame until
+ * the physical panel/compositor actually powers on, which is where the
+ * delay comes from — not from a stale process.
+ */
+export async function isScreenOn(serial: string): Promise<boolean | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "power"], { encoding: "utf8", timeout: 5000 });
+  const m = (r.stdout || "").match(/mWakefulness=(\w+)/) || (r.stdout || "").match(/mScreenOn=(\w+)/) || (r.stdout || "").match(/Display Power: state=(\w+)/i);
+  if (!m) return null;
+  const v = m[1].toLowerCase();
+  if (v === "awake" || v === "true" || v === "on") return true;
+  if (v === "asleep" || v === "false" || v === "off" || v === "dozing") return false;
+  return null;
+}
+
+/**
+ * Wakes the display and blocks (polling, up to `timeoutMs`) until
+ * `isScreenOn` reports true, so a caller can be certain a fresh
+ * screenrecord invocation will actually have frames to encode instead of
+ * racing the panel/compositor power-on. No-op (returns immediately) if the
+ * screen is already on.
+ */
+export async function ensureScreenOn(serial: string, timeoutMs = 2500): Promise<void> {
+  const already = await isScreenOn(serial);
+  if (already === true) return;
+  await wakeScreen(serial);
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const on = await isScreenOn(serial);
+    if (on === true || on === null) return; // null = can't tell, don't block forever
+    await new Promise(r => setTimeout(r, 150));
+  }
+}
+
+/**
+ * Finds Instagram's Like button for the post currently on screen via the
+ * accessibility tree (uiautomator dump) and returns its real on-screen
+ * centre point, or null if no such button is visible right now (e.g. the
+ * feed item under the cursor is a Reel/ad card that doesn't expose a
+ * standard Like control, or the dump caught a mid-scroll transition).
+ *
+ * This replaces guessing "roughly where the post's like target should be"
+ * from a fixed vertical offset — feed items vary in height (single photo
+ * vs. carousel vs. embedded Reel suggestion vs. ad), so a fixed-offset
+ * double-tap was landing on whatever happened to be there, including a
+ * Reel thumbnail or an ad's CTA, instead of the like button.
+ */
+export async function findLikeButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  // Instagram's like control exposes content-desc="Like" when NOT yet
+  // liked, and content-desc="Unlike" once it IS liked. `_findElem`'s
+  // generic substring match would match both ("Unlike" contains "Like"),
+  // which could cause a double-tap to unlike an already-liked post — the
+  // opposite of what a "like" action should ever do. Match only nodes
+  // whose content-desc is the exact, whole-word "Like" (anchored, not a
+  // substring), so an "Unlike" node is never selected.
+  const re = /content-desc="Like"[^>]*bounds="([^"]+)"/;
+  const m = xml.match(re);
+  if (!m) return null;
+  return _parseCenter(m[1]);
+}
+
 export type SignupRecipeStep =
   | { type: "wait"; ms: number; label?: string }
   | { type: "tap"; x: number; y: number; label?: string }

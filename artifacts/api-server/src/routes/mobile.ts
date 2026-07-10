@@ -335,7 +335,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const serial = decodeURIComponent(m[1]);
     (socket as any).__wsHandled = true;
     logger.info({ serial }, "[mobile-video] upgrading connection for device");
-    videoWss.handleUpgrade(request, socket as any, head, (ws) => {
+    videoWss.handleUpgrade(request, socket as any, head, async (ws) => {
       const tools = android.detectToolset();
       const adbPath = tools.adb.path;
       if (!adbPath) {
@@ -511,6 +511,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         spawnSync(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], { encoding: "utf8", timeout: 3000 });
       }
       videoSessionActive.add(serial);
+      // Second real cause of "first connect lags ~5s, retry is instant":
+      // if the display panel/compositor is still off when screenrecord
+      // starts, it can't produce a frame until the panel actually powers
+      // on — the retry is instant only because the first attempt already
+      // woke it. Wait for the screen to actually be on before spawning the
+      // encoder so both the first and later connects are equally fast.
+      await android.ensureScreenOn(serial).catch(() => { /* best effort */ });
       logger.info({ serial, adbPath }, "[mobile-video] starting screenrecord stream");
       spawnStream();
     });
@@ -819,22 +826,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      logger.info({ serial, target: "feed-scroll", from: [x, y1], to: [x, y2] }, "[check-feed] swipe");
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
       if (likeChance > 0 && Math.random() < likeChance) {
-        const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
-        const jy = cy + Math.round((Math.random() - 0.5) * h * 0.03);
         await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
-        try {
-          await android.doubleTap(serial, jx, jy);
-          likes++;
-        } catch {
+        // Look up the real Like button for whatever's on screen right now
+        // instead of guessing a fixed offset — feed items vary in height
+        // (photo vs carousel vs embedded Reel vs ad), so a fixed offset was
+        // landing on whatever happened to be there.
+        const likeBtn = await android.findLikeButton(serial).catch(() => null);
+        if (likeBtn) {
+          // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
+          // but small enough to stay inside the button's own hit target.
+          const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
+          const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
+          logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] double-tap");
+          try {
+            await android.doubleTap(serial, jx, jy);
+            likes++;
+          } catch {
+            likeFailures++;
+          }
+          await sleepOrAbort(serial, 300);
+          await verifyStillInInstagram();
+        } else {
+          // No like button found on screen — this post/card doesn't expose
+          // one right now (Reel suggestion, ad, still animating in from the
+          // scroll). Skip the like rather than double-tapping blind, since
+          // that's exactly what was hitting Reels/ad CTAs before.
+          logger.info({ serial, target: "like-button", matched: false }, "[check-feed] skipped like — no Like button visible on screen");
           likeFailures++;
         }
-        await sleepOrAbort(serial, 300);
-        await verifyStillInInstagram();
       }
 
       // Share to Feed (repost to own story/feed): tap the send/share icon,
