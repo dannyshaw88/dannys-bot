@@ -6216,6 +6216,8 @@ class AutomationEngine {
     const injectProfileBrowsingViewReelsScrollMax    = Math.max(0, s.injectProfileBrowsingViewReelsScrollMax ?? 0);
     const injectProfileBrowsingShareToDmPctMin       = Math.max(0, s.injectProfileBrowsingShareToDmPctMin ?? 0);
     const injectProfileBrowsingShareToDmPctMax       = Math.max(0, s.injectProfileBrowsingShareToDmPctMax ?? 0);
+    const injectProfileBrowsingShareToFeedPctMin     = Math.max(0, s.injectProfileBrowsingShareToFeedPctMin ?? 0);
+    const injectProfileBrowsingShareToFeedPctMax     = Math.max(0, s.injectProfileBrowsingShareToFeedPctMax ?? 0);
 
     // Helper: pick `n` random indices from [lo, hi] without repeats (partial Fisher-Yates).
     // Returns a Set — elements are `followed` counter values at which the injection fires.
@@ -6517,6 +6519,27 @@ class AutomationEngine {
                   }
                 } catch { /* non-critical */ }
               }
+            }
+          },
+        );
+      }
+
+      // Share to Feed — clicks the double-arrow "share to own feed" button on a profile post
+      if (injectProfileBrowsingShareToFeedPctMax > 0 && profilePosts.length > 0) {
+        enqueue("share to feed",
+          Number(s.injectProfileBrowsingShareToFeedPctOrderMin ?? 0), Number(s.injectProfileBrowsingShareToFeedPctOrderMax ?? 0),
+          async () => {
+            const sharePct = randInt(injectProfileBrowsingShareToFeedPctMin, injectProfileBrowsingShareToFeedPctMax);
+            if (Math.random() * 100 < sharePct) {
+              const post = profilePosts[Math.floor(Math.random() * profilePosts.length)];
+              if (!post.mediaId) return;
+              try {
+                const shared = await client.sharePostToFeed(post.mediaId);
+                if (shared) {
+                  engineLog("INFO", `@${profile.username}: [${label}] shared post ${post.shortcode} of @${targetUser.username} to own feed`);
+                  this.logAction(profile.id, tool.id, "share_post", targetUser.username, post.shortcode, "post", "ok", "Shared profile post to own feed from profile browse");
+                }
+              } catch { /* non-critical */ }
             }
           },
         );

@@ -4,6 +4,59 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.447] — 2026-07-10
+
+### Account Settings, Inject Profile Browsing (Step 2), and Ghost Browser slot management
+
+#### Feature: Delete button for each Instagram Account Slot
+
+- **Account Settings (Mobile tab) now has a Delete button on every Instagram
+  Account Slot row**, placed immediately after the 2FA "Generate" button.
+  Clicking it removes that slot's username, password, and 2FA/TOTP secret
+  fields, and keeps the per-slot UI state (show/hide password, generated TOTP
+  code, TOTP error) correctly aligned with the remaining slots — no more
+  need to blank out a slot manually to "remove" it.
+
+#### UI: "+ Add Instagram Account Slot" button is now left-aligned and text-width
+
+- Previously this button stretched the full width of the panel
+  (`className="w-full"`). It is now wrapped in a left-aligned flex container
+  and sized to fit its own label (`w-fit`), matching the left-aligned,
+  content-sized style used elsewhere in Account Settings instead of looking
+  like a stray full-width bar under the slot list.
+
+#### Feature: "Share to Feed" percentage field added to Inject Profile Browsing (Step 2)
+
+- **A new X–Y percentage field, "Share to Feed", now sits directly after the
+  Like field** in the Inject Profile Browsing settings used by Step 2 of the
+  automation config. When it fires, the engine clicks the double-arrow
+  "share to own feed" button on a random post from the profile being
+  browsed — the same underlying action already used by the timeline
+  "Share Post" feature, `client.sharePostToFeed(mediaId)`, but now triggerable
+  from profile browsing sessions with its own Min/Max chance and Min/Max
+  queue-order weight (`injectProfileBrowsingShareToFeedPctMin/Max` and
+  `injectProfileBrowsingShareToFeedPctOrderMin/Max`).
+- **"Share via DM" (send to a random user) now sits directly to the right of
+  "Share to Feed" on the same row**, right after Like. This existing field
+  (`injectProfileBrowsingShareToDmPct*`) previously lived in its own row much
+  further down the panel, disconnected from the Like/engagement fields it
+  logically belongs with — the old standalone "Share to DM" row has been
+  removed to avoid a duplicate control.
+
+#### Backend: new "share to feed" action in the profile-browsing engagement queue
+
+- The automation engine's per-profile engagement queue (the same
+  order-weighted queue that runs Like, Save Media, Watch Stories, Comment,
+  and Share to DM) now also enqueues a "share to feed" action when
+  `injectProfileBrowsingShareToFeedPctMax > 0` and the profile has posts
+  loaded. It rolls the configured percentage, picks a random post from the
+  profile, calls `sharePostToFeed`, and logs the result via `logAction`
+  (`share_post`) exactly like the existing timeline share-to-feed feature —
+  errors are swallowed as non-critical, matching the Share to DM action's
+  error-handling pattern.
+
+---
+
 ## [1.1.446] — 2026-07-10
 
 ### Mobile tab — UI overhaul, phone wake bug fix, canvas black screen on power

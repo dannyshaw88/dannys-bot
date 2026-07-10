@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
-  ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX,
+  ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -1295,6 +1295,13 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
     setTotpError(e => [...e, null]);
   };
 
+  const removeSlot = (i: number) => {
+    setSlots(s => s.filter((_, idx) => idx !== i));
+    setShowPassword(s => s.filter((_, idx) => idx !== i));
+    setTotpCode(c => c.filter((_, idx) => idx !== i));
+    setTotpError(e => e.filter((_, idx) => idx !== i));
+  };
+
   const generateTotp = async (slotIdx: number, secret: string) => {
     setTotpCode(c => c.map((v, i) => i === slotIdx ? null : v));
     setTotpError(e => e.map((v, i) => i === slotIdx ? null : v));
@@ -1415,20 +1422,35 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
                   )}
                 </div>
               </div>
+
+              {/* Delete slot */}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={() => removeSlot(i)}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                aria-label={`Delete Instagram Account Slot ${i + 1}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         ))}
 
         {/* Add slot button */}
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={addSlot}
-          disabled={loading}
-          className="w-full"
-        >
-          + Add Instagram Account Slot
-        </Button>
+        <div className="flex justify-start">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={addSlot}
+            disabled={loading}
+            className="w-fit"
+          >
+            + Add Instagram Account Slot
+          </Button>
+        </div>
       </div>
 
       {saved && <p className="text-xs text-green-500">Saved</p>}
