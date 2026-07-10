@@ -891,13 +891,30 @@ interface AutomationSettingsData {
   actionDelayMax: number;
   likePercentMin: number;
   likePercentMax: number;
+  shareFeedPercentMin: number;
+  shareFeedPercentMax: number;
+  shareDmPercentMin: number;
+  shareDmPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
+  viewStoriesUsersMin: number;
+  viewStoriesUsersMax: number;
+  viewStoriesSlidesMin: number;
+  viewStoriesSlidesMax: number;
+  viewStoriesSlideWatchPctMin: number;
+  viewStoriesSlideWatchPctMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-  actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
+  actionDelayMin: 5, actionDelayMax: 10,
+  likePercentMin: 3, likePercentMax: 5,
+  shareFeedPercentMin: 0, shareFeedPercentMax: 0,
+  shareDmPercentMin: 0, shareDmPercentMax: 0,
+  feedScrollMin: 5, feedScrollMax: 10,
+  viewStoriesUsersMin: 0, viewStoriesUsersMax: 0,
+  viewStoriesSlidesMin: 3, viewStoriesSlidesMax: 6,
+  viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -924,6 +941,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const hydratedRef = useRef(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Abort controller for the currently in-flight automation-cycle fetch.
+  // When the master toggle is flipped off, this is aborted immediately so
+  // the running cycle also receives a stop signal server-side.
+  const cycleAbortRef = useRef<AbortController | null>(null);
   // Snapshot of what's actually persisted server-side — lets autosave skip
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
@@ -996,26 +1017,45 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // sequence recycles every time this fires, for as long as the master
       // toggle stays on.
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
+      const ctrl = new AbortController();
+      cycleAbortRef.current = ctrl;
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: ctrl.signal,
           body: JSON.stringify({
             count,
             delayMinSec: s.actionDelayMin,
             delayMaxSec: s.actionDelayMax,
             likePercentMin: s.likePercentMin,
             likePercentMax: s.likePercentMax,
+            shareFeedPercentMin: s.shareFeedPercentMin,
+            shareFeedPercentMax: s.shareFeedPercentMax,
+            shareDmPercentMin: s.shareDmPercentMin,
+            shareDmPercentMax: s.shareDmPercentMax,
+            viewStoriesUsersMin: s.viewStoriesUsersMin,
+            viewStoriesUsersMax: s.viewStoriesUsersMax,
+            viewStoriesSlidesMin: s.viewStoriesSlidesMin,
+            viewStoriesSlidesMax: s.viewStoriesSlidesMax,
+            viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
+            viewStoriesSlideWatchPctMax: s.viewStoriesSlideWatchPctMax,
           }),
         });
         const body = await r.json().catch(() => null);
         if (!r.ok || !body?.ok) {
           onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
         } else {
-          onLog?.(`Cycle complete — ${body.likes} likes, closed Instagram, airplane-mode recycled, phone locked`);
+          onLog?.(`Cycle complete — ${body.likes} likes${body.storiesWatched ? `, ${body.storiesWatched} stories` : ""}, closed Instagram, airplane-mode recycled, phone locked`);
         }
       } catch (e: any) {
+        if ((e as any)?.name === "AbortError") {
+          onLog?.("Cycle aborted — toggle turned off");
+          return;
+        }
         onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
+      } finally {
+        cycleAbortRef.current = null;
       }
       if (cancelled) return;
       setRunning(false);
@@ -1028,7 +1068,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     };
 
     runCycle();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); setRunning(false); setNextRunAt(null); };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      setRunning(false);
+      setNextRunAt(null);
+      // Immediately abort any in-flight cycle fetch and tell the server to stop.
+      const ctrl = cycleAbortRef.current;
+      if (ctrl) {
+        ctrl.abort();
+        cycleAbortRef.current = null;
+        // Best-effort server-side abort — fire and forget.
+        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, { method: "POST" }).catch(() => {});
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, settings.enabled]);
 
@@ -1114,7 +1167,10 @@ function AutomationSettingsPanel({
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2) View Feed</p>
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+          <p className="text-sm font-semibold text-foreground">View Feed</p>
+        </div>
         <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
@@ -1165,35 +1221,187 @@ function AutomationSettingsPanel({
           </div>
         </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Like % of viewed posts</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.likePercentMin}
-              onChange={e => setSettings(s => ({ ...s, likePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-              disabled={loading}
-            />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              maxLength={4}
-              className={NUM_INPUT_CLASS}
-              value={settings.likePercentMax}
-              onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-              disabled={loading}
-            />
-            <span className="text-muted-foreground text-sm">%</span>
+        {/* Like + Share to Feed + Share via DM — all three on the same row */}
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Like % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.likePercentMin}
+                onChange={e => setSettings(s => ({ ...s, likePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.likePercentMax}
+                onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share to Feed % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.shareFeedPercentMin}
+                onChange={e => setSettings(s => ({ ...s, shareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.shareFeedPercentMax}
+                onChange={e => setSettings(s => ({ ...s, shareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.shareDmPercentMin}
+                onChange={e => setSettings(s => ({ ...s, shareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.shareDmPercentMax}
+                onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
           </div>
         </div>
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+      </div>
+
+      {/* View Stories from Feed */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
+          <p className="text-sm font-semibold text-foreground">View Stories from Feed</p>
+          <p className="text-xs text-muted-foreground">Set users to 0 to skip story viewing. Each story slide watches a randomly chosen % within your range — no two slides get the same duration.</p>
+        </div>
+
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Users to watch</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={50}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesUsersMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesUsersMin: Math.min(50, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={50}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesUsersMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesUsersMax: Math.min(50, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Slides per user</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesSlidesMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMin: Math.min(50, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesSlidesMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMax: Math.min(50, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">% of each slide to watch</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesSlideWatchPctMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMin: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesSlideWatchPctMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Final Step */}

@@ -70,8 +70,18 @@ type AutomationSettings = {
   actionDelayMax: number;
   likePercentMin: number;
   likePercentMax: number;
+  shareFeedPercentMin: number;
+  shareFeedPercentMax: number;
+  shareDmPercentMin: number;
+  shareDmPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
+  viewStoriesUsersMin: number;
+  viewStoriesUsersMax: number;
+  viewStoriesSlidesMin: number;
+  viewStoriesSlidesMax: number;
+  viewStoriesSlideWatchPctMin: number;
+  viewStoriesSlideWatchPctMax: number;
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -565,12 +575,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     actionDelayMax: z.number().min(0).max(9999),
     likePercentMin: z.number().min(0).max(100),
     likePercentMax: z.number().min(0).max(100),
+    shareFeedPercentMin: z.number().min(0).max(100).default(0),
+    shareFeedPercentMax: z.number().min(0).max(100).default(0),
+    shareDmPercentMin: z.number().min(0).max(100).default(0),
+    shareDmPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
+    viewStoriesUsersMin: z.number().min(0).max(50).default(0),
+    viewStoriesUsersMax: z.number().min(0).max(50).default(0),
+    viewStoriesSlidesMin: z.number().min(1).max(50).default(3),
+    viewStoriesSlidesMax: z.number().min(1).max(50).default(6),
+    viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
+    viewStoriesSlideWatchPctMax: z.number().min(1).max(100).default(90),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const defaults: AutomationSettings = { enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30, actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
+    const defaults: AutomationSettings = {
+      enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+      actionDelayMin: 5, actionDelayMax: 10,
+      likePercentMin: 3, likePercentMax: 5,
+      shareFeedPercentMin: 0, shareFeedPercentMax: 0,
+      shareDmPercentMin: 0, shareDmPercentMax: 0,
+      feedScrollMin: 5, feedScrollMax: 10,
+      viewStoriesUsersMin: 0, viewStoriesUsersMax: 0,
+      viewStoriesSlidesMin: 3, viewStoriesSlidesMax: 6,
+      viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
+    };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
   app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -640,19 +670,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const checkFeedInProgress = new Set<string>();
 
-  // Shared by the standalone `/check-feed` route and the full
-  // `/automation-cycle` route below — the scroll/like loop itself is
-  // identical either way, only what happens before/after it differs.
-  async function runCheckFeedLoop(serial: string, params: {
-    count: number; delayMinSec: number; delayMaxSec: number; likePercentMin: number; likePercentMax: number;
-  }): Promise<{ count: number; likes: number; likeFailures: number }> {
-    const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax } = params;
-    const delayLoSec = Math.min(delayMinSec, delayMaxSec);
-    const delayHiSec = Math.max(delayMinSec, delayMaxSec);
-    const likeLoPct = Math.min(likePercentMin, likePercentMax);
-    const likeHiPct = Math.max(likePercentMin, likePercentMax);
-    const likeChance = (likeLoPct + Math.random() * (likeHiPct - likeLoPct)) / 100;
+  // Signals a running automation cycle to abort at the next safe checkpoint.
+  const automationCycleAbortRequested = new Set<string>();
 
+  // Helper: sleep with abort-check. Throws if abort has been requested.
+  const sleepOrAbort = (serial: string, ms: number) =>
+    new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => {
+        if (automationCycleAbortRequested.has(serial)) reject(new Error("cycle-aborted"));
+        else resolve();
+      }, ms);
+      // Also resolve immediately if ms is 0
+      if (ms <= 0) { clearTimeout(t); if (automationCycleAbortRequested.has(serial)) reject(new Error("cycle-aborted")); else resolve(); }
+    });
+
+  // Helper: get screen dimensions via adb wm size.
+  function getScreenSize(serial: string): { w: number; h: number } {
     let w = 1080, h = 2400;
     try {
       const tools = android.detectToolset();
@@ -663,22 +696,57 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
       }
     } catch { /* fall back to defaults above */ }
+    return { w, h };
+  }
 
+  // Shared by the standalone `/check-feed` route and the full
+  // `/automation-cycle` route below — the scroll/like/share loop.
+  async function runCheckFeedLoop(serial: string, params: {
+    count: number; delayMinSec: number; delayMaxSec: number;
+    likePercentMin: number; likePercentMax: number;
+    shareFeedPercentMin?: number; shareFeedPercentMax?: number;
+    shareDmPercentMin?: number; shareDmPercentMax?: number;
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number }> {
+    const {
+      count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+      shareFeedPercentMin = 0, shareFeedPercentMax = 0,
+      shareDmPercentMin = 0, shareDmPercentMax = 0,
+    } = params;
+    const delayLoSec = Math.min(delayMinSec, delayMaxSec);
+    const delayHiSec = Math.max(delayMinSec, delayMaxSec);
+    const likeLoPct = Math.min(likePercentMin, likePercentMax);
+    const likeHiPct = Math.max(likePercentMin, likePercentMax);
+    const likeChance = (likeLoPct + Math.random() * (likeHiPct - likeLoPct)) / 100;
+    const shareFeedLo = Math.min(shareFeedPercentMin, shareFeedPercentMax);
+    const shareFeedHi = Math.max(shareFeedPercentMin, shareFeedPercentMax);
+    const shareFeedChance = (shareFeedLo + Math.random() * (shareFeedHi - shareFeedLo)) / 100;
+    const shareDmLo = Math.min(shareDmPercentMin, shareDmPercentMax);
+    const shareDmHi = Math.max(shareDmPercentMin, shareDmPercentMax);
+    const shareDmChance = (shareDmLo + Math.random() * (shareDmHi - shareDmLo)) / 100;
+
+    const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
     const y1 = Math.round(h * 0.78);
     const y2 = Math.round(h * 0.22);
     const cy = Math.round(h / 2);
+    // Instagram action bar (like/comment/share/bookmark row) position.
+    // On a standard feed post the row sits at roughly 72% of screen height.
+    const actionBarY = Math.round(h * 0.72);
+    const shareIconX = Math.round(w * 0.33); // paper-airplane send/share button
 
     let likes = 0;
     let likeFailures = 0;
+    let sharesFeed = 0;
+    let sharesDm = 0;
     for (let i = 0; i < count; i++) {
+      if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
-      await new Promise(r => setTimeout(r, 180));
+      await sleepOrAbort(serial, 180);
 
       if (likeChance > 0 && Math.random() < likeChance) {
         const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
         const jy = cy + Math.round((Math.random() - 0.5) * h * 0.03);
-        await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
+        await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
         try {
           await android.doubleTap(serial, jx, jy);
           likes++;
@@ -687,12 +755,118 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
+      // Share to Feed (repost to own story/feed): tap the send/share icon,
+      // then tap the "Repost" option in the share sheet.
+      if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
+        if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
+        try {
+          await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+          await android.tap(serial, shareIconX, actionBarY);
+          await sleepOrAbort(serial, 1200); // wait for sheet to open
+          // "Repost" option appears in the share sheet at roughly 30% height
+          await android.tap(serial, Math.round(w * 0.5), Math.round(h * 0.30));
+          await sleepOrAbort(serial, 800);
+          // Dismiss sheet (swipe down from center)
+          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.6), Math.round(w / 2), Math.round(h * 0.9), 300);
+          await sleepOrAbort(serial, 600);
+          sharesFeed++;
+        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+      }
+
+      // Share via DM: tap the send/share icon, then tap the first suggested
+      // user in the DM picker list.
+      if (shareDmChance > 0 && Math.random() < shareDmChance) {
+        if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
+        try {
+          await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+          await android.tap(serial, shareIconX, actionBarY);
+          await sleepOrAbort(serial, 1200); // wait for DM picker
+          // First suggested recipient avatar row sits at roughly 55% height
+          await android.tap(serial, Math.round(w * 0.17), Math.round(h * 0.55));
+          await sleepOrAbort(serial, 500);
+          // Tap "Send" button (right side of the composer row)
+          await android.tap(serial, Math.round(w * 0.85), Math.round(h * 0.90));
+          await sleepOrAbort(serial, 800);
+          // Dismiss the sheet
+          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.6), Math.round(w / 2), Math.round(h * 0.95), 300);
+          await sleepOrAbort(serial, 600);
+          sharesDm++;
+        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+      }
+
       if (i < count - 1) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
-        await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+        await sleepOrAbort(serial, Math.round(delaySec * 1000));
       }
     }
-    return { count, likes, likeFailures };
+    return { count, likes, likeFailures, sharesFeed, sharesDm };
+  }
+
+  // View stories from the stories bar at the top of the feed.
+  // Opens the first story, watches N slides per user (each for a randomly
+  // chosen % of the typical slide duration), then advances to the next user.
+  async function runViewStoriesFromFeedLoop(serial: string, params: {
+    usersMin: number; usersMax: number;
+    slidesMin: number; slidesMax: number;
+    slideWatchPctMin: number; slideWatchPctMax: number;
+  }): Promise<{ usersWatched: number; slidesWatched: number }> {
+    const { usersMin, usersMax, slidesMin, slidesMax, slideWatchPctMin, slideWatchPctMax } = params;
+    const numUsers = Math.floor(
+      Math.min(usersMin, usersMax) +
+      Math.random() * (Math.max(usersMin, usersMax) - Math.min(usersMin, usersMax) + 1)
+    );
+    if (numUsers <= 0) return { usersWatched: 0, slidesWatched: 0 };
+
+    const { w, h } = getScreenSize(serial);
+    // Instagram stories bar is at the very top of the feed — approximately
+    // 8% from the top, first avatar at 12% from the left.
+    const storyBarY  = Math.round(h * 0.08);
+    const firstStoryX = Math.round(w * 0.12);
+
+    let usersWatched = 0;
+    let slidesWatched = 0;
+
+    // Tap the first story to open it.
+    await android.tap(serial, firstStoryX, storyBarY);
+    await sleepOrAbort(serial, 1800); // let story viewer open
+
+    for (let u = 0; u < numUsers; u++) {
+      if (automationCycleAbortRequested.has(serial)) break;
+      const numSlides = Math.floor(
+        Math.min(slidesMin, slidesMax) +
+        Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
+      );
+      for (let s = 0; s < numSlides; s++) {
+        if (automationCycleAbortRequested.has(serial)) break;
+        // Each slide gets its own randomly chosen watch percentage.
+        const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
+          Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
+        // Typical Instagram story slide is 7 seconds for videos; use 6s as
+        // a conservative baseline so even 100% watch doesn't overshoot.
+        const watchMs = Math.max(400, Math.round((watchPct / 100) * 6000));
+        await sleepOrAbort(serial, watchMs);
+        slidesWatched++;
+        // Tap the right ~70% of the screen to advance to the next slide.
+        await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
+        await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
+      }
+      usersWatched++;
+      // Advance to the next user's stories by swiping left.
+      if (u < numUsers - 1) {
+        await android.swipe(serial,
+          Math.round(w * 0.80), Math.round(h * 0.50),
+          Math.round(w * 0.20), Math.round(h * 0.50),
+          280
+        );
+        await sleepOrAbort(serial, 900 + Math.round(Math.random() * 400));
+      }
+    }
+
+    // Exit the story viewer by swiping down.
+    await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.50), Math.round(w / 2), Math.round(h * 0.92), 300);
+    await sleepOrAbort(serial, 800);
+
+    return { usersWatched, slidesWatched };
   }
 
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
@@ -712,73 +886,125 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── Automation Cycle — the full "toggle on" lifecycle, per user
   // instruction: power on the phone, open Instagram, run the configured
-  // scroll/like tools, close Instagram by swiping it away in the recent-apps
-  // switcher, cycle airplane mode off/on to force a fresh connection, then
-  // lock the phone again. Each toggle "tick" runs this whole sequence once;
-  // the frontend calls it back-to-back on a randomized gap while the master
-  // toggle stays on, so it recycles every time.
+  // scroll/like/share/stories tools, close Instagram by swiping it away in
+  // the recent-apps switcher, cycle airplane mode off/on to force a fresh
+  // connection, then lock the phone again. Each toggle "tick" runs this
+  // whole sequence once; the frontend calls it back-to-back on a randomized
+  // gap while the master toggle stays on, so it recycles every time.
   const automationCycleSchema = checkFeedSchema.extend({
     airplaneWaitMinSec: z.number().min(1).max(120).default(15),
     airplaneWaitMaxSec: z.number().min(1).max(120).default(20),
+    shareFeedPercentMin: z.number().min(0).max(100).default(0),
+    shareFeedPercentMax: z.number().min(0).max(100).default(0),
+    shareDmPercentMin: z.number().min(0).max(100).default(0),
+    shareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesUsersMin: z.number().min(0).max(50).default(0),
+    viewStoriesUsersMax: z.number().min(0).max(50).default(0),
+    viewStoriesSlidesMin: z.number().min(1).max(50).default(3),
+    viewStoriesSlidesMax: z.number().min(1).max(50).default(6),
+    viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
+    viewStoriesSlideWatchPctMax: z.number().min(1).max(100).default(90),
   });
   const automationCycleInProgress = new Set<string>();
+
+  // Abort endpoint — called by the frontend when the master toggle is switched
+  // off mid-cycle. Sets the abort flag so the running cycle stops at the next
+  // safe checkpoint.
+  app.post("/api/mobile/devices/:serial/automation-cycle/abort", (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    automationCycleAbortRequested.add(serial);
+    res.json({ ok: true });
+  });
+
   app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response) => {
     const serial = p(req, "serial");
     if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
       res.status(409).json({ error: "An automation cycle is already in progress on this device" });
       return;
     }
+    // Clear any stale abort flag from a previous aborted cycle.
+    automationCycleAbortRequested.delete(serial);
     automationCycleInProgress.add(serial);
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
+    let storiesWatched = 0;
     try {
-      const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax, airplaneWaitMinSec, airplaneWaitMaxSec } =
-        automationCycleSchema.parse(req.body);
+      const {
+        count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+        airplaneWaitMinSec, airplaneWaitMaxSec,
+        shareFeedPercentMin, shareFeedPercentMax,
+        shareDmPercentMin, shareDmPercentMax,
+        viewStoriesUsersMin, viewStoriesUsersMax,
+        viewStoriesSlidesMin, viewStoriesSlidesMax,
+        viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
+      } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
       await android.wakeScreen(serial);
       steps.push("power-on");
-      await new Promise(r => setTimeout(r, 1200)); // let the screen finish waking
+      await sleepOrAbort(serial, 1200);
 
       // 2. Open Instagram.
       await android.launchInstagram(serial);
       steps.push("launch-instagram");
-      await new Promise(r => setTimeout(r, 3500)); // let the app finish loading before scrolling
+      await sleepOrAbort(serial, 3500); // let the app finish loading before scrolling
 
-      // 3. Run the tools with the configured settings.
-      const { likes, likeFailures } = await runCheckFeedLoop(serial, { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax });
-      steps.push(`ran-tools(${count} scrolls, ${likes} likes, ${likeFailures} like-failures)`);
+      // 3. View stories from the top of the feed (if configured).
+      if (viewStoriesUsersMax > 0) {
+        const result = await runViewStoriesFromFeedLoop(serial, {
+          usersMin: viewStoriesUsersMin, usersMax: viewStoriesUsersMax,
+          slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
+          slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
+        });
+        storiesWatched = result.usersWatched;
+        steps.push(`stories(${result.usersWatched} users, ${result.slidesWatched} slides)`);
+      }
 
-      // 4. Close Instagram completely — recents switcher + swipe away, not a
+      // 4. Run the feed scroll/like/share loop.
+      const { likes, likeFailures, sharesFeed, sharesDm } = await runCheckFeedLoop(serial, {
+        count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+        shareFeedPercentMin, shareFeedPercentMax,
+        shareDmPercentMin, shareDmPercentMax,
+      });
+      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures)`);
+
+      // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
       await android.closeInstagramViaRecents(serial);
       steps.push("closed-instagram");
 
-      // 5. Cycle airplane mode on, wait, then off — forces a fresh network
+      // 6. Cycle airplane mode on, wait, then off — forces a fresh network
       // session on the next run.
       await android.setAirplaneMode(serial, true);
       steps.push("airplane-mode-on");
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
-      await new Promise(r => setTimeout(r, Math.round(waitSec * 1000)));
+      await sleepOrAbort(serial, Math.round(waitSec * 1000));
       await android.setAirplaneMode(serial, false);
       steps.push("airplane-mode-off");
 
-      // 6. Swipe up, then press power again to lock the phone — ready for
+      // 7. Swipe up, then press power again to lock the phone — ready for
       // the next cycle to start from a clean, screen-off state.
-      await new Promise(r => setTimeout(r, 1500)); // let the radios reconnect before touching the screen
+      await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
       await android.sleepScreen(serial);
       steps.push("power-off");
 
-      res.json({ ok: true, count, likes, likeFailures, steps });
+      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, steps });
     } catch (e: any) {
-      res.status(400).json({ error: e?.message ?? "Automation cycle failed", steps });
+      const aborted = (e?.message === "cycle-aborted");
+      res.status(aborted ? 200 : 400).json({
+        ok: aborted,
+        aborted,
+        error: aborted ? undefined : (e?.message ?? "Automation cycle failed"),
+        steps,
+      });
     } finally {
       automationCycleInProgress.delete(serial);
       checkFeedInProgress.delete(serial);
+      automationCycleAbortRequested.delete(serial);
     }
   });
 

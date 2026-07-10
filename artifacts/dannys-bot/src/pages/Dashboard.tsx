@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.448",
+    date: "10 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "Human Session Tool — Step 2 now has two new fields right next to Like: 'Share to Feed %' (taps the share button and reposts the post to your own story/feed) and 'Share via DM %' (taps the share button and sends the post to the first suggested person). Both work the same way as Like — set an X–Y range and each post has a random chance of triggering it.",
+      },
+      {
+        category: "Added",
+        text: "Human Session Tool — new Step 3 'View Stories from Feed'. Set how many users' stories to watch, how many slides per user, and what % of each slide to watch. The percentage is picked randomly for every individual slide, so no two slides get the same watch time. Set users to 0 to skip story viewing entirely.",
+      },
+      {
+        category: "Improved",
+        text: "Turning the master toggle OFF mid-session now stops everything immediately — the running cycle is cancelled right away instead of waiting to finish whatever it was doing.",
+      },
+      {
+        category: "Improved",
+        text: "The Step 2 heading now shows '(STEP2)' on its own line with 'View Feed' as a separate title below it, so the layout is cleaner.",
+      },
+    ],
+  },
+  {
     version: "1.1.421",
     date: "9 Jul 2026",
     items: [
