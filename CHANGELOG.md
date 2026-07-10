@@ -4,6 +4,49 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.449] — 2026-07-10
+
+### Fix: Mobile automation cycle — ads-consent modal and Stories not watching
+
+#### Fix: Meta's "ads choice" consent screen silently blocked the automation cycle
+
+- Instagram occasionally shows a full-screen EU/UK ads-consent modal on
+  launch ("Make a choice about your ads" → **Get started** → select **Use
+  for free with ads** → **Continue** → **Agree**). It's a full-screen overlay
+  that blocks everything behind it, so once it appeared every subsequent
+  scripted tap in the cycle (feed scroll, likes, stories) landed on the
+  modal instead of the feed and the rest of the run silently did nothing.
+- Added `dismissAdsChoiceDialog()` in `androidManager.ts`: takes a single UI
+  dump after Instagram launches, and only acts if the dump actually matches
+  the ads-choice screen (checks for "choice about your ads" / "Get started"
+  text together with an ads reference) — it will not fire on unrelated
+  dialogs that happen to share a button label. If it matches, it walks
+  Get started → Use for free with ads → Continue → Agree in sequence,
+  waiting for each screen to advance. No-op (one UI dump, zero taps) when
+  the dialog isn't present.
+- Wired into `automation-cycle` immediately after `launch-instagram` and
+  before feed scrolling starts, with an extra 1s settle delay if the dialog
+  was actually dismissed.
+
+#### Fix: Stories (Step 3) not opening after feed scrolling — Home-tab wait was too short
+
+- Reported symptom: after all feed scrolling finished, there was a 45+
+  second wait, then the feed scrolled back to the top, and the Stories step
+  finished immediately without anything actually being watched.
+- Root cause: the automation cycle already tapped the Instagram bottom-nav
+  Home icon to force the feed back to the top before starting the stories
+  loop (this was a fix from a previous release), but only waited **1.5
+  seconds** afterward before tapping the stories tray. The stories tray does
+  not repopulate that fast after a Home-forced refresh — it needs up to
+  ~10 seconds — so the tap landed on empty space, no story ever opened, and
+  the stories loop ran through its timing with nothing on screen to show
+  for it.
+- Fix: increased the post-Home-tap wait from 1.5s to 10s in
+  `runViewStoriesFromFeedLoop`'s call site in `automation-cycle`, giving the
+  stories tray time to fully reload before the first story tap.
+
+---
+
 ## [1.1.447] — 2026-07-10
 
 ### Account Settings, Inject Profile Browsing (Step 2), and Ghost Browser slot management
