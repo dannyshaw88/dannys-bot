@@ -64,10 +64,10 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 type AutomationSettings = {
   actionDelayMin: number;
   actionDelayMax: number;
-  maxActionsPerDay: number;
+  likePercentMin: number;
+  likePercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
-  notes?: string;
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings };
 type InstanceConfigMap = Record<string, InstanceConfig>;
@@ -558,16 +558,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── Per-device automation settings (isolated to the Mobile tab) ─────────────
   const automationSchema = z.object({
-    actionDelayMin: z.number().min(0),
-    actionDelayMax: z.number().min(0),
-    maxActionsPerDay: z.number().min(0),
+    actionDelayMin: z.number().min(0).max(9999),
+    actionDelayMax: z.number().min(0).max(9999),
+    likePercentMin: z.number().min(0).max(100),
+    likePercentMax: z.number().min(0).max(100),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
-    notes: z.string().optional(),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const defaults: AutomationSettings = { actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, feedScrollMin: 5, feedScrollMax: 10, notes: "" };
+    const defaults: AutomationSettings = { actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10 };
     res.json(cfg[p(req, "serial")]?.automation ?? defaults);
   });
   app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -584,8 +584,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Check Feed — N downward scrolls over the Instagram feed currently on
   // screen. Opening Instagram/navigating to the feed is out of scope for now
   // (per user instruction) — this just drives the scroll gesture repeatedly
-  // against whatever is currently visible on the device.
-  const checkFeedSchema = z.object({ count: z.number().min(1).max(50) });
+  // against whatever is currently visible on the device. A configurable
+  // percentage of scrolls also get a double-tap (like) on the post left on
+  // screen, and the pacing between actions honors the user's delay setting
+  // (seconds) instead of a hardcoded pause.
+  const checkFeedSchema = z.object({
+    count: z.number().min(1).max(50),
+    delayMinSec: z.number().min(0).max(120).default(5),
+    delayMaxSec: z.number().min(0).max(120).default(10),
+    likePercentMin: z.number().min(0).max(100).default(0),
+    likePercentMax: z.number().min(0).max(100).default(0),
+  });
   const checkFeedInProgress = new Set<string>();
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
     const serial = p(req, "serial");
@@ -595,7 +604,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     checkFeedInProgress.add(serial);
     try {
-      const { count } = checkFeedSchema.parse(req.body);
+      const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax } = checkFeedSchema.parse(req.body);
+      const delayLoSec = Math.min(delayMinSec, delayMaxSec);
+      const delayHiSec = Math.max(delayMinSec, delayMaxSec);
+      const likeLoPct = Math.min(likePercentMin, likePercentMax);
+      const likeHiPct = Math.max(likePercentMin, likePercentMax);
+      // One like-rate is drawn per run (e.g. "3 to 5%" -> ~4%) and applied
+      // per-scroll as an independent chance, so it averages out across the
+      // run rather than always liking a fixed count.
+      const likeChance = (likeLoPct + Math.random() * (likeHiPct - likeLoPct)) / 100;
 
       let w = 1080, h = 2400;
       try {
@@ -611,13 +628,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const x  = Math.round(w / 2);
       const y1 = Math.round(h * 0.78); // start low on screen
       const y2 = Math.round(h * 0.22); // swipe up to scroll the feed down
+      const cy = Math.round(h / 2);    // center of screen, for double-tap-to-like
 
+      let likes = 0;
       for (let i = 0; i < count; i++) {
         await android.swipe(serial, x, y1, x, y2, 350 + Math.round(Math.random() * 150));
-        await new Promise(r => setTimeout(r, 600 + Math.round(Math.random() * 500)));
+
+        if (likeChance > 0 && Math.random() < likeChance) {
+          // Small jitter around screen center so every like doesn't land on
+          // the exact same pixel — looks less like a scripted double-tap.
+          const jx = x + Math.round((Math.random() - 0.5) * w * 0.08);
+          const jy = cy + Math.round((Math.random() - 0.5) * h * 0.06);
+          await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
+          await android.tap(serial, jx, jy);
+          await new Promise(r => setTimeout(r, 90 + Math.round(Math.random() * 60)));
+          await android.tap(serial, jx, jy);
+          likes++;
+        }
+
+        if (i < count - 1) {
+          const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
+          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+        }
       }
 
-      res.json({ ok: true, count });
+      res.json({ ok: true, count, likes });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to check feed" }); }
     finally { checkFeedInProgress.delete(serial); }
   });

@@ -760,15 +760,21 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 interface AutomationSettingsData {
   actionDelayMin: number;
   actionDelayMax: number;
-  maxActionsPerDay: number;
+  likePercentMin: number;
+  likePercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
-  notes?: string;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
-  actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, feedScrollMin: 5, feedScrollMax: 10, notes: "",
+  actionDelayMin: 5, actionDelayMax: 10, likePercentMin: 3, likePercentMax: 5, feedScrollMin: 5, feedScrollMax: 10,
 };
+
+// 4-digit-wide number inputs, shared by every field in this panel.
+const NUM_INPUT_CLASS = "w-16 text-center";
+// HTML `maxLength` isn't reliably enforced on type="number" inputs, so clamp
+// values to 4 digits (0-9999) in code as well.
+const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
 
 function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onLog?: (msg: string) => void }) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
@@ -803,14 +809,20 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/check-feed`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count }),
+        body: JSON.stringify({
+          count,
+          delayMinSec: settings.actionDelayMin,
+          delayMaxSec: settings.actionDelayMax,
+          likePercentMin: settings.likePercentMin,
+          likePercentMax: settings.likePercentMax,
+        }),
       });
       const body = await r.json().catch(() => null);
       if (!r.ok || !body?.ok) {
         setCheckMsg(body?.error ?? `Failed (${r.status})`);
         return;
       }
-      setCheckMsg(`Scrolled ${count} times`);
+      setCheckMsg(`Scrolled ${count} times${body.likes ? `, liked ${body.likes}` : ""}`);
     } catch (e: any) {
       setCheckMsg(e?.message ?? "Couldn't reach the server");
     } finally { setChecking(false); }
@@ -851,7 +863,7 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-foreground">Automation Settings</h2>
+        <h2 className="text-lg font-bold text-foreground">Human Session Tool</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
         </p>
@@ -871,18 +883,73 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
             <Input
               type="number"
               min={1}
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
               value={settings.feedScrollMin}
-              onChange={e => setSettings(s => ({ ...s, feedScrollMin: Number(e.target.value) }))}
+              onChange={e => setSettings(s => ({ ...s, feedScrollMin: clamp4(Number(e.target.value)) }))}
               disabled={loading}
             />
             <span className="text-muted-foreground text-sm">to</span>
             <Input
               type="number"
               min={1}
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
               value={settings.feedScrollMax}
-              onChange={e => setSettings(s => ({ ...s, feedScrollMax: Number(e.target.value) }))}
+              onChange={e => setSettings(s => ({ ...s, feedScrollMax: clamp4(Number(e.target.value)) }))}
               disabled={loading}
             />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
+              value={settings.actionDelayMin}
+              onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
+              disabled={loading}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
+              value={settings.actionDelayMax}
+              onChange={e => setSettings(s => ({ ...s, actionDelayMax: clamp4(Number(e.target.value)) }))}
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Like this % of viewed posts</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
+              value={settings.likePercentMin}
+              onChange={e => setSettings(s => ({ ...s, likePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+              disabled={loading}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              maxLength={4}
+              className={NUM_INPUT_CLASS}
+              value={settings.likePercentMax}
+              onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+              disabled={loading}
+            />
+            <span className="text-muted-foreground text-sm">%</span>
           </div>
         </div>
 
@@ -890,49 +957,6 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
           {checking ? "Scrolling…" : "Check Feed"}
         </Button>
         {checkMsg && <p className="text-xs text-muted-foreground">{checkMsg}</p>}
-
-        <div className="border-t border-border/50" />
-
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              value={settings.actionDelayMin}
-              onChange={e => setSettings(s => ({ ...s, actionDelayMin: Number(e.target.value) }))}
-              disabled={loading}
-            />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input
-              type="number"
-              value={settings.actionDelayMax}
-              onChange={e => setSettings(s => ({ ...s, actionDelayMax: Number(e.target.value) }))}
-              disabled={loading}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Maximum actions per day</Label>
-          <Input
-            type="number"
-            value={settings.maxActionsPerDay}
-            onChange={e => setSettings(s => ({ ...s, maxActionsPerDay: Number(e.target.value) }))}
-            disabled={loading}
-          />
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Notes</Label>
-          <textarea
-            value={settings.notes ?? ""}
-            onChange={e => setSettings(s => ({ ...s, notes: e.target.value }))}
-            disabled={loading}
-            rows={3}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40"
-            placeholder="Anything worth remembering about this device…"
-          />
-        </div>
 
         <Button className="w-full" onClick={save} disabled={saving || loading}>
           {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
