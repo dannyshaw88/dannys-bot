@@ -319,6 +319,12 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       IDEVICE_BIN_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "bin", "win32")
         : path.join(__dirname, "..", "..", "resources", "bin", "win32"),
+      // Packaged installs run from an install directory that is often
+      // read-only without admin rights (e.g. Program Files) — process.cwd()
+      // there is NOT a safe place to write files. ADB auto-install / the
+      // manual-path override both need a real writable folder, so point
+      // them at userData like the database, logs, and cookies already do.
+      ADB_TOOLS_DIR: path.join(getUserDataPath(), "adb-tools"),
     },
   });
 

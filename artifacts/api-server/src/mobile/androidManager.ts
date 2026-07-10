@@ -207,7 +207,8 @@ function emulatorAdbCandidates(): string[] {
  */
 function loadAdbOverridePath(): string | null {
   try {
-    const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), "adb-path-override.json"), "utf8"));
+    const dir = process.env.ADB_TOOLS_DIR || process.cwd();
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, "adb-path-override.json"), "utf8"));
     const folder = typeof raw?.folder === "string" ? raw.folder.trim() : "";
     if (!folder) return null;
     const candidate = path.join(folder, process.platform === "win32" ? "adb.exe" : "adb");

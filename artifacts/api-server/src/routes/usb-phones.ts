@@ -26,8 +26,20 @@ const PLATFORM_TOOLS_URL: Record<string, string> = {
 // Lets a user paste the folder containing adb.exe directly in the UI instead of
 // editing the Windows PATH environment variable. Persisted so it survives restarts.
 
+/**
+ * Where ADB tooling and the override file are persisted. Electron passes
+ * ADB_TOOLS_DIR pointing at app.getPath("userData") for packaged installs
+ * (process.cwd() there is often read-only without admin rights — e.g.
+ * Program Files). Falls back to cwd in plain dev/server-only runs.
+ */
+function adbToolsDir(): string {
+  const dir = process.env.ADB_TOOLS_DIR || process.cwd();
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 function overrideFilePath(): string {
-  return path.join(process.cwd(), "adb-path-override.json");
+  return path.join(adbToolsDir(), "adb-path-override.json");
 }
 
 function loadOverridePath(): string | null {
@@ -264,7 +276,8 @@ router.post("/mobile/adb-auto-install", async (_req, res) => {
     return;
   }
 
-  const installDir = path.join(process.cwd(), "vendor", "platform-tools");
+  const vendorDir = adbToolsDir();
+  const installDir = path.join(vendorDir, "platform-tools");
   const alreadyInstalled = resolveAdbInFolder(installDir);
   if (alreadyInstalled) {
     saveOverridePath(installDir);
@@ -272,17 +285,15 @@ router.post("/mobile/adb-auto-install", async (_req, res) => {
     return;
   }
 
-  const zipPath = path.join(process.cwd(), "vendor", "platform-tools.zip");
+  const zipPath = path.join(vendorDir, "platform-tools.zip");
   try {
-    fs.mkdirSync(path.dirname(zipPath), { recursive: true });
-
     await downloadFile(url, zipPath);
 
     // The zip's own top-level folder is "platform-tools/" — extract it
-    // directly into vendor/ so files land at vendor/platform-tools/adb.exe.
+    // directly into vendorDir so files land at vendorDir/platform-tools/adb.exe.
     const AdmZip = (await import("adm-zip")).default;
     const zip = new AdmZip(zipPath);
-    zip.extractAllTo(path.join(process.cwd(), "vendor"), true);
+    zip.extractAllTo(vendorDir, true);
     fs.rmSync(zipPath, { force: true });
 
     const found = resolveAdbInFolder(installDir);
