@@ -236,6 +236,14 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     "send_dummy_byte=false",
     "raw_stream=false",
   ];
+  // scrcpy-server's runtime error logging (Ln.e -> android.util.Log) goes to
+  // logcat, NOT this process's own stdout/stderr — only its very early
+  // bootstrap prints (version checks, etc.) use System.out/err directly. A
+  // video-thread failure (e.g. the encoder rejecting the requested
+  // size/bitrate) is exactly the kind of runtime error that only shows up in
+  // logcat. Clear the buffer right before launch so a post-failure dump is
+  // scoped to this session only.
+  try { spawnSync(adb, ["-s", serial, "logcat", "-c"], { timeout: 5000 }); } catch { /* ignore */ }
   const serverProc: ChildProcess = spawn(adb, ["-s", serial, ...serverArgs], { stdio: ["ignore", "pipe", "pipe"] });
   let serverOut = "";
   let serverExitCode: number | null | undefined;
@@ -275,6 +283,24 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
   // Back-compat alias for the two call sites below.
   const failIfServerDied = failureReason;
 
+  // Runtime errors inside the server (video encoder config failures, display
+  // capture permission issues, etc.) are logged via android.util.Log, which
+  // only shows up in logcat — not in this process's own stdout/stderr. Used
+  // as a fallback when failureReason() comes back empty.
+  const logcatFailureReason = (): string | null => {
+    try {
+      const dump = spawnSync(adb, ["-s", serial, "logcat", "-d", "-t", "300"], { encoding: "utf8", timeout: 5000 });
+      const lines = (dump.stdout || "").split("\n").filter((l) =>
+        /scrcpy|Server|MediaCodec|Codec2|OMXClient|SurfaceControl/i.test(l) &&
+        /\bE\/|\bW\/|Exception|error/i.test(l),
+      );
+      if (lines.length === 0) return null;
+      return `device logcat around the failure:\n${lines.slice(-40).join("\n")}`;
+    } catch {
+      return null;
+    }
+  };
+
   // A socket 'close' event can fire a beat before the spawned process's own
   // 'exit' event is delivered (they're two independent async notifications
   // for essentially the same crash), so checking failIfServerDied()
@@ -306,7 +332,7 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     await waitBriefly(400);
     try { serverProc.kill(); } catch { /* ignore */ }
     removeForward();
-    const diedReason = failIfServerDied();
+    const diedReason = failIfServerDied() ?? logcatFailureReason();
     throw diedReason ? new Error(diedReason) : (err instanceof Error ? err : new Error(String(err)));
   }
 
@@ -332,7 +358,7 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     videoSock.destroy();
     controlSock.destroy();
     removeForward();
-    const diedReason = failureReason();
+    const diedReason = failureReason() ?? logcatFailureReason();
     throw new Error(diedReason ?? `Failed to read scrcpy video header: ${err instanceof Error ? err.message : String(err)}`);
   }
 
