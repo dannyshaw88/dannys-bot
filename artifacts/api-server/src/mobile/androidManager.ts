@@ -598,6 +598,62 @@ export async function launchInstagram(serial: string): Promise<void> {
   ], { encoding: "utf8", timeout: 10000 });
 }
 
+/**
+ * Instagram occasionally shows Meta's EU/UK "ads choice" consent screen on
+ * launch ("Make a choice about your ads" → Get started → pick "Use for free
+ * with ads" → Continue → Agree). It's a full-screen modal that blocks
+ * everything behind it, so if it appears mid-automation-cycle every
+ * subsequent scripted tap lands on it instead of the feed and the whole
+ * cycle silently does nothing. This walks through it end-to-end if present,
+ * and is a no-op (single UI dump, no taps) if the dialog isn't showing.
+ */
+export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismissed: boolean; steps: string[] }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  let xml = await _uiDump(adb, serial);
+
+  // Only proceed if this actually looks like the ads-choice screen — avoid
+  // tapping "Get started" blind on some unrelated dialog that happens to
+  // share a button label.
+  const looksLikeAdsChoice = /ads?\b/i.test(xml) && (xml.includes("Get started") || xml.includes("choice about your ads"));
+  if (!looksLikeAdsChoice) return { dismissed: false, steps };
+
+  // 1. "Get started"
+  let pos = _findElem(xml, "Get started", "GET STARTED");
+  if (!pos) return { dismissed: false, steps };
+  _adbTap(adb, serial, pos.x, pos.y);
+  steps.push("ads-choice: tapped Get started");
+  await _sleep(1200);
+
+  // 2. Select "Use for free with ads" (radio option), then Continue
+  xml = await _uiDump(adb, serial);
+  pos = _findElem(xml, "Use for free with ads", "Free with ads");
+  if (pos) {
+    _adbTap(adb, serial, pos.x, pos.y);
+    steps.push("ads-choice: selected Use for free with ads");
+    await _sleep(500);
+    xml = await _uiDump(adb, serial);
+  }
+  pos = _findElem(xml, "Continue", "CONTINUE");
+  if (pos) {
+    _adbTap(adb, serial, pos.x, pos.y);
+    steps.push("ads-choice: tapped Continue");
+    await _sleep(1200);
+    xml = await _uiDump(adb, serial);
+  }
+
+  // 3. "Agree" on the final confirmation page
+  pos = _findElem(xml, "Agree", "AGREE", "I agree", "Allow");
+  if (pos) {
+    _adbTap(adb, serial, pos.x, pos.y);
+    steps.push("ads-choice: tapped Agree");
+    await _sleep(1200);
+  }
+
+  return { dismissed: true, steps };
+}
+
 export async function stopInstagram(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

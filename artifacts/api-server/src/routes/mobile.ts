@@ -1100,6 +1100,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("launch-instagram");
       await sleepOrAbort(serial, 3500); // let the app finish loading before scrolling
 
+      // 2b. Meta occasionally shows a full-screen "ads choice" consent modal
+      // on launch (Get started → Use for free with ads → Continue → Agree).
+      // It blocks the whole screen, so every scripted tap after it would
+      // silently land on the modal instead of the feed. Walk through it if
+      // present; this is a no-op if the dialog isn't showing.
+      const adsChoice = await android.dismissAdsChoiceDialog(serial).catch(() => ({ dismissed: false, steps: [] as string[] }));
+      if (adsChoice.dismissed) {
+        steps.push(`ads-choice-dialog(${adsChoice.steps.length} steps)`);
+        await sleepOrAbort(serial, 1000); // let the feed settle after the modal closes
+      }
+
       // 3. Scroll the feed (Step 2 in the UI).
       const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
