@@ -65,7 +65,8 @@ type AutomationSettings = {
   actionDelayMin: number;
   actionDelayMax: number;
   maxActionsPerDay: number;
-  autoReplyEnabled: boolean;
+  feedScrollMin: number;
+  feedScrollMax: number;
   notes?: string;
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings };
@@ -560,12 +561,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     actionDelayMin: z.number().min(0),
     actionDelayMax: z.number().min(0),
     maxActionsPerDay: z.number().min(0),
-    autoReplyEnabled: z.boolean(),
+    feedScrollMin: z.number().min(1).max(50),
+    feedScrollMax: z.number().min(1).max(50),
     notes: z.string().optional(),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const defaults: AutomationSettings = { actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, autoReplyEnabled: false, notes: "" };
+    const defaults: AutomationSettings = { actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, feedScrollMin: 5, feedScrollMax: 10, notes: "" };
     res.json(cfg[p(req, "serial")]?.automation ?? defaults);
   });
   app.post("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -577,6 +579,47 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       saveInstanceConfigs(cfg);
       res.json({ ok: true, automation: input });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
+  });
+
+  // ── Check Feed — N downward scrolls over the Instagram feed currently on
+  // screen. Opening Instagram/navigating to the feed is out of scope for now
+  // (per user instruction) — this just drives the scroll gesture repeatedly
+  // against whatever is currently visible on the device.
+  const checkFeedSchema = z.object({ count: z.number().min(1).max(50) });
+  const checkFeedInProgress = new Set<string>();
+  app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    if (checkFeedInProgress.has(serial)) {
+      res.status(409).json({ error: "A Check Feed run is already in progress on this device" });
+      return;
+    }
+    checkFeedInProgress.add(serial);
+    try {
+      const { count } = checkFeedSchema.parse(req.body);
+
+      let w = 1080, h = 2400;
+      try {
+        const tools = android.detectToolset();
+        const adbPath = tools.adb.path;
+        if (adbPath) {
+          const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+          const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+          if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
+        }
+      } catch { /* fall back to defaults above */ }
+
+      const x  = Math.round(w / 2);
+      const y1 = Math.round(h * 0.78); // start low on screen
+      const y2 = Math.round(h * 0.22); // swipe up to scroll the feed down
+
+      for (let i = 0; i < count; i++) {
+        await android.swipe(serial, x, y1, x, y2, 350 + Math.round(Math.random() * 150));
+        await new Promise(r => setTimeout(r, 600 + Math.round(Math.random() * 500)));
+      }
+
+      res.json({ ok: true, count });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to check feed" }); }
+    finally { checkFeedInProgress.delete(serial); }
   });
 
   // ── Instance config (proxy assignment) ───────────────────────────────────────

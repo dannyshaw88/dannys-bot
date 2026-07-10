@@ -4,7 +4,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -103,7 +102,7 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in window;
 
-const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: string; onLog?: (msg: string) => void }) {
+const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions }: { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
@@ -158,6 +157,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
         canvas.width  = sz.w;
         canvas.height = sz.h;
         addLog(`Canvas set ${sz.w}×${sz.h}`);
+        onDimensions?.(sz.w, sz.h);
       }
       const ctx = canvas.getContext("2d");
       ctx?.drawImage(frame, 0, 0);
@@ -272,6 +272,7 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog }: { serial: s
               canvas.width  = sz.w;
               canvas.height = sz.h;
               addLog(`Canvas set ${sz.w}×${sz.h}`);
+              onDimensions?.(sz.w, sz.h);
             }
             ctx.drawImage(img, 0, 0);
             revoke();
@@ -588,7 +589,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx, onLog }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void }) {
+function PhoneSlot({ phone, idx, onLog, onDimensions }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }) {
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
@@ -642,7 +643,7 @@ function PhoneSlot({ phone, idx, onLog }: { phone: UsbPhone | null; idx: number;
         )}
 
         {/* Auto-stream — always mounts when phone is ready */}
-        {isReady && phone && <LiveCanvas serial={phone.serial} onLog={onLog} />}
+        {isReady && phone && <LiveCanvas serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
       </div>
 
       {/* Nav bar */}
@@ -760,19 +761,22 @@ interface AutomationSettingsData {
   actionDelayMin: number;
   actionDelayMax: number;
   maxActionsPerDay: number;
-  autoReplyEnabled: boolean;
+  feedScrollMin: number;
+  feedScrollMax: number;
   notes?: string;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
-  actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, autoReplyEnabled: false, notes: "",
+  actionDelayMin: 30, actionDelayMax: 90, maxActionsPerDay: 150, feedScrollMin: 5, feedScrollMax: 10, notes: "",
 };
 
-function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
+function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onLog?: (msg: string) => void }) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkMsg,  setCheckMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }
@@ -787,6 +791,30 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   }, [phone?.serial]);
 
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const runCheckFeed = async () => {
+    if (!phone) return;
+    const min = Math.max(1, Math.min(settings.feedScrollMin, settings.feedScrollMax));
+    const max = Math.max(settings.feedScrollMin, settings.feedScrollMax);
+    const count = Math.floor(Math.random() * (max - min + 1)) + min;
+    setChecking(true); setCheckMsg(null);
+    onLog?.(`Check Feed → ${count} downward scrolls`);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/check-feed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !body?.ok) {
+        setCheckMsg(body?.error ?? `Failed (${r.status})`);
+        return;
+      }
+      setCheckMsg(`Scrolled ${count} times`);
+    } catch (e: any) {
+      setCheckMsg(e?.message ?? "Couldn't reach the server");
+    } finally { setChecking(false); }
+  };
 
   const save = async () => {
     if (!phone) return;
@@ -830,17 +858,38 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold text-foreground">Auto-reply</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Respond to incoming DMs automatically</div>
+        <div>
+          <div className="text-sm font-semibold text-foreground">Check Feed</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Scroll the Instagram feed currently shown on the phone
           </div>
-          <Switch
-            checked={settings.autoReplyEnabled}
-            onCheckedChange={(v) => setSettings(s => ({ ...s, autoReplyEnabled: v }))}
-            disabled={loading}
-          />
         </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={1}
+              value={settings.feedScrollMin}
+              onChange={e => setSettings(s => ({ ...s, feedScrollMin: Number(e.target.value) }))}
+              disabled={loading}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              min={1}
+              value={settings.feedScrollMax}
+              onChange={e => setSettings(s => ({ ...s, feedScrollMax: Number(e.target.value) }))}
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <Button className="w-full" variant="secondary" onClick={runCheckFeed} disabled={checking || loading}>
+          {checking ? "Scrolling…" : "Check Feed"}
+        </Button>
+        {checkMsg && <p className="text-xs text-muted-foreground">{checkMsg}</p>}
 
         <div className="border-t border-border/50" />
 
@@ -894,35 +943,6 @@ function AutomationSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-// ─── Debug log panel (right column, below settings) ───────────────────────────
-
-function DebugLogPanel({ logs }: { logs: string[] }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = boxRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [logs]);
-
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="px-4 py-2 border-b border-border shrink-0 flex items-center gap-1.5">
-        <Terminal className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold text-foreground">Stream log</span>
-      </div>
-      <div ref={boxRef} className="flex-1 min-h-0 overflow-y-auto bg-zinc-950 px-3 py-2">
-        {logs.length === 0 ? (
-          <p className="text-[11px] text-white/25 font-mono">No activity yet…</p>
-        ) : (
-          logs.map((l, i) => (
-            <div key={i} className="text-[10px] font-mono text-white/50 leading-relaxed whitespace-pre-wrap break-all">{l}</div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TOTAL_SLOTS = 1;
@@ -931,12 +951,7 @@ export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [logs,    setLogs]    = useState<string[]>([]);
-
-  const pushLog = useCallback((msg: string) => {
-    const stamp = new Date().toLocaleTimeString([], { hour12: false });
-    setLogs(l => [...l.slice(-199), `${stamp}  ${msg}`]);
-  }, []);
+  const [phoneDims, setPhoneDims] = useState<{ w: number; h: number } | null>(null);
 
   const refresh = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -954,6 +969,12 @@ export function MobilePage() {
 
   const phones = data?.phones ?? [];
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
+  const activeSerial = slots[0]?.serial ?? null;
+
+  // Drop any previously-learned aspect ratio when the connected device
+  // changes (or disconnects) — otherwise a stale ratio from the last phone
+  // can briefly letterbox the next one before its first frame arrives.
+  useEffect(() => { setPhoneDims(null); }, [activeSerial]);
 
   // Only true once we have real data AND either a phone is connected or one
   // of the setup panels needs to take over the whole content area.
@@ -1017,23 +1038,29 @@ export function MobilePage() {
           </div>
         )}
 
-        {/* Phone (left half, full height) + automation settings & log (right half) */}
+        {/* Phone (left half, full height) + automation settings (right half) */}
         {showSplitView && (
           <div className="flex-1 min-h-0 flex">
             <div className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
-              <div className="h-full aspect-[9/16]" style={{ maxWidth: "100%" }}>
+              {/* Aspect ratio is set from the phone's real reported resolution
+                  once known (falls back to 9/16 before the first frame
+                  arrives), so the canvas's object-fit: contain never has to
+                  letterbox — the shell fits the actual screen exactly instead
+                  of leaving black bars on either side. */}
+              <div
+                className="h-full"
+                style={{
+                  maxWidth: "100%",
+                  aspectRatio: phoneDims ? `${phoneDims.w} / ${phoneDims.h}` : "9 / 16",
+                }}
+              >
                 {slots.map((phone, i) => (
-                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onLog={pushLog} />
+                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onDimensions={(w, h) => setPhoneDims({ w, h })} />
                 ))}
               </div>
             </div>
-            <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
-              <div className="flex-[2] min-h-0 overflow-y-auto">
-                <AutomationSettingsPanel phone={slots[0]} />
-              </div>
-              <div className="flex-1 min-h-0 border-t border-border">
-                <DebugLogPanel logs={logs} />
-              </div>
+            <div className="w-1/2 h-full min-h-0 overflow-y-auto border-l border-border">
+              <AutomationSettingsPanel phone={slots[0]} />
             </div>
           </div>
         )}

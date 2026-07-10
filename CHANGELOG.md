@@ -4,6 +4,46 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.436] — 2026-07-10
+
+### Mobile Farm — fixed mirror letterboxing, dropped the Stream log, replaced Auto-reply with Check Feed
+
+**Black bars on either side of the phone mirror:** the phone shell was
+hard-coded to a `9/16` aspect ratio (Tailwind `aspect-[9/16]`), but real
+device resolutions (e.g. 1080×2400, 1080×2460) aren't exactly 9:16 — the
+mismatch left the canvas's `object-fit: contain` letterboxing the image with
+black padding on the left/right. The shell now tracks the device's *real*
+reported resolution (threaded up via a new `onDimensions` callback:
+`LiveCanvas` → `PhoneSlot` → `MobilePage`) and sets `aspectRatio` on the
+wrapper dynamically from that, falling back to `9/16` only until the first
+frame arrives. The tracked resolution is also reset whenever the connected
+device's serial changes (or it disconnects), so a stale ratio from a
+previous phone can never linger and briefly letterbox the next one.
+
+**Stream log removed:** the on-screen "Stream log" panel (`DebugLogPanel`)
+under Automation Settings has been removed entirely — it was a debugging aid
+during development that's no longer needed day-to-day.
+
+**"Auto-reply" replaced with "Check Feed":** the per-device Automation
+Settings panel no longer has an Auto-reply toggle. In its place is a
+**Check Feed** control: two number inputs ("Scroll this many times", e.g. 5
+to 10) and a **Check Feed** button. Pressing it sends a random number of
+downward swipes (uniformly chosen between the min/max) to whatever is
+currently on the device's screen — this only drives the scroll gesture
+itself; opening Instagram / navigating to the feed first is intentionally
+out of scope for now and will be layered on separately.
+
+- Backend: `AutomationSettings` per device now stores `feedScrollMin` /
+  `feedScrollMax` instead of `autoReplyEnabled` (isolated to the Mobile Farm
+  tab's own config file — unrelated to the separate Auto Reply tool used
+  elsewhere in the app for DM automation, which is untouched).
+- New endpoint: `POST /api/mobile/devices/:serial/check-feed` — resolves the
+  device's real screen size via `adb shell wm size`, then issues N swipes
+  (random 350–500ms duration, random 600–1100ms pacing between each) from
+  ~78% down the screen to ~22%. Guarded by a per-serial in-progress lock so
+  overlapping requests against the same device 409 instead of interleaving
+  swipes.
+
 ## [1.1.435] — 2026-07-10
 
 ### Mobile Farm — reverted the video mirror back to `screenrecord`; scrcpy never worked on real hardware
