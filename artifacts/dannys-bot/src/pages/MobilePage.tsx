@@ -945,6 +945,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // When the master toggle is flipped off, this is aborted immediately so
   // the running cycle also receives a stop signal server-side.
   const cycleAbortRef = useRef<AbortController | null>(null);
+  // Tracks the cycleId of the currently in-flight cycle so the cleanup can
+  // pass it to the server-side abort endpoint (prevents stale abort POSTs
+  // from killing the *next* cycle after a rapid toggle-off / toggle-on).
+  const cycleIdRef = useRef<string | null>(null);
   // Snapshot of what's actually persisted server-side — lets autosave skip
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
@@ -1017,14 +1021,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // sequence recycles every time this fires, for as long as the master
       // toggle stays on.
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
+      // Generate a unique ID for this cycle.  Both the cycle POST and the abort
+      // POST carry it so the server can ignore stale aborts from the previous
+      // cycle that race with the start of this new one.
+      const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const ctrl = new AbortController();
       cycleAbortRef.current = ctrl;
+      cycleIdRef.current = cycleId; // expose to cleanup closure for the abort POST
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: ctrl.signal,
           body: JSON.stringify({
+            cycleId,
             count,
             delayMinSec: s.actionDelayMin,
             delayMaxSec: s.actionDelayMax,
@@ -1056,6 +1066,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
       } finally {
         cycleAbortRef.current = null;
+        cycleIdRef.current = null;
       }
       if (cancelled) return;
       setRunning(false);
@@ -1074,12 +1085,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       setRunning(false);
       setNextRunAt(null);
       // Immediately abort any in-flight cycle fetch and tell the server to stop.
+      // Pass the cycleId so the server only aborts the specific cycle that was
+      // running when the toggle was flipped — stale abort POSTs that arrive
+      // after the next cycle has already started will be ignored.
       const ctrl = cycleAbortRef.current;
       if (ctrl) {
+        const abortingId = cycleIdRef.current;
         ctrl.abort();
         cycleAbortRef.current = null;
-        // Best-effort server-side abort — fire and forget.
-        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, { method: "POST" }).catch(() => {});
+        cycleIdRef.current = null;
+        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cycleId: abortingId }),
+        }).catch(() => {});
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

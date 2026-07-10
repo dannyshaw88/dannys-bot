@@ -670,18 +670,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const checkFeedInProgress = new Set<string>();
 
-  // Signals a running automation cycle to abort at the next safe checkpoint.
-  const automationCycleAbortRequested = new Set<string>();
+  // Per-cycle abort tracking.  Each new cycle is assigned a random ID that is
+  // passed by the frontend in both the cycle POST body and the abort POST body.
+  // The abort endpoint only sets the flag when the supplied ID matches the ID
+  // of the cycle that is currently running, so a stale abort POST that arrives
+  // after the next cycle has already started cannot kill the new cycle.
+  const automationCycleCurrentId  = new Map<string, string>(); // serial → running cycle ID
+  const automationCycleAbortedId  = new Map<string, string>(); // serial → ID that was aborted
 
-  // Helper: sleep with abort-check. Throws if abort has been requested.
+  const isCycleAborted = (serial: string) =>
+    automationCycleAbortedId.get(serial) !== undefined &&
+    automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
+
+  // Helper: sleep with abort-check. Throws "cycle-aborted" if the abort flag
+  // for this specific cycle has been set.
   const sleepOrAbort = (serial: string, ms: number) =>
     new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
-        if (automationCycleAbortRequested.has(serial)) reject(new Error("cycle-aborted"));
+        if (isCycleAborted(serial)) reject(new Error("cycle-aborted"));
         else resolve();
       }, ms);
-      // Also resolve immediately if ms is 0
-      if (ms <= 0) { clearTimeout(t); if (automationCycleAbortRequested.has(serial)) reject(new Error("cycle-aborted")); else resolve(); }
+      // Also check immediately for zero-ms waits
+      if (ms <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }
     });
 
   // Helper: get screen dimensions via adb wm size.
@@ -739,7 +749,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let sharesFeed = 0;
     let sharesDm = 0;
     for (let i = 0; i < count; i++) {
-      if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 180);
 
@@ -758,7 +768,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Share to Feed (repost to own story/feed): tap the send/share icon,
       // then tap the "Repost" option in the share sheet.
       if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
-        if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
+        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
         try {
           await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
           await android.tap(serial, shareIconX, actionBarY);
@@ -776,7 +786,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Share via DM: tap the send/share icon, then tap the first suggested
       // user in the DM picker list.
       if (shareDmChance > 0 && Math.random() < shareDmChance) {
-        if (automationCycleAbortRequested.has(serial)) throw new Error("cycle-aborted");
+        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
         try {
           await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
           await android.tap(serial, shareIconX, actionBarY);
@@ -831,13 +841,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1800); // let story viewer open
 
     for (let u = 0; u < numUsers; u++) {
-      if (automationCycleAbortRequested.has(serial)) break;
+      if (isCycleAborted(serial)) break;
       const numSlides = Math.floor(
         Math.min(slidesMin, slidesMax) +
         Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
       );
       for (let s = 0; s < numSlides; s++) {
-        if (automationCycleAbortRequested.has(serial)) break;
+        if (isCycleAborted(serial)) break;
         // Each slide gets its own randomly chosen watch percentage.
         const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
           Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
@@ -908,11 +918,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const automationCycleInProgress = new Set<string>();
 
   // Abort endpoint — called by the frontend when the master toggle is switched
-  // off mid-cycle. Sets the abort flag so the running cycle stops at the next
-  // safe checkpoint.
+  // off mid-cycle.  The frontend passes the same cycleId it used to start the
+  // cycle so we can ignore stale abort POSTs that arrive after the next cycle
+  // has already started (the race that was killing fresh cycles on toggle-off).
   app.post("/api/mobile/devices/:serial/automation-cycle/abort", (req: Request, res: Response) => {
     const serial = p(req, "serial");
-    automationCycleAbortRequested.add(serial);
+    const cycleId: string | undefined = req.body?.cycleId;
+    // Only set the abort flag if the supplied ID matches the cycle that is
+    // actually running right now.  If cycleId is absent (older clients) fall
+    // back to the unconditional set for backwards compatibility.
+    if (!cycleId || automationCycleCurrentId.get(serial) === cycleId) {
+      automationCycleAbortedId.set(serial, automationCycleCurrentId.get(serial) ?? cycleId ?? "");
+    }
     res.json({ ok: true });
   });
 
@@ -922,8 +939,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.status(409).json({ error: "An automation cycle is already in progress on this device" });
       return;
     }
-    // Clear any stale abort flag from a previous aborted cycle.
-    automationCycleAbortRequested.delete(serial);
+    // Register this cycle's ID so the abort endpoint can target it precisely.
+    // Using the ID from the request body (sent by the frontend) means a stale
+    // abort POST that arrives after this cycle started will NOT match and is
+    // safely ignored.
+    const incomingCycleId: string = req.body?.cycleId ?? `fallback-${Date.now()}`;
+    automationCycleCurrentId.set(serial, incomingCycleId);
+    automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
     automationCycleInProgress.add(serial);
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
@@ -1004,7 +1026,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } finally {
       automationCycleInProgress.delete(serial);
       checkFeedInProgress.delete(serial);
-      automationCycleAbortRequested.delete(serial);
+      automationCycleCurrentId.delete(serial);
+      automationCycleAbortedId.delete(serial);
     }
   });
 
