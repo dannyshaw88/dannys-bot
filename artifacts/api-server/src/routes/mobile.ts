@@ -70,7 +70,8 @@ type AutomationSettings = {
   feedScrollMin: number;
   feedScrollMax: number;
 };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings };
+type DeviceAccount = { username: string; password: string };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -583,6 +584,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
   });
 
+  // ── Per-device linked Instagram account (Account Settings tab) ──────────────
+  const deviceAccountSchema = z.object({
+    username: z.string().min(1),
+    password: z.string().min(1),
+  });
+  app.get("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
+    const cfg = loadInstanceConfigs();
+    const account = cfg[p(req, "serial")]?.account ?? null;
+    res.json(account);
+  });
+  app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
+    try {
+      const input = deviceAccountSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], account: input };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true, account: input });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
+  });
+
   // ── Check Feed — N downward scrolls over the Instagram feed currently on
   // screen. Opening Instagram/navigating to the feed is out of scope for now
   // (per user instruction) — this just drives the scroll gesture repeatedly
@@ -935,31 +957,52 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     videoW: z.number().optional(),
     videoH: z.number().optional(),
   });
+  // Shared by /input/tap and /input/double-tap — the mirrored video frame is
+  // often downscaled from the device's real resolution, so tap coordinates
+  // captured against the video's pixel size need rescaling to the phone's
+  // actual `wm size` before they're sent to adb.
+  function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): { x: number; y: number } {
+    if (!videoW || !videoH) return { x, y };
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) return { x, y };
+      const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+      const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+      if (!m) return { x, y };
+      const realW = parseInt(m[1]);
+      const realH = parseInt(m[2]);
+      if (realW === videoW && realH === videoH) return { x, y };
+      const rx = Math.round((x / videoW) * realW);
+      const ry = Math.round((y / videoH) * realH);
+      logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
+      return { x: rx, y: ry };
+    } catch { return { x, y }; }
+  }
+
   app.post("/api/mobile/devices/:serial/input/tap", async (req: Request, res: Response) => {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      let { x, y } = input;
-      if (input.videoW && input.videoH) {
-        try {
-          const tools = android.detectToolset();
-          const adbPath = tools.adb.path;
-          if (adbPath) {
-            const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-            const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
-            if (m) {
-              const realW = parseInt(m[1]);
-              const realH = parseInt(m[2]);
-              if (realW !== input.videoW || realH !== input.videoH) {
-                x = Math.round((x / input.videoW) * realW);
-                y = Math.round((y / input.videoH) * realH);
-                logger.info({ serial, from: [input.x, input.y], to: [x, y], video: [input.videoW, input.videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
-              }
-            }
-          }
-        } catch { /* fall back to unscaled coordinates */ }
-      }
+      const { x, y } = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
       await android.tap(serial, x, y);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // Manual double-tap (like) from the operator clicking the mirrored screen
+  // twice — must go through the same single-adb-call `doubleTap` used by
+  // the automated Check Feed loop. Sending this as two separate
+  // `/input/tap` requests (the old behavior) reintroduces the exact
+  // latency bug that broke double-tap-to-like: each request is its own
+  // adb round-trip, and by the time the second tap lands Instagram's
+  // double-tap gesture window has already closed.
+  app.post("/api/mobile/devices/:serial/input/double-tap", async (req: Request, res: Response) => {
+    try {
+      const input = tapSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const { x, y } = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      await android.doubleTap(serial, x, y);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

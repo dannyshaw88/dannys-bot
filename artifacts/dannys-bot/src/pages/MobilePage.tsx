@@ -89,9 +89,11 @@ async function sendKey(serial: string, code: number, label: string, onLog?: (msg
 function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
     <button
+      type="button"
+      tabIndex={-1}
       onClick={onClick}
       title={label}
-      className="flex flex-col items-center gap-0.5 text-white/40 hover:text-white/80 transition-colors px-1.5"
+      className="flex flex-col items-center gap-0.5 text-white/40 hover:text-white/80 transition-colors px-1.5 focus:outline-none"
     >
       {icon}
       <span className="text-[8px] font-medium tracking-wide uppercase">{label}</span>
@@ -403,6 +405,24 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions 
     startedAt: number;
   } | null>(null);
   const DRAG_THRESHOLD_PX = 10; // in viewport (client) pixels
+  // Tracks the previous tap so a second tap landing soon after, near the
+  // same spot, is sent as a single combined double-tap gesture instead of
+  // two independent `/input/tap` requests. Two separate requests each pay
+  // their own adb round-trip, which was pushing the real on-device gap
+  // past Instagram's double-tap recognition window (same root cause as the
+  // automated Check Feed like bug — see androidManager.doubleTap).
+  const lastTapRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  // A lone tap isn't sent immediately — it's held for DOUBLE_TAP_MS in case
+  // a second tap follows nearby, so a genuine double-tap gesture always
+  // resolves to exactly one combined double-tap request (not a single tap
+  // followed by a double-tap, which would land 3 taps on the device).
+  const pendingSingleTapRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const DOUBLE_TAP_MS = 350;
+  const DOUBLE_TAP_PX = 40; // phone-coordinate pixels
+
+  useEffect(() => {
+    return () => { if (pendingSingleTapRef.current) clearTimeout(pendingSingleTapRef.current.timer); };
+  }, []);
 
   const endDrag = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* already released */ }
@@ -462,21 +482,61 @@ const LiveCanvas = React.memo(function LiveCanvas({ serial, onLog, onDimensions 
 
     if (clientDist < DRAG_THRESHOLD_PX) {
       // Short/no movement — treat as a tap at the press point (matches the
-      // previous click-to-tap behavior exactly).
-      addLog(`Tap → (${drag.startX}, ${drag.startY})`);
-      try {
-        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize.w, videoH: phoneSize.h }),
-        });
-        if (!r.ok) {
-          const body = await r.json().catch(() => null);
-          addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+      // previous click-to-tap behavior exactly). A lone tap is held for
+      // DOUBLE_TAP_MS instead of firing right away: if a second tap lands
+      // nearby within that window, the pending single tap is cancelled and
+      // the pair is sent as one combined double-tap request instead — so a
+      // genuine double-tap gesture always resolves to exactly one
+      // double-tap on the device, never a single tap plus a double-tap.
+      const pending = pendingSingleTapRef.current;
+      const now = Date.now();
+      const isDoubleTap = !!pending
+        && (now - lastTapRef.current!.at) <= DOUBLE_TAP_MS
+        && Math.hypot(drag.startX - pending.x, drag.startY - pending.y) <= DOUBLE_TAP_PX;
+
+      if (isDoubleTap) {
+        clearTimeout(pending!.timer);
+        pendingSingleTapRef.current = null;
+        lastTapRef.current = null;
+        addLog(`Double-tap → (${drag.startX}, ${drag.startY})`);
+        try {
+          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/double-tap`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize.w, videoH: phoneSize.h }),
+          });
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            addLog(`Double-tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          }
+        } catch (err: any) {
+          addLog(`Double-tap FAILED — ${err?.message ?? "network error"}`);
         }
-      } catch (err: any) {
-        addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
+        return;
       }
+
+      // No pending partner tap in range — hold this one in case a second
+      // tap arrives shortly, otherwise send it as a plain single tap.
+      lastTapRef.current = { x: drag.startX, y: drag.startY, at: now };
+      const tapX = drag.startX, tapY = drag.startY;
+      const timer = setTimeout(async () => {
+        pendingSingleTapRef.current = null;
+        addLog(`Tap → (${tapX}, ${tapY})`);
+        try {
+          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x: tapX, y: tapY, videoW: phoneSize.w, videoH: phoneSize.h }),
+          });
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          }
+        } catch (err: any) {
+          addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
+        }
+      }, DOUBLE_TAP_MS);
+      pendingSingleTapRef.current = { timer, x: tapX, y: tapY };
       return;
     }
 
@@ -778,7 +838,12 @@ const NUM_INPUT_CLASS = "w-16 text-center";
 // values to 4 digits (0-9999) in code as well.
 const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
 
-function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onLog?: (msg: string) => void }) {
+// Owns settings load/autosave and the continuous run-loop. Called once from
+// `MobilePage` (not from the tab-conditional panel) so switching away from
+// the Human Session Tool tab never unmounts this and interrupts an
+// in-progress automation cycle — the loop must keep running in the
+// background regardless of which tab is currently visible.
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -885,6 +950,19 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, settings.enabled]);
 
+  return { settings, setSettings, loading, saveError, running };
+}
+
+function AutomationSettingsPanel({
+  phone, settings, setSettings, loading, saveError, running,
+}: {
+  phone: UsbPhone | null;
+  settings: AutomationSettingsData;
+  setSettings: React.Dispatch<React.SetStateAction<AutomationSettingsData>>;
+  loading: boolean;
+  saveError: string | null;
+  running: boolean;
+}) {
   if (!phone) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
@@ -1008,15 +1086,164 @@ function AutomationSettingsPanel({ phone, onLog }: { phone: UsbPhone | null; onL
   );
 }
 
+function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
+  const [account, setAccount] = useState<{ username: string; password: string }>({ username: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const hydratedRef = useRef(false);
+  const lastSavedRef = useRef<string>(JSON.stringify({ username: "", password: "" }));
+
+  useEffect(() => {
+    hydratedRef.current = false;
+    if (!phone) { setAccount({ username: "", password: "" }); return; }
+    let active = true;
+    setLoading(true);
+    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`)
+      .then(r => r.json())
+      .then(d => {
+        if (!active) return;
+        const loaded = d && d.username ? { username: d.username, password: d.password ?? "" } : { username: "", password: "" };
+        lastSavedRef.current = JSON.stringify(loaded);
+        setAccount(loaded);
+      })
+      .catch(() => { /* keep blank */ })
+      .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
+    return () => { active = false; };
+  }, [phone?.serial]);
+
+  useEffect(() => {
+    if (!phone || !hydratedRef.current) return;
+    if (!account.username.trim() || !account.password.trim()) return; // wait for both fields before saving
+    const serial = phone.serial;
+    const toSaveStr = JSON.stringify(account);
+    if (toSaveStr === lastSavedRef.current) return;
+    const t = setTimeout(() => {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: toSaveStr,
+      })
+        .then(async r => {
+          const body = await r.json().catch(() => null);
+          if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server rejected the account (${r.status})`); return; }
+          lastSavedRef.current = toSaveStr;
+          setSaveError(null);
+          setSaved(true);
+          setTimeout(() => setSaved(false), 1500);
+        })
+        .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [account, phone?.serial]);
+
+  if (!phone) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
+        <Smartphone className="w-8 h-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Connect a phone via USB to link an Instagram account to it.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-6 space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-foreground">Account Settings</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
+        </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div className="space-y-2">
+          <Label className="text-sm text-muted-foreground">Instagram username</Label>
+          <Input
+            value={account.username}
+            onChange={e => setAccount(a => ({ ...a, username: e.target.value }))}
+            placeholder="username"
+            disabled={loading}
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm text-muted-foreground">Password</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type={showPassword ? "text" : "password"}
+              value={account.password}
+              onChange={e => setAccount(a => ({ ...a, password: e.target.value }))}
+              placeholder="password"
+              disabled={loading}
+              autoComplete="off"
+            />
+            <Button type="button" variant="secondary" onClick={() => setShowPassword(s => !s)}>
+              {showPassword ? "Hide" : "Show"}
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Saved automatically as you type — linked to this phone (serial {phone.serial}).
+        </p>
+        {saved && <p className="text-xs text-green-500">Saved</p>}
+        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+      </div>
+    </div>
+  );
+}
+
+function LogPanel({ lines, onClear }: { lines: string[]; onClear: () => void }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  return (
+    <div className="h-full flex flex-col p-6">
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <h2 className="text-lg font-bold text-foreground">Log</h2>
+        <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
+          Clear
+        </Button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed text-green-400/90">
+        {lines.length === 0
+          ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
+          : lines.map((l, i) => <div key={i} className="whitespace-pre-wrap break-all">{l}</div>)
+        }
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TOTAL_SLOTS = 1;
+
+type MobileTab = "account" | "tool" | "log";
+const MOBILE_TABS: { id: MobileTab; label: string }[] = [
+  { id: "account", label: "Account Settings" },
+  { id: "tool",    label: "Human Session Tool" },
+  { id: "log",     label: "Log" },
+];
+const LOG_MAX_LINES = 500;
 
 export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [phoneDims, setPhoneDims] = useState<{ w: number; h: number } | null>(null);
+  const [activeTab, setActiveTab] = useState<MobileTab>("tool");
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const addLog = useCallback((msg: string) => {
+    const stamp = new Date().toLocaleTimeString();
+    setLogLines(prev => {
+      const next = [...prev, `[${stamp}] ${msg}`];
+      return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
+    });
+  }, []);
 
   const refresh = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -1035,6 +1262,10 @@ export function MobilePage() {
   const phones = data?.phones ?? [];
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
+
+  // Owned here (not inside the tab-conditional panel) so the run-loop keeps
+  // going in the background no matter which right-panel tab is active.
+  const automation = useAutomationSettings(slots[0], addLog);
 
   // Drop any previously-learned aspect ratio when the connected device
   // changes (or disconnects) — otherwise a stale ratio from the last phone
@@ -1120,12 +1351,41 @@ export function MobilePage() {
                 }}
               >
                 {slots.map((phone, i) => (
-                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onDimensions={(w, h) => setPhoneDims({ w, h })} />
+                  <PhoneSlot key={phone?.serial ?? `empty-${i}`} phone={phone} idx={i} onLog={addLog} onDimensions={(w, h) => setPhoneDims({ w, h })} />
                 ))}
               </div>
             </div>
-            <div className="w-1/2 h-full min-h-0 overflow-y-auto border-l border-border">
-              <AutomationSettingsPanel phone={slots[0]} />
+            <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
+              <div className="shrink-0 flex items-center border-b border-border px-4">
+                {MOBILE_TABS.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTab(t.id)}
+                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                      activeTab === t.id
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 min-h-0">
+                {activeTab === "account" && <AccountSettingsPanel phone={slots[0]} />}
+                {activeTab === "tool"    && (
+                  <AutomationSettingsPanel
+                    phone={slots[0]}
+                    settings={automation.settings}
+                    setSettings={automation.setSettings}
+                    loading={automation.loading}
+                    saveError={automation.saveError}
+                    running={automation.running}
+                  />
+                )}
+                {activeTab === "log"     && <LogPanel lines={logLines} onClear={() => setLogLines([])} />}
+              </div>
             </div>
           </div>
         )}

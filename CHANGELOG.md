@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.439] — 2026-07-10
+
+### Human Session Tool — real fix for double-tap-to-like, tabs (Account Settings / Human Session Tool / Log)
+
+- **Fixed: manually double-tapping a post on the phone mirror still didn't
+  like it.** The previous fix only covered the automated Check Feed loop —
+  a manual double-tap from the operator clicking the mirrored screen was
+  still sent as two independent `/input/tap` requests, each its own adb
+  round-trip, so the same latency problem broke it. The pointer handler now
+  holds a lone tap for 350ms; if a second tap lands nearby within that
+  window it cancels the pending single tap and sends one combined
+  `/input/double-tap` request instead, which reaches the device as a single
+  `adb shell` call with both taps and an on-device pause — matching what
+  the automated loop already does.
+- **Brought back a visible activity log.** Previously the log callback
+  wasn't actually wired to anything, so nothing appeared anywhere. There's
+  now a real **Log** tab that shows every tap, swipe, key press, and
+  automation cycle as it happens, for debugging exactly this kind of issue.
+- **Split the right panel into three tabs**, in this order: **Account
+  Settings**, **Human Session Tool**, **Log**.
+  - **Account Settings** (new) — link an Instagram username/password to
+    this specific phone; saves automatically as you type.
+  - **Human Session Tool** — the existing scroll/like automation panel,
+    unchanged in behavior.
+  - **Log** — the new activity log, with a Clear button.
+  - Switching tabs no longer interrupts anything: the Human Session Tool's
+    run-loop (and its settings load/autosave) now lives at the page level
+    instead of inside the tab's panel, so it keeps running in the
+    background even while you're looking at Account Settings or the Log.
+
 ## [1.1.438] — 2026-07-10
 
 ### Human Session Tool — master toggle, autosave, fixed double-tap like
