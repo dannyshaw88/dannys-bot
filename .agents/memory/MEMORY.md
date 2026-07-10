@@ -14,3 +14,4 @@
 - [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses WebCodecs H.264 decode (client side); PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
 - [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — mirror now uses real scrcpy-server (not adb screenrecord); ALWAYS verify control-message byte layout against the server's own decompiled ControlMessageReader, not memory
 - [Manual vs automated input parity](mobile-manual-vs-automated-input-parity.md) — a gesture-timing fix in one input path (automated) doesn't fix the same bug in another (manual UI); check all call sites
+- [Mobile tab explicit power-on](mobile-tab-explicit-power-on.md) — phone mirror stream must only start on Power button press or automation toggle, never on tab mount alone
