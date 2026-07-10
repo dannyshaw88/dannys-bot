@@ -1127,7 +1127,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Instagram bottom-nav Home icon: leftmost of 5 items → x ≈ 10% of width.
         // Nav bar sits at the very bottom of the screen → y ≈ 97.5% of height.
         await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
-        await sleepOrAbort(serial, 1500); // wait for feed to scroll back to top
+        // The Home tap forces Instagram to refresh the feed back to the top,
+        // but the stories tray doesn't repopulate instantly — it needs up to
+        // ~10s to reload after the refresh. Tapping the story bar before then
+        // lands on empty space (no story opens) and the whole stories step
+        // silently no-ops. 1.5s was nowhere near enough; wait the full 10s.
+        await sleepOrAbort(serial, 10000);
         const result = await runViewStoriesFromFeedLoop(serial, {
           usersMin: viewStoriesUsersMin, usersMax: viewStoriesUsersMax,
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
