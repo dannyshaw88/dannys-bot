@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.454] — 2026-07-10
+
+### Fix: hold-and-slide gesture opened the Reels tab instead of a story
+
+- The two-step tray navigation added in 1.1.452 (a separate swipe to
+  scroll the tray when the random target wasn't on screen, followed by a
+  second swipe to actually pick the bubble) was almost certainly the cause
+  — two independent `input swipe` calls starting close to the top of the
+  screen can each be misread as unrelated gestures instead of one
+  continuous scrub, and something in that chain ended up on the Reels tab.
+- Removed the separate scroll step entirely. `pickAndOpenRandomStory()` now
+  does exactly ONE hold-and-slide-right gesture per pick, with the random
+  target clamped to whatever bubbles are actually visible on screen (up to
+  10) instead of scrolling to reach further ones.
+- Tightened the story-tray Y coordinate to `h * 0.085` — per user
+  confirmation the tray sits top-central and is a thin band (~15px tall on
+  their device), so precision on Y matters more than X here.
+
+---
+
 ## [1.1.453] — 2026-07-10
 
 ### Debug: added a raw UI-dump endpoint to stop guessing story-tray coordinates

@@ -932,42 +932,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Opens the first story, watches N slides per user (each for a randomly
   // chosen % of the typical slide duration), then advances to the next user.
   /**
-   * Picks and opens one story bubble from the tray using a "hold and slide
-   * right" drag rather than a plain tap. Always tapping the same fixed spot
-   * (the first real story) creates a detectable pattern, so instead this
-   * presses down on the tray and drags right to a *randomly chosen* bubble
-   * among the first 10 (1-indexed, 1 = first real story after "Your
-   * story"), releasing there to open it — the same effect a person gets by
-   * scrubbing across the story tray before letting go on one.
+   * Picks and opens one story bubble from the tray using a single "hold and
+   * slide right" drag rather than a plain tap. Always tapping the same
+   * fixed spot (the first real story) creates a detectable pattern, so
+   * instead this presses down on the tray and drags right to a *randomly
+   * chosen* bubble, releasing there to open it.
+   *
+   * Per user confirmation, the story tray after tapping the Home tab sits
+   * top-central and is a thin band — only ~15px tall on their device — so
+   * accuracy on Y matters more than on X. An earlier version of this
+   * function first did a *separate* swipe to scroll the tray when the
+   * target bubble (1-10) wasn't yet on screen, then a second swipe to do
+   * the actual pick — that two-gesture chain is almost certainly what
+   * landed on the Reels tab instead: two independent `input swipe` calls
+   * starting very close to the top of the screen can each be misread as
+   * unrelated gestures (e.g. a stray edge/notification gesture) rather than
+   * one continuous scrub. Fixed by doing exactly ONE gesture, clamped to
+   * whatever bubbles are actually visible on screen (no separate
+   * pre-scroll), which is simpler and much less likely to be misread.
    *
    * Returns the 1-based position that was opened (for logging only).
    */
   async function pickAndOpenRandomStory(serial: string, w: number, h: number): Promise<number> {
-    // Stories bar sits just below the header, ~10% from the top. The FIRST
-    // slot is always the user's own profile with the "+" create-story button
-    // overlaid — tapping/dragging onto it opens the camera instead of
-    // viewing, so all positions here are 1-indexed starting at the first
-    // *friend's* story (slot 2 on screen).
-    const storyBarY   = Math.round(h * 0.10);
+    // Story tray band: top-central, thin (per user: ~15px tall on-device).
+    // The FIRST slot is always the user's own profile with the "+"
+    // create-story button overlaid — tapping/dragging onto it opens the
+    // camera instead of viewing, so all positions here are 1-indexed
+    // starting at the first *friend's* story (slot 2 on screen).
+    const storyBarY   = Math.round(h * 0.085);
     const firstStoryX = Math.round(w * 0.22);
     // Approximate on-device spacing between adjacent story bubbles.
     const spacing      = Math.round(w * 0.14);
-    // How many bubbles fit on screen at once starting from firstStoryX.
-    const maxVisible   = Math.max(1, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1);
+    // How many bubbles fit on screen at once starting from firstStoryX —
+    // the random pick is clamped to this so the whole gesture stays a
+    // single on-screen drag (no separate tray-scroll step beforehand).
+    const maxVisible   = Math.max(1, Math.min(10, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1));
 
-    let target = 1 + Math.floor(Math.random() * 10); // random 1..10
-    const picked = target;
-
-    // If the chosen bubble isn't on screen yet, scroll the tray left
-    // (finger drags right-to-left) a page at a time until it is, keeping
-    // one bubble of overlap as an anchor.
-    while (target > maxVisible) {
-      await android.swipe(serial, Math.round(w * 0.85), storyBarY, Math.round(w * 0.15), storyBarY, 350);
-      await sleepOrAbort(serial, 400 + Math.round(Math.random() * 300));
-      target -= (maxVisible - 1);
-    }
-
+    const target = 1 + Math.floor(Math.random() * maxVisible); // random 1..maxVisible
     const targetX = Math.round(firstStoryX + (target - 1) * spacing);
+
     // The "hold and slide right" gesture itself: a single slow drag from
     // the first visible bubble over to the target bubble. A long duration
     // (vs. the quick flicks used elsewhere) is what makes it read as a
@@ -976,7 +979,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // it lifts.
     const slideMs = 900 + Math.round(Math.random() * 500);
     await android.swipe(serial, firstStoryX, storyBarY, targetX, storyBarY, slideMs);
-    return picked;
+    return target;
   }
 
   async function runViewStoriesFromFeedLoop(serial: string, params: {
