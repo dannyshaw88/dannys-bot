@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.450] — 2026-07-10
+
+### Fix: Home-tab tap landing on a feed post, and automation cycle firing instantly on toggle-on/restart
+
+#### Fix: Stories step tapped a feed post instead of the bottom-nav Home icon
+
+- The Home-tab tap before Stories used fixed screen percentages (10% width,
+  97.5% height), which on this device/screen ratio landed on a post in the
+  feed instead of the actual house icon in the bottom nav.
+- Added `findHomeTab()` in `androidManager.ts`, which reads Instagram's
+  accessibility tree for the bottom-nav Home tab (`content-desc="Home"`,
+  with a resource-id fallback) and taps its real on-screen centre instead of
+  a guessed position. Falls back to the old percentage tap only if the
+  element genuinely isn't found.
+
+#### Fix: Automation cycle ran instantly instead of waiting the configured interval
+
+- When the master toggle was already on and the app restarted (or the
+  toggle was flipped on), the automation cycle fired immediately instead of
+  waiting a randomized delay from the "Run every X to Y minutes" setting.
+- The effect that drives the cycle loop called `runCycle()` directly on
+  mount. Now the very first cycle is scheduled with the same randomized
+  min/max wait used between subsequent cycles, so enabling the tool (or
+  restarting with it already enabled) always waits before the first run
+  instead of executing on update/restart.
+
+---
+
 ## [1.1.449] — 2026-07-10
 
 ### Fix: Mobile automation cycle — ads-consent modal and Stories not watching

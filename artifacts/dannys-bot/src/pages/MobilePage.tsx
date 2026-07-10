@@ -1078,7 +1078,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
-    runCycle();
+    // Schedule the first cycle after a randomized wait using the configured
+    // Run-every min/max — the same gap used between subsequent cycles.
+    // Previously this called runCycle() immediately, so re-enabling the
+    // toggle (or the app simply restarting while a phone's toggle was left
+    // on from before) fired a cycle instantly instead of respecting the
+    // configured interval.
+    const s0 = settingsRef.current;
+    const initMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
+    const initMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
+    const initGapMs = (initMin + Math.random() * (initMax - initMin)) * 60_000;
+    setNextRunAt(Date.now() + Math.round(initGapMs));
+    timer = setTimeout(runCycle, Math.round(initGapMs));
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);

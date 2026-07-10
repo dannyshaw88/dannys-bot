@@ -1050,6 +1050,31 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
   return _parseCenter(m[1]);
 }
 
+/**
+ * Locate Instagram's bottom-nav Home tab (the house icon, leftmost of the
+ * 5 nav items) via the real accessibility tree instead of a guessed screen
+ * percentage. Percentage-based taps drift depending on device screen
+ * ratio/software chrome and were landing on a feed post instead of the nav
+ * bar. Instagram exposes this control with content-desc "Home" (selected
+ * state is sometimes "Home, selected" — matched as a prefix, not exact, to
+ * catch both). Falls back to null if not found so the caller can decide on
+ * a fixed-percentage fallback.
+ */
+export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  // Prefer an exact/prefix content-desc match anchored to word start so we
+  // don't accidentally match some unrelated "Home..." text elsewhere on
+  // screen (e.g. a post caption). resource-id fallback covers builds where
+  // content-desc isn't set.
+  const re = /content-desc="Home[^"]*"[^>]*bounds="([^"]+)"/;
+  const m = xml.match(re);
+  if (m) return _parseCenter(m[1]);
+  return _findByResId(xml, ":id/feed_tab", ":id/home_tab");
+}
+
 export type SignupRecipeStep =
   | { type: "wait"; ms: number; label?: string }
   | { type: "tap"; x: number; y: number; label?: string }

@@ -1123,10 +1123,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
       // very top of the feed so the stories row is visible again.
       if (viewStoriesUsersMax > 0) {
-        const { w: sw, h: sh } = getScreenSize(serial);
-        // Instagram bottom-nav Home icon: leftmost of 5 items → x ≈ 10% of width.
-        // Nav bar sits at the very bottom of the screen → y ≈ 97.5% of height.
-        await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+        // Find the real Home tab via the accessibility tree instead of a
+        // guessed screen percentage — the fixed 10%/97.5% coordinates were
+        // landing on a feed post instead of the bottom-nav house icon on
+        // some devices/screen ratios. Fall back to the old percentage guess
+        // only if the element genuinely can't be found.
+        const homeTab = await android.findHomeTab(serial).catch(() => null);
+        if (homeTab) {
+          await android.tap(serial, homeTab.x, homeTab.y);
+        } else {
+          const { w: sw, h: sh } = getScreenSize(serial);
+          await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+        }
         // The Home tap forces Instagram to refresh the feed back to the top,
         // but the stories tray doesn't repopulate instantly — it needs up to
         // ~10s to reload after the refresh. Tapping the story bar before then
