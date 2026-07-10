@@ -10,6 +10,17 @@ import { Router } from "express";
 import { spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
+import https from "https";
+import { pipeline } from "stream/promises";
+
+// Official Google-hosted platform-tools zip. No account/API key needed — this
+// is the same URL "Download SDK Platform-Tools" links to on Android's own
+// developer site.
+const PLATFORM_TOOLS_URL: Record<string, string> = {
+  win32: "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
+  darwin: "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
+  linux: "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
+};
 
 // ── Manual ADB path override ───────────────────────────────────────────────────
 // Lets a user paste the folder containing adb.exe directly in the UI instead of
@@ -236,5 +247,75 @@ router.post("/mobile/adb-path", (req, res) => {
   saveOverridePath(folder);
   res.json({ ok: true, adbPath: found });
 });
+
+/**
+ * POST /api/mobile/adb-auto-install
+ * Downloads Google's official platform-tools zip for the current OS,
+ * extracts it locally, and saves it as the ADB override — so the user never
+ * has to manually download/unzip/paste a folder path. Idempotent: if it was
+ * already installed by this route before, re-uses the existing extraction
+ * instead of re-downloading.
+ */
+router.post("/mobile/adb-auto-install", async (_req, res) => {
+  const platform = process.platform;
+  const url = PLATFORM_TOOLS_URL[platform];
+  if (!url) {
+    res.status(400).json({ ok: false, error: `No auto-install available for this OS (${platform}). Please download platform-tools manually.` });
+    return;
+  }
+
+  const installDir = path.join(process.cwd(), "vendor", "platform-tools");
+  const alreadyInstalled = resolveAdbInFolder(installDir);
+  if (alreadyInstalled) {
+    saveOverridePath(installDir);
+    res.json({ ok: true, adbPath: alreadyInstalled, reused: true });
+    return;
+  }
+
+  const zipPath = path.join(process.cwd(), "vendor", "platform-tools.zip");
+  try {
+    fs.mkdirSync(path.dirname(zipPath), { recursive: true });
+
+    await downloadFile(url, zipPath);
+
+    // The zip's own top-level folder is "platform-tools/" — extract it
+    // directly into vendor/ so files land at vendor/platform-tools/adb.exe.
+    const AdmZip = (await import("adm-zip")).default;
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(path.join(process.cwd(), "vendor"), true);
+    fs.rmSync(zipPath, { force: true });
+
+    const found = resolveAdbInFolder(installDir);
+    if (!found) {
+      res.status(500).json({ ok: false, error: "Downloaded platform-tools but couldn't find adb inside it — the archive layout may have changed." });
+      return;
+    }
+
+    saveOverridePath(installDir);
+    res.json({ ok: true, adbPath: found, reused: false });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message ?? "Failed to download/install ADB automatically. Check your internet connection, or use the manual folder option below." });
+  }
+});
+
+function downloadFile(url: string, destPath: string, redirectsLeft = 5): Promise<void> {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        if (redirectsLeft <= 0) { reject(new Error("Too many redirects")); return; }
+        response.resume();
+        downloadFile(response.headers.location, destPath, redirectsLeft - 1).then(resolve, reject);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`Download failed with HTTP ${response.statusCode}`));
+        return;
+      }
+      const file = fs.createWriteStream(destPath);
+      pipeline(response, file).then(resolve, reject);
+    }).on("error", reject);
+  });
+}
 
 export default router;

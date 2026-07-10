@@ -754,6 +754,8 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
   const [ok,     setOk]     = useState<string | null>(null);
+  const [autoInstalling, setAutoInstalling] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   const submit = async () => {
     if (!folder.trim()) return;
@@ -768,6 +770,18 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
     finally { setSaving(false); }
   };
 
+  const autoInstall = async () => {
+    setAutoInstalling(true); setError(null); setOk(null);
+    try {
+      const r    = await fetch("/api/mobile/adb-auto-install", { method: "POST" });
+      const body = await r.json();
+      if (!r.ok || !body.ok) { setError(body.error ?? "Auto-install failed — try the manual option below."); return; }
+      setOk("ADB installed! Checking for phones…");
+      onSaved();
+    } catch { setError("Couldn't reach the server. Try again."); }
+    finally { setAutoInstalling(false); }
+  };
+
   return (
     <div className="max-w-xl mx-auto mt-16 space-y-6 text-center px-4">
       <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto">
@@ -775,25 +789,34 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
       </div>
       <div>
         <h2 className="text-lg font-bold text-foreground">ADB not found</h2>
-        <p className="text-sm text-muted-foreground mt-1">Paste the path to your platform-tools folder to get started.</p>
+        <p className="text-sm text-muted-foreground mt-1">Equinox can download and set it up for you — no manual install needed.</p>
       </div>
       <div className="text-left bg-card border border-primary/30 rounded-xl p-5 space-y-3">
-        <div className="flex gap-2">
-          <input type="text" value={folder} onChange={e => setFolder(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && submit()}
-            placeholder="e.g. C:\platform-tools"
-            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40" />
-          <button onClick={submit} disabled={saving || !folder.trim()}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
-            {saving ? "Checking…" : "Use folder"}
-          </button>
-        </div>
+        <button onClick={autoInstall} disabled={autoInstalling}
+          className="w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+          {autoInstalling ? "Downloading & setting up ADB…" : "Set up ADB automatically"}
+        </button>
         {error && <p className="text-xs text-destructive">{error}</p>}
         {ok    && <p className="text-xs text-green-500">{ok}</p>}
+        <button onClick={() => setShowManual(v => !v)} className="text-xs text-muted-foreground hover:text-foreground underline">
+          {showManual ? "Hide manual option" : "I'd rather point at a folder myself"}
+        </button>
+        {showManual && (
+          <div className="flex gap-2 pt-1">
+            <input type="text" value={folder} onChange={e => setFolder(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()}
+              placeholder="e.g. C:\platform-tools"
+              className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40" />
+            <button onClick={submit} disabled={saving || !folder.trim()}
+              className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0">
+              {saving ? "Checking…" : "Use folder"}
+            </button>
+          </div>
+        )}
       </div>
       <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noreferrer"
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:border-primary/40 transition-colors">
-        <ExternalLink className="w-4 h-4" />Download SDK Platform-Tools for Windows
+        <ExternalLink className="w-4 h-4" />Download SDK Platform-Tools manually
       </a>
     </div>
   );

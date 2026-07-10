@@ -11,6 +11,10 @@ out-tsc
 # dependencies
 node_modules
 
+# auto-downloaded ADB tooling (fetched on demand by /api/mobile/adb-auto-install)
+vendor/
+adb-path-override.json
+
 # IDEs and editors
 /.idea
 .project
