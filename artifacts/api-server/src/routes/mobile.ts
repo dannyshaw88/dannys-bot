@@ -320,6 +320,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // per invocation, so we transparently respawn it when it exits and keep
   // streaming — the browser-side decoder just sees a short gap.
   const videoWss = new WebSocketServer({ noServer: true });
+  // Tracks whether a video session for a given serial has already run its
+  // one-time stale-process cleanup this connection. Guards the `pkill` below
+  // so a second concurrent/overlapping connection for the SAME device never
+  // kills a stream that this process itself just started — it only clears
+  // processes left behind by something outside this server's tracking
+  // (a crashed tab, a previous server run, etc).
+  const videoSessionActive = new Set<string>();
 
   httpServer.on("upgrade", (request, socket, head) => {
     const url = request.url ?? "";
@@ -381,12 +388,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (cleanedUp) return; // idempotent — close fires after error too
         cleanedUp = true;
         running = false;
+        videoSessionActive.delete(serial);
         try { currentChild?.kill(); } catch { /* ignore */ }
         try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
         logger.info({ serial, reason }, "[mobile-video] session cleaned up");
       };
       ws.on("close", () => cleanup("close"));
       ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
+
+      // Scoped to the whole WS session (not per screenrecord restart) so a
+      // stall that persists across several internal restarts still only
+      // sends/logs its notice once, instead of every ~6s forever.
+      let stallNotified = false;
 
       const spawnStream = () => {
         if (!running || ws.readyState !== 1) return;
@@ -414,12 +427,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // like "connected but frozen forever" from the client's side. Watch
         // for a stall and force a fresh screenrecord + re-poke the device
         // rather than hanging indefinitely.
+        // Only surface the "stalled" notice once per stall episode — every
+        // restart re-arms the timer, and if the screen genuinely stays off
+        // the old code kept logging/sending the same message every 6s
+        // forever (this is what filled the Log panel with endless "Tap the
+        // mirror to wake" lines). Reset the flag only when real data flows
+        // again, so the client still gets a single fresh notice per episode.
         let stallTimer: NodeJS.Timeout | null = null;
         const armStall = (ms: number) => {
           if (stallTimer) clearTimeout(stallTimer);
           stallTimer = setTimeout(() => {
             logger.warn({ serial, bytesTotal }, "[mobile-video] stream stalled — no data for 6s, forcing restart");
-            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled — screen may be off. Tap the mirror to wake." }));
+            if (!stallNotified) {
+              stallNotified = true;
+              if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled — screen may be off. Tap the mirror to wake." }));
+            }
             // WAKEUP intentionally omitted: wake must only come from user input.
             try { child.kill(); } catch { /* ignore — close handler restarts */ }
           }, ms);
@@ -429,6 +451,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         child.stdout.on("data", (chunk: Buffer) => {
           sawAnyData = true;
           bytesTotal += chunk.length;
+          stallNotified = false;
           armStall(6_000);
           if (ws.readyState === 1) ws.send(chunk);
         });
@@ -470,6 +493,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
       };
 
+      // A prior mirror session (tab closed/refreshed without a clean
+      // WebSocket close, or the previous `child.kill()` only killed the
+      // local `adb exec-out` process but not the remote on-device
+      // `screenrecord`) can leave a screenrecord instance holding the
+      // hardware encoder. The new invocation then has to wait for Android
+      // to notice the old process died before it can grab the encoder
+      // itself — this is the "first connect is ~5s delayed, reconnect is
+      // instant" symptom, since by the second attempt the stale process has
+      // already been reaped. Explicitly clear any stale instance first so
+      // every connection gets the encoder immediately. Guarded by
+      // `videoSessionActive`: only run this when THIS process has no other
+      // tracked session already streaming that serial, so an overlapping
+      // second connection to the same device can never kill a sibling
+      // session's own live screenrecord out from under it.
+      if (!videoSessionActive.has(serial)) {
+        spawnSync(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], { encoding: "utf8", timeout: 3000 });
+      }
+      videoSessionActive.add(serial);
       logger.info({ serial, adbPath }, "[mobile-video] starting screenrecord stream");
       spawnStream();
     });
@@ -716,7 +757,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin?: number; shareFeedPercentMax?: number;
     shareDmPercentMin?: number; shareDmPercentMax?: number;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; strayNavRecoveries: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -748,10 +789,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let likeFailures = 0;
     let sharesFeed = 0;
     let sharesDm = 0;
+    let strayNavRecoveries = 0;
+    // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
+    // "Install Now", "Learn More") overlaid near the bottom of the media —
+    // right where our double-tap-to-like jitter can land after a scroll that
+    // doesn't align to a post boundary. Tapping that button navigates out of
+    // Instagram entirely (browser / Play Store), and every scripted tap for
+    // the rest of the cycle then lands on the wrong app, which looks like
+    // "the whole flow broke". We can't reliably detect an ad from pixels
+    // alone via adb, so instead we verify we're still inside Instagram after
+    // every gesture that could have hit a CTA, and recover with BACK if not.
+    const INSTAGRAM_PKG = "com.instagram.android";
+    const verifyStillInInstagram = async (): Promise<void> => {
+      const fg = await android.getForegroundPackage(serial).catch(() => null);
+      if (fg && fg !== INSTAGRAM_PKG) {
+        strayNavRecoveries++;
+        logger.warn({ serial, fg }, "[check-feed] tap navigated away from Instagram (likely hit an ad's CTA) — recovering with BACK");
+        try { await android.pressBack(serial); } catch { /* best effort */ }
+        await sleepOrAbort(serial, 700);
+        // If BACK didn't get us home (e.g. it opened a separate app like the
+        // Play Store rather than an in-app browser), force Instagram back to
+        // the foreground rather than continuing to tap blind.
+        const fg2 = await android.getForegroundPackage(serial).catch(() => null);
+        if (fg2 && fg2 !== INSTAGRAM_PKG) {
+          await android.launchInstagram(serial).catch(() => { /* best effort */ });
+          await sleepOrAbort(serial, 1500);
+        }
+      }
+    };
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 180);
+      await verifyStillInInstagram();
 
       if (likeChance > 0 && Math.random() < likeChance) {
         const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
@@ -763,6 +833,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } catch {
           likeFailures++;
         }
+        await sleepOrAbort(serial, 300);
+        await verifyStillInInstagram();
       }
 
       // Share to Feed (repost to own story/feed): tap the send/share icon,
@@ -809,7 +881,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
       }
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm };
+    if (strayNavRecoveries > 0) {
+      logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
+    }
+    return { count, likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -891,8 +966,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkFeedInProgress.add(serial);
     try {
       const params = checkFeedSchema.parse(req.body);
-      const { count, likes, likeFailures } = await runCheckFeedLoop(serial, params);
-      res.json({ ok: true, count, likes, likeFailures });
+      const { count, likes, likeFailures, strayNavRecoveries } = await runCheckFeedLoop(serial, params);
+      res.json({ ok: true, count, likes, likeFailures, strayNavRecoveries });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to check feed" }); }
     finally { checkFeedInProgress.delete(serial); }
   });
@@ -985,12 +1060,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 3500); // let the app finish loading before scrolling
 
       // 3. Scroll the feed (Step 2 in the UI).
-      const { likes, likeFailures, sharesFeed, sharesDm } = await runCheckFeedLoop(serial, {
+      const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
       });
-      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures)`);
+      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
 
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
       // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
@@ -1034,7 +1109,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.sleepScreen(serial);
       steps.push("power-off");
 
-      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, steps });
+      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
       res.status(aborted ? 200 : 400).json({

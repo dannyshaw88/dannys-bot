@@ -891,12 +891,37 @@ export function stopScrcpy(serial: string): void {
   if (child) { try { child.kill(); } catch { /* ignore */ } runningScrcpy.delete(serial); }
 }
 
+/** Presses the hardware/virtual BACK key — used to recover when a scripted
+ * tap accidentally navigated out of the app it was supposed to stay in. */
+export async function pressBack(serial: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
+}
+
 export async function getInstagramSignupHint(serial: string): Promise<{ currentActivity: string | null }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "activity", "activities"], { encoding: "utf8", timeout: 5000 });
   const m = (r.stdout || "").match(/mResumedActivity:.*?\{[^}]*\s([^/]+\/[^\s}]+)/);
   return { currentActivity: m ? m[1] : null };
+}
+
+/**
+ * Returns the package name currently in the foreground (e.g.
+ * "com.instagram.android", "com.android.chrome"), or null if it can't be
+ * determined. Used to detect when an automated tap accidentally navigated
+ * away from Instagram — e.g. a double-tap-to-like landing on a sponsored
+ * post's CTA button ("Shop Now" / "Install Now"), which opens a browser or
+ * the Play Store and leaves every subsequent scripted tap hitting the wrong
+ * app for the rest of the cycle.
+ */
+export async function getForegroundPackage(serial: string): Promise<string | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "activity", "activities"], { encoding: "utf8", timeout: 5000 });
+  const m = (r.stdout || "").match(/mResumedActivity:.*?\{[^}]*\s([^/]+)\/[^\s}]+/);
+  return m ? m[1] : null;
 }
 
 export type SignupRecipeStep =
