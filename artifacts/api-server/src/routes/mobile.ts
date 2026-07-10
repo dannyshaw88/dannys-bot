@@ -336,6 +336,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     (socket as any).__wsHandled = true;
     logger.info({ serial }, "[mobile-video] upgrading connection for device");
     videoWss.handleUpgrade(request, socket as any, head, async (ws) => {
+      // Timing instrumentation for the "first connect lags ~5s, retry is
+      // instant" report: log elapsed ms at every stage instead of guessing
+      // where the time goes, so the next repro pinpoints the real cause
+      // rather than another unverified theory.
+      const t0 = Date.now();
+      const elapsed = () => Date.now() - t0;
+
       const tools = android.detectToolset();
       const adbPath = tools.adb.path;
       if (!adbPath) {
@@ -345,6 +352,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       const deviceCheck = spawnSync(adbPath, ["devices"], { encoding: "utf8", timeout: 5000 });
+      logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: adb devices check done");
       const deviceLine = (deviceCheck.stdout ?? "").split("\n").find(l => l.startsWith(serial));
       if (!deviceLine || deviceLine.split("\t")[1]?.trim() !== "device") {
         ws.send(JSON.stringify({ error: `Device ${serial} not found or not ready` }));
@@ -449,6 +457,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         armStall(6_000);
 
         child.stdout.on("data", (chunk: Buffer) => {
+          if (!sawAnyData) {
+            logger.info({ serial, elapsedMs: elapsed(), restartCount }, "[mobile-video] timing: first stdout chunk from screenrecord");
+          }
           sawAnyData = true;
           bytesTotal += chunk.length;
           stallNotified = false;
@@ -511,14 +522,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         spawnSync(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], { encoding: "utf8", timeout: 3000 });
       }
       videoSessionActive.add(serial);
-      // Second real cause of "first connect lags ~5s, retry is instant":
-      // if the display panel/compositor is still off when screenrecord
-      // starts, it can't produce a frame until the panel actually powers
-      // on — the retry is instant only because the first attempt already
-      // woke it. Wait for the screen to actually be on before spawning the
-      // encoder so both the first and later connects are equally fast.
+      logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: pkill stale screenrecord done");
+
+      // NOTE: an earlier fix here assumed the display being off explained
+      // the first-connect delay — the user confirmed the screen was ON, so
+      // that theory was wrong. Keeping ensureScreenOn as a no-op-when-on
+      // safety net (it returns immediately if the screen is already awake),
+      // but logging its own elapsed cost separately so it's not blamed for
+      // time it didn't spend.
+      const screenOnBefore = await android.isScreenOn(serial).catch(() => null);
       await android.ensureScreenOn(serial).catch(() => { /* best effort */ });
-      logger.info({ serial, adbPath }, "[mobile-video] starting screenrecord stream");
+      logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
+
+      logger.info({ serial, elapsedMs: elapsed(), adbPath }, "[mobile-video] timing: about to spawn screenrecord");
       spawnStream();
     });
   });
