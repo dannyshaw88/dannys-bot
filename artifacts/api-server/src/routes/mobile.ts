@@ -620,6 +620,62 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMax: z.number().min(0).max(100).default(0),
   });
   const checkFeedInProgress = new Set<string>();
+
+  // Shared by the standalone `/check-feed` route and the full
+  // `/automation-cycle` route below — the scroll/like loop itself is
+  // identical either way, only what happens before/after it differs.
+  async function runCheckFeedLoop(serial: string, params: {
+    count: number; delayMinSec: number; delayMaxSec: number; likePercentMin: number; likePercentMax: number;
+  }): Promise<{ count: number; likes: number; likeFailures: number }> {
+    const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax } = params;
+    const delayLoSec = Math.min(delayMinSec, delayMaxSec);
+    const delayHiSec = Math.max(delayMinSec, delayMaxSec);
+    const likeLoPct = Math.min(likePercentMin, likePercentMax);
+    const likeHiPct = Math.max(likePercentMin, likePercentMax);
+    const likeChance = (likeLoPct + Math.random() * (likeHiPct - likeLoPct)) / 100;
+
+    let w = 1080, h = 2400;
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (adbPath) {
+        const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+        const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+        if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
+      }
+    } catch { /* fall back to defaults above */ }
+
+    const x  = Math.round(w / 2);
+    const y1 = Math.round(h * 0.78);
+    const y2 = Math.round(h * 0.22);
+    const cy = Math.round(h / 2);
+
+    let likes = 0;
+    let likeFailures = 0;
+    for (let i = 0; i < count; i++) {
+      await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
+      await new Promise(r => setTimeout(r, 180));
+
+      if (likeChance > 0 && Math.random() < likeChance) {
+        const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
+        const jy = cy + Math.round((Math.random() - 0.5) * h * 0.03);
+        await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
+        try {
+          await android.doubleTap(serial, jx, jy);
+          likes++;
+        } catch {
+          likeFailures++;
+        }
+      }
+
+      if (i < count - 1) {
+        const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
+        await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+      }
+    }
+    return { count, likes, likeFailures };
+  }
+
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
     const serial = p(req, "serial");
     if (checkFeedInProgress.has(serial)) {
@@ -628,79 +684,83 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     checkFeedInProgress.add(serial);
     try {
-      const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax } = checkFeedSchema.parse(req.body);
-      const delayLoSec = Math.min(delayMinSec, delayMaxSec);
-      const delayHiSec = Math.max(delayMinSec, delayMaxSec);
-      const likeLoPct = Math.min(likePercentMin, likePercentMax);
-      const likeHiPct = Math.max(likePercentMin, likePercentMax);
-      // One like-rate is drawn per run (e.g. "3 to 5%" -> ~4%) and applied
-      // per-scroll as an independent chance, so it averages out across the
-      // run rather than always liking a fixed count.
-      const likeChance = (likeLoPct + Math.random() * (likeHiPct - likeLoPct)) / 100;
-
-      let w = 1080, h = 2400;
-      try {
-        const tools = android.detectToolset();
-        const adbPath = tools.adb.path;
-        if (adbPath) {
-          const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-          const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
-          if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
-        }
-      } catch { /* fall back to defaults above */ }
-
-      const x  = Math.round(w / 2);
-      const y1 = Math.round(h * 0.78); // start low on screen
-      const y2 = Math.round(h * 0.22); // swipe up to scroll the feed down
-      const cy = Math.round(h / 2);    // center of screen, for double-tap-to-like
-
-      let likes = 0;
-      let likeFailures = 0;
-      for (let i = 0; i < count; i++) {
-        // A longer, slower swipe (was 350-500ms) so the device doesn't add
-        // its own fling/momentum scroll on top of the gesture — with a
-        // short fast swipe, Android keeps scrolling the feed for a moment
-        // after the finger lifts, which is why a run configured for N
-        // scrolls visibly moved the feed by what looked like 2-3x that.
-        await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
-        // Let any fling from the swipe fully settle before the next action
-        // reads/acts on the screen.
-        await new Promise(r => setTimeout(r, 180));
-
-        if (likeChance > 0 && Math.random() < likeChance) {
-          // Jitter stays tight around screen center — never enough to reach
-          // near the bottom nav bar/edges, which is what could leave a
-          // stray highlighted control if a tap landed outside the feed.
-          const jx = x + Math.round((Math.random() - 0.5) * w * 0.04);
-          const jy = cy + Math.round((Math.random() - 0.5) * h * 0.03);
-          await new Promise(r => setTimeout(r, 250 + Math.round(Math.random() * 250)));
-          try {
-            // Both taps must land inside one adb shell call (see
-            // androidManager.doubleTap) — two separate `tap()` calls each
-            // pay their own adb/USB round-trip, which pushed the real
-            // on-device gap past Instagram's double-tap window and the
-            // like never fired.
-            await android.doubleTap(serial, jx, jy);
-            likes++;
-          } catch (e: any) {
-            // A single failed double-tap (transient adb/USB hiccup, brief
-            // permission blip, etc.) must not kill the rest of the run —
-            // previously this threw out of the loop entirely, so one bad
-            // tap silently ended the whole Check Feed cycle early with 0
-            // likes recorded on every post after it.
-            likeFailures++;
-          }
-        }
-
-        if (i < count - 1) {
-          const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
-          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
-        }
-      }
-
+      const params = checkFeedSchema.parse(req.body);
+      const { count, likes, likeFailures } = await runCheckFeedLoop(serial, params);
       res.json({ ok: true, count, likes, likeFailures });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to check feed" }); }
     finally { checkFeedInProgress.delete(serial); }
+  });
+
+  // ── Automation Cycle — the full "toggle on" lifecycle, per user
+  // instruction: power on the phone, open Instagram, run the configured
+  // scroll/like tools, close Instagram by swiping it away in the recent-apps
+  // switcher, cycle airplane mode off/on to force a fresh connection, then
+  // lock the phone again. Each toggle "tick" runs this whole sequence once;
+  // the frontend calls it back-to-back on a randomized gap while the master
+  // toggle stays on, so it recycles every time.
+  const automationCycleSchema = checkFeedSchema.extend({
+    airplaneWaitMinSec: z.number().min(1).max(120).default(15),
+    airplaneWaitMaxSec: z.number().min(1).max(120).default(20),
+  });
+  const automationCycleInProgress = new Set<string>();
+  app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
+      res.status(409).json({ error: "An automation cycle is already in progress on this device" });
+      return;
+    }
+    automationCycleInProgress.add(serial);
+    checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
+    const steps: string[] = [];
+    try {
+      const { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax, airplaneWaitMinSec, airplaneWaitMaxSec } =
+        automationCycleSchema.parse(req.body);
+
+      // 1. Power on the phone.
+      await android.wakeScreen(serial);
+      steps.push("power-on");
+      await new Promise(r => setTimeout(r, 1200)); // let the screen finish waking
+
+      // 2. Open Instagram.
+      await android.launchInstagram(serial);
+      steps.push("launch-instagram");
+      await new Promise(r => setTimeout(r, 3500)); // let the app finish loading before scrolling
+
+      // 3. Run the tools with the configured settings.
+      const { likes, likeFailures } = await runCheckFeedLoop(serial, { count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax });
+      steps.push(`ran-tools(${count} scrolls, ${likes} likes, ${likeFailures} like-failures)`);
+
+      // 4. Close Instagram completely — recents switcher + swipe away, not a
+      // force-stop, so the device behaves like a person put it down.
+      await android.closeInstagramViaRecents(serial);
+      steps.push("closed-instagram");
+
+      // 5. Cycle airplane mode on, wait, then off — forces a fresh network
+      // session on the next run.
+      await android.setAirplaneMode(serial, true);
+      steps.push("airplane-mode-on");
+      const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
+      const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
+      const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
+      await new Promise(r => setTimeout(r, Math.round(waitSec * 1000)));
+      await android.setAirplaneMode(serial, false);
+      steps.push("airplane-mode-off");
+
+      // 6. Swipe up, then press power again to lock the phone — ready for
+      // the next cycle to start from a clean, screen-off state.
+      await new Promise(r => setTimeout(r, 1500)); // let the radios reconnect before touching the screen
+      await android.swipeUpFromBottom(serial);
+      steps.push("swipe-up");
+      await android.sleepScreen(serial);
+      steps.push("power-off");
+
+      res.json({ ok: true, count, likes, likeFailures, steps });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Automation cycle failed", steps });
+    } finally {
+      automationCycleInProgress.delete(serial);
+      checkFeedInProgress.delete(serial);
+    }
   });
 
   // ── Instance config (proxy assignment) ───────────────────────────────────────

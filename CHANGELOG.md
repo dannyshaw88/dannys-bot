@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.441] — 2026-07-10
+
+### Human Session Tool — full power-on/open/run/close/airplane-recycle lifecycle
+
+- **The master toggle now runs a full real-phone lifecycle each cycle**,
+  not just a scroll/like loop. On every recycle while the toggle is on:
+  1. Wakes the phone (`KEYCODE_WAKEUP`, not a plain power-button toggle —
+     see below).
+  2. Opens Instagram and gives it a moment to finish loading.
+  3. Runs the scroll/like tools using whatever settings are currently
+     configured (unchanged from before).
+  4. Closes Instagram by opening the recent-apps switcher and swiping its
+     card away — a real gesture, not a background `force-stop` — and
+     verifies the process actually exited, force-stopping only as a
+     fallback if the swipe didn't land on a given device/launcher.
+  5. Turns airplane mode on, waits a randomized 15-20s, then turns it back
+     off, to force a fresh network session before the next cycle.
+  6. Swipes up and puts the screen back to sleep, ready for the next
+     recycle to start clean.
+  - **Note on "press power"**: a literal `KEYCODE_POWER` press just
+    *toggles* the screen — if the phone happened to already be awake when
+    a cycle started, "pressing power to wake it" would instead turn it
+    off and run every following step blind. Used the explicit
+    wake/sleep keycodes instead so the on/off state at each end of the
+    cycle is always correct regardless of what it was before.
+  - New backend route: `POST /api/mobile/devices/:serial/automation-cycle`
+    (the standalone `/check-feed` endpoint still exists unchanged, for any
+    other manual use).
+
 ## [1.1.440] — 2026-07-10
 
 ### Human Session Tool — Mobile tab no longer auto-wakes the phone; Check Feed resilience fixes

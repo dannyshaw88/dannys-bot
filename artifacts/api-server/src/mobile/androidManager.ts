@@ -775,6 +775,97 @@ export async function keyevent(serial: string, code: string | number): Promise<v
   runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }
 
+// ── Automation-cycle lifecycle steps ────────────────────────────────────────
+// Real button/gesture actions used to bookend each automation cycle — the
+// phone should look like a person picked it up, used Instagram, put it down,
+// and (per user instruction) cycled airplane mode before locking it again,
+// not like a script silently force-stopping a process in the background.
+
+function getScreenSize(serial: string): { w: number; h: number } {
+  let w = 1080, h = 2400;
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    const wm = spawnSync(adb, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
+    const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+    if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
+  } catch { /* fall back to defaults above */ }
+  return { w, h };
+}
+
+// A raw KEYCODE_POWER (26) is a *toggle* — if the screen happened to already
+// be on when a cycle starts, "pressing power to wake it" would instead turn
+// it off, and every step after that runs blind against a black screen. Using
+// the explicit WAKEUP/SLEEP keycodes gets the same real-world effect (screen
+// on at the start of a cycle, screen off at the end) without that race.
+export async function wakeScreen(serial: string): Promise<void> {
+  await keyevent(serial, 224); // KEYCODE_WAKEUP
+}
+
+export async function sleepScreen(serial: string): Promise<void> {
+  await keyevent(serial, 223); // KEYCODE_SLEEP
+}
+
+export async function openRecentApps(serial: string): Promise<void> {
+  await keyevent(serial, 187); // KEYCODE_APP_SWITCH
+}
+
+/**
+ * Closes Instagram the way a person would: open the recent-apps switcher,
+ * then swipe its card off the left edge of the screen to dismiss it —
+ * deliberately a real gesture rather than `am force-stop`, per user
+ * instruction, so the automation cycle behaves like someone actually using
+ * the phone rather than a script killing a process in the background.
+ */
+export async function closeInstagramViaRecents(serial: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+  await openRecentApps(serial);
+  await new Promise(r => setTimeout(r, 700)); // let the overview animation finish
+  const cardY = Math.round(h * 0.45); // recent-app cards sit around mid-screen on stock overview UI
+  await swipe(serial, Math.round(w * 0.85), cardY, 0, cardY, 260);
+  await new Promise(r => setTimeout(r, 400));
+
+  // Card-dismiss gestures aren't consistent across OEM launchers/Android
+  // versions (some dismiss on a horizontal swipe, some need vertical) — a
+  // "closed completely" requirement can't rely on the gesture alone landing
+  // right every time. Verify Instagram is no longer a running process and,
+  // if the swipe missed, fall back to a clean force-stop so the app is
+  // guaranteed closed before the cycle moves on.
+  const check = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
+  const stillRunning = (check.stdout ?? "").trim().length > 0;
+  if (stillRunning) {
+    console.log(`[androidManager] Instagram still running after recents-swipe on ${serial} — falling back to force-stop`);
+    await stopInstagram(serial);
+  }
+}
+
+/**
+ * Toggles airplane mode via the connectivity service directly rather than
+ * tapping a quick-settings tile — tile position varies by device/OEM and
+ * Android version, so a blind coordinate tap isn't reliable across the
+ * range of phones this tool targets. The network effect (radios off, then
+ * back on) is identical to using the tile.
+ */
+export async function setAirplaneMode(serial: string, enable: boolean): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const want = enable ? "enable" : "disable";
+  const r1 = spawnSync(adb, ["-s", serial, "shell", "cmd", "connectivity", "airplane-mode", want], { encoding: "utf8", timeout: 5000 });
+  const ok1 = r1.status === 0 && !/error|exception|unknown command/i.test(`${r1.stdout ?? ""}${r1.stderr ?? ""}`);
+  if (ok1) return;
+  // Fallback for older Android builds without `cmd connectivity`.
+  spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "airplane_mode_on", enable ? "1" : "0"], { encoding: "utf8", timeout: 5000 });
+  spawnSync(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE", "--ez", "state", enable ? "true" : "false"], { encoding: "utf8", timeout: 5000 });
+}
+
+export async function swipeUpFromBottom(serial: string): Promise<void> {
+  const { w, h } = getScreenSize(serial);
+  const x = Math.round(w / 2);
+  await swipe(serial, x, Math.round(h * 0.92), x, Math.round(h * 0.35), 300);
+}
+
 export function startScrcpy(serial: string, opts: { windowTitle?: string; maxSize?: number } = {}): { pid: number } {
   const tools = detectToolset();
   const scrcpy = requireTool(tools.scrcpy, "scrcpy");

@@ -916,10 +916,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => clearTimeout(t);
   }, [settings, phone?.serial]);
 
-  // While the master toggle is on, repeatedly run a Check-Feed cycle
-  // (random scroll count from the configured range, honoring the delay and
-  // like-percentage settings) back-to-back until the toggle is switched
-  // off or the phone disconnects.
+  // While the master toggle is on, repeatedly run the full automation
+  // cycle (power on → open Instagram → scroll/like with the configured
+  // settings → close Instagram → recycle airplane mode → power off)
+  // back-to-back until the toggle is switched off or the phone disconnects.
   useEffect(() => {
     if (!phone || !settings.enabled) { setRunning(false); return; }
     let cancelled = false;
@@ -933,9 +933,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
       setRunning(true);
-      onLog?.(`Tool active → ${count} downward scrolls`);
+      // Full lifecycle per cycle: power on → open Instagram → run the tools
+      // → close Instagram → cycle airplane mode → power off. The whole
+      // sequence recycles every time this fires, for as long as the master
+      // toggle stays on.
+      onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
       try {
-        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/check-feed`, {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -947,7 +951,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }),
         });
         const body = await r.json().catch(() => null);
-        if (!r.ok || !body?.ok) onLog?.(`Cycle failed — ${body?.error ?? r.status}`);
+        if (!r.ok || !body?.ok) {
+          onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
+        } else {
+          onLog?.(`Cycle complete — ${body.likes} likes, closed Instagram, airplane-mode recycled, phone locked`);
+        }
       } catch (e: any) {
         onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
       }
