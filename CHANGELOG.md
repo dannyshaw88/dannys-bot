@@ -4,6 +4,51 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.443] — 2026-07-10
+
+### Mobile tab — Human Session Tool UI overhaul + MIUI recents-swipe fix
+
+#### Bug fix: Instagram swipe-to-close now works on Xiaomi / MIUI devices
+
+- **Fixed: at the end of each automation cycle, Instagram was supposed to be
+  swiped off the screen in the recent-apps switcher, but the card never actually
+  moved — it stayed floating on screen while airplane mode activated around it.**
+  Root cause: the previous gesture swiped *horizontally* from right to left
+  across the card (`w×0.85 → 0, same Y`). That is the stock AOSP/Pixel
+  dismiss direction; on Xiaomi MIUI the recents overview requires an *upward*
+  swipe to dismiss a card, and a horizontal drag does nothing. The gesture now
+  swipes vertically from the card's centre upward to the top of the screen.
+- **Increased the post-recents-open wait from 700 ms to 1 200 ms.** MIUI's
+  overview animation takes noticeably longer than stock Android to settle; the
+  old 700 ms wait sometimes meant the swipe fired while the cards were still
+  animating in, causing the gesture to land on the wrong element. The longer
+  wait lets the animation finish before the dismiss gesture fires.
+- The force-stop fallback is still in place: after the swipe, the cycle checks
+  `pidof com.instagram.android` and only force-stops if the process is still
+  alive — so the cycle always exits with Instagram fully closed regardless of
+  whether the gesture landed cleanly on a given OEM launcher.
+
+#### Human Session Tool UI — toggle, labels, and layout
+
+- **Toggle switch moved to the left of the status label.** Previously the toggle
+  sat on the far right of the header card and the status text was on the left.
+  The switch is now the first element, followed immediately by the status word,
+  matching the natural left-to-right read order ("flip this to enable").
+- **"Disabled" state now reads "Disabled (STEP1)"** to make it immediately clear
+  to new users that enabling this toggle is the first step to start the
+  automation.
+- **"Tool is idle" subtitle removed.** When the toggle is off, no secondary
+  line of text is shown — the label "Disabled (STEP1)" is sufficient. The
+  subtitle ("Automatically scrolling and liking on this phone") still appears
+  when the toggle is on, so the running state remains descriptive.
+- **"VIEW FEED" section title added** above the scroll/delay/like controls.
+  The settings card previously had no heading, making it unclear what the
+  numbers referred to. The bold uppercase label now groups those controls
+  under a named section.
+- **"Like this % of viewed posts" shortened to "Like % of viewed posts"**
+  — the original wording was unnecessarily wordy; the shorter form is
+  consistent with similar labels elsewhere in the app.
+
 ## [1.1.442] — 2026-07-10
 
 ### Mobile tab — one-click ADB setup, no manual install
