@@ -4,6 +4,117 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.446] — 2026-07-10
+
+### Mobile tab — UI overhaul, phone wake bug fix, canvas black screen on power
+
+#### UI: STEP1 card now contains "Run every" interval on the same bordered card
+
+- **"Run every X–Y minutes" is now inside the same bordered wrapper as the
+  STEP1 toggle**, on the row directly below it. Previously the interval row
+  sat outside the card as a loose row, making it visually disconnected from
+  the toggle it controls. It is now clearly part of the STEP1 configuration
+  block — toggling on and setting the interval are both done inside the same
+  bordered card.
+
+#### Feature: toggle shows "Active" + next-run timestamp between cycles
+
+- **When the automation toggle is on and a cycle has just finished, the
+  status now shows "Active" with a "Next run at HH:MM on DD/MM/YYYY"
+  line underneath it**, instead of staying on "Running" until the next cycle
+  begins. This tells you exactly when the tool will fire again without having
+  to guess based on your configured interval.
+  - While a cycle is actually executing, the status shows "Running" as
+    before.
+  - The timestamp is calculated from the random gap drawn at the end of each
+    cycle (`cycleIntervalMin`–`cycleIntervalMax` minutes) so it reflects the
+    real next-fire time, not just an average.
+  - Toggling off clears the timestamp immediately.
+
+#### Feature: "Final Step" section added below STEP2
+
+- **A new "(FINAL STEP)" bordered card sits below the STEP2 View Feed
+  card.** It describes the close-and-recycle step that always runs at the
+  end of every automation cycle: *"Close the Instagram app and Airplane Mode
+  will be activated for 15–20 seconds, then Airplane Mode will be turned
+  off."* This makes the three-phase cycle (STEP1 → STEP2 → FINAL STEP)
+  visible and self-documenting in the UI.
+
+#### UI: Account Settings — all three fields on one row per slot
+
+- **Username, Password, and 2FA OTP Secret are now on a single horizontal
+  row per slot**, instead of three separate stacked rows. The previous layout
+  used three `space-y` blocks per slot, making five slots take up an
+  unreasonable amount of vertical space. The new layout keeps the same fields
+  in a compact `flex-wrap` row with labels above each input — the card still
+  wraps cleanly on narrow panels.
+  - "Generate Code" button shortened to "Generate" to keep the row tighter.
+  - Labels reduced from `text-sm` to `text-xs` to match the denser layout.
+
+#### UI: Account Settings — "Slot N" renamed to "Instagram Account Slot N"
+
+- **Each slot header now reads "INSTAGRAM ACCOUNT SLOT N"** instead of the
+  generic "SLOT N". This makes the purpose of each card unambiguous —
+  especially relevant now that slots can be added dynamically.
+
+#### Feature: Account Settings — "Add Instagram Account Slot" button
+
+- **A "+ Add Instagram Account Slot" button below the last slot lets you add
+  as many slots as you need**, beyond the default 5. Each press appends a new
+  empty card. All per-slot UI state (show/hide password, TOTP code, TOTP
+  error) is correctly extended when a new slot is added.
+  - The backend `max(5)` Zod cap on the `slots` array has been removed. The
+    API now accepts any number of slots — existing 5-slot data is unaffected.
+    On load the UI preserves however many slots the server stored.
+
+#### Bug fix: Power button now shows a true black screen (no cached frame)
+
+- **When you press the Power button to lock the phone, the mirror canvas
+  immediately clears to solid black** — no more seeing the last captured
+  frame (wallpaper, lock screen, or Instagram) sitting on screen making the
+  phone appear to still be on.
+  - Two complementary paths:
+    1. **Immediate** — the Power button calls `clearToBlack()` directly on
+       the canvas via a `useImperativeHandle` ref, before the keyevent even
+       reaches the device. The canvas goes black the instant you click.
+    2. **Automatic** — a `useEffect` inside `LiveCanvas` also clears the
+       canvas whenever `status` transitions to `"asleep"`, which covers
+       automation-triggered power-offs (airplane-mode cycle, etc.) where the
+       user didn't press Power themselves.
+  - `LiveCanvas` is now a `forwardRef` component so `PhoneSlot` can hold a
+    typed `LiveCanvasHandle` ref (`{ clearToBlack: () => void }`).
+
+#### Bug fix: phone no longer wakes constantly from sleep on its own
+
+- **Root cause identified and fixed: the server-side WebSocket stream handlers
+  were sending `KEYCODE_WAKEUP` (adb input keyevent 224) automatically from
+  four separate locations**, causing the phone to wake up every few seconds
+  even with no tools running and the user having done nothing:
+
+  | Location | Frequency |
+  |---|---|
+  | Screenshot WS — on every client connect | Every 2–3 s (client reconnects when stream drops after phone sleeps) |
+  | Screenshot WS — screencap loop | Every 400 ms while `screencap` returned 0 bytes (screen off) |
+  | Video WS — on every client connect | Every 2–3 s |
+  | Video WS — stall timer | Every 6 s when `screenrecord` produced no data (which always happens when screen is off) |
+
+  All four automatic `KEYCODE_WAKEUP` calls are removed. `wm dismiss-keyguard`
+  (which can also trigger a display wake on some OEM skins) is removed from
+  the same connect and stall-timer paths.
+
+  Wake is now **exclusively user-triggered**: tapping the mirror canvas sends
+  a `KEYCODE_WAKEUP` via the `/api/mobile/devices/:serial/input/key` endpoint,
+  which is the only legitimate path. The phone now sleeps correctly between
+  automation cycles and stays asleep until you explicitly tap the mirror or
+  the automation engine wakes it as part of a new cycle.
+
+  The screen-timeout suppression (`screen_off_timeout → 2147483647`) is kept:
+  it prevents the phone from auto-sleeping on its own timer *while you are
+  actively watching the mirror*, which is the intended behaviour. It is
+  restored on WS disconnect.
+
+---
+
 ## [1.1.445] — 2026-07-10
 
 ### Mobile tab — swipe fix (no hold), interval timer, persistent settings, UI polish
