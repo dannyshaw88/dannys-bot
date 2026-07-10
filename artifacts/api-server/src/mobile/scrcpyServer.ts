@@ -248,18 +248,32 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     logger.info({ serial, code, output: serverOut.trim().slice(-4000) }, "[scrcpy] server process exited");
   });
 
-  // The on-device server prints exactly why it aborted (e.g. a version
-  // mismatch between the `SCRCPY_VERSION` arg we pass and the vendored
-  // jar's own embedded version check, a permission/API failure grabbing the
-  // display, etc.) to stdout/stderr and then exits almost immediately —
-  // well before the connect-retry loop's ~3s budget would time out on its
-  // own. Surface that instead of a generic timeout so real failures are
-  // diagnosable from the client log without shelling in.
-  const failIfServerDied = (): string | null => {
-    if (!serverExited) return null;
+  // The on-device server prints exactly why something went wrong (a version
+  // mismatch, a permission/API failure grabbing the display, a MediaCodec
+  // encoder configuration error, etc.) to stdout/stderr via its own
+  // log_level=info logging. Critically, the *process itself does not
+  // necessarily exit* when this happens: scrcpy's Server runs video/control
+  // (/audio) on separate threads, so a fatal error in the video thread (e.g.
+  // the hardware H264 encoder rejecting the requested size/bitrate — a real
+  // OEM/SoC compatibility gap, not a crash) can close just the video socket
+  // while the control thread — and therefore the whole app_process — keeps
+  // running untouched. That's exactly why taps/keys kept working while video
+  // failed: two independent threads, only one of them died. Gating our
+  // diagnostic message behind "did the process exit" therefore silently
+  // swallowed the real reason on any device hitting this pattern. Surface
+  // whatever the server has printed so far unconditionally instead.
+  const failureReason = (): string | null => {
     const tail = serverOut.trim().slice(-1500);
-    return `scrcpy server exited (code=${serverExitCode})${tail ? `: ${tail}` : " with no output"}`;
+    if (serverExited) {
+      return `scrcpy server exited (code=${serverExitCode})${tail ? `: ${tail}` : " with no output"}`;
+    }
+    if (tail) {
+      return `scrcpy server is still running but reported an error: ${tail}`;
+    }
+    return null;
   };
+  // Back-compat alias for the two call sites below.
+  const failIfServerDied = failureReason;
 
   // A socket 'close' event can fire a beat before the spawned process's own
   // 'exit' event is delivered (they're two independent async notifications
@@ -309,12 +323,16 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     width = codecMeta.readUInt32BE(4);
     height = codecMeta.readUInt32BE(8);
   } catch (err) {
+    // Give any in-flight stdout/stderr `data` events (the video thread's own
+    // error log line, emitted right before it closes the socket) a brief
+    // moment to land before we build the failure message.
+    await new Promise((r) => setTimeout(r, 150));
     await waitBriefly(400);
     try { serverProc.kill(); } catch { /* ignore */ }
     videoSock.destroy();
     controlSock.destroy();
     removeForward();
-    const diedReason = failIfServerDied();
+    const diedReason = failureReason();
     throw new Error(diedReason ?? `Failed to read scrcpy video header: ${err instanceof Error ? err.message : String(err)}`);
   }
 
