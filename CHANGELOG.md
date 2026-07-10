@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.451] — 2026-07-10
+
+### Fix: toggling on manually now runs the first cycle immediately again
+
+- The 1.1.450 fix made the first cycle always wait the configured Run-every
+  interval — but that also delayed the case where the user deliberately
+  flips the toggle off then back on, which should still start right away.
+- Added `setEnabledByUser`, used only by the master toggle's `onCheckedChange`.
+  It marks a ref before flipping `enabled` on, so the run-loop effect can
+  tell "user just turned this on" (run immediately) apart from "settings
+  loaded with `enabled` already true" i.e. app restart with a phone's
+  toggle left on from before (wait the configured interval, as fixed in
+  1.1.450). Plain settings changes / initial load never set the ref, so
+  restarts still wait as intended.
+
+---
+
 ## [1.1.450] — 2026-07-10
 
 ### Fix: Home-tab tap landing on a feed post, and automation cycle firing instantly on toggle-on/restart

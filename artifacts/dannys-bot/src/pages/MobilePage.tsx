@@ -953,6 +953,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
   const lastSavedRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS));
+  // Distinguishes "user just flipped the master toggle on" from "the
+  // effect re-ran because settings loaded from the server with enabled
+  // already true" (e.g. on app restart). Only the former should run the
+  // first cycle immediately — the latter must still wait the configured
+  // Run-every interval, same as every cycle after it. Set by
+  // `setEnabledByUser` below, consumed once by the run-loop effect.
+  const manualToggleOnRef = useRef(false);
+
+  const setEnabledByUser = useCallback((enabled: boolean) => {
+    if (enabled) manualToggleOnRef.current = true;
+    setSettings(s => ({ ...s, enabled }));
+  }, []);
 
   useEffect(() => {
     hydratedRef.current = false;
@@ -1078,18 +1090,25 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
-    // Schedule the first cycle after a randomized wait using the configured
-    // Run-every min/max — the same gap used between subsequent cycles.
-    // Previously this called runCycle() immediately, so re-enabling the
-    // toggle (or the app simply restarting while a phone's toggle was left
-    // on from before) fired a cycle instantly instead of respecting the
-    // configured interval.
-    const s0 = settingsRef.current;
-    const initMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
-    const initMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
-    const initGapMs = (initMin + Math.random() * (initMax - initMin)) * 60_000;
-    setNextRunAt(Date.now() + Math.round(initGapMs));
-    timer = setTimeout(runCycle, Math.round(initGapMs));
+    // Deliberately turning the toggle on should run the first cycle right
+    // away — that's the whole point of flipping it on. But this effect also
+    // re-fires when settings load with `enabled` already true (e.g. the app
+    // restarting with a phone left on from before), and that case must NOT
+    // fire instantly — it should wait the configured Run-every interval like
+    // every other cycle. `manualToggleOnRef` (set by `setEnabledByUser`)
+    // tells us which situation this is; it's consumed once and reset so a
+    // later re-render of this same "on" session doesn't re-trigger it.
+    if (manualToggleOnRef.current) {
+      manualToggleOnRef.current = false;
+      runCycle();
+    } else {
+      const s0 = settingsRef.current;
+      const initMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const initMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const initGapMs = (initMin + Math.random() * (initMax - initMin)) * 60_000;
+      setNextRunAt(Date.now() + Math.round(initGapMs));
+      timer = setTimeout(runCycle, Math.round(initGapMs));
+    }
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
@@ -1115,15 +1134,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, settings.enabled]);
 
-  return { settings, setSettings, loading, saveError, running, nextRunAt };
+  return { settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt };
 }
 
 function AutomationSettingsPanel({
-  phone, settings, setSettings, loading, saveError, running, nextRunAt,
+  phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
   setSettings: React.Dispatch<React.SetStateAction<AutomationSettingsData>>;
+  setEnabledByUser: (enabled: boolean) => void;
   loading: boolean;
   saveError: string | null;
   running: boolean;
@@ -1156,7 +1176,7 @@ function AutomationSettingsPanel({
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
           <Switch
             checked={settings.enabled}
-            onCheckedChange={(enabled) => setSettings(s => ({ ...s, enabled }))}
+            onCheckedChange={setEnabledByUser}
             disabled={loading}
             className="shrink-0"
           />
@@ -1910,6 +1930,7 @@ export function MobilePage() {
                     phone={slots[0]}
                     settings={automation.settings}
                     setSettings={automation.setSettings}
+                    setEnabledByUser={automation.setEnabledByUser}
                     loading={automation.loading}
                     saveError={automation.saveError}
                     running={automation.running}
