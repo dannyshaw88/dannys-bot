@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.442] — 2026-07-10
+
+### Mobile tab — one-click ADB setup, no manual install
+
+- **The "ADB not found" screen now has a "Set up ADB automatically" button.**
+  It downloads Google's official platform-tools package for your OS,
+  unzips it into the app's own folder, and wires it up — no more manually
+  downloading a zip, extracting it, and pasting a folder path. The old
+  manual "paste a folder" option is still there (collapsed behind "I'd
+  rather point at a folder myself") for anyone who wants it.
+  - New backend route: `POST /api/mobile/adb-auto-install`.
+  - Downloaded tooling lives in `artifacts/api-server/vendor/platform-tools/`
+    (gitignored — it's fetched on demand per machine, not committed).
+
 ## [1.1.441] — 2026-07-10
 
 ### Human Session Tool — full power-on/open/run/close/airplane-recycle lifecycle
