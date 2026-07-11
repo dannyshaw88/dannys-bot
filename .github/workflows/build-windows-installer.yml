@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Step 1: Build the web bundle on Linux (fast, free) ────────────────────
+  # ── Step 1: Build the web bundle on Ubuntu ────────────────────────────────
   build-web:
     name: Build Web (Ubuntu)
     runs-on: ubuntu-latest
@@ -24,7 +24,15 @@ jobs:
           cache: pnpm
 
       - name: Install workspace dependencies
+        # minimumReleaseAge in pnpm-workspace.yaml is a supply-chain guard for
+        # local dev — on CI we re-resolve from the lockfile so we override it
+        # to 0 to prevent phantom install failures when a transitive dep had a
+        # patch released in the last 24 h.  --ignore-scripts is intentional:
+        # native modules (better-sqlite3, puppeteer) don't need to be compiled
+        # here — this step only produces the esbuild/vite web bundle.
         run: pnpm install --no-frozen-lockfile --ignore-scripts
+        env:
+          npm_config_minimum_release_age: '0'
 
       - name: Build lib/db
         run: pnpm --filter @workspace/db run build
@@ -52,6 +60,9 @@ jobs:
     name: Package Windows Installer
     runs-on: windows-latest
     needs: build-web
+    defaults:
+      run:
+        shell: bash   # use Git Bash for all steps so forward-slash paths work
     steps:
       - uses: actions/checkout@v4
 
@@ -81,18 +92,24 @@ jobs:
 
       - name: Bundle Electron main process
         working-directory: artifacts/electron
+        # DANNY_BOT_UPDATER_TOKEN is optional — if the secret is not configured
+        # in the repo, build.mjs falls back to an empty string gracefully.
         run: node build.mjs
         env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
 
       - name: Package Windows installer (.exe)
         working-directory: artifacts/electron
-        env:
-          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-        run: ./node_modules/.bin/electron-builder --win --publish always
+        # --publish never: just build the .exe locally; we upload it ourselves
+        # in the steps below.  Using --publish always / electron-builder's
+        # built-in GitHub publisher requires a GH_TOKEN with specific release
+        # permissions and a pre-existing draft release, which is fragile on CI.
+        # The softprops/action-gh-release step below handles the release upload
+        # in a much more reliable way using the always-available GITHUB_TOKEN.
+        run: npx electron-builder --win --publish never
 
-      # Always upload the .exe as an Actions artifact so you can download it
-      # from the Actions run page regardless of whether a tag release exists.
+      # Always upload the .exe so it can be downloaded from the Actions run
+      # page even when no GitHub Release is being created (e.g. manual runs).
       - name: Upload installer to Actions artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -100,10 +117,10 @@ jobs:
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
 
-      # When the workflow is triggered by a version tag (e.g. v1.1.464),
-      # also attach the .exe to a GitHub Release so users can download it
-      # from the Releases page and the auto-updater can find it.
-      - name: Attach installer to GitHub Release
+      # On tag pushes (e.g. v1.1.464) create/update a GitHub Release and
+      # attach the installer so users and the auto-updater can find it.
+      # Uses secrets.GITHUB_TOKEN which is always present — no custom secret needed.
+      - name: Create GitHub Release and attach installer
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
@@ -117,6 +134,6 @@ jobs:
             2. Run it — if Windows SmartScreen appears, click **More info → Run anyway**.
             3. Launch **Equinox** from your desktop or Start menu.
 
-            See [CHANGELOG.md](https://github.com/dannyshaw88/dannys-bot/blob/main/CHANGELOG.md) for what changed.
+            See [CHANGELOG.md](https://github.com/dannyshaw88/dannys-bot/blob/main/CHANGELOG.md) for what changed in this release.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
