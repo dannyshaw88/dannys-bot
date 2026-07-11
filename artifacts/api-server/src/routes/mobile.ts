@@ -1305,7 +1305,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } else {
       onLog?.(`Story tray: slot ${target} opened successfully`);
     }
-    return target;
+    return { slot: target, opened: !stillOnFeed };
   }
 
   async function runViewStoriesFromFeedLoop(serial: string, params: {
@@ -1339,8 +1339,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
 
     // Open the story viewer: tap a random friend's story bubble.
-    const picked = await pickAndOpenRandomStory(serial, w, h, onLog);
-    logger.info({ serial, picked, totalStories }, "[view-stories] opened story viewer");
+    const { slot: picked, opened: storyOpened } = await pickAndOpenRandomStory(serial, w, h, onLog);
+    logger.info({ serial, picked, totalStories, storyOpened }, "[view-stories] story open attempt");
+
+    // If the tray tap didn't actually open a story (bottom nav was still
+    // visible after the tap — meaning we hit a follow badge or missed the
+    // bubble entirely) there is nothing to like or share.  Acting on whatever
+    // is currently visible would mean double-tapping a home-feed post (which
+    // likes it) or tapping dead air. Return zero watched rather than
+    // accidentally interacting with the wrong screen.
+    if (!storyOpened) {
+      onLog?.("Story tray: no story opened — skipping story actions for this cycle");
+      return { storiesWatched: 0 };
+    }
+
     await sleepOrAbort(serial, 1800); // let viewer animate open
 
     let storiesWatched = 0;
@@ -1682,6 +1694,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.closeInstagramViaRecents(serial, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");
+
+      // After close, the recents overview is still on screen (we opened it
+      // to do the swipe attempt). Press HOME to dismiss it and return to the
+      // launcher before sleeping — otherwise the phone locks with recents
+      // still showing and the next cycle wakes to an unexpected screen.
+      await android.keyevent(serial, 3 /* KEYCODE_HOME */);
+      await new Promise(r => setTimeout(r, 600)); // let launcher animate in
 
       // 6. Cycle airplane mode on, wait, then off — forces a fresh network
       // session on the next run.

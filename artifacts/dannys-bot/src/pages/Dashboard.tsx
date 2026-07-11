@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.482",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Story like landing on a home feed post instead of a story: when the story tray tap missed (hit a follow badge or slipped between bubbles), the phone was still showing the home feed. The software didn't check whether a story actually opened — it just ran the double-tap at 'story centre' coordinates anyway, liking whatever post was showing. The tray tap result is now checked before any story action runs; if no story opened, the software skips like/share entirely for that cycle.",
+      },
+      {
+        category: "Fixed",
+        text: "Phone left sitting on the recents screen after closing Instagram: the close step opens the recents overview to try the swipe gesture, then force-stops the app, but never dismissed the recents screen afterwards. The phone locked with recents still showing, so the next cycle woke to an unexpected screen. A HOME keypress is now sent after close to return to the launcher before the screen sleeps.",
+      },
+    ],
+  },
+  {
     version: "1.1.481",
     date: "11 Jul 2026",
     items: [

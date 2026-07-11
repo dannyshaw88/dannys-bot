@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.482] — 2026-07-11
+
+### Fix: story like/share landing on home feed when tray tap missed (CRITICAL)
+
+`pickAndOpenRandomStory` logged whether the story viewer opened or not but
+returned only the slot number — the caller (`runViewStoriesFromFeedLoop`) never
+saw the open/fail status and always proceeded to run like and share actions
+regardless. When the tray tap missed (e.g. hit the follow badge), the phone
+was still showing the home feed, and the next action — a double-tap at story
+centre coordinates — landed on whatever post was on screen and liked it.
+
+Fix: `pickAndOpenRandomStory` now returns `{ slot, opened }`. If `opened` is
+false the story loop exits immediately with 0 stories watched instead of
+running actions on the wrong screen.
+
+### Fix: phone left on recents screen after close step
+
+`closeInstagramViaRecents` opens the recents overview to attempt the
+swipe-to-dismiss gesture, then force-stops the process. It correctly closed
+Instagram but left the phone sitting on the recents screen (the overview
+animation was still showing). The subsequent swipe-up + sleep then locked the
+phone on the recents view, so the next cycle woke to an unexpected screen.
+
+Fix: added `KEYCODE_HOME` (keycode 3) immediately after
+`closeInstagramViaRecents` returns so the launcher is foregrounded before the
+sleep command locks the screen.
+
+---
+
 ## [1.1.481] — 2026-07-11
 
 ### Fix: phone screen still waking on restart (stay_on_while_plugged_in persisted from old sessions)
