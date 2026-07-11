@@ -1740,12 +1740,32 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning, setScanning] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
 
   const handleScan = async () => {
     if (!onScanTray) return;
     setScanning(true);
     try { await onScanTray(); } finally { setScanning(false); }
+  };
+
+  const handleCopy = async () => {
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API unavailable/blocked — fall back to a hidden textarea + execCommand.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* give up silently */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
@@ -1764,6 +1784,9 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
               {scanning ? "Scanning…" : "📋 Scan Screen Layout"}
             </Button>
           )}
+          <Button type="button" variant="secondary" onClick={handleCopy} disabled={lines.length === 0}>
+            {copied ? "Copied!" : "📄 Copy"}
+          </Button>
           <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
             Clear
           </Button>

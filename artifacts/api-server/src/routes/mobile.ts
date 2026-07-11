@@ -1342,7 +1342,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // icons sit between it and Share.
           const heart = actionIcons[0];
           await android.tap(serial, heart.x, heart.y);
-          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] liked story (icon detected)");
+          // Safety net: pixel-based icon detection can still be fooled by
+          // reply-box placeholder text that happens to look icon-sized
+          // (see findStoryActionIcons doc comment). If that tap actually
+          // landed on the text field instead of the heart, the keyboard
+          // pops up — an unmistakable signal we hit the wrong control.
+          // Back out immediately rather than let a comment attempt sit
+          // there half-open.
+          await sleepOrAbort(serial, 500);
+          if (await android.isKeyboardShown(serial).catch(() => false)) {
+            await android.pressBack(serial);
+            logger.warn({ serial, story: s + 1 }, "[view-stories] like tap opened the reply keyboard instead — wrong control, backed out, not counted as liked");
+          } else {
+            logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] liked story (icon detected)");
+          }
         } else if (actionIcons) {
           // 0 = icons genuinely absent (likes/comments/shares disabled by
           // the owner), 1 = can't tell Like from Share. Either way, tapping
@@ -1369,7 +1382,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Instagram always keeps Share/Send rightmost.
           const shareIcon = actionIcons[actionIcons.length - 1];
           await android.tap(serial, shareIcon.x, shareIcon.y);
-          opened = true;
+          // Same keyboard safety net as the Like path above — confirm the
+          // tap actually opened the share sheet and not the reply text
+          // field before proceeding into the recipient-picking flow.
+          await sleepOrAbort(serial, 500);
+          if (await android.isKeyboardShown(serial).catch(() => false)) {
+            await android.pressBack(serial);
+            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened the reply keyboard instead — wrong control, backed out, not shared");
+          } else {
+            opened = true;
+          }
         } else if (actionIcons) {
           logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped share — icon not distinguishable on this story");
         } else {

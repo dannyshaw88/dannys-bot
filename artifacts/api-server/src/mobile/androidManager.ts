@@ -1018,6 +1018,25 @@ export async function pressBack(serial: string): Promise<void> {
   spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
 }
 
+/**
+ * Reports whether the soft keyboard (IME) is currently visible. Used as a
+ * safety net after tapping a pixel-detected icon (e.g. story Like/Share):
+ * a coordinate that lands on the reply/comment text field instead of the
+ * intended icon opens the keyboard, which is an unambiguous, cheap-to-check
+ * signal that the tap hit the wrong control — even when we can't otherwise
+ * tell icon glyphs apart from nearby placeholder text pixels. Checks two
+ * dumpsys fields across Android versions (`mInputShown` on most builds,
+ * `mIsInputViewShown` on some OEM skins) so it doesn't silently miss on
+ * either.
+ */
+export async function isKeyboardShown(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "input_method"], { encoding: "utf8", timeout: 4000 });
+  const out = r.stdout || "";
+  return /mInputShown=true/.test(out) || /mIsInputViewShown=true/.test(out);
+}
+
 export async function getInstagramSignupHint(serial: string): Promise<{ currentActivity: string | null }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -1391,7 +1410,23 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
     // Keep only icon-sized clusters — not a stray bright caption/banner.
     const iconSized = clusters.filter(c => (c.x2 - c.x1) >= 6 && (c.x2 - c.x1) <= Math.round(width * 0.12));
     if (iconSized.length >= 1 && iconSized.length <= 4) {
-      candidateRows.push({ y, clusters: iconSized, avgLum });
+      // Real icon glyphs (heart, paper-plane, speech-bubble) are all drawn
+      // at the same fixed size, so their cluster widths land within a
+      // narrow range of each other. The reply-box placeholder text ("Send
+      // message") sits in this same band and, once split into per-word
+      // bright runs, can pass the checks above too — but its "words" have
+      // very uneven widths (e.g. "Send" vs "message"). This was observed
+      // outranking a real single-icon row (only Like enabled) because the
+      // placeholder text produced MORE clusters than the lone heart,
+      // winning the cluster-count tie-break below and causing a tap into
+      // the text field — which opens the keyboard instead of liking/
+      // sharing. Reject rows whose cluster widths vary too much to be a
+      // uniform icon set.
+      const widths = iconSized.map(c => c.x2 - c.x1);
+      const maxW = Math.max(...widths), minW = Math.min(...widths);
+      if (maxW / minW <= 1.6) {
+        candidateRows.push({ y, clusters: iconSized, avgLum });
+      }
     }
   }
 

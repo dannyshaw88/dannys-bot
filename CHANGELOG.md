@@ -4,6 +4,44 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.475] — 2026-07-11
+
+### New: Copy button on the Log panel
+Added a "Copy" button next to Clear on the Mobile Log tab — copies the
+full visible log to your clipboard in one click, so you can paste it
+straight into a bug report without selecting text by hand.
+
+### Fix: story Like/Share could open the reply keyboard instead of tapping the icon
+On a story with only the Like icon available (comments/shares disabled
+by the owner), the like/share automation sometimes tapped into the
+reply text box and opened the keyboard instead of liking or sharing —
+even though the very next story, which had all 3 icons, worked
+correctly.
+
+**Root cause:** the story icon bar has no accessible elements at all
+(Instagram draws it on a canvas), so icons are located by scanning
+on-screen pixels for small bright clusters against the dark bottom
+scrim. The reply box's placeholder text ("Send message") sits in that
+same region and can itself split into a couple of bright, icon-sized
+clusters. When a story has just one real icon (the heart), that
+placeholder-text row can end up with *more* clusters than the real
+one-icon row and win the row-selection tie-break, so the tap lands on
+the text field instead of the heart.
+
+**Fix, two layers:**
+1. Icon rows now also require their clusters to be similar widths to
+   each other — real icons are all the same size, while the
+   placeholder's "words" ("Send" vs "message") vary a lot more in width,
+   so uneven rows are no longer treated as a valid icon bar.
+2. As a backstop, after tapping a detected Like or Share icon the bot
+   now checks whether the on-screen keyboard actually opened. If it did,
+   that tap hit the wrong control — it immediately backs out (no typing,
+   nothing sent) and logs it clearly as a missed like/share rather than
+   leaving a half-open reply box or silently miscounting it as
+   successful.
+
+---
+
 ## [1.1.474] — 2026-07-11
 
 ### Fix: feed Like/Share taps hit the wrong icon when a post had comments or shares disabled
