@@ -78,6 +78,32 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.469",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Mirror lag — when the phone screen fell behind by more than ~1 second, the client now tells the server directly (instead of waiting for the server to notice on its own). The server immediately restarts the stream and the canvas clears so you see live frames again within one keyframe (~0.5s) instead of waiting for the old backlog to drain.",
+      },
+      {
+        category: "Fixed",
+        text: "Blue discoloration in top-right of mirror — caused by the browser defaulting to a BT.601 colour matrix when decoding H.264 frames, while Android's display uses BT.709/sRGB. The canvas context now explicitly uses the sRGB colour space and is cached between frames so there is no pipeline inconsistency on decoder resets.",
+      },
+      {
+        category: "Fixed",
+        text: "Instagram open delay — the fixed 2-second pause after launching Instagram was reduced to 1.2 seconds, and the ads-choice dialog taps (Get started / Continue / Agree) were each reduced from 1.2 s to 0.8 s. If the ads dialog does not appear this cycle saves up to 2.4 seconds before scrolling starts.",
+      },
+      {
+        category: "Improved",
+        text: "Stream bitrate reduced from 8 Mbps to 4 Mbps — this halves how fast frame data accumulates in the decode queue, which directly reduces how often the lag recovery kicks in. Mirror quality at 4 Mbps is still excellent over a local USB connection.",
+      },
+      {
+        category: "Improved",
+        text: "Log tab now shows elapsed seconds on every step — e.g. '[2.3s] ▶ Opening Instagram…' — so you can see exactly which step is taking time in each cycle.",
+      },
+    ],
+  },
+  {
     version: "1.1.448",
     date: "10 Jul 2026",
     items: [

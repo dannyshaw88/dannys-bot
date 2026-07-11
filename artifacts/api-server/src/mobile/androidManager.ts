@@ -624,7 +624,7 @@ export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismisse
   if (!pos) return { dismissed: false, steps };
   _adbTap(adb, serial, pos.x, pos.y);
   steps.push("ads-choice: tapped Get started");
-  await _sleep(1200);
+  await _sleep(800); // reduced from 1200ms — UI transition is faster than worst-case
 
   // 2. Select "Use for free with ads" (radio option), then Continue
   xml = await _uiDump(adb, serial);
@@ -632,14 +632,14 @@ export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismisse
   if (pos) {
     _adbTap(adb, serial, pos.x, pos.y);
     steps.push("ads-choice: selected Use for free with ads");
-    await _sleep(500);
+    await _sleep(400); // reduced from 500ms
     xml = await _uiDump(adb, serial);
   }
   pos = _findElem(xml, "Continue", "CONTINUE");
   if (pos) {
     _adbTap(adb, serial, pos.x, pos.y);
     steps.push("ads-choice: tapped Continue");
-    await _sleep(1200);
+    await _sleep(800); // reduced from 1200ms
     xml = await _uiDump(adb, serial);
   }
 
@@ -648,7 +648,7 @@ export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismisse
   if (pos) {
     _adbTap(adb, serial, pos.x, pos.y);
     steps.push("ads-choice: tapped Agree");
-    await _sleep(1200);
+    await _sleep(800); // reduced from 1200ms
   }
 
   return { dismissed: true, steps };

@@ -4,6 +4,47 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.469] — 2026-07-11
+
+### Fix: mirror lag, blue tint, IG open delay, log timestamps
+
+**Mirror lag — bidirectional resync:**  
+The server-side lag watchdog only detected backlog in the TCP send buffer
+(`ws.bufferedAmount`). If the client's GPU WebCodecs decoder fell behind (the
+client received frames fast but decoded them slowly), the server never noticed
+and the lag compounded forever. Added client→server `{ clientLag }` signal:
+when the client's decode queue has been over 8 frames for >800 ms it sends the
+signal, the server immediately kills and restarts screenrecord, and the client
+clears its decoder and canvas simultaneously — lag collapses to near-zero on
+the very next keyframe (~0.5 s) instead of draining the old backlog.
+
+**Blue discoloration — colour space fix:**  
+Android's screenrecord outputs H.264 with BT.601 implied by the profile (no
+VUI colour info), but the phone's display is BT.709/sRGB. The canvas
+`getContext("2d")` was called fresh every frame with no `colorSpace` option, so
+the browser defaulted to BT.601 matrix for the VideoFrame→canvas blit — the
+resulting colour shift was most visible in the status-bar blue tones in the
+top-right. Fix: `getContext("2d", { colorSpace: "srgb", alpha: false })` is
+now called once and cached; `colorSpace:"srgb"` forces the sRGB pipeline that
+matches Android's display, eliminating the tint. The canvas also immediately
+clears to black on every decoder reset so no stale frame bleeds through.
+
+**Bitrate 8 → 4 Mbps:**  
+Halves the data volume per second which directly halves how fast the decode
+queue fills. Mirror quality at 4 Mbps over USB is unchanged.
+
+**IG open delay reduced:**  
+- Post-launch wait: 2000 ms → 1200 ms  
+- `dismissAdsChoiceDialog` taps: 1200/500/1200/1200 ms → 800/400/800/800 ms  
+Total saving when the ads dialog appears: ~2.4 s.
+
+**Log tab — elapsed timestamps:**  
+Every automation step log line now starts with `[Xs]` elapsed time so the
+user can see exactly which step is taking time (e.g. `[4.2s] ▶ Checking for
+launch dialogs…`).
+
+---
+
 ## [1.1.468] — 2026-07-11
 
 ### Fix: video mirror DRM restart speed + share-DM tapping wrong target

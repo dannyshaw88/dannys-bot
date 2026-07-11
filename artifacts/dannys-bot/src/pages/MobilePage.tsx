@@ -109,6 +109,12 @@ type LiveCanvasHandle = { clearToBlack: () => void };
 
 const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
+  // Cache the 2D context so we don't re-call getContext() every frame.
+  // Specifying colorSpace:'srgb' ensures the canvas uses the same color
+  // pipeline as the phone's display (BT.709 / sRGB), which fixes the blue
+  // tint that appears when WebCodecs decodes BT.601-tagged frames into a
+  // canvas that has no explicit color space set.
+  const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
   const fpsCountRef  = useRef(0);
@@ -120,6 +126,9 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const demuxerRef   = useRef<AnnexBDemuxer | null>(null);
   const decoderRef   = useRef<VideoDecoder | null>(null);
   const configuredRef = useRef(false);
+  // Tracks when the decode queue first exceeded the lag threshold so we can
+  // avoid sending clientLag every single frame.
+  const lagSinceRef  = useRef<number | null>(null);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -173,11 +182,29 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     // component instance.
     useVideoRef.current = WEBCODECS_SUPPORTED;
 
-    const closeDecoder = () => {
+    const closeDecoder = (clearCanvas = false) => {
       try { decoderRef.current?.close(); } catch { /* ignore */ }
       decoderRef.current = null;
       configuredRef.current = false;
       demuxerRef.current = null;
+      lagSinceRef.current = null;
+      if (clearCanvas) {
+        const canvas = canvasRef.current;
+        const ctx = ctxRef.current;
+        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+
+    const getCtx = (): CanvasRenderingContext2D | null => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      if (!ctxRef.current) {
+        // colorSpace:'srgb' + alpha:false matches Android's BT.709/sRGB display
+        // pipeline — prevents the blue tint that appears when WebCodecs defaults
+        // to BT.601 matrix for Baseline-profile H.264 streams with no VUI.
+        ctxRef.current = canvas.getContext("2d", { colorSpace: "srgb", alpha: false }) ?? null;
+      }
+      return ctxRef.current;
     };
 
     const drawFrame = (frame: VideoFrame) => {
@@ -188,13 +215,15 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         phoneSizeRef.current = sz;
         canvas.width  = sz.w;
         canvas.height = sz.h;
+        ctxRef.current = null; // canvas resize invalidates cached context
         addLog(`Canvas set ${sz.w}×${sz.h}`);
         onDimensions?.(sz.w, sz.h);
       }
-      const ctx = canvas.getContext("2d");
+      const ctx = getCtx();
       ctx?.drawImage(frame, 0, 0);
       frame.close();
       fpsCountRef.current++;
+      lagSinceRef.current = null; // frame decoded — lag is clearing
       setStatus("live");
     };
 
@@ -273,14 +302,11 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
               setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
             } else if (j.info) {
               addLog(j.info);
-              // Server restarted screenrecord to clear a send-buffer backlog.
-              // Flush our WebCodecs decoder immediately so we don't keep
-              // playing back the old queued frames — without this the client
-              // still had several seconds of buffered video to drain even
-              // after the server started a fresh stream, which is why the
-              // "resyncing" watchdog never actually cleared the visible lag.
+              // Server restarted screenrecord (either its own watchdog or in
+              // response to our clientLag signal). Flush decoder + clear canvas
+              // immediately so we don't keep playing back the old queued frames.
               if (/resync|fell behind/i.test(j.info)) {
-                closeDecoder();
+                closeDecoder(true /* clearCanvas */);
               }
             }
           } catch { /* ok */ }
@@ -299,8 +325,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           setStatus("live");
           const canvas = canvasRef.current;
           if (!canvas) return;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
           const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
           const url  = URL.createObjectURL(blob);
           const img  = new Image();
@@ -312,10 +336,11 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
               phoneSizeRef.current = sz;
               canvas.width  = sz.w;
               canvas.height = sz.h;
+              ctxRef.current = null;
               addLog(`Canvas set ${sz.w}×${sz.h}`);
               onDimensions?.(sz.w, sz.h);
             }
-            ctx.drawImage(img, 0, 0);
+            getCtx()?.drawImage(img, 0, 0);
             revoke();
           };
           img.onerror = revoke;
@@ -333,19 +358,31 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           // Client-side backpressure: if the decode queue has grown large the
           // decoder is falling behind real time. Drop delta (non-key) frames
           // to let it catch up. If the queue is still huge even on a keyframe,
-          // flush the decoder entirely and wait for the next IDR to resync —
-          // this is the client-side partner to the server's lag watchdog and
-          // is what actually eliminates the compounding "10-second lag" the
-          // user reported: the server was already restarting screenrecord, but
-          // the client kept draining its existing queue of old frames first.
+          // tell the server to restart screenrecord (bidirectional lag control)
+          // AND hard-flush the decoder — this combination is what actually
+          // eliminates the compounding lag: the server restarts the stream from
+          // a fresh IDR and the client drops everything already queued, so
+          // latency collapses to near-zero on the next keyframe instead of
+          // slowly draining the existing backlog first.
           const queueSize = decoder.decodeQueueSize;
-          if (queueSize > 8 && !unit.keyFrame) {
-            // Too many frames queued — skip this delta, wait for a keyframe.
-            continue;
+          if (queueSize > 8) {
+            if (lagSinceRef.current === null) lagSinceRef.current = Date.now();
+            if (!unit.keyFrame) {
+              // Too many frames queued — skip this delta, wait for a keyframe.
+              continue;
+            }
+            // Queue still large even at keyframe — signal server to restart.
+            const lagMs = Date.now() - (lagSinceRef.current ?? Date.now());
+            if (lagMs > 800 && wsRef.current?.readyState === 1) {
+              addLog(`Lag detected (queue=${queueSize}, ${lagMs}ms) — signalling server to resync`);
+              wsRef.current.send(JSON.stringify({ clientLag: true }));
+              closeDecoder(true /* clearCanvas */);
+              decoder = ensureDecoder();
+            }
           }
           if (queueSize > 20) {
-            // Even keyframes can't drain it fast enough — hard flush.
-            closeDecoder();
+            // Still overwhelming even without lag signal — hard flush locally.
+            closeDecoder(true /* clearCanvas */);
             decoder = ensureDecoder();
           }
 

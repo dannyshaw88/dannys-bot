@@ -424,6 +424,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ws.on("close", () => cleanup("close"));
       ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
 
+      // ── Client-triggered resync ───────────────────────────────────────────
+      // The client sends { clientLag: true } when its WebCodecs decode queue
+      // has been backed up for >800ms. The server-side ws.bufferedAmount check
+      // only catches TCP send-buffer backlog (i.e. client can't receive fast
+      // enough) — it misses the case where TCP delivers data quickly but the
+      // client's GPU decoder falls behind. This bidirectional signal is the
+      // only reliable way to catch that second scenario.
+      ws.on("message", (raw: Buffer | string) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.clientLag && running) {
+            logger.warn({ serial }, "[mobile-video] client reported decode lag — restarting screenrecord");
+            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Mirror fell behind — resyncing…" }));
+            lastLagRestart = Date.now();
+            try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
+          }
+        } catch { /* ignore non-JSON control frames */ }
+      });
+
       // ── Lag watchdog ─────────────────────────────────────────────────────
       // "The delay/lag is awful" / "video is no longer 30fps" reports trace
       // back to the same mechanism: ws.send() here is fire-and-forget. If the
@@ -470,7 +489,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const args = [
           "-s", serial, "exec-out", "screenrecord",
           "--output-format=h264",
-          "--bit-rate", "8000000",
+          // 4 Mbps instead of 8 Mbps: halves the data volume per second,
+          // which halves how fast the client decode queue can fill up and
+          // halves the lag that accumulates before the resync watchdog fires.
+          // Mirror quality at 4 Mbps is still excellent for a local USB stream.
+          "--bit-rate", "4000000",
           "--time-limit", "180",
           "-",
         ];
@@ -1406,6 +1429,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
     let storiesWatched = 0;
+    const cycleStart = Date.now();
+    // tLog prefixes every log line with elapsed seconds so the user can see
+    // exactly where each chunk of time is going in the Log tab.
+    const tLog = (msg: string) => {
+      const elapsed = ((Date.now() - cycleStart) / 1000).toFixed(1);
+      sendVideoLog(serial, `[${elapsed}s] ${msg}`);
+    };
     try {
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
@@ -1419,7 +1449,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
-      sendVideoLog(serial, "▶ Waking screen…");
+      tLog("▶ Waking screen…");
       await android.wakeScreen(serial);
       steps.push("power-on");
       await sleepOrAbort(serial, 1200); // let the screen finish waking
@@ -1430,33 +1460,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // taps land on the keyguard instead of Instagram.  A real swipe gesture
       // also resets the screen-off timeout so the display stays on while the
       // cycle runs (KEYCODE_WAKEUP alone does not count as touch input).
-      sendVideoLog(serial, "▶ Unlocking screen…");
+      tLog("▶ Unlocking screen…");
       await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
       // 2. Open Instagram.
-      sendVideoLog(serial, "▶ Opening Instagram…");
+      tLog("▶ Opening Instagram…");
       await android.launchInstagram(serial);
       steps.push("launch-instagram");
-      // Reduced from 3500 → 2000 ms. The dismissAdsChoiceDialog and
+      // Reduced from 2000 → 1200 ms. The dismissAdsChoiceDialog and
       // dismissInstagramInterstitials calls below each do a UIAutomator
       // accessibility dump which takes ~1-2 s on a loaded device, so the
-      // total time before scrolling starts is still 4-6 s even with the
-      // shorter fixed wait — but the user no longer sees a dead 3.5 s pause
-      // where the feed is already visible but nothing is happening yet.
-      await sleepOrAbort(serial, 2000);
+      // total time before scrolling starts is covered by those dumps — we
+      // don't need a long fixed wait on top of them.
+      await sleepOrAbort(serial, 1200);
 
       // 2b. Meta occasionally shows a full-screen "ads choice" consent modal
       // on launch (Get started → Use for free with ads → Continue → Agree).
       // It blocks the whole screen, so every scripted tap after it would
       // silently land on the modal instead of the feed. Walk through it if
       // present; this is a no-op if the dialog isn't showing.
-      sendVideoLog(serial, "▶ Checking for launch dialogs…");
+      tLog("▶ Checking for launch dialogs…");
       const adsChoice = await android.dismissAdsChoiceDialog(serial).catch(() => ({ dismissed: false, steps: [] as string[] }));
       if (adsChoice.dismissed) {
         steps.push(`ads-choice-dialog(${adsChoice.steps.length} steps)`);
-        sendVideoLog(serial, `▶ Dismissed ads-choice dialog (${adsChoice.steps.length} taps)`);
+        tLog(`▶ Dismissed ads-choice dialog (${adsChoice.steps.length} taps)`);
         await sleepOrAbort(serial, 1000); // let the feed settle after the modal closes
       }
 
@@ -1465,12 +1494,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const launchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
       if (launchPopup) {
         steps.push(`launch-popup-dismissed(${launchPopup})`);
-        sendVideoLog(serial, `▶ Dismissed launch popup (${launchPopup})`);
+        tLog(`▶ Dismissed launch popup (${launchPopup})`);
         await sleepOrAbort(serial, 600);
       }
 
       // 3. Scroll the feed (Step 2 in the UI).
-      sendVideoLog(serial, `▶ Starting feed scroll — ${count} posts`);
+      tLog(`▶ Starting feed scroll — ${count} posts`);
       const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         shareFeedPercentMin, shareFeedPercentMax,
@@ -1478,13 +1507,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
       });
       steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-      sendVideoLog(serial, `▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
+      tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
 
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
       // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
       // very top of the feed so the stories row is visible again.
       if (viewStoriesSlidesMax > 0) {
-        sendVideoLog(serial, "▶ Tapping Home tab for stories…");
+        tLog("▶ Tapping Home tab for stories…");
         // Find the real Home tab via the accessibility tree instead of a
         // guessed screen percentage — the fixed 10%/97.5% coordinates were
         // landing on a feed post instead of the bottom-nav house icon on
@@ -1514,9 +1543,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // upper bound; on the user's device the story tray reliably reloads
         // in 3–5 s. Cutting it to 5 s eliminates the long dead pause the
         // user sees after scrolling ends and before any story opens.
-        sendVideoLog(serial, "▶ Waiting for story tray to load…");
+        tLog("▶ Waiting for story tray to load…");
         await sleepOrAbort(serial, 5000);
-        sendVideoLog(serial, `▶ Starting stories (up to ${viewStoriesSlidesMax})`);
+        tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
         const result = await runViewStoriesFromFeedLoop(serial, {
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
@@ -1525,25 +1554,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
         storiesWatched = result.storiesWatched;
         steps.push(`stories(${result.storiesWatched} watched)`);
-        sendVideoLog(serial, `▶ Stories done — ${result.storiesWatched} watched`);
+        tLog(`▶ Stories done — ${result.storiesWatched} watched`);
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
-      sendVideoLog(serial, "▶ Closing Instagram…");
+      tLog("▶ Closing Instagram…");
       await android.closeInstagramViaRecents(serial);
       steps.push("closed-instagram");
 
       // 6. Cycle airplane mode on, wait, then off — forces a fresh network
       // session on the next run.
-      sendVideoLog(serial, "▶ Airplane mode ON — recycling network…");
+      tLog("▶ Airplane mode ON — recycling network…");
       await android.setAirplaneMode(serial, true);
       steps.push("airplane-mode-on");
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
       await sleepOrAbort(serial, Math.round(waitSec * 1000));
-      sendVideoLog(serial, "▶ Airplane mode OFF");
+      tLog("▶ Airplane mode OFF");
       await android.setAirplaneMode(serial, false);
       steps.push("airplane-mode-off");
 
@@ -1552,7 +1581,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
-      sendVideoLog(serial, "▶ Locking phone — cycle complete ✓");
+      tLog("▶ Locking phone — cycle complete ✓");
       await android.sleepScreen(serial);
       steps.push("power-off");
 
