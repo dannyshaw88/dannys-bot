@@ -2,8 +2,7 @@ name: Build Windows Installer
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -21,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
         env:
-          npm_config_minimum_release_age: '0'
+          npm_config_minimum_release_age: "0"
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
       - name: Build frontend
@@ -67,7 +66,7 @@ jobs:
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, "refs/tags/v")
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/electron/release/*.exe
