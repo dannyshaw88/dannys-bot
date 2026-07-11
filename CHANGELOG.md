@@ -4,6 +4,55 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.464] — 2026-07-11
+
+### Fix: Mirror lag, app-open delay, share-sheet expansion bug; remove stories tooltip
+
+**Mirror stream lag (up to 10 seconds behind)** — Two-layer fix:
+
+*Server side:* The lag watchdog threshold was lowered from 2 MB to 800 KB (~0.8 s of
+video at 8 Mbps) and the poll interval halved from 1 s to 500 ms, so the server
+detects a backing-up send buffer and kills/restarts screenrecord twice as fast.
+
+*Client side (the real fix):* When the server restarted screenrecord, the WebCodecs
+decoder still had a large queue of old frames to drain before it would show the new
+live ones — meaning the visible lag persisted even after the server restart. Now:
+(a) On receiving the server's "resyncing" info message, the client immediately flushes
+and closes the decoder, so old queued frames are dropped instantly.
+(b) Client-side backpressure gate: if `decoder.decodeQueueSize > 8`, delta (non-key)
+frames are skipped until a keyframe arrives. If the queue exceeds 20 even on keyframes,
+the decoder is hard-flushed. This caps lag at well under 1 s without server involvement.
+
+**Instagram app sits for ~10 seconds before scrolling starts** — Two sources of dead
+time were cut:
+
+*Initial app launch:* The fixed wait after `launchInstagram()` was reduced from 3 500 ms
+to 2 000 ms. The `dismissAdsChoiceDialog` and `dismissInstagramInterstitials` calls that
+follow each do a full UIAutomator accessibility dump (~1–2 s each), so the total pre-
+scroll pause is still adequate for app loading but no longer has a dead 3.5 s visible
+pause while the feed is already loaded.
+
+*After feed-scrolling ends, before stories:* The fixed wait for the story tray to
+repopulate after tapping the Home tab was reduced from 10 000 ms to 5 000 ms. The 10 s
+value was a conservative upper bound from an early test; on the user's device the tray
+reliably reloads in 3–5 s, making the second half of the 10 s wait pure dead time.
+
+**Share-to-DM broke the flow — tapping a user expanded the list instead** — The
+`SHARE_SHEET_AVATAR_SLOTS` y-percentages (0.525 and 0.667 of full screen height) were
+landing too high in the "Send to" bottom sheet. On the user's 1080×2226 device:
+- 0.525 × 2226 ≈ 1169 px → right on the sheet's search bar
+- The sheet's drag-handle sits at ~50 % Y, so taps at 52.5 % were near the drag zone
+- When Android interprets a tap near the drag handle as a swipe, the sheet expands to
+  full screen — exactly what the user described ("scrolled upwards / expanded the list")
+
+Fixed by moving both rows down to y=0.625 (1391 px) and y=0.740 (1647 px), which land
+squarely in the avatar/conversation rows, well clear of the handle and search bar.
+
+**Removed tooltip text** from the Stories settings panel (the "Set stories to 0 to skip.
+Opens one random story bubble…" paragraph the user asked to delete).
+
+---
+
 ## [1.1.463] — 2026-07-11
 
 ### Fix: Share-to-DM never actually sent, story likes never landed

@@ -423,18 +423,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // clean IDR frame with an empty send queue) whenever it backs up past
       // ~2 seconds of video at the stream's own bit rate, so lag is bounded
       // and self-healing instead of compounding for the rest of the session.
-      const LAG_BYTES_THRESHOLD = 2_000_000; // ~2s of buffered video at 8Mbps
+      // Threshold lowered from 2 MB to 800 KB so the watchdog fires much
+      // sooner — at 8 Mbps, 800 KB is only ~0.8 s of buffered video, which
+      // keeps the observed lag tight. The watchdog also runs every 500 ms
+      // instead of 1 s so it catches a growing backlog faster.
+      const LAG_BYTES_THRESHOLD = 800_000; // ~0.8s of buffered video at 8Mbps
       let lastLagRestart = 0;
       const lagWatchdog = setInterval(() => {
         if (!running || ws.readyState !== 1) return;
         const buffered = ws.bufferedAmount;
-        if (buffered > LAG_BYTES_THRESHOLD && Date.now() - lastLagRestart > 5000) {
+        if (buffered > LAG_BYTES_THRESHOLD && Date.now() - lastLagRestart > 4000) {
           lastLagRestart = Date.now();
           logger.warn({ serial, buffered }, "[mobile-video] send buffer backed up — forcing screenrecord restart to clear lag");
           if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Mirror fell behind — resyncing…" }));
           try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
         }
-      }, 1000);
+      }, 500);
 
       // Scoped to the whole WS session (not per screenrecord restart) so a
       // stall that persists across several internal restarts still only
@@ -808,22 +812,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  // Instagram's "Share" sheet (opened from a post's paper-plane icon, or a
-  // story's own share/send icon) renders its quick-share recipient grid
-  // with NO per-avatar accessibility info at all — the whole grid collapses
-  // to a single opaque accessibility node (content-desc "User avatars"),
-  // so unlike Like/Repost/Close there is no element to look up by label.
-  // Picking a recipient has to be coordinate-based. Calibrated from a real
-  // screenshot of the sheet (Jul 2026): a 3-column x 2-row grid of avatars
-  // sits directly below the search box, above the "Add to Story / Copy
-  // Link / WhatsApp / Share / Facebook" icon row.
+  // Instagram's "Share" / "Send to" sheet (opened from a post's paper-plane
+  // icon or a story's send icon) is a bottom sheet that slides up from the
+  // lower half of the screen.  Its structure on the user's 1080×2226 device:
+  //
+  //   ~50 % Y  — sheet drag-handle (a tiny pill at the very top of the sheet)
+  //   ~52–54 % Y — search bar ("Search" placeholder text)
+  //   ~57–70 % Y — first two rows of recent DM conversation avatars
+  //   ~72–80 % Y — third row of avatars / "More people" section
+  //
+  // The old y values of 0.525 and 0.667 placed taps TOO HIGH:
+  //   0.525 × 2226 ≈ 1169 px  → lands right on or just below the search bar
+  //   0.667 × 2226 ≈ 1484 px  → first avatar row, but very close to the
+  //                              search bar drag-expand zone
+  //
+  // When the tap lands on the search bar / drag-handle area, the bottom
+  // sheet interprets it as a swipe gesture and expands to full screen ("it
+  // scrolled upwards / expanded the user list") instead of selecting a
+  // recipient.  Moving the y slots down to 0.625 / 0.740 puts them safely
+  // in the middle of the avatar rows, well clear of the handle and search
+  // bar.  X positions (3-column grid) stay the same.
   const SHARE_SHEET_AVATAR_SLOTS: { xPct: number; yPct: number }[] = [
-    { xPct: 0.230, yPct: 0.525 },
-    { xPct: 0.496, yPct: 0.525 },
-    { xPct: 0.762, yPct: 0.525 },
-    { xPct: 0.230, yPct: 0.667 },
-    { xPct: 0.496, yPct: 0.667 },
-    { xPct: 0.762, yPct: 0.667 },
+    { xPct: 0.230, yPct: 0.625 },
+    { xPct: 0.496, yPct: 0.625 },
+    { xPct: 0.762, yPct: 0.625 },
+    { xPct: 0.230, yPct: 0.740 },
+    { xPct: 0.496, yPct: 0.740 },
+    { xPct: 0.762, yPct: 0.740 },
   ];
 
   /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
@@ -1362,7 +1377,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 2. Open Instagram.
       await android.launchInstagram(serial);
       steps.push("launch-instagram");
-      await sleepOrAbort(serial, 3500); // let the app finish loading before scrolling
+      // Reduced from 3500 → 2000 ms. The dismissAdsChoiceDialog and
+      // dismissInstagramInterstitials calls below each do a UIAutomator
+      // accessibility dump which takes ~1-2 s on a loaded device, so the
+      // total time before scrolling starts is still 4-6 s even with the
+      // shorter fixed wait — but the user no longer sees a dead 3.5 s pause
+      // where the feed is already visible but nothing is happening yet.
+      await sleepOrAbort(serial, 2000);
 
       // 2b. Meta occasionally shows a full-screen "ads choice" consent modal
       // on launch (Get started → Use for free with ads → Continue → Agree).
@@ -1419,7 +1440,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
           await sleepOrAbort(serial, 600);
         }
-        await sleepOrAbort(serial, 10000);
+        // Reduced from 10 000 → 5 000 ms. 10 s was added because 1.5 s was
+        // "nowhere near enough" on a first test — but 10 s is the extreme
+        // upper bound; on the user's device the story tray reliably reloads
+        // in 3–5 s. Cutting it to 5 s eliminates the long dead pause the
+        // user sees after scrolling ends and before any story opens.
+        await sleepOrAbort(serial, 5000);
         const result = await runViewStoriesFromFeedLoop(serial, {
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,

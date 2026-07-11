@@ -273,6 +273,15 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
               setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
             } else if (j.info) {
               addLog(j.info);
+              // Server restarted screenrecord to clear a send-buffer backlog.
+              // Flush our WebCodecs decoder immediately so we don't keep
+              // playing back the old queued frames — without this the client
+              // still had several seconds of buffered video to drain even
+              // after the server started a fresh stream, which is why the
+              // "resyncing" watchdog never actually cleared the visible lag.
+              if (/resync|fell behind/i.test(j.info)) {
+                closeDecoder();
+              }
             }
           } catch { /* ok */ }
           return;
@@ -317,10 +326,29 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         // Real H.264 stream: demux Annex-B bytes into access units and feed
         // WebCodecs. This is what gives ~30fps live mirroring instead of the
         // 150-400ms-per-screenshot polling loop.
-        const decoder = ensureDecoder();
+        let decoder = ensureDecoder();
         const demuxer = demuxerRef.current!;
         const units = demuxer.push(new Uint8Array(ev.data as ArrayBuffer));
         for (const unit of units) {
+          // Client-side backpressure: if the decode queue has grown large the
+          // decoder is falling behind real time. Drop delta (non-key) frames
+          // to let it catch up. If the queue is still huge even on a keyframe,
+          // flush the decoder entirely and wait for the next IDR to resync —
+          // this is the client-side partner to the server's lag watchdog and
+          // is what actually eliminates the compounding "10-second lag" the
+          // user reported: the server was already restarting screenrecord, but
+          // the client kept draining its existing queue of old frames first.
+          const queueSize = decoder.decodeQueueSize;
+          if (queueSize > 8 && !unit.keyFrame) {
+            // Too many frames queued — skip this delta, wait for a keyframe.
+            continue;
+          }
+          if (queueSize > 20) {
+            // Even keyframes can't drain it fast enough — hard flush.
+            closeDecoder();
+            decoder = ensureDecoder();
+          }
+
           if (!configuredRef.current) {
             const sps = demuxer.getSps();
             if (!sps) continue; // wait for an SPS before configuring
@@ -1371,7 +1399,6 @@ function AutomationSettingsPanel({
         <div className="space-y-1">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
           <p className="text-sm font-semibold text-foreground">View Stories from Feed</p>
-          <p className="text-xs text-muted-foreground">Set stories to 0 to skip. Opens one random story bubble then watches that many stories in sequence — like and share chances apply individually to each story watched.</p>
         </div>
 
         <div className="flex items-start gap-6 flex-wrap">
