@@ -4,6 +4,50 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.477] — 2026-07-11
+
+### Fix: story-tray tap could hit a "Suggested for you" follow badge instead of viewing the story
+Instagram overlays a small "+"/follow badge on the bottom-right corner of
+some story-tray bubbles (accounts you don't follow yet). The tap point
+used to land dead-centre on the bubble, which for those accounts could
+land on the badge and silently follow them instead of opening their
+story. The tap is now biased toward the upper-left of the bubble, away
+from that corner, and — since blind coordinate tweaks alone have missed
+before — the code now also verifies the tap actually opened a story
+(checking that the feed's bottom nav bar is gone) and logs the outcome
+either way, so a still-wrong tap shows up clearly in the Log tab instead
+of failing silently.
+
+### Fix: closing Instagram via Recents could miss the card on grid-style overview layouts
+The close-Instagram step assumed the recent-apps switcher always shows
+one card centred on screen and swiped left from the middle. Some OEM
+overview layouts (confirmed from a screenshot: MIUI showing two recent
+apps side by side) don't centre a single card there, so the blind swipe
+could miss it entirely. The routine now reads the accessibility tree for
+the actual "Instagram" card each attempt and swipes it away from its own
+real position (or falls back to the old centred guess if the label isn't
+found), logging which path ran and whether Instagram was confirmed
+closed after each attempt.
+
+### Fix: phone screen lighting up just from opening the Mobile Farm tool
+Opening the Mobile tool (or the page remounting after a server restart)
+made the connected phone flicker/wake, even with no automation running.
+Cause: the device list endpoint re-ran 2–3 `adb shell getprop` calls for
+every connected phone on every 3-second poll, forever, for as long as the
+tab was open — each one re-touches the USB link to the device. Those
+properties (manufacturer, Android version, model) never change while a
+phone stays plugged in, so they're now read once per connection and
+cached, cutting that repeated `adb shell` traffic to near zero.
+
+### Diagnostics: richer Log tab detail for stories and closing Instagram
+Both fixes above also add step-by-step log lines (tap coordinates,
+whether a detected UI element was used or a fallback guess, and the
+verified before/after Instagram-running state per attempt) so the next
+round of tap-position debugging has concrete evidence to work from
+instead of another guess.
+
+---
+
 ## [1.1.476] — 2026-07-11
 
 ### Fix: feed Like tapped the wrong post's icon, opening a reply box instead

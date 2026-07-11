@@ -130,6 +130,22 @@ export interface UsbPhone {
 
 // ── Core logic ────────────────────────────────────────────────────────────────
 
+// Device props (manufacturer/model/Android version) never change for a given
+// serial while it stays plugged in — the frontend's Mobile Farm page polls
+// this endpoint every 3 s just to refresh connection status, but the old
+// code ran 2–3 extra `adb shell getprop ...` calls on EVERY poll for every
+// fully-connected phone, forever, for as long as the tab stayed open. Each
+// of those is a fresh `adb shell` invocation, which keeps re-touching the
+// USB data connection to the device — reported by the user as the phone
+// "lighting up as if it's connecting or doing a check" every time the
+// Mobile Farm tool is open, especially right after the server restarts and
+// the tab remounts. Caching per-serial after the first successful read
+// means these three calls now only ever run ONCE per phone per server
+// process lifetime (or once per reconnect, if the phone was unplugged and
+// the cache entry was cleared), not 20+ times a minute.
+const devicePropsCache = new Map<string, { manufacturer?: string; androidVersion?: string; model?: string }>();
+const seenSerials = new Set<string>();
+
 function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[] {
   const out = runAdb(adbPath, ["devices", "-l"]);
   if (diag) diag.rawOutput = out ?? "(adb devices -l produced no output or failed to run)";
@@ -179,22 +195,42 @@ function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[
       product: kv["product"] ?? undefined,
     };
 
-    // For fully connected devices, read extra props (each takes ~200 ms)
+    // For fully connected devices, read extra props — but only once per
+    // serial (cached below), not on every 3 s poll. See devicePropsCache
+    // comment above for why.
     if (state === "device") {
-      const mfr = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.manufacturer"]);
-      if (mfr) phone.manufacturer = mfr;
+      seenSerials.add(serial);
+      let cached = devicePropsCache.get(serial);
+      if (!cached) {
+        cached = {};
+        const mfr = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.manufacturer"]);
+        if (mfr) cached.manufacturer = mfr;
 
-      const ver = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.build.version.release"]);
-      if (ver) phone.androidVersion = ver;
+        const ver = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.build.version.release"]);
+        if (ver) cached.androidVersion = ver;
 
-      // If model wasn't in the -l output, try getprop
-      if (!phone.model) {
-        const mdl = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
-        if (mdl) phone.model = mdl;
+        // If model wasn't in the -l output, try getprop
+        if (!phone.model) {
+          const mdl = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
+          if (mdl) cached.model = mdl;
+        }
+        devicePropsCache.set(serial, cached);
       }
+      if (cached.manufacturer) phone.manufacturer = cached.manufacturer;
+      if (cached.androidVersion) phone.androidVersion = cached.androidVersion;
+      if (!phone.model && cached.model) phone.model = cached.model;
     }
 
     phones.push(phone);
+  }
+
+  // Drop cached props for any serial that's no longer in this listing at
+  // all (fully unplugged, not just briefly "unauthorized") so a different
+  // phone reusing the same serial slot — or the same phone reconnecting
+  // after a factory reset — re-reads fresh props instead of stale ones.
+  const currentSerials = new Set(phones.map(p => p.serial));
+  for (const s of seenSerials) {
+    if (!currentSerials.has(s)) { devicePropsCache.delete(s); seenSerials.delete(s); }
   }
 
   return phones;

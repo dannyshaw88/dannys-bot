@@ -1240,7 +1240,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *
    * Returns the 1-based position that was opened (for logging only).
    */
-  async function pickAndOpenRandomStory(serial: string, w: number, h: number): Promise<number> {
+  async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void): Promise<number> {
     // ── Coordinate calibration (from real 1080×2226 screenshot, Jul 2026) ──
     //
     // Story tray sits between the Instagram header and the feed. On the
@@ -1258,7 +1258,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Opening a story requires a TAP on the bubble, not a swipe. The
     // previous "hold-and-slide-right" swipe was scrolling the tray
     // (or navigating to Reels) instead of opening anything.
-    const storyBarY   = Math.round(h * 0.14);
+    const storyBarYCenter = Math.round(h * 0.14);
     const firstStoryX = Math.round(w * 0.37); // first *friend's* story (skip "Your story")
     const spacing      = Math.round(w * 0.185);
 
@@ -1266,10 +1266,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const maxVisible = Math.max(1, Math.min(4, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1));
 
     const target  = 1 + Math.floor(Math.random() * maxVisible); // 1..maxVisible
-    const targetX = Math.round(firstStoryX + (target - 1) * spacing);
+    const bubbleCenterX = Math.round(firstStoryX + (target - 1) * spacing);
+
+    // Instagram renders some tray bubbles as "Suggested for you" accounts
+    // rather than a friend's actual story — these carry a small circular
+    // "+"/follow badge overlaid on the BOTTOM-RIGHT of the avatar so the
+    // same tile can either open a story (tap the avatar) or follow (tap the
+    // badge). A centred tap can land on that badge instead of the avatar,
+    // which silently follows an account instead of viewing a story — user-
+    // confirmed from a screen-layout scan. Bias the tap toward the
+    // upper-left quadrant of the bubble (away from the bottom-right corner
+    // where the badge sits) so it always lands on open-story territory
+    // instead. Kept small (±6% of one bubble's width/height) so it stays
+    // well inside the ring — the tray's usable Y band is narrow, and
+    // overcorrecting risks landing above the tray in the header again (a
+    // real past bug).
+    const targetX = bubbleCenterX - Math.round(spacing * 0.12);
+    const targetY = storyBarYCenter - Math.round(h * 0.012);
+
+    onLog?.(`Story tray: tapping slot ${target}/${maxVisible} at (${targetX},${targetY}) — biased away from bottom-right follow badge`);
 
     // Single tap on the chosen bubble — that's all Instagram needs to open it.
-    await android.tap(serial, targetX, storyBarY);
+    await android.tap(serial, targetX, targetY);
+    await new Promise(r => setTimeout(r, 600)); // let the story viewer (or a follow toast) finish appearing
+
+    // Verify a story actually opened instead of blindly assuming it did.
+    // The main feed's bottom nav bar (Home/Search/Reels/Shop/Profile) is
+    // always visible on the feed and never visible inside the story viewer
+    // (which is full-screen) — its continued presence after the tap is a
+    // reliable signal the tap missed (e.g. hit the follow badge, or missed
+    // the bubble/tray band entirely) rather than opening a story.
+    const stillOnFeed = await android.findHomeTab(serial).then(r => r !== null).catch(() => false);
+    if (stillOnFeed) {
+      onLog?.(`Story tray: tap on slot ${target} did NOT open a story — bottom nav still visible (likely hit the follow badge or missed the bubble)`);
+    } else {
+      onLog?.(`Story tray: slot ${target} opened successfully`);
+    }
     return target;
   }
 
@@ -1278,12 +1310,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     slideWatchPctMin: number; slideWatchPctMax: number;
     likePercentMin: number; likePercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
+    onLog?: (msg: string) => void;
   }): Promise<{ storiesWatched: number }> {
     const {
       slidesMin, slidesMax,
       slideWatchPctMin, slideWatchPctMax,
       likePercentMin, likePercentMax,
       shareDmPercentMin, shareDmPercentMax,
+      onLog,
     } = params;
 
     const totalStories = Math.floor(
@@ -1302,7 +1336,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
 
     // Open the story viewer: tap a random friend's story bubble.
-    const picked = await pickAndOpenRandomStory(serial, w, h);
+    const picked = await pickAndOpenRandomStory(serial, w, h, onLog);
     logger.info({ serial, picked, totalStories }, "[view-stories] opened story viewer");
     await sleepOrAbort(serial, 1800); // let viewer animate open
 
@@ -1640,6 +1674,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
           likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
           shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
+          onLog: (msg) => tLog(`  ${msg}`),
         });
         storiesWatched = result.storiesWatched;
         steps.push(`stories(${result.storiesWatched} watched)`);
@@ -1649,7 +1684,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
       tLog("▶ Closing Instagram…");
-      await android.closeInstagramViaRecents(serial);
+      await android.closeInstagramViaRecents(serial, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
 
       // 6. Cycle airplane mode on, wait, then off — forces a fresh network

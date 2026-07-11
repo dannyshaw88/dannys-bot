@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.477",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Story tray could tap a 'Suggested for you' account's follow badge instead of viewing their story — the tap point is now biased toward the upper-left of the bubble, away from the badge's bottom-right corner, and the code checks afterward whether a story actually opened (logging the result either way) instead of assuming the tap worked.",
+      },
+      {
+        category: "Fixed",
+        text: "Closing Instagram via Recents could miss the card when the phone's overview screen shows two recent apps side by side instead of one centred card (seen on MIUI) — it now reads the real 'Instagram' card position from the screen each attempt and swipes it away from there, falling back to the old centred guess only if that label can't be found.",
+      },
+      {
+        category: "Fixed",
+        text: "Opening the Mobile tool made the phone screen flicker/wake even with automation off — the device list was re-running a few extra ADB property checks on every 3-second refresh, forever, which kept nudging the USB connection. Those properties don't change while a phone stays plugged in, so they're now read once per connection and reused.",
+      },
+      {
+        category: "Improved",
+        text: "Log tab now shows the exact tap coordinates and detected-vs-fallback method used for the story tray and closing Instagram, plus whether each attempt actually worked — meant to make future tap-position issues diagnosable from the log instead of guessing again.",
+      },
+    ],
+  },
+  {
     version: "1.1.476",
     date: "11 Jul 2026",
     items: [

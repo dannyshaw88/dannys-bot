@@ -926,42 +926,70 @@ export async function openRecentApps(serial: string): Promise<void> {
  * instruction, so the automation cycle behaves like someone actually using
  * the phone rather than a script killing a process in the background.
  */
-export async function closeInstagramViaRecents(serial: string): Promise<void> {
+export async function closeInstagramViaRecents(serial: string, onLog?: (msg: string) => void): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
+  const log = (m: string) => { onLog?.(m); console.log(`[androidManager] ${m}`); };
   // Sometimes more than one app ends up stacked in the recents switcher —
   // an accidental tap opened something, or the phone's own background
   // activity (a notification, a system prompt) launched an app on top of
-  // Instagram. A single open-recents + swipe-left only ever dismisses the
-  // one card on top, leaving anything else stacked behind it still open.
-  // Repeat the same "open recents, swipe the top card away" gesture 5 times
-  // in a row before moving on, so any handful of stray apps get swiped away
-  // too, not just Instagram — each pass is a no-op if recents is already
+  // Instagram. A single open-recents + swipe only ever dismisses the one
+  // card on top, leaving anything else stacked behind it still open.
+  // Repeat the same "open recents, dismiss the top card" gesture 5 times in
+  // a row before moving on — each pass is a no-op if recents is already
   // empty (KEYCODE_APP_SWITCH on an empty stack just shows nothing to swipe).
-  const cardX = Math.round(w * 0.5);
-  const cardY = Math.round(h * 0.45);
+  const pidof = () => {
+    const r = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
+    return (r.stdout ?? "").trim().length > 0;
+  };
   for (let i = 0; i < 5; i++) {
     await openRecentApps(serial);
     await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
-    // Quick horizontal swipe left — no hold, no long press. The MIUI recents
-    // card just needs a simple click-drag a short distance to the left; a hold
-    // triggers the long-press context menu instead of dismissing the card.
-    await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
+
+    // A fixed "swipe left from screen centre" assumed recents always shows
+    // one card at a time, horizontally centred (a single-card carousel).
+    // Some OEM overview layouts (MIUI grid / "Floating windows" view
+    // confirmed from a user screenshot) instead show recent apps two at a
+    // time SIDE BY SIDE, so the centre of the screen can land between two
+    // cards, or on the wrong one, and the swipe dismisses nothing. Reading
+    // the real accessibility tree for an "Instagram" label finds the actual
+    // card wherever it is instead of assuming it's centred.
+    const xml = await _uiDump(adb, serial);
+    const igCard = xml ? _findElem(xml, "Instagram") : null;
+    let method: string;
+    if (igCard) {
+      // Card located — dismiss it with an upward swipe starting from its own
+      // real position. Grid-style OEM recents (side-by-side cards) dismiss
+      // with a swipe up on the card itself, not a swipe across the screen.
+      await swipe(serial, igCard.x, igCard.y, igCard.x, Math.round(h * 0.08), 220);
+      method = `found "Instagram" card at (${igCard.x},${igCard.y}) — swiped it up`;
+    } else {
+      // Couldn't identify the card by label (older Android/AOSP recents
+      // often don't expose one) — fall back to the original single-centred
+      // assumption, logged clearly so it's obvious which path ran if this
+      // still doesn't close the app.
+      const cardX = Math.round(w * 0.5);
+      const cardY = Math.round(h * 0.45);
+      await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
+      method = `no "Instagram" label found in recents tree — fell back to centred swipe-left guess (${cardX},${cardY})`;
+    }
     await new Promise(r => setTimeout(r, 500));
+    const runningNow = pidof();
+    log(`[close-ig] attempt ${i + 1}/5: ${method} — Instagram ${runningNow ? "still running" : "closed"}`);
+    if (!runningNow) break; // confirmed gone, no need to keep swiping
   }
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
-  // versions (some dismiss on a horizontal swipe, some need vertical) — a
-  // "closed completely" requirement can't rely on the gesture alone landing
-  // right every time. Verify Instagram is no longer a running process and,
-  // if the swipe missed, fall back to a clean force-stop so the app is
-  // guaranteed closed before the cycle moves on.
-  const check = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
-  const stillRunning = (check.stdout ?? "").trim().length > 0;
-  if (stillRunning) {
-    console.log(`[androidManager] Instagram still running after recents-swipe on ${serial} — falling back to force-stop`);
+  // versions — a "closed completely" requirement can't rely on the gesture
+  // alone landing right every time. Verify Instagram is no longer a running
+  // process and, if every swipe attempt missed, fall back to a clean
+  // force-stop so the app is guaranteed closed before the cycle moves on.
+  if (pidof()) {
+    log("[close-ig] still running after all recents-swipe attempts — falling back to force-stop");
     await stopInstagram(serial);
+  } else {
+    log("[close-ig] confirmed closed");
   }
 }
 
