@@ -28,13 +28,20 @@ jobs:
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
-      - name: Upload dist
+      # Upload each dist directory as its own artifact so download-artifact
+      # can place files at the exact target path without any copy/rename step.
+      - name: Upload API server dist
         uses: actions/upload-artifact@v4
         with:
-          name: web-dist
-          path: |
-            artifacts/api-server/dist
-            artifacts/dannys-bot/dist
+          name: api-server-dist
+          path: artifacts/api-server/dist/
+          if-no-files-found: error
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist/
+          if-no-files-found: error
 
   build-installer:
     name: Build Windows Installer
@@ -50,18 +57,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Download web-dist
+      # Download directly into the paths the Electron builder expects.
+      # No copy step needed — download-artifact places files at the given path.
+      - name: Download API server dist
         uses: actions/download-artifact@v4
         with:
-          name: web-dist
-          path: _dist
+          name: api-server-dist
+          path: artifacts/api-server/dist
 
-      - name: Place dist files
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist
+
+      - name: Verify dist files
         run: |
-          mkdir -p artifacts/api-server
-          mkdir -p artifacts/dannys-bot
-          cp -r _dist/artifacts/api-server/dist artifacts/api-server/dist
-          cp -r _dist/artifacts/dannys-bot/dist artifacts/dannys-bot/dist
+          echo "=== api-server/dist ==="
+          ls artifacts/api-server/dist/
+          echo "=== dannys-bot/dist ==="
+          ls artifacts/dannys-bot/dist/
 
       - name: Install Electron deps
         working-directory: artifacts/electron
