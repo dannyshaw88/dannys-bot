@@ -2,8 +2,8 @@ name: Build Windows Installer
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -12,28 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: 10.26.1
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
         env:
           npm_config_minimum_release_age: '0'
-
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
-
       - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
-
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
@@ -51,34 +45,27 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
-
       - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install
-
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
-
       - name: Build installer
         working-directory: artifacts/electron
         run: npx electron-builder --win --publish never
-
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: Equinox-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
-
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
