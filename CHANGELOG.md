@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.471] — 2026-07-11
+
+### Fix: strip client-side frame-drop / clientLag loop (back to basics)
+
+The frame-drop + bidirectional lag-signal code added in v1.1.469 created a
+self-reinforcing feedback loop:
+
+1. `decodeQueueSize > 8` → skip every non-keyframe
+2. Keyframes arrive ~1–2×/sec → effective frame rate collapses to ~1 fps
+3. Queue never drains because no delta frames are being decoded
+4. `lagSinceRef` fires → send `{ clientLag }` to server → server kills screenrecord
+5. Client flushes decoder + clears canvas → blank screen
+6. New screenrecord starts → back to step 1
+
+**Fix:** removed all client-side queue inspection, frame dropping, `lagSinceRef`,
+and `clientLag` signal entirely. The decode loop is now: demux → configure if
+needed → `decoder.decode()` → done. WebCodecs drains its own queue at GPU
+speed; the server-side `ws.bufferedAmount` watchdog (original design, never
+removed) handles genuine TCP send-buffer backlog without any client involvement.
+
+---
+
 ## [1.1.470] — 2026-07-11
 
 ### Fix: mirror colour revert (pink tint), UIAutomator 20s silent hang

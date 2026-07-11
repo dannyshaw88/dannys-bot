@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.471",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Mirror back to basics — stripped out all client-side frame-dropping, lag-detection, and the clientLag server-signal added in v1.1.469. Every frame is now decoded and drawn without interference. The client-side 'fix' was causing a feedback loop: queue > 8 → drop non-keyframes → only 1–2 fps → never drains → restart → blank canvas → repeat. The server-side bufferedAmount watchdog (original design) handles real TCP backlog on its own.",
+      },
+    ],
+  },
+  {
     version: "1.1.470",
     date: "11 Jul 2026",
     items: [

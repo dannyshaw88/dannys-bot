@@ -122,9 +122,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const demuxerRef   = useRef<AnnexBDemuxer | null>(null);
   const decoderRef   = useRef<VideoDecoder | null>(null);
   const configuredRef = useRef(false);
-  // Tracks when the decode queue first exceeded the lag threshold so we can
-  // avoid sending clientLag every single frame.
-  const lagSinceRef  = useRef<number | null>(null);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -183,7 +180,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       decoderRef.current = null;
       configuredRef.current = false;
       demuxerRef.current = null;
-      lagSinceRef.current = null;
       if (clearCanvas) {
         const canvas = canvasRef.current;
         const ctx = ctxRef.current;
@@ -222,7 +218,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       ctx?.drawImage(frame, 0, 0);
       frame.close();
       fpsCountRef.current++;
-      lagSinceRef.current = null; // frame decoded — lag is clearing
       setStatus("live");
     };
 
@@ -348,43 +343,14 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         }
 
         // Real H.264 stream: demux Annex-B bytes into access units and feed
-        // WebCodecs. This is what gives ~30fps live mirroring instead of the
-        // 150-400ms-per-screenshot polling loop.
-        let decoder = ensureDecoder();
+        // WebCodecs. Decode every frame — no client-side dropping or lag
+        // signals. The server-side bufferedAmount watchdog handles genuine
+        // TCP backlog; letting WebCodecs drain its own queue at GPU speed is
+        // always faster than dropping frames and triggering restarts.
+        const decoder = ensureDecoder();
         const demuxer = demuxerRef.current!;
         const units = demuxer.push(new Uint8Array(ev.data as ArrayBuffer));
         for (const unit of units) {
-          // Client-side backpressure: if the decode queue has grown large the
-          // decoder is falling behind real time. Drop delta (non-key) frames
-          // to let it catch up. If the queue is still huge even on a keyframe,
-          // tell the server to restart screenrecord (bidirectional lag control)
-          // AND hard-flush the decoder — this combination is what actually
-          // eliminates the compounding lag: the server restarts the stream from
-          // a fresh IDR and the client drops everything already queued, so
-          // latency collapses to near-zero on the next keyframe instead of
-          // slowly draining the existing backlog first.
-          const queueSize = decoder.decodeQueueSize;
-          if (queueSize > 8) {
-            if (lagSinceRef.current === null) lagSinceRef.current = Date.now();
-            if (!unit.keyFrame) {
-              // Too many frames queued — skip this delta, wait for a keyframe.
-              continue;
-            }
-            // Queue still large even at keyframe — signal server to restart.
-            const lagMs = Date.now() - (lagSinceRef.current ?? Date.now());
-            if (lagMs > 800 && wsRef.current?.readyState === 1) {
-              addLog(`Lag detected (queue=${queueSize}, ${lagMs}ms) — signalling server to resync`);
-              wsRef.current.send(JSON.stringify({ clientLag: true }));
-              closeDecoder(true /* clearCanvas */);
-              decoder = ensureDecoder();
-            }
-          }
-          if (queueSize > 20) {
-            // Still overwhelming even without lag signal — hard flush locally.
-            closeDecoder(true /* clearCanvas */);
-            decoder = ensureDecoder();
-          }
-
           if (!configuredRef.current) {
             const sps = demuxer.getSps();
             if (!sps) continue; // wait for an SPS before configuring
