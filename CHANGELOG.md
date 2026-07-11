@@ -4,6 +4,37 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.465] — 2026-07-11
+
+### UI: Redesigned Mobile sidebar icon; Windows installer CI now builds on every push to main
+
+**Redesigned Mobile nav icon** — The Mobile entry in the left sidebar now uses a
+redrawn smartphone icon. The previous icon was a plain rectangle with a flat screen
+cutout and a thin home-indicator bar. The new icon is modelled on a modern Android/
+iPhone form factor:
+
+- **Punch-hole camera** — a small filled circle centred at the top of the phone body
+  replaces the old featureless top bezel, making the icon immediately readable at the
+  32 × 32 px size it renders at in the sidebar.
+- **Side buttons** — two volume buttons on the right edge and a power button on the
+  left edge are rendered as low-opacity rounded rectangles. They add depth and silhouette
+  detail without cluttering the icon at small sizes.
+- **Pill home indicator** — slightly wider and taller than the previous thin bar, keeping
+  the modern full-screen phone language.
+- **Tighter body proportions** — the phone body now uses `rx=3.5` (was `rx=2.5`), giving
+  it more pronounced rounded corners that match the iOS/Android aesthetic.
+
+No behaviour, routing, or data is affected — purely visual.
+
+**Windows installer CI trigger extended to push → main** — `build-windows-installer.yml`
+previously only ran on `v*` tag pushes and manual `workflow_dispatch`. It now also
+triggers on every push to the `main` branch, so a fresh `Equinox-Installer` artifact is
+produced automatically after each commit without needing to cut a tag. The artifact is
+uploaded to GitHub Actions as before; the `Publish to GitHub Release` step still only
+runs on tag pushes, so no spurious releases are created from regular commits.
+
+---
+
 ## [1.1.464] — 2026-07-11
 
 ### Fix: Mirror lag, app-open delay, share-sheet expansion bug; remove stories tooltip

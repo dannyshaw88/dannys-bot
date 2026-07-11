@@ -92,11 +92,18 @@ function FilledSmartphoneIcon({ className, style }: { className?: string; style?
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
       {/* Phone body */}
-      <rect x="5" y="1" width="14" height="22" rx="2.5" fill="currentColor"/>
-      {/* Screen cutout */}
-      <rect x="7" y="3.5" width="10" height="15" rx="1" fill="var(--card,#1e293b)"/>
-      {/* Home indicator */}
-      <rect x="10" y="20" width="4" height="1.2" rx="0.6" fill="var(--card,#1e293b)"/>
+      <rect x="4" y="1" width="16" height="22" rx="3.5" fill="currentColor"/>
+      {/* Screen area */}
+      <rect x="6" y="4" width="12" height="14" rx="1" fill="var(--card,#1e293b)"/>
+      {/* Punch-hole camera */}
+      <circle cx="12" cy="2.6" r="0.9" fill="var(--card,#1e293b)"/>
+      {/* Home indicator pill */}
+      <rect x="9.5" y="20.2" width="5" height="1.4" rx="0.7" fill="var(--card,#1e293b)"/>
+      {/* Side volume button */}
+      <rect x="20" y="7.5" width="1.2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
+      <rect x="20" y="11.5" width="1.2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
+      {/* Power button left */}
+      <rect x="2.8" y="8.5" width="1.2" height="4" rx="0.5" fill="currentColor" opacity="0.6"/>
     </svg>
   );
 }
