@@ -4,6 +4,47 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.463] — 2026-07-11
+
+### Fix: Share-to-DM never actually sent, story likes never landed
+
+Diagnosed from a screen-layout scan + screenshot the user provided of the
+real Share sheet, and a scan taken mid-story.
+
+**Share-to-DM (feed posts and stories) never sent anything.** Both flows
+tapped the paper-plane/share icon to open the recipient picker, then just
+pressed Back — no recipient was ever selected and Send was never tapped.
+It only ever opened and closed the sheet.
+
+**Fix:** After opening the picker, tap a random recipient avatar from the
+quick-share grid (calibrated from the user's screenshot — a 3×2 grid of
+avatars below the search box), wait for the checkmark/Send button to
+appear, then look up and tap the real "Send" button via the accessibility
+tree (same reliable by-label lookup already used for Repost/Close). If Send
+can't be found, it falls back to Back so a stuck sheet can't block the
+rest of the cycle. Applies to both the feed's share-via-DM action and a
+story's share-via-DM action.
+
+**Story likes were never clicked.** `findLikeButton()` was expected to work
+in the story viewer the same way it does in the feed, with a fixed-pixel
+fallback (15.1% X, 97.8% Y) if it didn't. A fresh screen-layout scan taken
+mid-story showed the story viewer exposes only 3 opaque containers total —
+there is no accessible Like element in stories at all, so it always fell
+through to the fallback tap — and that scan also showed the real
+reply/action bar sits at 92.4–93.8% Y (center ~93.1%), not 97.8%. The old
+Y value was tapping below the actual bar, missing the heart entirely.
+
+**Fix:** Corrected the story like/share-icon fallback Y coordinate to
+93.1%.
+
+**Caveat:** neither fix has been verified against a live device in this
+sandbox (no adb/device access here) — the DM-recipient-grid and story
+action-bar coordinates are calibrated from the screenshot/scan the user
+supplied, not confirmed live. Please test a cycle and report back if a
+tap still misses.
+
+---
+
 ## [1.1.462] — 2026-07-11
 
 ### Fix: Mirror lag/FPS drift + close-all-apps only dismissed one stray app

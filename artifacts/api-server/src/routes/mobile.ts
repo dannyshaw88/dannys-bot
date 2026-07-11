@@ -808,6 +808,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
+  // Instagram's "Share" sheet (opened from a post's paper-plane icon, or a
+  // story's own share/send icon) renders its quick-share recipient grid
+  // with NO per-avatar accessibility info at all — the whole grid collapses
+  // to a single opaque accessibility node (content-desc "User avatars"),
+  // so unlike Like/Repost/Close there is no element to look up by label.
+  // Picking a recipient has to be coordinate-based. Calibrated from a real
+  // screenshot of the sheet (Jul 2026): a 3-column x 2-row grid of avatars
+  // sits directly below the search box, above the "Add to Story / Copy
+  // Link / WhatsApp / Share / Facebook" icon row.
+  const SHARE_SHEET_AVATAR_SLOTS: { xPct: number; yPct: number }[] = [
+    { xPct: 0.230, yPct: 0.525 },
+    { xPct: 0.496, yPct: 0.525 },
+    { xPct: 0.762, yPct: 0.525 },
+    { xPct: 0.230, yPct: 0.667 },
+    { xPct: 0.496, yPct: 0.667 },
+    { xPct: 0.762, yPct: 0.667 },
+  ];
+
+  /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
+  async function tapRandomShareSheetRecipient(serial: string, w: number, h: number): Promise<void> {
+    const slot = SHARE_SHEET_AVATAR_SLOTS[Math.floor(Math.random() * SHARE_SHEET_AVATAR_SLOTS.length)];
+    await android.tap(serial, Math.round(w * slot.xPct), Math.round(h * slot.yPct));
+  }
+
+  /**
+   * Once a recipient is selected, Instagram shows a real "Send" button —
+   * unlike the avatar grid, this is a standalone action button and (like
+   * "Repost"/"Close" elsewhere in this file) does carry real accessible
+   * text, so it can be found the same reliable way instead of guessing a
+   * coordinate. Returns true if it was found and tapped.
+   */
+  async function sendShareSheet(serial: string): Promise<boolean> {
+    const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+    if (sendBtn) {
+      await android.tap(serial, sendBtn.x, sendBtn.y);
+      return true;
+    }
+    return false;
+  }
+
   // Shared by the standalone `/check-feed` route and the full
   // `/automation-cycle` route below — the scroll/like/share loop.
   async function runCheckFeedLoop(serial: string, params: {
@@ -854,6 +894,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // if no Like button can be found (see the action-bar gating below).
     const shareFeedIconX = Math.round(w * 0.481); // 48.1% X — circular arrows
     const shareDmIconX   = Math.round(w * 0.660); // 66.0% X — paper plane
+
+    // Share-to-DM used to just tap the paper-plane icon and press Back —
+    // it never actually picked a recipient or sent anything, it only
+    // *opened and closed* the DM picker. See tapRandomShareSheetRecipient /
+    // sendShareSheet below for the real send flow.
 
     let likes = 0;
     let likeFailures = 0;
@@ -1015,9 +1060,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 await android.tap(serial, shareDmIconX, rowY);
                 logger.info({ serial, x: shareDmIconX, y: rowY }, "[check-feed] tapped share-to-DM icon");
                 await sleepOrAbort(serial, 1200); // wait for DM picker sheet
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 600);
-                sharesDm++;
+                // Pick a random recipient from the quick-share avatar grid,
+                // then look for the Send button that appears once a
+                // recipient is selected — previously this just opened the
+                // sheet and pressed Back, never actually sending to anyone.
+                await tapRandomShareSheetRecipient(serial, w, h);
+                await sleepOrAbort(serial, 700); // let the checkmark/Send button appear
+                const sent = await sendShareSheet(serial);
+                if (sent) {
+                  logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
+                  await sleepOrAbort(serial, 800); // let the "Sent" confirmation settle
+                  sharesDm++;
+                } else {
+                  logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 500);
+                }
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
             }
@@ -1139,17 +1197,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, watchMs);
 
       // Like the story?
-      // Story action bar sits at the very bottom (~97–98% Y). Coordinates
-      // confirmed via screen-layout scan on the user's 1080×2226 device:
-      //   like  ≈ 15% X, 97.8% Y
-      //   share ≈ 43% X, 97.8% Y  (paper-plane / DM icon)
+      // A fresh screen-layout scan taken mid-story on the user's device
+      // (Jul 2026) found only 3 opaque elements total — no accessible Like
+      // element exists in the story viewer at all, so findLikeButton()
+      // below is expected to always miss here and this always falls
+      // through to the fixed-coordinate tap. That same scan *did* reveal
+      // the real reply/action bar container bounds: y 92.4–93.8% (center
+      // ~93.1%), not the ~97.8% previously assumed — 97.8% sits below the
+      // actual bar, which is almost certainly why story likes were never
+      // landing at all ("liked story" was logged, but the tap missed).
       if (likeChance > 0 && Math.random() < likeChance) {
         // Try the accessibility tree first (same method as feed likes).
         const likeBtn = await android.findLikeButton(serial).catch(() => null);
         if (likeBtn) {
           await android.tap(serial, likeBtn.x, likeBtn.y);
         } else {
-          await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.978));
+          await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.931));
         }
         logger.info({ serial, story: s + 1 }, "[view-stories] liked story");
         await sleepOrAbort(serial, 400 + Math.round(Math.random() * 200));
@@ -1157,13 +1220,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // Share via DM?
       if (shareChance > 0 && Math.random() < shareChance) {
-        // Tap the paper-plane / send icon to open the DM picker.
-        await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.978));
+        // Tap the paper-plane / send icon to open the DM picker. Same Y
+        // correction as the Like tap above (93.1%, not 97.8%).
+        await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.931));
         await sleepOrAbort(serial, 1200); // wait for picker sheet
-        // Close without sending (registers the share intent, looks human).
-        await android.pressBack(serial);
-        logger.info({ serial, story: s + 1 }, "[view-stories] shared story DM picker opened then closed");
-        await sleepOrAbort(serial, 600);
+        // Pick a random recipient, then look for the real Send button —
+        // previously this just opened the sheet and pressed Back, never
+        // actually sending to anyone (same bug as the feed's share-to-DM).
+        await tapRandomShareSheetRecipient(serial, w, h);
+        await sleepOrAbort(serial, 700); // let the checkmark/Send button appear
+        const sent = await sendShareSheet(serial);
+        if (sent) {
+          logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
+          await sleepOrAbort(serial, 800);
+        } else {
+          await android.pressBack(serial);
+          logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
+          await sleepOrAbort(serial, 600);
+        }
       }
 
       storiesWatched++;
