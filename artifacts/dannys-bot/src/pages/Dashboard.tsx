@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.472",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Mirror lag / 'plays catch-up' — root cause was UIAutomator using spawnSync, which blocks Node's entire event loop for 4–5 seconds per call. While blocked, the video WebSocket couldn't flush frames, bufferedAmount spiked, the lag watchdog fired, screenrecord restarted, and the mirror went black then caught up. UIAutomator now uses async spawn so the video stream keeps flowing uninterrupted during all dialog checks.",
+      },
+      {
+        category: "Fixed",
+        text: "Share-to-DM Send button never pressed — the 700ms wait after tapping a recipient wasn't long enough for the blue Send button to render. Increased to 1500ms. Added a coordinate-based fallback (y=94.8% of screen height) so the Send button is always tapped even when the UIAutomator accessibility label lookup returns nothing.",
+      },
+    ],
+  },
+  {
     version: "1.1.471",
     date: "11 Jul 2026",
     items: [

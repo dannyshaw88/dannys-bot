@@ -1325,13 +1325,24 @@ export async function dumpUi(serial: string): Promise<string> {
 async function _uiDump(adb: string, serial: string): Promise<string> {
   const tmpDev = "/sdcard/equinox_ui_dump.xml";
   const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
-  // 5 s hard cap (was 10 s). During the Instagram splash screen the
-  // accessibility tree is being rebuilt continuously; the old 10 s timeout
-  // let UIAutomator hang the full duration, making every dialog-check call
-  // take 10–16 s with zero log visibility. 5 s is enough for a settled UI
-  // and fails fast enough on a loading screen to not block the cycle.
-  spawnSync(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { encoding: "utf8", timeout: 5000 });
-  spawnSync(adb, ["-s", serial, "pull", tmpDev, tmpHost], { encoding: "utf8", timeout: 4000 });
+  // CRITICAL: use async spawn (not spawnSync) so the Node event loop stays
+  // free during the 4–5 s UIAutomator dump. spawnSync was blocking the entire
+  // event loop, preventing the video WebSocket from flushing frames to the
+  // client — ws.bufferedAmount spiked, the lag watchdog fired, screenrecord
+  // restarted, and the client got a 10–20 s black screen then "catch-up".
+  // With async spawn the video stream keeps flowing uninterrupted.
+  await new Promise<void>((resolve) => {
+    const child = spawn(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { stdio: "ignore" });
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 5000);
+    child.on("close", () => { clearTimeout(t); resolve(); });
+    child.on("error", () => { clearTimeout(t); resolve(); });
+  });
+  await new Promise<void>((resolve) => {
+    const child = spawn(adb, ["-s", serial, "pull", tmpDev, tmpHost], { stdio: "ignore" });
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 4000);
+    child.on("close", () => { clearTimeout(t); resolve(); });
+    child.on("error", () => { clearTimeout(t); resolve(); });
+  });
   try {
     const xml = fs.readFileSync(tmpHost, "utf8");
     try { fs.unlinkSync(tmpHost); } catch { /**/ }

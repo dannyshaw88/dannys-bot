@@ -4,6 +4,38 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.472] — 2026-07-11
+
+### Fix: mirror catch-up lag (spawnSync→async) + Send button never pressed
+
+**Mirror "10–20 second black then catch-up" — root cause found and fixed:**  
+`_uiDump` (every UIAutomator accessibility dump) used `spawnSync`, which
+blocks Node's **entire** event loop while it runs — typically 4–5 s on this
+device. While blocked, `ws.send()` calls queued up in `ws.bufferedAmount`
+since Node had no cycles to flush the socket. After the `spawnSync` returned,
+`bufferedAmount` was well past the 800 KB watchdog threshold → watchdog fired
+→ killed screenrecord → client cleared decoder and canvas → new screenrecord
+started → "catch-up." This happened on every UIAutomator call (ads-choice
+check, interstitials check, `isFeedbackOrSurveyCard`, `findLikeButton`, etc.)
+— multiple times per cycle.  
+**Fix:** `_uiDump` now uses async `spawn` with Promise wrappers and explicit
+kill-on-timeout. The event loop is free during the entire dump, the video
+WebSocket flushes normally, `bufferedAmount` stays near zero, the watchdog
+never fires spuriously. No logic changes — identical timeout values (5 s dump,
+4 s pull), just non-blocking.
+
+**Share-to-DM "Send" button never pressed:**  
+Two problems: (1) the wait after tapping the recipient avatar was 700 ms —
+not long enough for Instagram to render the blue Send button. (2) The fallback
+when `findButtonByLabel("Send")` returned null was `pressBack`, which
+dismissed the sheet instead of sending.  
+**Fix:** wait increased to 1500 ms. `sendShareSheet` now accepts `w, h` and
+falls back to a coordinate tap at `(w×0.422, h×0.948)` — the consistent
+screen position of the Send button across all tested Instagram versions —
+so a DM share always completes even if the UIAutomator label lookup misses.
+
+---
+
 ## [1.1.471] — 2026-07-11
 
 ### Fix: strip client-side frame-drop / clientLag loop (back to basics)

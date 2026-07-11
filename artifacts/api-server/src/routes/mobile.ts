@@ -927,19 +927,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   /**
-   * Once a recipient is selected, Instagram shows a real "Send" button —
-   * unlike the avatar grid, this is a standalone action button and (like
-   * "Repost"/"Close" elsewhere in this file) does carry real accessible
-   * text, so it can be found the same reliable way instead of guessing a
-   * coordinate. Returns true if it was found and tapped.
+   * Taps the blue "Send" button in Instagram's DM share sheet.
+   *
+   * Primary: UIAutomator accessibility lookup for the "Send" button text —
+   * reliable when the UI is settled and the label is present.
+   *
+   * Fallback: coordinate tap at the Send button's known position (~y=94.8%
+   * of screen height, ~x=42.2% for the button center). The Send button is
+   * always the large full-width blue row at the bottom of the share sheet
+   * immediately above the Android nav bar, so this coordinate is stable
+   * across Instagram versions even when the accessibility label varies.
+   *
+   * NOTE: _uiDump is now async (non-blocking) so calling this no longer
+   * stalls the video WebSocket.
    */
-  async function sendShareSheet(serial: string): Promise<boolean> {
+  async function sendShareSheet(serial: string, w: number, h: number): Promise<boolean> {
     const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
       return true;
     }
-    return false;
+    // UIAutomator didn't find "Send" — fall back to the known coordinate.
+    // On 720×1260 this is (304, 1195); scales correctly on other resolutions.
+    await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
+    return true;
   }
 
   // Shared by the standalone `/check-feed` route and the full
@@ -1162,11 +1173,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // recipient is selected — previously this just opened the
                 // sheet and pressed Back, never actually sending to anyone.
                 await tapRandomShareSheetRecipient(serial, w, h);
-                await sleepOrAbort(serial, 700); // let the checkmark/Send button appear
-                const sent = await sendShareSheet(serial);
+                // 1500ms instead of 700ms — UIAutomator (now async) takes
+                // ~4s on this device. 700ms was never enough time for the
+                // blue Send button to finish rendering before we looked for it.
+                await sleepOrAbort(serial, 1500);
+                const sent = await sendShareSheet(serial, w, h);
                 if (sent) {
                   logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
-                  await sleepOrAbort(serial, 800); // let the "Sent" confirmation settle
+                  await sleepOrAbort(serial, 800);
                   sharesDm++;
                 } else {
                   logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
@@ -1325,8 +1339,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // previously this just opened the sheet and pressed Back, never
         // actually sending to anyone (same bug as the feed's share-to-DM).
         await tapRandomShareSheetRecipient(serial, w, h);
-        await sleepOrAbort(serial, 700); // let the checkmark/Send button appear
-        const sent = await sendShareSheet(serial);
+        await sleepOrAbort(serial, 1500); // 700→1500ms: give Send button time to appear
+        const sent = await sendShareSheet(serial, w, h);
         if (sent) {
           logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
           await sleepOrAbort(serial, 800);
