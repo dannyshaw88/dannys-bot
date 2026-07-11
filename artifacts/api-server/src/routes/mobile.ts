@@ -1368,6 +1368,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let actionIcons: { x: number; y: number }[] | null = null;
       if (willLike || willShare) {
         actionIcons = await android.findStoryActionIcons(serial).catch(() => null);
+        onLog?.(`Story ${s + 1}: icon scan found ${actionIcons ? `${actionIcons.length} icon(s) at [${actionIcons.map(p => `(${p.x},${p.y})`).join(", ")}]` : "nothing (screenshot unavailable — using fallback)"}`);
       }
 
       if (willLike) {
@@ -1387,8 +1388,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (await android.isKeyboardShown(serial).catch(() => false)) {
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] like tap opened the reply keyboard instead — wrong control, backed out, not counted as liked");
+            onLog?.(`Story ${s + 1}: Like tap at (${heart.x},${heart.y}) opened the keyboard instead — wrong control, backed out`);
           } else {
             logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] liked story (icon detected)");
+            onLog?.(`Story ${s + 1}: liked (tapped (${heart.x},${heart.y}))`);
           }
         } else if (actionIcons) {
           // 0 = icons genuinely absent (likes/comments/shares disabled by
@@ -1396,6 +1399,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // blind risks hitting the wrong control or the story itself —
           // skip rather than guess.
           logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped like — icon not distinguishable on this story");
+          onLog?.(`Story ${s + 1}: skipped like — only ${actionIcons.length} icon(s) found, can't tell Like from Share`);
         } else {
           // Screenshot capture/decode unavailable on this device — old
           // fallback chain: accessibility tree, then fixed coordinate.
@@ -1406,6 +1410,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.931));
           }
           logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fixed-coordinate fallback — icon scan unavailable)");
+          onLog?.(`Story ${s + 1}: liked using fallback coordinates (icon scan unavailable)`);
         }
         await sleepOrAbort(serial, 400 + Math.round(Math.random() * 200));
       }
@@ -1423,14 +1428,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (await android.isKeyboardShown(serial).catch(() => false)) {
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened the reply keyboard instead — wrong control, backed out, not shared");
+            onLog?.(`Story ${s + 1}: Share tap at (${shareIcon.x},${shareIcon.y}) opened the keyboard instead — wrong control, backed out`);
           } else {
             opened = true;
+            onLog?.(`Story ${s + 1}: share sheet opened (tapped (${shareIcon.x},${shareIcon.y}))`);
           }
         } else if (actionIcons) {
           logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped share — icon not distinguishable on this story");
+          onLog?.(`Story ${s + 1}: skipped share — only ${actionIcons.length} icon(s) found, can't tell Like from Share`);
         } else {
           await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.931));
           opened = true;
+          onLog?.(`Story ${s + 1}: share sheet opened using fallback coordinates (icon scan unavailable)`);
         }
 
         if (opened) {
@@ -1443,10 +1452,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const sent = await sendShareSheet(serial, w, h);
           if (sent) {
             logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
+            onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
             await sleepOrAbort(serial, 800);
           } else {
             await android.pressBack(serial);
             logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
+            onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
             await sleepOrAbort(serial, 600);
           }
         }

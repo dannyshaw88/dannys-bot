@@ -223,7 +223,19 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     "audio=false",
     "control=true",
     "cleanup=true",
-    "power_on=true",
+    // power_on=false: scrcpy-server's own default is to turn the physical
+    // screen ON the moment it starts, completely independent of anything
+    // this app's own wakeScreen()/sleepScreen() calls do — this was the
+    // actual root cause of the phone "lighting up" just from opening the
+    // Mobile tool (every previous fix removed app-level wake calls, but
+    // never touched this flag, so the mirror session itself kept waking
+    // the screen on every connect, including the automatic one that fires
+    // when the automation toggle was left on from a previous session and
+    // the page remounts after a restart). Mirroring should reflect
+    // whatever state the screen is already in; the automation-cycle route
+    // still calls wakeScreen() explicitly when it actually needs the
+    // screen on.
+    "power_on=false",
     "stay_awake=true",
     "video_codec=h264",
     `video_bit_rate=${opts.bitRate ?? 8_000_000}`,

@@ -1493,7 +1493,32 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
       const widths = iconSized.map(c => c.x2 - c.x1);
       const maxW = Math.max(...widths), minW = Math.min(...widths);
       if (maxW / minW <= 1.6) {
-        candidateRows.push({ y, clusters: iconSized, avgLum });
+        // Second defense, added after a real-world miss: the reply-box
+        // placeholder text ("Send message") sits to the LEFT of the real
+        // icon group in Instagram's actual layout (text field, then heart,
+        // then paper-plane, left to right) — a stray word/fragment from it
+        // can survive the width-uniformity check above and still get
+        // treated as "the leftmost icon" (assumed = Like), which is how a
+        // tap meant for Like landed in the message field, and a tap meant
+        // for Share landed on the real heart one slot to its right instead
+        // (both real icons shifted one index right by the fake entry).
+        // The real icon group is always packed tightly together (heart and
+        // share/paper-plane sit right next to each other); a text fragment
+        // is isolated from that group by a much bigger gap than the icons'
+        // own spacing. Drop anything left of an outsized gap so only the
+        // tightly-packed real icon group remains.
+        let group = iconSized;
+        if (group.length >= 2) {
+          const gaps: number[] = [];
+          for (let i = 1; i < group.length; i++) gaps.push(group[i].x1 - group[i - 1].x2);
+          const maxGap = Math.max(...gaps);
+          const maxGapIdx = gaps.indexOf(maxGap);
+          const otherGaps = gaps.filter((_, i) => i !== maxGapIdx);
+          const avgOtherGap = otherGaps.length ? otherGaps.reduce((a, b) => a + b, 0) / otherGaps.length : maxGap;
+          const isolated = otherGaps.length > 0 ? maxGap > avgOtherGap * 2.2 : maxGap > maxW * 2.5;
+          if (isolated) group = group.slice(maxGapIdx + 1);
+        }
+        if (group.length >= 1) candidateRows.push({ y, clusters: group, avgLum });
       }
     }
   }

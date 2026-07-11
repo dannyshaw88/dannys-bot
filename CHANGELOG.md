@@ -4,6 +4,50 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.478] — 2026-07-11
+
+### Fix (real root cause this time): phone screen turning on just from opening the Mobile tool
+Every previous attempt at this bug (getprop caching, removing app-level
+wakeScreen calls) missed the actual cause: the vendored scrcpy-server is
+started with `power_on=true`, which is scrcpy's own built-in behavior —
+it forces the physical screen on the instant its mirror session starts,
+completely independent of any wakeScreen()/sleepScreen() call this app
+makes. Since the live-mirror view auto-connects whenever the automation
+toggle is left on from a previous session (by design, so you can watch
+an in-progress run), simply reopening the Mobile tool after a restart —
+with the toggle still on from before — silently started a mirror
+session, which woke the screen. Changed to `power_on=false`: the mirror
+now shows whatever state the screen is already in instead of forcing it
+on. The automation cycle's own explicit wake step (used when it actually
+needs the screen) is untouched.
+
+### Fix: story Like/Share taps swapped — a message-field tap landed first
+On a story with the reply bar showing, a tap meant for Like landed in
+the "Type a message" field instead, then (after backing out of that) the
+tap meant for Share landed on the real Like button instead of Share.
+Root cause: Instagram lays this bar out as [message field] [heart]
+[paper-plane], left to right — the detection code assumed the leftmost
+bright cluster it found was always the Like icon, but a stray fragment
+of the message-field's placeholder text can pass the existing
+icon-shape filter and sit to the left of the real heart, which then
+shifted every index over by one (the fake entry became "Like", the real
+heart became "Share"). The real Like and Share icons always sit right
+next to each other with a small, consistent gap; a text fragment is
+isolated from them by a much bigger gap. The scan now measures the gaps
+between candidate clusters and drops anything separated from the
+tightly-packed real icon group by an outsized gap, so a leftover text
+fragment can no longer be mistaken for an icon.
+
+### Improved: Log tab now shows story Like/Share detection detail
+Every story Like/Share attempt now logs what the icon scan actually
+found (coordinates, count) and the outcome of the tap (liked, opened
+share sheet, hit the keyboard by mistake and backed out, or skipped
+because the icons weren't distinguishable) — so if this class of bug
+resurfaces, the Log tab shows exactly what was detected instead of
+requiring another live reproduction to diagnose.
+
+---
+
 ## [1.1.477] — 2026-07-11
 
 ### Fix: story-tray tap could hit a "Suggested for you" follow badge instead of viewing the story

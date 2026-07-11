@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.478",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone screen still turned on just from opening the Mobile tool — found the real cause this time: the mirror engine (scrcpy) forces the screen on the instant it starts, on its own, regardless of anything else this app does. That happens automatically whenever the automation toggle was left on from before (so you can watch an in-progress run), including right after a restart. The mirror no longer forces the screen on — it just shows whatever state the screen already is in.",
+      },
+      {
+        category: "Fixed",
+        text: "Story Like/Share taps swapped — a tap meant for Like landed in the 'Type a message' box, then the next tap meant for Share landed on the actual Like button instead. Caused by a leftover fragment of the message box's placeholder text being mistaken for an icon and shifting every real icon over by one slot. The scan now checks the spacing between detected icons and throws out anything sitting oddly far from the tightly-packed real icon group.",
+      },
+      {
+        category: "Improved",
+        text: "Log tab now records exactly what the story Like/Share icon scan found and what happened with each tap, so a repeat of this class of bug can be diagnosed straight from the log.",
+      },
+    ],
+  },
+  {
     version: "1.1.477",
     date: "11 Jul 2026",
     items: [
