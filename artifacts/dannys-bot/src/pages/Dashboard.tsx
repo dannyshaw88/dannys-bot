@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.476",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Feed Like tapped the wrong post's icon (opened a reply/message box instead) — the accessibility scan could see more than one 'Like' button at once, since Android keeps the post scrolling out of view and a Reel/repost card scrolling into view both alive in the hierarchy during a scroll. The scan now always picks the Like button closest to the centre of the screen (the post actually in view), and no longer lets a wide reply/message text field get mistaken for a Comment/Repost/Send icon even if it happens to line up on the same row.",
+      },
+    ],
+  },
+  {
     version: "1.1.475",
     date: "11 Jul 2026",
     items: [

@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.476] — 2026-07-11
+
+### Fix: feed Like tapped the wrong post's icon, opening a reply box instead
+On a normal feed post, a Like tap sometimes opened a reply/message
+compose box (mistaken by you for a Comment tap) instead of liking the
+post, even though the same detection logic had just fixed this exact
+class of bug for Stories/Reels.
+
+**Root cause:** Android's RecyclerView-backed feed keeps the post
+scrolling out of the top of the screen and the post/Reel-repost card
+scrolling into the bottom BOTH alive in the accessibility hierarchy
+during a scroll — so `uiautomator dump` can report more than one
+`content-desc="Like"` node at the same time. The code took the FIRST
+one it found in document order, which is not necessarily the post
+actually centred on screen. When it picked the wrong post's Like
+button, the "everything else on that row" scan (`findFeedActionIcons`)
+swept in unrelated elements from a totally different card — including
+a Reel/repost card's wide message/reply text field — and, by
+elimination, mistook it for Comment/Repost/Send.
+
+**Fix:** the Like-button scan now always selects the node closest to
+the vertical centre of the screen (the post actually being viewed),
+not just the first match. The row-scan also now rejects any clickable
+element wider than a real action icon (and explicitly excludes
+`EditText` compose fields), so even if a wide reply box ever lines up
+on the same row as the correct Like button, it can never be mistaken
+for one of the small square icons.
+
+---
+
 ## [1.1.475] — 2026-07-11
 
 ### New: Copy button on the Log panel

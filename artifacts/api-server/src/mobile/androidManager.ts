@@ -1119,17 +1119,42 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
-  // Instagram's like control exposes content-desc="Like" when NOT yet
-  // liked, and content-desc="Unlike" once it IS liked. `_findElem`'s
-  // generic substring match would match both ("Unlike" contains "Like"),
-  // which could cause a double-tap to unlike an already-liked post — the
-  // opposite of what a "like" action should ever do. Match only nodes
-  // whose content-desc is the exact, whole-word "Like" (anchored, not a
-  // substring), so an "Unlike" node is never selected.
-  const re = /content-desc="Like"[^>]*bounds="([^"]+)"/;
-  const m = xml.match(re);
-  if (!m) return null;
-  return _parseCenter(m[1]);
+  const like = _findCentermostLikeNode(xml);
+  return like ? { x: like.x, y: like.y } : null;
+}
+
+/**
+ * Android's RecyclerView-backed feed keeps the adapter rows immediately
+ * above/below the visible viewport alive in the view hierarchy (for smooth
+ * scroll recycling), so `uiautomator dump` can legitimately contain MORE
+ * THAN ONE `content-desc="Like"` node at once — one for the post that's
+ * mostly scrolled past, one for the post the user is actually looking at,
+ * sometimes a third for a card only a few px into view. Taking the FIRST
+ * regex match (old behaviour) picked whichever happened to appear first in
+ * document order, which is not necessarily the post on screen — a comment
+ * card, a Reel's reply/reaction bar, or another unrelated post could then
+ * get swept into that wrong Like button's "same row" scan (see
+ * findFeedActionIcons) and get tapped instead of Like. Selecting the Like
+ * node whose Y is closest to the screen's vertical centre reliably picks
+ * the post the user (and any human-like jitter tap) is actually looking
+ * at, since that's what's centred in the viewport after a scroll settles.
+ */
+function _findCentermostLikeNode(xml: string): { x: number; y: number } | null {
+  // Exact, whole-word "Like" only — content-desc="Unlike" (already-liked
+  // posts) must never match, or a jitter tap could accidentally unlike.
+  const re = /content-desc="Like"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
+  const { h } = _getScreenSize(xml);
+  const centerY = h / 2;
+  let best: { x: number; y: number } | null = null;
+  let bestDist = Infinity;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const c = _parseCenter(m[1]);
+    if (!c) continue;
+    const dist = Math.abs(c.y - centerY);
+    if (dist < bestDist) { bestDist = dist; best = c; }
+  }
+  return best;
 }
 
 export interface FeedActionIcons {
@@ -1183,14 +1208,26 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  const likeM = xml.match(/content-desc="Like"[^>]*bounds="([^"]+)"/);
-  if (!likeM) return null;
-  const like = _parseCenter(likeM[1]);
+  // Use the Like node closest to the screen's vertical centre, not just the
+  // first one in document order — RecyclerView recycling can keep an
+  // adjacent post's (or a Reel/reply-bar card's) Like node alive in the
+  // hierarchy at the same time. Anchoring the row-scan on the wrong post's
+  // Like button pulls THAT post's unrelated wide elements (e.g. a Reel's
+  // message/reply text field) into rowNodes — see _findCentermostLikeNode.
+  const like = _findCentermostLikeNode(xml);
   if (!like) return null;
 
   const { w } = _getScreenSize(xml);
   const rowTolerance = 20;
   const saveCutoffX = Math.round(w * 0.80);
+  // Instagram's Comment/Repost/Send icons are small square glyphs (roughly
+  // the same width as the Like heart). A message/reply compose field (the
+  // quick-reaction bar Instagram shows under a Reel/repost card in-feed)
+  // is `clickable="true"` too and can land on the same row by coincidence,
+  // but it's much wider than a single icon — cap accepted width generously
+  // above the Like button's own width so real icons always pass while a
+  // full-width text field never does.
+  const maxIconWidth = Math.max(120, Math.round(w * 0.12));
 
   type RowNode = { x: number; y: number; cd: string };
   const rowNodes: RowNode[] = [];
@@ -1199,10 +1236,13 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
     if (!/clickable="true"/.test(attrs)) continue;
-    const bm = attrs.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+    if (/class="android\.widget\.EditText"/.test(attrs)) continue; // message/reply/comment compose field, never an action icon
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
+    const nodeWidth = +bm[4] - +bm[2];
+    if (nodeWidth > maxIconWidth) continue; // too wide to be a single action icon (e.g. a reply/compose bar)
     if (Math.abs(c.y - like.y) > rowTolerance) continue;
     if (c.x <= like.x + 4) continue; // Like itself, or anything left of it
     const cdM = attrs.match(/content-desc="([^"]*)"/);
