@@ -494,23 +494,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // forever (this is what filled the Log panel with endless "Tap the
         // mirror to wake" lines). Reset the flag only when real data flows
         // again, so the client still gets a single fresh notice per episode.
-        // During an active automation cycle the phone is busy running adb
-        // commands (UIAutomator dumps, swipes, taps) and screenrecord can
-        // legitimately pause for several seconds between frames.  6s is too
-        // aggressive there; use 30s while automation is active so the watchdog
-        // doesn't kill screenrecord in the middle of a UIAutomator dump.
-        const stallThresholdMs = () => automationCycleInProgress.has(serial) ? 30_000 : 6_000;
+        // Stall threshold — three tiers:
+        //
+        //  1. No real frame yet (only SPS/PPS headers received, chunk ≤ ~500 B):
+        //     Restart at 8 s.  This is the MIUI/Instagram DRM scenario: scrcpy
+        //     sends the codec headers then freezes because the secure surface
+        //     blocks capture.  We want to restart quickly so the mirror catches
+        //     up rather than sitting blank until the user notices.
+        //
+        //  2. Real frames were flowing + automation cycle is active:
+        //     Wait 30 s.  UIAutomator accessibility dumps take 1–2 s each and
+        //     are chained during launch — 6 s would fire mid-dump and kill the
+        //     stream while the phone is legitimately busy.
+        //
+        //  3. Real frames were flowing + no automation:
+        //     6 s.  Normal idle mirror watchdog.
+        //
+        // A "real frame" is any chunk > 512 B (SPS/PPS on this device is
+        // 117 B; a real IDR frame is typically 30–200 KB).
+        let sawRealFrame = false;
+        const stallThresholdMs = () => {
+          if (!sawRealFrame) return 8_000;
+          return automationCycleInProgress.has(serial) ? 30_000 : 6_000;
+        };
         let stallTimer: NodeJS.Timeout | null = null;
         const armStall = (ms: number) => {
           if (stallTimer) clearTimeout(stallTimer);
           stallTimer = setTimeout(() => {
-            logger.warn({ serial, bytesTotal }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
+            logger.warn({ serial, bytesTotal, sawRealFrame }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
             if (!stallNotified) {
               stallNotified = true;
               const cycleActive = automationCycleInProgress.has(serial);
-              const msg = cycleActive
-                ? "Stream paused — automation busy (UIAutomator / adb). Restarting stream…"
-                : "Stream stalled — screen may be off. Tap the mirror to wake.";
+              const msg = !sawRealFrame
+                ? "Stream paused — DRM surface blocked (Instagram). Restarting…"
+                : cycleActive
+                  ? "Stream paused — automation busy (UIAutomator / adb). Restarting stream…"
+                  : "Stream stalled — screen may be off. Tap the mirror to wake.";
               if (ws.readyState === 1) ws.send(JSON.stringify({ info: msg }));
             }
             // WAKEUP intentionally omitted: wake must only come from user input.
@@ -525,6 +544,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
           sawAnyData = true;
           bytesTotal += chunk.length;
+          if (!sawRealFrame && chunk.length > 512) {
+            sawRealFrame = true;
+            logger.info({ serial, chunkBytes: chunk.length, elapsedMs: elapsed() }, "[mobile-video] first real IDR frame received");
+          }
           stallNotified = false;
           armStall(stallThresholdMs());
           if (ws.readyState === 1) ws.send(chunk);
