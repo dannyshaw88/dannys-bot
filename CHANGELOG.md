@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.456] — 2026-07-11
+
+### Fix: like button was double-tapped (like then instantly unlike)
+
+The automation was calling `doubleTap()` on the heart icon, which pressed
+it twice in quick succession — once to like, once to unlike. Changed to a
+single `tap()`. Double-tap belongs on the post image/video (the gesture
+Instagram uses to like from anywhere), not on the dedicated button.
+
+### Fix: story tray coordinates corrected from real screenshot data
+
+Three wrong values in `pickAndOpenRandomStory()` were stacking up to make
+the gesture consistently miss:
+
+| Setting | Old | New | Why |
+|---|---|---|---|
+| `storyBarY` | `h × 8.5%` | `h × 14%` | 8.5% lands in Instagram's header bar above the tray; 14% puts the tap in the middle of the bubble row (verified against 1080×2226 screenshot) |
+| `firstStoryX` | `w × 22%` | `w × 37%` | 22% lands on the user's own "Your story +" slot which opens the camera; first friend's bubble starts at ~37% |
+| `spacing` | `w × 14%` | `w × 18.5%` | Measured bubble-to-bubble gap from screenshot; previous value compressed slots into each other |
+
+### Fix: story opening gesture changed from swipe to tap
+
+The "hold-and-slide-right" swipe was scrolling/flinging the story tray
+(or accidentally hitting the Reels tab) rather than opening a story.
+Opening a story on Instagram requires a **single tap** on the bubble.
+`pickAndOpenRandomStory` now picks a random slot (1–4 visible friends)
+and taps its centre directly — no swipe involved.
+
+---
+
 ## [1.1.455] — 2026-07-11
 
 ### Add: "Scan Story Tray" button in the Log tab

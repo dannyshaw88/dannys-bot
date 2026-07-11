@@ -859,9 +859,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // but small enough to stay inside the button's own hit target.
           const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
           const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
-          logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] double-tap");
+          logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] tap like");
           try {
-            await android.doubleTap(serial, jx, jy);
+            await android.tap(serial, jx, jy);
             likes++;
           } catch {
             likeFailures++;
@@ -954,31 +954,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * Returns the 1-based position that was opened (for logging only).
    */
   async function pickAndOpenRandomStory(serial: string, w: number, h: number): Promise<number> {
-    // Story tray band: top-central, thin (per user: ~15px tall on-device).
-    // The FIRST slot is always the user's own profile with the "+"
-    // create-story button overlaid — tapping/dragging onto it opens the
-    // camera instead of viewing, so all positions here are 1-indexed
-    // starting at the first *friend's* story (slot 2 on screen).
-    const storyBarY   = Math.round(h * 0.085);
-    const firstStoryX = Math.round(w * 0.22);
-    // Approximate on-device spacing between adjacent story bubbles.
-    const spacing      = Math.round(w * 0.14);
-    // How many bubbles fit on screen at once starting from firstStoryX —
-    // the random pick is clamped to this so the whole gesture stays a
-    // single on-screen drag (no separate tray-scroll step beforehand).
-    const maxVisible   = Math.max(1, Math.min(10, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1));
+    // ── Coordinate calibration (from real 1080×2226 screenshot, Jul 2026) ──
+    //
+    // Story tray sits between the Instagram header and the feed. On the
+    // device the user has (1080×2226), the tray Y centre is ~14 % of
+    // screen height (~311 px). Previous values of 8.5 % landed in the
+    // Instagram header bar above the tray, which is why nothing opened.
+    //
+    // X positions measured from the same screenshot:
+    //   Slot 0 – "Your story" (+)  ≈ 20 % of width  (skip — opens camera)
+    //   Slot 1 – first friend      ≈ 37 % of width
+    //   Slot 2 – second friend     ≈ 55 % of width
+    //   Slot 3 – third friend      ≈ 73 % of width
+    //   … and so on; spacing ≈ 18.5 % per slot.
+    //
+    // Opening a story requires a TAP on the bubble, not a swipe. The
+    // previous "hold-and-slide-right" swipe was scrolling the tray
+    // (or navigating to Reels) instead of opening anything.
+    const storyBarY   = Math.round(h * 0.14);
+    const firstStoryX = Math.round(w * 0.37); // first *friend's* story (skip "Your story")
+    const spacing      = Math.round(w * 0.185);
 
-    const target = 1 + Math.floor(Math.random() * maxVisible); // random 1..maxVisible
+    // How many friend bubbles fit on screen from firstStoryX to the right edge.
+    const maxVisible = Math.max(1, Math.min(4, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1));
+
+    const target  = 1 + Math.floor(Math.random() * maxVisible); // 1..maxVisible
     const targetX = Math.round(firstStoryX + (target - 1) * spacing);
 
-    // The "hold and slide right" gesture itself: a single slow drag from
-    // the first visible bubble over to the target bubble. A long duration
-    // (vs. the quick flicks used elsewhere) is what makes it read as a
-    // deliberate press-and-drag rather than a flick, and lets Instagram's
-    // tray-scrub gesture land on and open the bubble under the finger when
-    // it lifts.
-    const slideMs = 900 + Math.round(Math.random() * 500);
-    await android.swipe(serial, firstStoryX, storyBarY, targetX, storyBarY, slideMs);
+    // Single tap on the chosen bubble — that's all Instagram needs to open it.
+    await android.tap(serial, targetX, storyBarY);
     return target;
   }
 
