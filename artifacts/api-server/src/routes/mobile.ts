@@ -1243,7 +1243,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *
    * Returns the 1-based position that was opened (for logging only).
    */
-  async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void): Promise<number> {
+  async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void): Promise<{ slot: number; opened: boolean }> {
     // ── Coordinate calibration (from real 1080×2226 screenshot, Jul 2026) ──
     //
     // Story tray sits between the Instagram header and the feed. On the
@@ -1338,6 +1338,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const shareChance = (Math.min(shareDmPercentMin, shareDmPercentMax) +
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
 
+    // Returns true only while the story viewer is genuinely still on screen.
+    // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
+    // once a story opened, it stayed open for the rest of the per-slide
+    // loop and for the whole multi-step DM-share sequence (icon scan → tap
+    // → wait → pick recipient → wait → tap Send). Stories auto-advance (and
+    // the LAST story in a user's tray auto-EXITS back to the home feed) on
+    // their own ~5-6s timer regardless of what our script is doing — a
+    // short/fast story, or a DM-share sequence whose waits alone add up to
+    // several seconds, can run out that timer mid-sequence. When that
+    // happens every remaining scripted tap in this function was firing
+    // blind at whatever is now actually on screen — the home feed — which
+    // is exactly how a "share to DM" tap turned into an accidental like on
+    // a home-feed Reel (feed and story share-sheet coordinates overlap).
+    // This check must run before every single tap below, not just once at
+    // story-open time.
+    const stillInStoryViewer = () => android.findHomeTab(serial).then(r => r === null).catch(() => true);
+
     // Open the story viewer: tap a random friend's story bubble.
     const { slot: picked, opened: storyOpened } = await pickAndOpenRandomStory(serial, w, h, onLog);
     logger.info({ serial, picked, totalStories, storyOpened }, "[view-stories] story open attempt");
@@ -1366,11 +1383,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // Watch this story for a random percentage of its ~6s duration.
       // Floor is 1500 ms so even a very short story has enough runway
-      // to act before it auto-advances.
+      // to act before it auto-advances. When a DM-share is scheduled, cap
+      // the watch time so enough of the slide's own ~6s timer is left for
+      // the multi-step share sequence (icon scan + tap + recipient + Send,
+      // roughly 3-4s of scripted waits) to finish BEFORE the slide would
+      // auto-advance on its own — previously watchMs could run up to 100%
+      // of the slide, leaving zero runway and guaranteeing the share
+      // sequence ran into the next slide (or the feed) mid-flow.
       const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
         Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-      const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
+      let watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
+      if (willShare) watchMs = Math.min(watchMs, 2000);
       await sleepOrAbort(serial, watchMs);
+
+      // Bail out of the ENTIRE remaining loop — not just this slide — the
+      // instant the story viewer is gone. Continuing to loop assumes the
+      // next iteration will also be inside a story, which is exactly the
+      // false assumption that let blind taps land on the home feed.
+      if (!(await stillInStoryViewer())) {
+        onLog?.(`Story ${s + 1}: story viewer no longer open (auto-advanced/exited) — stopping story actions`);
+        logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before action — stopping loop");
+        break;
+      }
 
       if (willLike) {
         // Double-tap the centre of the story content to Like.
@@ -1397,7 +1431,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 600); // wait for heart animation
       }
 
-      if (willShare) {
+      if (willShare && !(await stillInStoryViewer())) {
+        onLog?.(`Story ${s + 1}: story viewer closed before share could start — skipping share`);
+        logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before share attempt");
+      } else if (willShare) {
         // Scan for icons BEFORE tapping — skip share entirely if the
         // paper-plane isn't present (story owner has sharing disabled).
         //
@@ -1426,23 +1463,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else {
           await android.tap(serial, shareIconPos.x, shareIconPos.y);
           await sleepOrAbort(serial, 500);
-          if (await android.isKeyboardShown(serial).catch(() => false)) {
+          // The sheet is a modal over the story, so its own presence isn't
+          // directly checkable via findHomeTab — but if the story has
+          // ALREADY exited to the feed underneath (auto-advanced past the
+          // last slide while we were mid-tap), the bottom nav reappears
+          // even though no keyboard is showing. That combination used to
+          // read as "sheet opened successfully" and every tap after this
+          // point (recipient, Send) landed on the feed instead.
+          const keyboardShown = await android.isKeyboardShown(serial).catch(() => false);
+          const backOnFeed = !keyboardShown && await stillInStoryViewer().then(v => !v);
+          if (keyboardShown) {
             // Safety net: scan coordinates landed in the message field after all
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard despite icon scan — backed out");
             onLog?.(`Story ${s + 1}: share skipped — tap at (${shareIconPos.x},${shareIconPos.y}) opened keyboard (scan may have mis-identified icon)`);
+          } else if (backOnFeed) {
+            logger.warn({ serial, story: s + 1 }, "[view-stories] story exited to feed instead of opening share sheet — no further taps");
+            onLog?.(`Story ${s + 1}: share skipped — story ended before the share sheet opened (back on home feed)`);
           } else {
             opened = true;
             onLog?.(`Story ${s + 1}: share sheet opened — tapped paper-plane at (${shareIconPos.x},${shareIconPos.y})`);
           }
         }
         if (opened) {
-          await sleepOrAbort(serial, 1200); // wait for picker sheet
+          await sleepOrAbort(serial, 900); // wait for picker sheet (trimmed from 1200ms to leave more runway)
           // Pick a random recipient, then look for the real Send button —
           // previously this just opened the sheet and pressed Back, never
           // actually sending to anyone (same bug as the feed's share-to-DM).
           await tapRandomShareSheetRecipient(serial, w, h);
-          await sleepOrAbort(serial, 1500); // 700→1500ms: give Send button time to appear
+          await sleepOrAbort(serial, 900); // 1500→900ms: still enough for the Send button to render
+          // Final checkpoint before the last tap: if the sheet/story is
+          // already gone by now, tapping "Send"'s coordinates blind would
+          // land on the feed (exactly the reported "liked a reel" bug) —
+          // skip the tap entirely instead of firing it regardless.
+          if (!(await stillInStoryViewer())) {
+            logger.warn({ serial, story: s + 1 }, "[view-stories] story/sheet gone before Send — skipped final tap");
+            onLog?.(`Story ${s + 1}: share aborted — story ended before Send could be tapped (no tap sent)`);
+          } else {
           const sent = await sendShareSheet(serial, w, h);
           if (sent) {
             logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
@@ -1454,7 +1511,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
             await sleepOrAbort(serial, 600);
           }
+          }
         }
+      }
+
+      // Don't tap "advance to next slide" if we've already left the story
+      // viewer — that tap would land on the feed and register as a like/
+      // navigation there instead of harmlessly advancing a story slide.
+      if (!(await stillInStoryViewer())) {
+        onLog?.(`Story ${s + 1}: story viewer already closed — stopping story loop`);
+        logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone at end of slide — stopping loop");
+        storiesWatched++;
+        break;
       }
 
       storiesWatched++;
@@ -1464,13 +1532,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
     }
 
-    // Exit the story viewer by swiping down.
-    await android.swipe(
-      serial,
-      Math.round(w / 2), Math.round(h * 0.50),
-      Math.round(w / 2), Math.round(h * 0.92),
-      300,
-    );
+    // Exit the story viewer by swiping down — only if we're actually still
+    // in it; if the loop already broke out because the viewer was gone,
+    // this would just be a harmless extra swipe on the feed, but skipping
+    // it keeps the log accurate about what really happened on screen.
+    if (await stillInStoryViewer()) {
+      await android.swipe(
+        serial,
+        Math.round(w / 2), Math.round(h * 0.50),
+        Math.round(w / 2), Math.round(h * 0.92),
+        300,
+      );
+    }
     await sleepOrAbort(serial, 800);
 
     return { storiesWatched };

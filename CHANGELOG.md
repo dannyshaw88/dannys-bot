@@ -4,6 +4,42 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.483] — 2026-07-11
+
+### Fix: story share-to-DM (and like) taps landing on the home feed (root-cause, not another icon heuristic)
+
+Every prior fix in the story loop patched *how* icons were detected (pixel
+scan, gap filters, keyboard-check safety nets), but never questioned the
+underlying assumption that once a story opened, it would still be open for
+the rest of the per-slide loop and for the entire multi-step DM-share
+sequence. It doesn't: Instagram stories auto-advance on their own ~5-6s
+timer regardless of what the script is doing, and the DM-share sequence
+(icon scan → tap paper-plane → wait → pick recipient → wait → tap Send) adds
+up to several seconds of scripted waits on its own. A short/fast story, or a
+share sequence that simply took too long, let the story exit back to the
+home feed mid-sequence — and every tap coded after that point kept firing
+blind at the real screen underneath (the feed), which is how a scheduled
+"share via DM" turned into an accidental like on a home-feed Reel, "literally
+not even in our flow."
+
+Fix: added a cheap live check (`stillInStoryViewer()`, via the existing
+`findHomeTab` bottom-nav probe) before *every* tap in the per-slide loop —
+before the like double-tap, before starting the share sequence, after the
+paper-plane tap, after picking a recipient and right before the final Send
+tap, and before the "advance to next slide" tap. The instant any check shows
+we've left the story viewer, the loop stops issuing further taps entirely
+instead of assuming the next screen is still a story. Also capped the
+pre-share watch time (max 2000ms when a share is scheduled, down from up to
+100% of the slide) and trimmed the DM-share sequence's own waits (1200→900ms,
+1500→900ms) so the whole sequence has a realistic chance of finishing before
+a slide's own timer runs out.
+
+Also fixed a stale type signature on `pickAndOpenRandomStory` (declared
+`Promise<number>` while actually returning `{ slot, opened }` since v1.1.482)
+that was silently masking real type errors at its call site.
+
+---
+
 ## [1.1.482] — 2026-07-11
 
 ### Fix: story like/share landing on home feed when tray tap missed (CRITICAL)

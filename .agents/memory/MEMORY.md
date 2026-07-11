@@ -17,3 +17,4 @@
 - [Mobile tab explicit power-on](mobile-tab-explicit-power-on.md) — phone mirror stream must only start on Power button press or automation toggle, never on tab mount alone
 - [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — master toggle runs power-on→open IG→run tools→close IG→airplane-mode recycle→lock each tick; use WAKEUP/SLEEP keycodes not toggle POWER, verify app close via pidof
 - [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — `build-windows-installer.yml` is the ONLY canonical workflow; never add another, deprecated stubs are inert on purpose
+- [Story share viewer-exit race](story-share-viewer-exit-race.md) — re-verify story viewer still open before EVERY tap (esp. DM-share); stories auto-advance mid multi-step sequence, blind taps then hit the home feed
