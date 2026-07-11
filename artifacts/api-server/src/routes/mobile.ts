@@ -494,17 +494,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // forever (this is what filled the Log panel with endless "Tap the
         // mirror to wake" lines). Reset the flag only when real data flows
         // again, so the client still gets a single fresh notice per episode.
-        let stallTimer: NodeJS.Timeout | null = null;
-        const armStall = (ms: number) => {
-          if (stallTimer) clearTimeout(stallTimer);
-          stallTimer = setTimeout(() => {
-            // During an active automation cycle the phone is busy running adb
-        // commands — UIAutomator dumps, swipes, taps — and screenrecord can
+        // During an active automation cycle the phone is busy running adb
+        // commands (UIAutomator dumps, swipes, taps) and screenrecord can
         // legitimately pause for several seconds between frames.  6s is too
         // aggressive there; use 30s while automation is active so the watchdog
         // doesn't kill screenrecord in the middle of a UIAutomator dump.
         const stallThresholdMs = () => automationCycleInProgress.has(serial) ? 30_000 : 6_000;
-        logger.warn({ serial, bytesTotal }, `[mobile-video] stream stalled — no data for ${stallThresholdMs() / 1000}s, forcing restart`);
+        let stallTimer: NodeJS.Timeout | null = null;
+        const armStall = (ms: number) => {
+          if (stallTimer) clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => {
+            logger.warn({ serial, bytesTotal }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
             if (!stallNotified) {
               stallNotified = true;
               const cycleActive = automationCycleInProgress.has(serial);
