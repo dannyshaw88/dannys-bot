@@ -1384,7 +1384,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // a home-feed Reel (feed and story share-sheet coordinates overlap).
     // This check must run before every single tap below, not just once at
     // story-open time.
-    const stillInStoryViewer = () => android.findHomeTab(serial).then(r => r === null).catch(() => true);
+    //
+    // Root-cause fix (Jul 2026, follow-up): this used to call findHomeTab
+    // directly on every check, which requires a full uiautomator dump +
+    // adb pull (~3-4s per call). Called up to 5-6 times inside one ~5-6s
+    // story slide, THAT was consuming the slide's entire timer on safety
+    // checks alone — the real reason likes/shares still stalled and
+    // weren't "instant" even after the earlier fix removed the deliberate
+    // pre-action watch delay. isStoryViewerOpenFast() does the same check
+    // via a screenshot pixel scan (~100-300ms) and only ever returns a
+    // confident `true`; it returns `null` whenever it can't tell for sure
+    // (e.g. a single-story tray with no multi-segment progress bar), and
+    // only THEN do we pay for the slow-but-proven accessibility-tree check.
+    const stillInStoryViewer = async () => {
+      const fast = await android.isStoryViewerOpenFast(serial).catch(() => null);
+      if (fast === true) return true;
+      return android.findHomeTab(serial).then(r => r === null).catch(() => true);
+    };
 
     // Open the story viewer: tap a random friend's story bubble.
     const { slot: picked, opened: storyOpened } = await pickAndOpenRandomStory(serial, w, h, onLog);

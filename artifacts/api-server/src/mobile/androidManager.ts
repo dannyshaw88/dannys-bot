@@ -1627,6 +1627,89 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
 }
 
 /**
+ * Fast, screenshot-based "is the story viewer still on screen?" check.
+ *
+ * Why this exists: the story per-slide loop in `runViewStoriesFromFeedLoop`
+ * calls a "still in story viewer?" gate before every tap (like, share-start,
+ * post-share-tap, pre-Send, advance) to avoid blind-tapping the home feed
+ * once a story auto-advances/exits mid-sequence. That gate used to be
+ * `findHomeTab`, which requires a full `uiautomator dump` + `adb pull` —
+ * measured at ~3-4s per call on this farm's devices. Calling it up to 5-6
+ * times inside a single ~5-6s story slide was consuming the ENTIRE slide
+ * timer on safety checks alone, before any scheduled like/share even fired
+ * — the real cause of "everything stalls, nothing is instant" even after
+ * the deliberate pre-action watch delay was removed (v1.1.485): removing a
+ * 250ms delay does nothing when the very next line blocks for 3-4s anyway.
+ *
+ * `adb exec-out screencap -p` (already used by `findStoryActionIcons`) is
+ * ~10x+ faster (~100-300ms). This scans a thin band near the top of the
+ * screen for Instagram's segmented story progress bar — 2+ bright,
+ * near-equal-width, evenly-spaced capsule segments spanning most of the
+ * screen width. That signature only ever appears in the story viewer;
+ * the feed header, Reels, and DM inbox never draw it.
+ *
+ * Deliberately asymmetric return contract: only ever returns `true`
+ * (confidently "still in the story viewer") or `null` ("can't tell from
+ * pixels alone"). It NEVER returns a confident `false`, because a wrong
+ * "still open" is dangerous (causes a blind tap on the real feed
+ * underneath — the exact bug this whole check exists to prevent), while a
+ * missed "still open" is merely conservative. Single-story trays (no
+ * multi-segment bar to detect) and any other ambiguous screenshot fall
+ * through as `null` on purpose — callers MUST fall back to the slower but
+ * proven `findHomeTab`-based check whenever this returns `null`, not treat
+ * `null` as "closed".
+ */
+export async function isStoryViewerOpenFast(serial: string): Promise<boolean | null> {
+  const img = await _captureScreenPixels(serial);
+  if (!img) return null;
+  const { width, height, channels, pixels } = img;
+  if (!width || !height) return null;
+
+  const lumAt = (x: number, y: number) => {
+    const idx = y * width * channels + x * channels;
+    return (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+  };
+
+  // Progress-bar segments sit in a thin strip just under the status bar /
+  // camera cutout. Scan several rows in that region to tolerate devices
+  // with different status-bar heights or notch designs.
+  const bandTop = Math.round(height * 0.015);
+  const bandBottom = Math.round(height * 0.06);
+  const brightThreshold = 150; // segments are near-white even when "unwatched"/dimmed
+
+  let bestClusterCount = 0;
+
+  for (let y = bandTop; y <= bandBottom; y += 2) {
+    const clusters: { x1: number; x2: number }[] = [];
+    let runStart = -1;
+    for (let x = 0; x < width; x++) {
+      const bright = lumAt(x, y) > brightThreshold;
+      if (bright) {
+        if (runStart === -1) runStart = x;
+      } else if (runStart !== -1) {
+        clusters.push({ x1: runStart, x2: x - 1 });
+        runStart = -1;
+      }
+    }
+    if (runStart !== -1) clusters.push({ x1: runStart, x2: width - 1 });
+
+    // The progress bar divides the width into several near-equal segments
+    // with small gaps. Reject rows that don't look like that pattern —
+    // a single edge-to-edge bright run is a header/banner, not a bar.
+    if (clusters.length < 2) continue;
+    const widths = clusters.map(c => c.x2 - c.x1);
+    const maxW = Math.max(...widths), minW = Math.min(...widths);
+    if (maxW / minW > 1.8) continue; // segments must be near-uniform width
+    const covered = widths.reduce((a, b) => a + b, 0);
+    if (covered < width * 0.55) continue; // segments must span most of the width
+
+    if (clusters.length > bestClusterCount) bestClusterCount = clusters.length;
+  }
+
+  return bestClusterCount >= 2 ? true : null;
+}
+
+/**
  * Locate Instagram's bottom-nav Home tab (the house icon, leftmost of the
  * 5 nav items) via the real accessibility tree instead of a guessed screen
  * percentage. Percentage-based taps drift depending on device screen

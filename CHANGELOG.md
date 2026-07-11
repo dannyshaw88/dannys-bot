@@ -4,6 +4,41 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.487] — 2026-07-11
+
+### Fix: story likes/shares were still stalling instead of firing instantly, even after the earlier timing fix
+
+The previous fix (v1.1.485) removed the deliberate "watch the story first"
+delay before a scheduled like/share, on the theory that stories run on
+their own fixed ~5-6s timer and any delay in front of a scheduled action
+eats directly into it. That was correct, but it wasn't the whole story: the
+per-slide "is the story viewer still open?" safety check that runs before
+every single tap (like, share-start, post-share-tap, pre-Send, advance) was
+still calling `findHomeTab`, which requires a full `uiautomator dump` +
+`adb pull` — roughly 3-4 seconds per call on this farm's devices. That
+check fires up to 5-6 times inside one story slide, so removing a 250ms
+watch delay changed almost nothing: log evidence showed ~5s just to reach
+the like tap and another ~4.6s to reach the share attempt, on a slide with
+only ~5-6s of runway total. The safety checks themselves — not the
+"realism" delay — were the real bottleneck.
+
+Fix: added a fast, screenshot-based "is the story viewer open?" check
+(`isStoryViewerOpenFast`) that scans for Instagram's segmented story
+progress bar near the top of the screen — a signature that only appears in
+the story viewer — via the same `adb exec-out screencap -p` approach
+already used for icon detection (~100-300ms instead of ~3-4s). It only
+ever returns a confident "yes, still open"; on anything it can't
+confidently read (a single-story tray with no multi-segment bar, a failed
+screenshot, or an ambiguous scan) it returns "unknown" and the code falls
+back to the original slow-but-proven accessibility-tree check, so nothing
+that used to be caught (blind taps on the home feed after a story ends
+mid-sequence) can slip through. In the common case — any tray with 2+
+stories — every safety check in the per-slide loop now costs a few hundred
+milliseconds instead of several seconds, leaving the actual scheduled
+like/share the runway it needs inside the story's own timer.
+
+---
+
 ## [1.1.486] — 2026-07-11
 
 ### Fix: story tray tap sometimes dismissed a "suggested friend" chip instead of opening a story, ending the cycle with zero stories watched

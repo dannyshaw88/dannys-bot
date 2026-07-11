@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.487",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Story likes/shares were still landing late even after the last timing fix — turns out the \"is this story still open?\" safety check before every tap was itself taking 3-4 seconds each time, up to 5-6 times per story. It now uses a much faster on-screen check (with the old, careful check kept as a backup when it can't tell for sure), so actions fire almost instantly again.",
+      },
+    ],
+  },
+  {
     version: "1.1.486",
     date: "11 Jul 2026",
     items: [
