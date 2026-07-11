@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.483",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Share to DM from a story sometimes did nothing and instead liked a random post on the home feed. Stories play on their own short timer no matter what the software is doing, and sending a story to someone takes several steps (open the share sheet, pick a person, tap Send) — if the story ended partway through those steps, every tap after that point kept happening on whatever was actually on screen, which was the home feed. The software now checks that the story is still open before every single tap in that sequence, and stops touching the screen the moment it isn't, instead of guessing.",
+      },
+    ],
+  },
+  {
     version: "1.1.482",
     date: "11 Jul 2026",
     items: [
