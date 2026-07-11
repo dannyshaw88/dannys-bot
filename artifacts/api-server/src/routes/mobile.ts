@@ -1580,71 +1580,94 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Story-tray scanner: reads the live accessibility tree, filters to the top
-  // 20% of the screen, and returns plain-English lines for every named element
-  // found there.  The front-end "Scan Story Tray" button calls this and prints
-  // the results straight into the Log tab — no terminal or adb knowledge needed.
-  app.get("/api/mobile/devices/:serial/story-tray-scan", async (req: Request, res: Response) => {
+  // General-purpose screen layout scanner.  Reads the full accessibility
+  // tree for whatever is on screen right now, groups every element with a
+  // real (non-zero) bounding box into three vertical zones, and returns
+  // human-readable lines including pixel coordinates AND screen-percentage
+  // equivalents.  Paste the log output to the developer when implementing
+  // any new gesture/tap feature — avoids coordinate-guessing entirely.
+  //
+  // Crucially: includes elements with NO text/desc/id (Instagram's story
+  // bubbles, for example, are completely anonymous in the accessibility
+  // tree) — we still report their bounds so the developer can see where
+  // they sit on screen.
+  app.get("/api/mobile/devices/:serial/screen-layout-scan", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const xml = await android.dumpUi(serial);
       if (!xml || xml.length < 200) {
-        res.json({ ok: false, lines: ["(empty dump — is the phone awake and showing the Instagram Home screen?)"] });
+        res.json({ ok: false, lines: ["(empty dump — is the phone awake and unlocked?)"] });
         return;
       }
 
-      // Screen dimensions from the root hierarchy node.
       const rootM = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
-      const screenW = rootM ? parseInt(rootM[1]) : 0;
-      const screenH = rootM ? parseInt(rootM[2]) : 0;
-      // Scan the top 20 % — the story tray sits in the top ~8-10 % but scan
-      // a bit wider so we catch any element whose label might help us orient.
-      const topCutoff = screenH > 0 ? Math.round(screenH * 0.20) : 400;
+      const W = rootM ? parseInt(rootM[1]) : 0;
+      const H = rootM ? parseInt(rootM[2]) : 0;
+      if (!W || !H) {
+        res.json({ ok: false, lines: ["Could not read screen size from dump — try again."] });
+        return;
+      }
 
-      const lines: string[] = [];
-      lines.push(`Screen: ${screenW}×${screenH}  |  top-strip cutoff: y < ${topCutoff} (top 20 %)`);
-      lines.push("─".repeat(60));
+      const pct = (v: number, dim: number) => `${((v / dim) * 100).toFixed(1)}%`;
+
+      interface Elem {
+        x1: number; y1: number; x2: number; y2: number;
+        cx: number; cy: number;
+        cls: string; rid: string; cd: string; txt: string; clickable: boolean;
+      }
+      const elems: Elem[] = [];
 
       const nodeRe = /<node\s([^/\n>]+)\s*\/>/g;
       let m: RegExpExecArray | null;
-      let count = 0;
       while ((m = nodeRe.exec(xml)) !== null) {
         const attrs = m[1];
-        const boundsM = attrs.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-        if (!boundsM) continue;
-        const boundsStr = boundsM[1];
-        const bm = boundsStr.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (!bm) continue;
-        const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]), x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
-        const cy = Math.floor((y1 + y2) / 2);
-        if (cy > topCutoff) continue;
-
-        const get = (attr: string) => { const am = attrs.match(new RegExp(`${attr}="([^"]*)"`)); return am ? am[1] : ""; };
-        const cd  = get("content-desc");
-        const rid = get("resource-id").replace(/^.*\//, ""); // strip package prefix
-        const txt = get("text");
-        const cls = get("class").replace(/^.*\./, "");       // short class name
-
-        // Skip completely anonymous/invisible nodes — they add noise.
-        if (!cd && !rid && !txt) continue;
-
-        const cx = Math.floor((x1 + x2) / 2);
-        lines.push(`  center=(${cx},${cy})  bounds=${boundsStr}`);
-        if (cls)  lines.push(`    class: ${cls}`);
-        if (rid)  lines.push(`    id:    ${rid}`);
-        if (cd)   lines.push(`    desc:  ${cd}`);
-        if (txt)  lines.push(`    text:  ${txt}`);
-        count++;
+        const [x1, y1, x2, y2] = [bm[1], bm[2], bm[3], bm[4]].map(Number);
+        // Skip zero-size nodes (invisible / layout containers only)
+        if (x2 - x1 < 4 || y2 - y1 < 4) continue;
+        const get = (attr: string) => { const a = attrs.match(new RegExp(`${attr}="([^"]*)"`)); return a ? a[1] : ""; };
+        elems.push({
+          x1, y1, x2, y2,
+          cx: Math.floor((x1 + x2) / 2),
+          cy: Math.floor((y1 + y2) / 2),
+          cls:       get("class").replace(/^.*\./, ""),
+          rid:       get("resource-id").replace(/^[^/]+\//, ""),
+          cd:        get("content-desc"),
+          txt:       get("text"),
+          clickable: get("clickable") === "true",
+        });
       }
 
-      if (count === 0) {
-        lines.push("No named elements found in top 20% — make sure Instagram is open on the Home tab before scanning.");
-      } else {
-        lines.push("─".repeat(60));
-        lines.push(`${count} element(s) found in top strip.`);
+      // Sort by vertical position then horizontal
+      elems.sort((a, b) => a.cy - b.cy || a.cx - b.cx);
+
+      const lines: string[] = [];
+      lines.push(`══ SCREEN LAYOUT SCAN ══  ${W}×${H} px  |  ${elems.length} elements`);
+      lines.push(`   Send this to your developer before implementing any tap/swipe.`);
+
+      const zones = [
+        { label: "TOP    (0 – 33%)",    min: 0,          max: Math.round(H * 0.33) },
+        { label: "MIDDLE (33 – 67%)",   min: Math.round(H * 0.33), max: Math.round(H * 0.67) },
+        { label: "BOTTOM (67 – 100%)",  min: Math.round(H * 0.67), max: H },
+      ];
+
+      for (const zone of zones) {
+        const group = elems.filter(e => e.cy >= zone.min && e.cy < zone.max);
+        lines.push("");
+        lines.push(`── ${zone.label}  (${group.length} elements) ─────────────────────`);
+        if (group.length === 0) { lines.push("   (none)"); continue; }
+        for (const e of group) {
+          const tag  = e.clickable ? "●" : "○"; // ● = tappable
+          const label = [e.rid, e.cd, e.txt].filter(Boolean).join(" | ") || "(no label)";
+          lines.push(`  ${tag} center=(${e.cx}, ${e.cy})  [${pct(e.cx,W)}, ${pct(e.cy,H)}]  ${e.cls}`);
+          lines.push(`     bounds=[${e.x1},${e.y1}][${e.x2},${e.y2}]  ${label}`);
+        }
       }
 
-      res.json({ ok: true, lines, screenW, screenH });
+      lines.push("");
+      lines.push(`● = clickable element  ○ = container/label`);
+      res.json({ ok: true, lines, screenW: W, screenH: H });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

@@ -4,6 +4,31 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.457] — 2026-07-11
+
+### Improve: "Scan Story Tray" → "📋 Scan Screen Layout" (general-purpose)
+
+The old scanner only looked at the top 20% of the screen and silently
+skipped any element without a content-desc/resource-id/text label —
+which is exactly why Instagram's story bubbles showed up as "no named
+elements found" (they have no accessibility label at all).
+
+The new `GET /api/mobile/devices/:serial/screen-layout-scan` endpoint:
+- Scans the **entire screen**, not just the top strip
+- Includes **every element** with a non-zero bounding box, labelled or not
+- Reports pixel coordinates **and** screen-percentage equivalents so
+  results are device-independent
+- Groups elements into three vertical zones (top / middle / bottom)
+- Marks clickable (tappable) elements with ● vs containers with ○
+- Can be run before implementing any new tap or swipe feature to get
+  real coordinates instead of guessing — avoids the 20-version guessing
+  cycle that plagued the story-tray work
+
+The Log-tab button is renamed to **📋 Scan Screen Layout** to reflect
+that it works for any screen, not just the story tray.
+
+---
+
 ## [1.1.456] — 2026-07-11
 
 ### Fix: like button was double-tapped (like then instantly unlike)

@@ -1744,9 +1744,9 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
               variant="secondary"
               onClick={handleScan}
               disabled={scanning}
-              title="Open Instagram on the Home tab first, then click this to read the real story-tray coordinates off the phone"
+              title="Shows every element on screen with pixel coords and screen %. Paste the Log output to your developer before implementing any tap/swipe."
             >
-              {scanning ? "Scanning…" : "🔍 Scan Story Tray"}
+              {scanning ? "Scanning…" : "📋 Scan Screen Layout"}
             </Button>
           )}
           <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
@@ -1968,9 +1968,9 @@ export function MobilePage() {
                     onClear={() => setLogLines([])}
                     serial={activeSerial}
                     onScanTray={activeSerial ? async () => {
-                      addLog("── Scanning story tray… (phone must be on Instagram Home tab) ──");
+                      addLog("── Scanning screen layout… ──");
                       try {
-                        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/story-tray-scan`);
+                        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/screen-layout-scan`);
                         const body = await r.json();
                         if (!r.ok) { addLog(`Scan failed: ${body?.error ?? r.status}`); return; }
                         for (const line of (body.lines as string[])) addLog(line);
