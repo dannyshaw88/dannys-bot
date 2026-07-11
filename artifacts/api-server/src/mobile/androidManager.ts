@@ -943,42 +943,32 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
     const r = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
     return (r.stdout ?? "").trim().length > 0;
   };
-  for (let i = 0; i < 5; i++) {
-    await openRecentApps(serial);
-    await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
+  // One attempt with the recents gesture, then immediately force-stop if it
+  // didn't work.  The original 5-attempt loop was wasting ~25 seconds on
+  // Xiaomi HyperOS devices where MIUI memory management "locks" apps in the
+  // recents stack so the swipe-to-dismiss gesture never actually kills the
+  // process — all 5 passes failed in user testing with Instagram still
+  // running after each one.  A single real-UI attempt is the right balance:
+  // it keeps the "looks like a person" behaviour when the swipe succeeds, and
+  // falls through to the reliable force-stop within ~3 s when it doesn't.
+  await openRecentApps(serial);
+  await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
 
-    // A fixed "swipe left from screen centre" assumed recents always shows
-    // one card at a time, horizontally centred (a single-card carousel).
-    // Some OEM overview layouts (MIUI grid / "Floating windows" view
-    // confirmed from a user screenshot) instead show recent apps two at a
-    // time SIDE BY SIDE, so the centre of the screen can land between two
-    // cards, or on the wrong one, and the swipe dismisses nothing. Reading
-    // the real accessibility tree for an "Instagram" label finds the actual
-    // card wherever it is instead of assuming it's centred.
-    const xml = await _uiDump(adb, serial);
-    const igCard = xml ? _findElem(xml, "Instagram") : null;
-    let method: string;
-    if (igCard) {
-      // Card located — dismiss it with an upward swipe starting from its own
-      // real position. Grid-style OEM recents (side-by-side cards) dismiss
-      // with a swipe up on the card itself, not a swipe across the screen.
-      await swipe(serial, igCard.x, igCard.y, igCard.x, Math.round(h * 0.08), 220);
-      method = `found "Instagram" card at (${igCard.x},${igCard.y}) — swiped it up`;
-    } else {
-      // Couldn't identify the card by label (older Android/AOSP recents
-      // often don't expose one) — fall back to the original single-centred
-      // assumption, logged clearly so it's obvious which path ran if this
-      // still doesn't close the app.
-      const cardX = Math.round(w * 0.5);
-      const cardY = Math.round(h * 0.45);
-      await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
-      method = `no "Instagram" label found in recents tree — fell back to centred swipe-left guess (${cardX},${cardY})`;
-    }
-    await new Promise(r => setTimeout(r, 500));
-    const runningNow = pidof();
-    log(`[close-ig] attempt ${i + 1}/5: ${method} — Instagram ${runningNow ? "still running" : "closed"}`);
-    if (!runningNow) break; // confirmed gone, no need to keep swiping
+  const xml = await _uiDump(adb, serial);
+  const igCard = xml ? _findElem(xml, "Instagram") : null;
+  let method: string;
+  if (igCard) {
+    await swipe(serial, igCard.x, igCard.y, igCard.x, Math.round(h * 0.08), 220);
+    method = `found "Instagram" card at (${igCard.x},${igCard.y}) — swiped it up`;
+  } else {
+    const cardX = Math.round(w * 0.5);
+    const cardY = Math.round(h * 0.45);
+    await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
+    method = `no "Instagram" label in recents tree — fell back to centred swipe-left (${cardX},${cardY})`;
   }
+  await new Promise(r => setTimeout(r, 500));
+  const runningNow = pidof();
+  log(`[close-ig] attempt 1/1: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions — a "closed completely" requirement can't rely on the gesture

@@ -185,6 +185,20 @@ export async function startScrcpySession(serial: string, opts: { maxSize?: numbe
 async function startScrcpySessionInner(serial: string, opts: { maxSize?: number; bitRate?: number }): Promise<ScrcpySession> {
   const adb = adbPath();
 
+  // 0. Explicitly clear the Android "stay on while plugged in" flag before
+  // starting the session.  A previous scrcpy session that used stay_awake=true
+  // (or a crash before scrcpy could restore the setting) leaves
+  // STAY_ON_WHILE_PLUGGED_IN=all on the device permanently until something
+  // resets it.  That stale system flag causes Xiaomi/MIUI to wake the physical
+  // screen the moment USB activity resumes — even though we now pass
+  // stay_awake=false, scrcpy only avoids SETTING the flag; it can't clear a
+  // value that was already there from a prior session.  Reset it explicitly
+  // every time before spawning so the screen state is purely controlled by the
+  // automation cycle's own wakeScreen()/sleepScreen() calls.
+  try {
+    spawnSync(adb, ["-s", serial, "shell", "settings put global stay_on_while_plugged_in 0"], { timeout: 3000 });
+  } catch { /* not fatal — device may not support this setting */ }
+
   // 1. Push the server jar. It's tiny (~90KB) — pushing on every session start
   // is simpler and safer than trying to cache/verify a remote checksum.
   const push = spawnSync(adb, ["-s", serial, "push", vendorJarPath(), DEVICE_JAR_PATH], { encoding: "utf8", timeout: 15000 });

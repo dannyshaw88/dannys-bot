@@ -827,8 +827,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     try {
       const input = deviceAccountSchema.parse(req.body);
-      // Ensure at least SLOT_COUNT slots are always stored
-      while (input.slots.length < SLOT_COUNT) input.slots.push({ username: "", password: "" });
+      // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
+      // empty entries.  That caused deleted slots to silently reappear every
+      // time the panel reloaded — the save wrote 2 slots, the pad restored
+      // 5, and the UI loaded 5 again.  Now we store exactly what the UI
+      // sent so the displayed count always matches what was saved.
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], account: input };
@@ -1383,28 +1386,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       if (willShare) {
-        // Tap the paper-plane (Send/Share) icon.
+        // Scan for icons BEFORE tapping — skip share entirely if the
+        // paper-plane isn't present (story owner has sharing disabled).
         //
-        // Same pixel-scan problem as Like: the icon can't be located via
-        // UIAutomator (the whole bar is one unlabelled canvas container),
-        // and pixel-scan mistakes text for icons. The paper-plane is always
-        // at the far right of the bar — ~92% of screen width, ~91% of
-        // screen height — on every standard Instagram story layout.
-        // If the story owner has sharing disabled the icon is absent; this
-        // tap would land in the message field instead (keyboard opens) and
-        // the keyboard check below catches and backs out cleanly.
-        const shareX = Math.round(w * 0.920);
-        const shareY = Math.round(h * 0.906);
-        await android.tap(serial, shareX, shareY);
-        await sleepOrAbort(serial, 500);
+        // Previous approach: blind tap at fixed right-edge coordinates, then
+        // check if the keyboard opened. Problem: that tap always lands inside
+        // the message field when sharing is disabled (the field expands to
+        // fill the full bar width), briefly opening the keyboard and
+        // disrupting the story before we back out.
+        //
+        // Fix: run findStoryActionIcons() first.  When sharing is disabled
+        // only the heart icon is visible — the scan returns 0 or 1 cluster.
+        // When sharing is enabled the heart AND paper-plane both appear — the
+        // scan returns ≥2 clusters, and the rightmost cluster IS the
+        // paper-plane.  We only tap if ≥2 icons were found, and we tap the
+        // actual detected coordinates rather than a guessed percentage.
+        // The keyboard check is kept as a final safety net.
+        const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
+        const shareIconPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
+        onLog?.(`Story ${s + 1}: share icon scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} icon(s) found`}${shareIconPos ? ` — paper-plane at (${shareIconPos.x},${shareIconPos.y})` : " — sharing disabled or not detectable"}`);
+
         let opened = false;
-        if (await android.isKeyboardShown(serial).catch(() => false)) {
-          await android.pressBack(serial);
-          logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard — story owner has sharing disabled, skipped");
-          onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (keyboard opened at (${shareX},${shareY}))`);
+        if (!shareIconPos) {
+          // 0 or 1 icon — sharing disabled or ambiguous, skip without touching the screen
+          logger.info({ serial, story: s + 1, iconsFound: iconScan?.length ?? 0 }, "[view-stories] share skipped — paper-plane not found in icon scan");
+          onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
         } else {
-          opened = true;
-          onLog?.(`Story ${s + 1}: share sheet opened (tapped (${shareX},${shareY}))`);
+          await android.tap(serial, shareIconPos.x, shareIconPos.y);
+          await sleepOrAbort(serial, 500);
+          if (await android.isKeyboardShown(serial).catch(() => false)) {
+            // Safety net: scan coordinates landed in the message field after all
+            await android.pressBack(serial);
+            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard despite icon scan — backed out");
+            onLog?.(`Story ${s + 1}: share skipped — tap at (${shareIconPos.x},${shareIconPos.y}) opened keyboard (scan may have mis-identified icon)`);
+          } else {
+            opened = true;
+            onLog?.(`Story ${s + 1}: share sheet opened — tapped paper-plane at (${shareIconPos.x},${shareIconPos.y})`);
+          }
         }
         if (opened) {
           await sleepOrAbort(serial, 1200); // wait for picker sheet
@@ -1554,6 +1572,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
+      tLog("  ✓ Screen unlocked");
 
       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
@@ -1595,6 +1614,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         tLog("▶ No launch popup — feed ready");
       }
+      tLog("  ✓ Instagram open");
 
       // 3. Scroll the feed (Step 2 in the UI).
       tLog(`▶ Starting feed scroll — ${count} posts`);
@@ -1661,18 +1681,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Closing Instagram…");
       await android.closeInstagramViaRecents(serial, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
+      tLog("  ✓ Instagram closed");
 
       // 6. Cycle airplane mode on, wait, then off — forces a fresh network
       // session on the next run.
       tLog("▶ Airplane mode ON — recycling network…");
       await android.setAirplaneMode(serial, true);
+      tLog("  ✓ Airplane mode on — waiting…");
       steps.push("airplane-mode-on");
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
       await sleepOrAbort(serial, Math.round(waitSec * 1000));
-      tLog("▶ Airplane mode OFF");
+      tLog("▶ Airplane mode OFF — restoring network…");
       await android.setAirplaneMode(serial, false);
+      tLog("  ✓ Airplane mode off — network reconnecting");
       steps.push("airplane-mode-off");
 
       // 7. Swipe up, then press power again to lock the phone — ready for

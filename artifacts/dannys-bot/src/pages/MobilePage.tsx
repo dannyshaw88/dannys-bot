@@ -1496,6 +1496,9 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
+  // Kept outside the effect so clearTimeout on new keystrokes works without
+  // tying the timer's lifetime to the component's mount state.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     hydratedRef.current = false;
@@ -1506,20 +1509,18 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
       .then(r => r.json())
       .then(d => {
         if (!active) return;
-        // Server now always returns { slots: [...] }; also handle legacy { username, password }
+        // Server returns { slots: [...] }; also handle legacy { username, password }
         let loaded: AccountSlot[];
         if (d && Array.isArray(d.slots) && d.slots.length > 0) {
-          // Preserve however many slots the server has (user may have added extras)
-          const count = Math.max(ACCT_SLOT_COUNT, d.slots.length);
-          loaded = Array.from({ length: count }, (_, i) => ({
-            username: d.slots[i]?.username ?? "",
-            password: d.slots[i]?.password ?? "",
-            totpSecret: d.slots[i]?.totpSecret ?? "",
+          // Use the exact count the server stored — do NOT pad to ACCT_SLOT_COUNT.
+          // Padding caused deleted slots to reappear every time the panel reloaded.
+          loaded = d.slots.map((s: any) => ({
+            username: s?.username ?? "",
+            password: s?.password ?? "",
+            totpSecret: s?.totpSecret ?? "",
           }));
         } else if (d && d.username) {
-          loaded = Array.from({ length: ACCT_SLOT_COUNT }, (_, i) =>
-            i === 0 ? { username: d.username, password: d.password ?? "", totpSecret: "" } : emptySlot()
-          );
+          loaded = [{ username: d.username, password: d.password ?? "", totpSecret: "" }];
         } else {
           loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
         }
@@ -1539,7 +1540,15 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
     const toSaveStr = JSON.stringify(slots);
     if (toSaveStr === lastSavedRef.current) return;
     const serial = phone.serial;
-    const t = setTimeout(() => {
+    // Debounce: cancel a previous pending save for NEW keystrokes, but do NOT
+    // clean up on component unmount.  AccountSettingsPanel unmounts whenever
+    // the user switches away from the Account tab (conditional render), so the
+    // old "return () => clearTimeout(t)" was silently discarding every save
+    // that fired within 600 ms of a tab switch — any value the user typed and
+    // then navigated away from would be lost on the next page load.
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1554,8 +1563,8 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
           setTimeout(() => setSaved(false), 1500);
         })
         .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
-    }, 600);
-    return () => clearTimeout(t);
+    }, 400);
+    // No return cleanup — intentional. Saves survive tab switches.
   }, [slots, phone?.serial]);
 
   const updateSlot = (i: number, patch: Partial<AccountSlot>) =>

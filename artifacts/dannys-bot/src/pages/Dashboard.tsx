@@ -78,6 +78,36 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.481",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone screen still waking on restart even after v1.1.480's stay_awake fix — the previous fix stopped the mirror engine from writing the 'stay awake while plugged in' flag on new sessions, but any session before v1.1.480 had already written it and Android keeps it permanently until something clears it. The engine now resets that flag to zero before starting every session.",
+      },
+      {
+        category: "Fixed",
+        text: "Account Settings — deleted slots kept reappearing: the server was always padding the saved list back to 5 entries on every save, so deleting a slot would save correctly but reload as 5 again. The server now stores exactly the number of slots you have.",
+      },
+      {
+        category: "Fixed",
+        text: "Account Settings — anything you typed was forgotten if you switched tabs before the auto-save fired: the Account Settings panel unmounts when you switch tabs, and the save timer was tied to that unmount (cancelling it). The timer is now independent of the panel's lifecycle — saves complete even after a tab change.",
+      },
+      {
+        category: "Fixed",
+        text: "Story share — the software was tapping the share area blind (then checking if a keyboard appeared) even when the paper-plane icon visibly wasn't there. It now scans the icon bar first: if fewer than 2 icons are detected (sharing disabled), the story carries on without touching the screen at all.",
+      },
+      {
+        category: "Fixed",
+        text: "Closing Instagram was taking up to 25 extra seconds — the recents-swipe gesture that was repeated 5 times never actually closes Instagram on this Xiaomi (MIUI locks it in memory). Reduced to 1 attempt, then the reliable force-stop fires immediately.",
+      },
+      {
+        category: "Improved",
+        text: "The Log tab now shows ✓ confirmation lines after each step (screen unlocked, Instagram open, closed, airplane mode on/off) so you can see both what the software intended to do and whether it actually happened.",
+      },
+    ],
+  },
+  {
     version: "1.1.480",
     date: "11 Jul 2026",
     items: [

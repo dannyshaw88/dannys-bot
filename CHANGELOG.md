@@ -4,6 +4,64 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.481] — 2026-07-11
+
+### Fix: phone screen still waking on restart (stay_on_while_plugged_in persisted from old sessions)
+
+`stay_awake=false` (added in v1.1.480) stopped scrcpy from *setting* the
+`STAY_ON_WHILE_PLUGGED_IN` system flag, but it cannot *clear* a value that was
+already set by a previous session. The flag persists on the device indefinitely
+after any session that used `stay_awake=true` — including every session prior
+to v1.1.480. Added an explicit `adb shell settings put global stay_on_while_plugged_in 0`
+command before each scrcpy spawn. This resets the flag from whatever previous
+session left it before the new session begins.
+
+### Fix: Account Settings — deleted slots reappear, typed values forgotten on tab switch
+
+Two separate persistence bugs:
+
+**Deleted slots reappear:** the server was padding the saved slot array back to
+5 entries on every POST (`while length < 5, push empty`). A user deleting down
+to 2 slots would see them save as 2, server would save as 5, and the UI would
+reload 5. Removed server padding — the server now stores exactly as many slots
+as the UI sent.
+
+**Typed values forgotten when switching tabs:** `AccountSettingsPanel` is
+conditionally rendered (`activeTab === "account" && <AccountSettingsPanel…/>`),
+so it unmounts every time the user navigates to a different tab. The save
+debounce used `return () => clearTimeout(t)` as its React cleanup, which React
+calls on unmount — silently cancelling any in-flight save that hadn't fired
+within 400 ms of the tab change. Replaced with a `useRef`-held timer that
+debounces between keystrokes but is not tied to the component lifecycle.
+
+### Fix: story share — now scans for icon before tapping (skip if not available)
+
+Previously: always tapped at fixed right-edge coordinates, then checked if the
+keyboard opened to determine if sharing was disabled. This always disturbed the
+story (briefly opening the message field) even when sharing was obviously off.
+
+Now: runs `findStoryActionIcons()` before any tap. If ≥2 icons are detected the
+rightmost is the paper-plane — its actual coordinates are used for the tap. If
+0 or 1 icons are found (sharing disabled or ambiguous), the story continues
+without touching the screen at all. Keyboard check is retained as a final
+safety net for the rare case where the icon scan mislabels a cluster.
+
+### Fix: close-Instagram — was wasting 25 seconds on 5 guaranteed-to-fail recents swipes
+
+On Xiaomi HyperOS, MIUI memory management locks apps in the recents stack so
+the swipe-to-dismiss gesture never kills the process. The 5-attempt loop took
+~25 seconds before reaching the force-stop fallback, all 5 passes failing in
+user testing. Reduced to 1 attempt; if Instagram is still running after it,
+force-stop fires immediately.
+
+### Improved: cycle log now shows completion status after each step
+
+Added `✓` confirmation lines after: screen unlock, Instagram open, Instagram
+close, airplane mode on/off. Previously only "about to do X" lines appeared;
+now both the intent and the result are visible.
+
+---
+
 ## [1.1.480] — 2026-07-11
 
 ### Fix: phone screen waking on software restart with toggle on
