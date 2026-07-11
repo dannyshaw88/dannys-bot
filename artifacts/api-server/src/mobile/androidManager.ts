@@ -3,6 +3,7 @@ import { promisify } from "util";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import zlib from "zlib";
 import { logger } from "../lib/logger";
 
 const execFileP = promisify(execFile);
@@ -1110,6 +1111,190 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
   const m = xml.match(re);
   if (!m) return null;
   return _parseCenter(m[1]);
+}
+
+/**
+ * Minimal, dependency-free PNG decoder for `adb exec-out screencap -p`
+ * output. Android's screencap always emits 8-bit RGBA (colorType 6); plain
+ * RGB (colorType 2) and grayscale (colorType 0) are also handled
+ * defensively. Pure Buffer + built-in zlib — no image library needed.
+ */
+function _decodePng(buf: Buffer): { width: number; height: number; channels: number; pixels: Buffer } {
+  let offset = 8; // skip PNG signature
+  let width = 0, height = 0, bitDepth = 0, colorType = 0;
+  const idatChunks: Buffer[] = [];
+  while (offset < buf.length) {
+    const len = buf.readUInt32BE(offset);
+    const type = buf.toString("ascii", offset + 4, offset + 8);
+    const data = buf.subarray(offset + 8, offset + 8 + len);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data.readUInt8(8);
+      colorType = data.readUInt8(9);
+    } else if (type === "IDAT") {
+      idatChunks.push(data);
+    } else if (type === "IEND") {
+      break;
+    }
+    offset += 12 + len; // length(4) + type(4) + data(len) + crc(4)
+  }
+  if (!width || !height) throw new Error("PNG decode: could not read IHDR");
+  if (bitDepth !== 8) throw new Error(`PNG decode: unsupported bit depth ${bitDepth}`);
+  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : colorType === 0 ? 1 : -1;
+  if (channels === -1) throw new Error(`PNG decode: unsupported color type ${colorType}`);
+
+  const raw = zlib.inflateSync(Buffer.concat(idatChunks));
+  const stride = width * channels;
+  const pixels = Buffer.alloc(height * stride);
+  let rawOffset = 0;
+  let prevLine = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filterType = raw[rawOffset]; rawOffset += 1;
+    const line = raw.subarray(rawOffset, rawOffset + stride); rawOffset += stride;
+    const outLine = Buffer.alloc(stride);
+    for (let x = 0; x < stride; x++) {
+      const a = x >= channels ? outLine[x - channels] : 0;
+      const b = prevLine[x];
+      const c = x >= channels ? prevLine[x - channels] : 0;
+      let val = line[x];
+      switch (filterType) {
+        case 0: break;
+        case 1: val = (val + a) & 0xff; break;
+        case 2: val = (val + b) & 0xff; break;
+        case 3: val = (val + ((a + b) >> 1)) & 0xff; break;
+        case 4: {
+          const p = a + b - c;
+          const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          const pr = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+          val = (val + pr) & 0xff;
+          break;
+        }
+        default: throw new Error(`PNG decode: unsupported filter type ${filterType}`);
+      }
+      outLine[x] = val;
+    }
+    outLine.copy(pixels, y * stride);
+    prevLine = outLine;
+  }
+  return { width, height, channels, pixels };
+}
+
+/**
+ * Captures the current screen as a raw pixel buffer via
+ * `adb exec-out screencap -p`. Returns null on any failure (missing tool,
+ * timeout, corrupt PNG) so callers can fall back to fixed-coordinate taps
+ * — this must never throw and break an automation cycle.
+ */
+async function _captureScreenPixels(serial: string): Promise<{ width: number; height: number; channels: number; pixels: Buffer } | null> {
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    const { stdout } = await execFileP(adb, ["-s", serial, "exec-out", "screencap", "-p"], {
+      encoding: "buffer",
+      timeout: 8000,
+      maxBuffer: 20 * 1024 * 1024,
+    } as any);
+    const buf = stdout as unknown as Buffer;
+    if (!buf || buf.length < 100) return null;
+    return _decodePng(buf);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Locates Instagram's story action icons (like / comment / share) by
+ * reading actual on-screen pixels instead of guessing fixed coordinates.
+ *
+ * Why this exists: a `screen-layout-scan` on a real device story viewer
+ * (Jul 2026) found only ONE opaque, unlabeled container for the entire
+ * reply-bar region — Instagram draws it on a canvas with no accessible
+ * child elements, so there is no content-desc/text/resource-id to search
+ * for. Worse, that bar's on-screen position AND icon count both change
+ * depending on content type (a plain story vs. a reposted Reel, which
+ * uses a visually different, higher action bar) and per-story privacy
+ * settings (the owner can disable likes, comments, or shares
+ * individually, which removes icons and re-centers the rest). A single
+ * hardcoded (x%, y%) pair can't track all of that — it was landing on
+ * the reply text field or the story background instead of the icons,
+ * which is exactly the bug this replaces.
+ *
+ * Approach: scan the bottom ~30% of the screen (where Instagram always
+ * places these icons, under its own dark gradient scrim so they stay
+ * legible over any background) for rows that are both (a) dark on
+ * average — confirming the scrim is present — and (b) contain 1-4
+ * compact bright clusters — the icon glyphs, always white/light against
+ * that scrim regardless of the content behind it. Clusters are returned
+ * left to right. Instagram always keeps the Like icon leftmost and the
+ * Share/Send icon rightmost in these bars regardless of how many icons
+ * sit between them, so callers can safely use the first/last cluster
+ * without needing to identify every icon by shape. Callers should treat
+ * a single cluster as ambiguous (can't tell Like from Share) and zero
+ * clusters as "nothing to tap" — and skip the action rather than risk
+ * tapping the wrong control.
+ */
+export async function findStoryActionIcons(serial: string): Promise<{ x: number; y: number }[] | null> {
+  const img = await _captureScreenPixels(serial);
+  if (!img) return null;
+  const { width, height, channels, pixels } = img;
+  if (!width || !height) return null;
+
+  const bandTop = Math.round(height * 0.70);
+  const bandBottom = Math.round(height * 0.97);
+  const rowStep = 3;
+  const brightThreshold = 165; // icon glyph luminance (white/light on dark scrim)
+  const darkRowThreshold = 70; // row must average this dark to confirm the scrim is present
+
+  const lumAt = (x: number, y: number) => {
+    const idx = y * width * channels + x * channels;
+    return (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+  };
+
+  type Row = { y: number; clusters: { x1: number; x2: number }[]; avgLum: number };
+  const candidateRows: Row[] = [];
+
+  for (let y = bandTop; y < bandBottom; y += rowStep) {
+    let sum = 0;
+    const brightMask = new Array<boolean>(width);
+    for (let x = 0; x < width; x++) {
+      const l = lumAt(x, y);
+      sum += l;
+      brightMask[x] = l > brightThreshold;
+    }
+    const avgLum = sum / width;
+    if (avgLum > darkRowThreshold) continue; // bright content row, not the scrim — skip
+
+    const clusters: { x1: number; x2: number }[] = [];
+    let runStart = -1;
+    for (let x = 0; x < width; x++) {
+      if (brightMask[x]) {
+        if (runStart === -1) runStart = x;
+      } else if (runStart !== -1) {
+        clusters.push({ x1: runStart, x2: x - 1 });
+        runStart = -1;
+      }
+    }
+    if (runStart !== -1) clusters.push({ x1: runStart, x2: width - 1 });
+
+    // Keep only icon-sized clusters — not a stray bright caption/banner.
+    const iconSized = clusters.filter(c => (c.x2 - c.x1) >= 6 && (c.x2 - c.x1) <= Math.round(width * 0.12));
+    if (iconSized.length >= 1 && iconSized.length <= 4) {
+      candidateRows.push({ y, clusters: iconSized, avgLum });
+    }
+  }
+
+  if (candidateRows.length === 0) return [];
+
+  // The true icon row has the most distinct clusters; ties go to the
+  // darkest row (deepest into the scrim, least likely a coincidental
+  // bright edge from content).
+  candidateRows.sort((a, b) => b.clusters.length - a.clusters.length || a.avgLum - b.avgLum);
+  const best = candidateRows[0];
+
+  return best.clusters
+    .map(c => ({ x: Math.round((c.x1 + c.x2) / 2), y: best.y }))
+    .sort((a, b) => a.x - b.x);
 }
 
 /**

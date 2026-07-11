@@ -1307,47 +1307,82 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const watchMs = Math.max(400, Math.round((watchPct / 100) * 6000));
       await sleepOrAbort(serial, watchMs);
 
-      // Like the story?
-      // A fresh screen-layout scan taken mid-story on the user's device
-      // (Jul 2026) found only 3 opaque elements total — no accessible Like
-      // element exists in the story viewer at all, so findLikeButton()
-      // below is expected to always miss here and this always falls
-      // through to the fixed-coordinate tap. That same scan *did* reveal
-      // the real reply/action bar container bounds: y 92.4–93.8% (center
-      // ~93.1%), not the ~97.8% previously assumed — 97.8% sits below the
-      // actual bar, which is almost certainly why story likes were never
-      // landing at all ("liked story" was logged, but the tap missed).
-      if (likeChance > 0 && Math.random() < likeChance) {
-        // Try the accessibility tree first (same method as feed likes).
-        const likeBtn = await android.findLikeButton(serial).catch(() => null);
-        if (likeBtn) {
-          await android.tap(serial, likeBtn.x, likeBtn.y);
+      // Like and/or share this story?
+      //
+      // The like/share icon bar sits at a DIFFERENT position depending on
+      // content type (plain story vs. a reposted Reel, which uses a
+      // visually different, higher bar) and shifts/loses icons entirely
+      // when the story owner disables likes, comments, or shares — none of
+      // which a single hardcoded (x%, y%) pair can track (see
+      // findStoryActionIcons() for the full history). Take one screenshot
+      // up front (reused for both actions this slide) and locate the real
+      // icons by pixel; only fall back to the old fixed coordinates if the
+      // screenshot/accessibility approach is entirely unavailable.
+      const willLike = likeChance > 0 && Math.random() < likeChance;
+      const willShare = shareChance > 0 && Math.random() < shareChance;
+
+      let actionIcons: { x: number; y: number }[] | null = null;
+      if (willLike || willShare) {
+        actionIcons = await android.findStoryActionIcons(serial).catch(() => null);
+      }
+
+      if (willLike) {
+        if (actionIcons && actionIcons.length >= 2) {
+          // Instagram always keeps Like leftmost regardless of how many
+          // icons sit between it and Share.
+          const heart = actionIcons[0];
+          await android.tap(serial, heart.x, heart.y);
+          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] liked story (icon detected)");
+        } else if (actionIcons) {
+          // 0 = icons genuinely absent (likes/comments/shares disabled by
+          // the owner), 1 = can't tell Like from Share. Either way, tapping
+          // blind risks hitting the wrong control or the story itself —
+          // skip rather than guess.
+          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped like — icon not distinguishable on this story");
         } else {
-          await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.931));
+          // Screenshot capture/decode unavailable on this device — old
+          // fallback chain: accessibility tree, then fixed coordinate.
+          const likeBtn = await android.findLikeButton(serial).catch(() => null);
+          if (likeBtn) {
+            await android.tap(serial, likeBtn.x, likeBtn.y);
+          } else {
+            await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.931));
+          }
+          logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fixed-coordinate fallback — icon scan unavailable)");
         }
-        logger.info({ serial, story: s + 1 }, "[view-stories] liked story");
         await sleepOrAbort(serial, 400 + Math.round(Math.random() * 200));
       }
 
-      // Share via DM?
-      if (shareChance > 0 && Math.random() < shareChance) {
-        // Tap the paper-plane / send icon to open the DM picker. Same Y
-        // correction as the Like tap above (93.1%, not 97.8%).
-        await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.931));
-        await sleepOrAbort(serial, 1200); // wait for picker sheet
-        // Pick a random recipient, then look for the real Send button —
-        // previously this just opened the sheet and pressed Back, never
-        // actually sending to anyone (same bug as the feed's share-to-DM).
-        await tapRandomShareSheetRecipient(serial, w, h);
-        await sleepOrAbort(serial, 1500); // 700→1500ms: give Send button time to appear
-        const sent = await sendShareSheet(serial, w, h);
-        if (sent) {
-          logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
-          await sleepOrAbort(serial, 800);
+      if (willShare) {
+        let opened = false;
+        if (actionIcons && actionIcons.length >= 2) {
+          // Instagram always keeps Share/Send rightmost.
+          const shareIcon = actionIcons[actionIcons.length - 1];
+          await android.tap(serial, shareIcon.x, shareIcon.y);
+          opened = true;
+        } else if (actionIcons) {
+          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped share — icon not distinguishable on this story");
         } else {
-          await android.pressBack(serial);
-          logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
-          await sleepOrAbort(serial, 600);
+          await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.931));
+          opened = true;
+        }
+
+        if (opened) {
+          await sleepOrAbort(serial, 1200); // wait for picker sheet
+          // Pick a random recipient, then look for the real Send button —
+          // previously this just opened the sheet and pressed Back, never
+          // actually sending to anyone (same bug as the feed's share-to-DM).
+          await tapRandomShareSheetRecipient(serial, w, h);
+          await sleepOrAbort(serial, 1500); // 700→1500ms: give Send button time to appear
+          const sent = await sendShareSheet(serial, w, h);
+          if (sent) {
+            logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
+            await sleepOrAbort(serial, 800);
+          } else {
+            await android.pressBack(serial);
+            logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
+            await sleepOrAbort(serial, 600);
+          }
         }
       }
 
