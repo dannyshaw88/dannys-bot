@@ -78,6 +78,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.486",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Sometimes tapping a story bubble accidentally hit a \"suggested friend\" button next to it instead, so no story opened and the whole turn ended with nothing liked or shared — even though the tray likely had a real story available. It now tries a different story on the same tray if the first tap doesn't land right, instead of giving up immediately.",
+      },
+    ],
+  },
+  {
     version: "1.1.485",
     date: "11 Jul 2026",
     items: [

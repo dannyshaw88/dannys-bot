@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.486] — 2026-07-11
+
+### Fix: story tray tap sometimes dismissed a "suggested friend" chip instead of opening a story, ending the cycle with zero stories watched
+
+User-reported and log-confirmed: the tray tap landed on a "suggested for
+you" account tile's follow/dismiss control instead of its avatar, so no
+story opened — and because only one slot was ever tried, the whole cycle
+gave up immediately with 0 likes / 0 shares, even though the same tray
+almost certainly had a real story available in a different slot. Unlike
+real friends' stories (always sorted first in the tray), suggested/discover
+tiles can appear at any position, so a single random pick could keep
+landing on one.
+
+Fix: the tray tap now tries slot 1 first (least likely to be a suggestion,
+since real friends' stories always sort before discover content), then
+falls back to up to 2 more random remaining slots if a tap doesn't actually
+open a story, before giving up on the cycle. This does not change the
+upper-left tap bias already in place to avoid the follow badge itself — it
+just gives the cycle more than one chance to find a real story on the same
+tray instead of quitting after the first miss.
+
+---
+
 ## [1.1.485] — 2026-07-11
 
 ### Fix: like/share on stories fired after a "watch" delay, running out of time before finishing (user-reported, CRITICAL)
