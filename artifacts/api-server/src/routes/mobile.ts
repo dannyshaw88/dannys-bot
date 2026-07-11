@@ -808,18 +808,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const y1 = Math.round(h * 0.78);
     const y2 = Math.round(h * 0.22);
     const cy = Math.round(h / 2);
-    // Instagram feed post action bar — coordinates confirmed from screen-layout
-    // scan on user's 1080×2226 device (Jul 2026):
+    // Instagram feed post action bar — X coordinates confirmed from
+    // screen-layout scan on user's 1080×2226 device (Jul 2026):
     //   Like          13.5% X  — found via findLikeButton() accessibility tree
     //   Comment       30.4% X
     //   Share to feed 48.1% X  — two circular arrows (repost)
     //   Share to DM   66.0% X  — paper-plane icon
-    //   Action bar Y  70.2% Y
     // NOTE: the old shareIconX was 33% which landed squarely on the Comment
     // button (bounds 27–34% X), opening the comment section and causing all
     // subsequent taps to miss their targets, including swipes that crossed
     // the bottom nav bar and accidentally triggered the Reels tab.
-    const actionBarY     = Math.round(h * 0.702); // 70.2% Y — from scan
+    // There is deliberately no fixed action-bar Y anymore — every share tap
+    // below is anchored to the Like button's real, freshly-measured Y
+    // (`rowY`) for whatever's on screen right now, and is skipped entirely
+    // if no Like button can be found (see the action-bar gating below).
     const shareFeedIconX = Math.round(w * 0.481); // 48.1% X — circular arrows
     const shareDmIconX   = Math.round(w * 0.660); // 66.0% X — paper plane
 
@@ -871,95 +873,126 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 400);
       }
 
-      if (likeChance > 0 && Math.random() < likeChance) {
-        await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
-        // Look up the real Like button for whatever's on screen right now
-        // instead of guessing a fixed offset — feed items vary in height
-        // (photo vs carousel vs embedded Reel vs ad), so a fixed offset was
-        // landing on whatever happened to be there.
-        const likeBtn = await android.findLikeButton(serial).catch(() => null);
-        if (likeBtn) {
-          // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
-          // but small enough to stay inside the button's own hit target.
-          const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
-          const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
-          logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] tap like");
-          try {
-            await android.tap(serial, jx, jy);
-            likes++;
-          } catch {
-            likeFailures++;
-          }
-          await sleepOrAbort(serial, 300);
-          await verifyStillInInstagram();
+      // Roll all three action chances up front (independent draws, same
+      // statistics as before) but DON'T act on any of them yet — first we
+      // need to confirm there's actually a normal post action bar on screen
+      // right now. Instagram's feed regularly serves things that aren't a
+      // normal post (embedded Reels, ads, "Thanks for your feedback" /
+      // snooze cards after its own suggested-content flow fires, survey
+      // prompts) and none of those expose the same Like/Share/Send row a
+      // real post does. Share-to-feed and share-via-DM used to tap fixed
+      // coordinates regardless of what was actually on screen — that's what
+      // was landing on "Undo", "Manage content preferences", the Comment
+      // button, or a Reel's own controls instead of the intended icon.
+      const wantLike = likeChance > 0 && Math.random() < likeChance;
+      const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
+      const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
+
+      if (wantLike || wantShareFeed || wantShareDm) {
+        const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => false);
+        if (feedbackCard) {
+          // This card replaced the post entirely — there is nothing safe to
+          // tap for like/share/share-DM. Skip all three and just scroll on.
+          logger.info({ serial }, "[check-feed] feedback/survey card detected in place of a post — skipping like/share/share-DM, scrolling past");
+          if (wantLike) likeFailures++;
         } else {
-          // No like button found on screen — this post/card doesn't expose
-          // one right now (Reel suggestion, ad, still animating in from the
-          // scroll). Skip the like rather than double-tapping blind, since
-          // that's exactly what was hitting Reels/ad CTAs before.
-          logger.info({ serial, target: "like-button", matched: false }, "[check-feed] skipped like — no Like button visible on screen");
-          likeFailures++;
-        }
-      }
-
-      // Share to Feed (repost): tap the circular-arrows icon, find "Repost"
-      // in the sheet via accessibility tree, tap it, then dismiss the
-      // "You reposted…" confirmation popup by tapping its "Close" button.
-      // Using pressBack to cancel (not a swipe) avoids any chance of the
-      // gesture crossing the bottom nav bar and triggering the Reels tab.
-      if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
-        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-        try {
-          await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-          // Tap the circular-arrows (share-to-feed / repost) icon.
-          await android.tap(serial, shareFeedIconX, actionBarY);
-          logger.info({ serial, x: shareFeedIconX, y: actionBarY }, "[check-feed] tapped share-to-feed icon");
-          await sleepOrAbort(serial, 1200); // wait for share sheet
-
-          // Find the "Repost" option in the sheet via accessibility tree.
-          const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-          if (repostBtn) {
-            await android.tap(serial, repostBtn.x, repostBtn.y);
-            logger.info({ serial }, "[check-feed] tapped Repost in sheet");
-            await sleepOrAbort(serial, 1000);
-            // "You reposted X's post" popup appears after the first repost —
-            // find its blue "Close" button via accessibility tree and tap it.
-            const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
-            if (closeBtn) {
-              await android.tap(serial, closeBtn.x, closeBtn.y);
-              logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
-              await sleepOrAbort(serial, 500);
-            }
-            sharesFeed++;
+          await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
+          // Look up the real Like button for whatever's on screen right now.
+          // Its presence confirms this is a normal post with a normal action
+          // bar; its Y position tells us exactly where that bar sits on THIS
+          // item, instead of assuming every post's action bar lands at the
+          // same fixed screen percentage.
+          const likeBtn = await android.findLikeButton(serial).catch(() => null);
+          if (!likeBtn) {
+            // No Like button found — this isn't a normal in-feed post right
+            // now (Reel suggestion, ad, still animating in from the scroll,
+            // or some other card we don't specifically recognize). Skip
+            // like AND share AND share-DM rather than firing share taps at
+            // coordinates that assume an action bar exists.
+            logger.info({ serial, target: "action-bar", matched: false }, "[check-feed] skipped like/share/share-DM — no Like button visible on screen");
+            if (wantLike) likeFailures++;
           } else {
-            // Sheet didn't open or "Repost" not visible — cancel safely.
-            logger.info({ serial }, "[check-feed] Repost button not found in sheet — pressing Back");
-            await android.pressBack(serial);
-            await sleepOrAbort(serial, 500);
-          }
-          await verifyStillInInstagram();
-        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
-      }
+            const rowY = likeBtn.y;
 
-      // Share via DM: tap the paper-plane icon to open the DM picker, then
-      // close it with Back (registers the share-intent tap in a human-looking
-      // way without needing to know a recipient). pressBack is intentional —
-      // the previous swipe-dismiss was crossing the bottom nav bar (90–95% Y)
-      // and accidentally triggering the Reels tab.
-      if (shareDmChance > 0 && Math.random() < shareDmChance) {
-        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-        try {
-          await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-          // Tap the paper-plane (DM / send) icon.
-          await android.tap(serial, shareDmIconX, actionBarY);
-          logger.info({ serial, x: shareDmIconX, y: actionBarY }, "[check-feed] tapped share-to-DM icon");
-          await sleepOrAbort(serial, 1200); // wait for DM picker sheet
-          // Close without sending — safe, no nav risk.
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 600);
-          sharesDm++;
-          await verifyStillInInstagram();
-        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+            if (wantLike) {
+              // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
+              // but small enough to stay inside the button's own hit target.
+              const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
+              const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
+              logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] tap like");
+              try {
+                await android.tap(serial, jx, jy);
+                likes++;
+              } catch {
+                likeFailures++;
+              }
+              await sleepOrAbort(serial, 300);
+              await verifyStillInInstagram();
+            }
+
+            // Share to Feed (repost): tap the circular-arrows icon, find
+            // "Repost" in the sheet via accessibility tree, tap it, then
+            // dismiss the "You reposted…" confirmation popup by tapping its
+            // "Close" button. Using pressBack to cancel (not a swipe) avoids
+            // any chance of the gesture crossing the bottom nav bar and
+            // triggering the Reels tab. Anchored to `rowY` (the Like
+            // button's actual Y on this post) rather than a fixed percentage,
+            // since we've now confirmed exactly where this post's action bar
+            // sits instead of assuming every post is the same height.
+            if (wantShareFeed) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              try {
+                await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                await android.tap(serial, shareFeedIconX, rowY);
+                logger.info({ serial, x: shareFeedIconX, y: rowY }, "[check-feed] tapped share-to-feed icon");
+                await sleepOrAbort(serial, 1200); // wait for share sheet
+
+                const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+                if (repostBtn) {
+                  await android.tap(serial, repostBtn.x, repostBtn.y);
+                  logger.info({ serial }, "[check-feed] tapped Repost in sheet");
+                  await sleepOrAbort(serial, 1000);
+                  // "You reposted X's post" popup appears after the first
+                  // repost — find its blue "Close" button via accessibility
+                  // tree and tap it.
+                  const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
+                  if (closeBtn) {
+                    await android.tap(serial, closeBtn.x, closeBtn.y);
+                    logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
+                    await sleepOrAbort(serial, 500);
+                  }
+                  sharesFeed++;
+                } else {
+                  // Sheet didn't open or "Repost" not visible — cancel safely.
+                  logger.info({ serial }, "[check-feed] Repost button not found in sheet — pressing Back");
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 500);
+                }
+                await verifyStillInInstagram();
+              } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+            }
+
+            // Share via DM: tap the paper-plane icon to open the DM picker,
+            // then close it with Back (registers the share-intent tap in a
+            // human-looking way without needing to know a recipient).
+            // pressBack is intentional — a swipe-dismiss risks crossing the
+            // bottom nav bar and accidentally triggering the Reels tab.
+            // Anchored to `rowY` for the same reason as share-to-feed above.
+            if (wantShareDm) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              try {
+                await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                await android.tap(serial, shareDmIconX, rowY);
+                logger.info({ serial, x: shareDmIconX, y: rowY }, "[check-feed] tapped share-to-DM icon");
+                await sleepOrAbort(serial, 1200); // wait for DM picker sheet
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 600);
+                sharesDm++;
+                await verifyStillInInstagram();
+              } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+            }
+          }
+        }
       }
 
       if (i < count - 1) {

@@ -1124,6 +1124,39 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
   return _findElem(xml, label);
 }
 
+/**
+ * Detects Instagram's "feedback on suggested content" card — the one that
+ * says "Thanks for your feedback" with an "Undo" link, plus "Snooze all
+ * suggested sets of reels in feed for 30 days" / "Manage content
+ * preferences". Instagram swaps this in to REPLACE a post entirely
+ * (usually after its own "not interested" flow fires on a suggested
+ * post/Reel/ad), so it exposes none of the normal Like/Share/Send controls.
+ *
+ * This matters because share-to-feed and share-via-DM tap fixed on-screen
+ * coordinates that assume a normal post action bar is there. If this card
+ * has taken the post's place, those coordinates land on "Undo" or "Manage
+ * content preferences" instead — an accidental, unintended tap that then
+ * cascades into the rest of the cycle misbehaving. Detected from on-screen
+ * text so it's caught regardless of where the card lands after a scroll.
+ */
+export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  const MARKERS = [
+    "Thanks for your feedback",
+    "Snooze all suggested",
+    "Manage content preferences",
+    "See fewer posts like this",
+    "See more posts like this",
+    "Why am I seeing this",
+    "Rate this ad",
+    "How relevant was this ad",
+  ];
+  return MARKERS.some(m => xml.includes(m));
+}
+
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
