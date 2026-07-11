@@ -4,6 +4,41 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.468] — 2026-07-11
+
+### Fix: video mirror DRM restart speed + share-DM tapping wrong target
+
+**Video mirror — 4 s restart when DRM-blocked:**
+The "no real frame yet" stall threshold was 8 s (v1.1.467), which was actually
+*slower* than the original 6 s constant timeout. On MIUI/Xiaomi, scrcpy gets
+DRM-blocked the moment Instagram's feed loads video content — the stream
+produces only a 46-byte metadata packet then goes silent. The old 6 s constant
+meant scrcpy cycled quickly and would occasionally catch a real frame in the
+brief window between DRM re-engagements. Raising it to 8 s made those
+catch-windows rarer, which is why the mirror appeared worse.
+**Fix:** drop the "no real frame" threshold to 4 s (faster than before).
+The three tiers are now:  
+- No real IDR frame yet → **4 s** (aggressive restart, punch through DRM)
+- Real frames flowing + automation active → **30 s** (UIAutomator patience)
+- Real frames flowing + idle → **6 s** (normal watchdog)
+
+**Share-DM — tapping drag-handle instead of user bubble:**
+The avatar slot y-coordinates (0.625 / 0.740) were calculated assuming the
+share sheet starts at ~50% of screen height. A live accessibility dump on the
+user's 1080×2226 device showed the sheet actually starts at y=1651 (74.2%):
+- y=0.625 × 2226 = 1391 px → above the sheet entirely (taps the post behind it)
+- y=0.740 × 2226 = 1647 px → right at the drag-handle pill (y≈1672), which
+  causes the sheet to **expand to full screen** instead of selecting a recipient.
+  This was the "clicking to expand to see more users" bug.
+**Fix:** updated all four avatar slots to y=0.786 (y=1749 on this device,
+measured directly from the scan) with x positions measured from the scan:
+- Bubble 1: x=0.151 (163 px)
+- Bubble 2: x=0.328 (354 px)
+- Bubble 3: x=0.487 (526 px)
+- Bubble 4: x=0.642 (693 px)
+
+---
+
 ## [1.1.466] — 2026-07-11 (hotfix included)
 
 ### Fix: Human Session Tool stalls + empty log during automation cycles

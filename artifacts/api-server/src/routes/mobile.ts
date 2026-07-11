@@ -514,7 +514,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // 117 B; a real IDR frame is typically 30–200 KB).
         let sawRealFrame = false;
         const stallThresholdMs = () => {
-          if (!sawRealFrame) return 8_000;
+          // No real IDR frame yet — MIUI DRM is likely blocking capture.
+          // Restart aggressively (4 s) so each restart has a short window to
+          // catch a real frame before DRM re-engages.  This is faster than the
+          // original 6 s constant timeout, giving more frequent catch attempts.
+          if (!sawRealFrame) return 4_000;
+          // Real frames were flowing + automation active — UIAutomator dumps
+          // can cause legitimate 3–5 s gaps between frames.  Wait patiently.
           return automationCycleInProgress.has(serial) ? 30_000 : 6_000;
         };
         let stallTimer: NodeJS.Timeout | null = null;
@@ -863,33 +869,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  // Instagram's "Share" / "Send to" sheet (opened from a post's paper-plane
-  // icon or a story's send icon) is a bottom sheet that slides up from the
-  // lower half of the screen.  Its structure on the user's 1080×2226 device:
+  // Instagram's "Share" / "Send to" sheet — measured positions from a live
+  // accessibility dump on the user's 1080×2226 device (captured 2026-07-11):
   //
-  //   ~50 % Y  — sheet drag-handle (a tiny pill at the very top of the sheet)
-  //   ~52–54 % Y — search bar ("Search" placeholder text)
-  //   ~57–70 % Y — first two rows of recent DM conversation avatars
-  //   ~72–80 % Y — third row of avatars / "More people" section
+  //   Sheet starts at y≈1651 (74.2%) — the LinearLayout container.
+  //   Drag-handle pill  y≈1672 (75.1%)
+  //   User avatar row   y≈1749 (78.6%) — the clickable recipient bubbles
+  //   Username labels   y≈1836 (82.5%) — text beneath each bubble
+  //   "more" button     x≈941 (87.1%), y≈1836 — "expand to see more users"
   //
-  // The old y values of 0.525 and 0.667 placed taps TOO HIGH:
-  //   0.525 × 2226 ≈ 1169 px  → lands right on or just below the search bar
-  //   0.667 × 2226 ≈ 1484 px  → first avatar row, but very close to the
-  //                              search bar drag-expand zone
+  // Previous coordinates (0.625/0.740 y) were WRONG:
+  //   0.625 × 2226 = 1391 px  → above the sheet entirely (taps the post behind)
+  //   0.740 × 2226 = 1647 px  → right at the drag-handle (1672), causing the
+  //                              sheet to EXPAND to full screen rather than
+  //                              selecting a recipient — this was "clicking to
+  //                              expand to see more users" bug the user reported.
   //
-  // When the tap lands on the search bar / drag-handle area, the bottom
-  // sheet interprets it as a swipe gesture and expands to full screen ("it
-  // scrolled upwards / expanded the user list") instead of selecting a
-  // recipient.  Moving the y slots down to 0.625 / 0.740 puts them safely
-  // in the middle of the avatar rows, well clear of the handle and search
-  // bar.  X positions (3-column grid) stay the same.
+  // Measured x positions of the 4 visible bubbles:
+  //   163 px (15.1%), 354 px (32.8%), 526 px (48.7%), 693 px (64.2%)
+  //
+  // All slots now use y=0.786 (1749 px on this device), well below the
+  // drag-handle zone and well above the "more" button.
   const SHARE_SHEET_AVATAR_SLOTS: { xPct: number; yPct: number }[] = [
-    { xPct: 0.230, yPct: 0.625 },
-    { xPct: 0.496, yPct: 0.625 },
-    { xPct: 0.762, yPct: 0.625 },
-    { xPct: 0.230, yPct: 0.740 },
-    { xPct: 0.496, yPct: 0.740 },
-    { xPct: 0.762, yPct: 0.740 },
+    { xPct: 0.151, yPct: 0.786 },  // bubble 1  — x≈163
+    { xPct: 0.328, yPct: 0.786 },  // bubble 2  — x≈354
+    { xPct: 0.487, yPct: 0.786 },  // bubble 3  — x≈526
+    { xPct: 0.642, yPct: 0.786 },  // bubble 4  — x≈693
   ];
 
   /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
