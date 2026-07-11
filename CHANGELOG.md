@@ -4,6 +4,54 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.461] — 2026-07-11
+
+### Fix: Mobile feed loop was acting on non-post content (ads, embedded Reels, Instagram's own "feedback" / snooze cards)
+
+**Root cause:** Instagram doesn't always serve a normal post in the feed —
+sometimes it's an embedded Reel, a sponsored ad, or (after its own
+suggested-content flow fires) a "Thanks for your feedback" card with
+"Undo" / "Snooze all suggested sets of reels in feed for 30 days" /
+"Manage content preferences". None of these expose the same Like/Share/Send
+action row a normal post does. Share-to-feed and share-via-DM tapped fixed
+on-screen coordinates regardless of what was actually on screen, so when one
+of these non-post cards took a post's place, the tap landed on "Undo",
+"Manage content preferences", or whatever else happened to be there instead
+— derailing the rest of the cycle. This is what caused the accidental
+feedback-form click reported during a live run.
+
+**Fix — `runCheckFeedLoop` (`artifacts/api-server/src/routes/mobile.ts`) now
+gates every action on a confirmed action bar:**
+1. Like/share-feed/share-DM chances are still rolled independently up front
+   (same statistics as before), but nothing is tapped until the current
+   screen is checked.
+2. New `android.isFeedbackOrSurveyCard()` detects Instagram's feedback/snooze
+   card by its on-screen text ("Thanks for your feedback", "Snooze all
+   suggested", "Manage content preferences", "See fewer/more posts like
+   this", ad-rating prompts). If present, all three actions are skipped for
+   that item — no tap fires at all, and the loop just scrolls past.
+3. Otherwise, `android.findLikeButton()` is used as the actual-post check.
+   If no Like button is found on screen (embedded Reel, ad, or content still
+   animating in from the scroll), like, share-to-feed, and share-to-DM are
+   *all* skipped — previously only the like was skipped while share-to-feed
+   and share-to-DM still fired blind.
+4. When a Like button **is** found, its real Y position (`rowY`) is used to
+   position the share-to-feed and share-to-DM taps, instead of a separately
+   guessed fixed action-bar percentage — this keeps the three actions
+   aligned to the actual post on screen even when its height differs from
+   the last one (carousel, longer caption, etc.).
+
+**New helper:** `isFeedbackOrSurveyCard(serial)` in `androidManager.ts` —
+single ui-dump text match against Instagram's known feedback/survey/ad-rating
+card strings.
+
+This can't guarantee Instagram never serves something unusual, but the tool
+now only clicks like/share/DM when it has positively confirmed a normal
+post's action bar is on screen — it no longer taps blind at a fixed spot and
+hopes a real post is still there.
+
+---
+
 ## [1.1.460] — 2026-07-11
 
 ### Fix: Share button coordinates were hitting Comment → Reels tab triggered
