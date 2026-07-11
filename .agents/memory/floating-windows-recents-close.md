@@ -27,6 +27,25 @@ left/right card-strip layout.
 must use a left-drag of the left-most visible card, not an upward swipe, and
 must repeat if the target app might not be the only (or left-most) card.
 
+## Follow-up (11 Jul 2026): pidof checked too soon after a working swipe
+
+A correctly-aimed drag was dismissing the card (user-confirmed visually),
+but Instagram's background services kept the process alive past a single
+600ms `pidof` check, so the code concluded the swipe had failed and
+redundantly repeated it (up to 5x, ~20s wasted) against an already-closed
+screen. Fixed by polling `pidof` for up to 3.5s after each swipe instead of
+one point-in-time check.
+
+Also: this launcher's recents dump has never exposed a text/content-desc
+label for any card in real testing, so "count how many cards remain" has no
+ground truth here — capped blind (no-label) retries at 2 instead of 5;
+still loop the full 5 when real per-card labels ARE found on other devices.
+
+**Why this matters generally:** a process being dismissed from a switcher
+UI and its OS process actually terminating are two different events with an
+unpredictable gap between them — never conclude "the gesture failed" from a
+single fast liveness check right after a UI dismiss action.
+
 ## Related open hypothesis: per-device aspect-ratio calibration risk
 
 Story tap coordinates and the story icon pixel-scan band are percentages of
