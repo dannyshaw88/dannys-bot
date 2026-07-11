@@ -4,6 +4,42 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.474] — 2026-07-11
+
+### Fix: feed Like/Share taps hit the wrong icon when a post had comments or shares disabled
+
+While scrolling the main feed, a share action opened the Comment
+reply/compose box instead of the intended Share sheet. Root cause: the
+feed's Like button position was found dynamically per post (via the
+accessibility tree), but Comment/Share-to-Feed/Share-via-DM were still
+tapped at fixed 30.4%/48.1%/66.0% screen-width offsets measured once from
+a single screenshot where all four action-bar icons happened to be
+present. Post/profile owners can disable comments and/or shares
+individually per post, which removes that icon from the bar and shifts
+everything after the gap to the left — so those fixed offsets only ever
+lined up with the right icon by coincidence. On a post with fewer icons
+than that reference screenshot, the "share" X landed on whatever the
+Comment button had shifted into, opening the reply keyboard instead.
+
+**Fix:** added `findFeedActionIcons()`, which reads the real
+accessibility tree for whatever post is on screen right now and works
+out each icon's actual position (or its absence) instead of assuming a
+fixed layout — the same principle already applied to the story-viewer
+like/share fix. Since Instagram doesn't reorder these icons, only omits
+disabled ones, their identity can usually be worked out for certain by
+elimination (e.g. if all 3 of Comment/Repost/Send are present, order
+alone fixes which is which; if Comment is positively labeled and exactly
+2 icons remain, those must be Repost + Send). When the remaining icons
+can't be told apart with confidence, the action is skipped for that post
+entirely rather than guessing — the same "skip rather than risk the
+wrong control" rule used for stories. Like tapping is unaffected; this
+only changes how Comment/Share-to-Feed/Share-via-DM icons are located.
+The log now also records which of Comment/Share-to-Feed/Share-via-DM
+were detected on each post, to make this easier to diagnose from the Log
+tab if it ever needs a closer look on a specific device/layout.
+
+---
+
 ## [1.1.473] — 2026-07-11
 
 ### Fix: story like/share taps missed on reposted Reels and privacy-restricted stories

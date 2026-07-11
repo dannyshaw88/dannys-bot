@@ -985,22 +985,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const y1 = Math.round(h * 0.78);
     const y2 = Math.round(h * 0.22);
     const cy = Math.round(h / 2);
-    // Instagram feed post action bar — X coordinates confirmed from
-    // screen-layout scan on user's 1080×2226 device (Jul 2026):
-    //   Like          13.5% X  — found via findLikeButton() accessibility tree
-    //   Comment       30.4% X
-    //   Share to feed 48.1% X  — two circular arrows (repost)
-    //   Share to DM   66.0% X  — paper-plane icon
-    // NOTE: the old shareIconX was 33% which landed squarely on the Comment
-    // button (bounds 27–34% X), opening the comment section and causing all
-    // subsequent taps to miss their targets, including swipes that crossed
-    // the bottom nav bar and accidentally triggered the Reels tab.
-    // There is deliberately no fixed action-bar Y anymore — every share tap
-    // below is anchored to the Like button's real, freshly-measured Y
-    // (`rowY`) for whatever's on screen right now, and is skipped entirely
-    // if no Like button can be found (see the action-bar gating below).
-    const shareFeedIconX = Math.round(w * 0.481); // 48.1% X — circular arrows
-    const shareDmIconX   = Math.round(w * 0.660); // 66.0% X — paper plane
+    // Instagram feed post action-bar icon positions are NOT fixed —
+    // page/profile owners can disable comments and/or shares per post,
+    // which removes icons from the bar and shifts everything after the
+    // gap left-ward. A fixed 48.1%/66.0% X guess (measured from one
+    // screenshot where all icons happened to be present) landed on the
+    // Comment button once a post had fewer icons than that, opening the
+    // comment/reply compose box instead of sharing — confirmed from a
+    // user-supplied screen-layout scan (Jul 2026). Every tap below is now
+    // resolved per-post from `android.findFeedActionIcons()`, which reads
+    // the real accessibility tree for whatever's on screen right now and
+    // returns `null` for any icon whose identity is ambiguous (see its
+    // doc comment) instead of guessing — see the action-bar gating below.
 
     // Share-to-DM used to just tap the paper-plane icon and press Back —
     // it never actually picked a recipient or sent anything, it only
@@ -1080,13 +1076,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (wantLike) likeFailures++;
         } else {
           await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
-          // Look up the real Like button for whatever's on screen right now.
-          // Its presence confirms this is a normal post with a normal action
-          // bar; its Y position tells us exactly where that bar sits on THIS
-          // item, instead of assuming every post's action bar lands at the
-          // same fixed screen percentage.
-          const likeBtn = await android.findLikeButton(serial).catch(() => null);
-          if (!likeBtn) {
+          // Look up the real action-bar icons for whatever's on screen right
+          // now. The Like button's presence confirms this is a normal post
+          // with a normal action bar; each icon's actual position (or
+          // absence — a page/profile owner can disable comments and/or
+          // shares per post) is resolved fresh per post instead of assuming
+          // a fixed layout. See findFeedActionIcons()'s doc comment.
+          const icons = await android.findFeedActionIcons(serial).catch(() => null);
+          if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
             // or some other card we don't specifically recognize). Skip
@@ -1095,7 +1092,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.info({ serial, target: "action-bar", matched: false }, "[check-feed] skipped like/share/share-DM — no Like button visible on screen");
             if (wantLike) likeFailures++;
           } else {
-            const rowY = likeBtn.y;
+            const likeBtn = icons.like;
+            logger.info({ serial, hasComment: !!icons.comment, hasShareFeed: !!icons.shareFeed, hasShareDm: !!icons.shareDm }, "[check-feed] action-bar icons detected for this post");
 
             if (wantLike) {
               // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
@@ -1118,11 +1116,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // dismiss the "You reposted…" confirmation popup by tapping its
             // "Close" button. Using pressBack to cancel (not a swipe) avoids
             // any chance of the gesture crossing the bottom nav bar and
-            // triggering the Reels tab. Anchored to `rowY` (the Like
-            // button's actual Y on this post) rather than a fixed percentage,
-            // since we've now confirmed exactly where this post's action bar
-            // sits instead of assuming every post is the same height.
-            if (wantShareFeed) {
+            // triggering the Reels tab. `icons.shareFeed` is this post's
+            // real, freshly-measured icon position — null means this post's
+            // icon layout couldn't be told apart with confidence (see
+            // findFeedActionIcons), so the action is skipped rather than
+            // risking a tap on the wrong control (e.g. Comment).
+            if (wantShareFeed && !icons.shareFeed) {
+              logger.info({ serial }, "[check-feed] skipped share-to-feed — icon not identifiable on this post (disabled or ambiguous layout)");
+            }
+            if (wantShareFeed && icons.shareFeed) {
+              const shareFeedIconX = icons.shareFeed.x, rowY = icons.shareFeed.y;
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               try {
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
@@ -1160,8 +1163,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // human-looking way without needing to know a recipient).
             // pressBack is intentional — a swipe-dismiss risks crossing the
             // bottom nav bar and accidentally triggering the Reels tab.
-            // Anchored to `rowY` for the same reason as share-to-feed above.
-            if (wantShareDm) {
+            // `icons.shareDm` is this post's real, freshly-measured icon
+            // position — null means it couldn't be identified with
+            // confidence (disabled by the poster, or ambiguous layout — see
+            // findFeedActionIcons), so the action is skipped.
+            if (wantShareDm && !icons.shareDm) {
+              logger.info({ serial }, "[check-feed] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
+            }
+            if (wantShareDm && icons.shareDm) {
+              const shareDmIconX = icons.shareDm.x, rowY = icons.shareDm.y;
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               try {
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));

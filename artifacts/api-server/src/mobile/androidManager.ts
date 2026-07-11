@@ -1113,6 +1113,117 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
   return _parseCenter(m[1]);
 }
 
+export interface FeedActionIcons {
+  like: { x: number; y: number };
+  comment: { x: number; y: number } | null;
+  shareFeed: { x: number; y: number } | null; // repost / share-to-feed (double-arrow icon)
+  shareDm: { x: number; y: number } | null;   // send / share-via-DM (paper-plane icon)
+}
+
+/**
+ * Locates Instagram's feed post action-bar icons (Like, Comment, Repost,
+ * Send) for whatever post is on screen right now, instead of assuming
+ * they always sit at fixed screen-width percentages.
+ *
+ * Why this exists: shareFeedIconX/shareDmIconX used to be hardcoded at
+ * 48.1%/66.0% of screen width, measured once from a single screenshot
+ * where all four icons (Like, Comment, Repost, Send) were present. But
+ * page/profile owners can disable comments and/or shares independently
+ * per post, which removes those icons from the bar entirely and shifts
+ * everything after the gap left-ward — the fixed 48.1%/66.0% X positions
+ * then land on whatever actually occupies that slot instead, including
+ * the Comment button (confirmed from a user's screen-layout-scan after
+ * "Share to Feed"/"Share via DM" opened a comment/reply compose box
+ * instead). There is no reliable way to guess how many icons are missing
+ * from screen % alone, so this reads the real accessibility tree for
+ * this exact post instead.
+ *
+ * Approach: find the confirmed Like button (existing, reliable
+ * content-desc="Like" match), then collect every OTHER clickable node on
+ * the same row (same Y, small tolerance), excluding the far-right
+ * bookmark/save icon (identified by content-desc when Instagram labels
+ * it, and by a >80%-of-width position heuristic when it doesn't). What's
+ * left, left to right, can only be some subset of {Comment, Repost,
+ * Send} — Instagram never reorders them, it only omits whichever are
+ * disabled. That means:
+ *   - Exactly 3 remaining → all three present, order is forced by
+ *     elimination: [Comment, Repost, Send]. No guessing involved.
+ *   - Comment positively identified by content-desc → its position is
+ *     certain; if exactly 2 icons remain after removing it, those must
+ *     be [Repost, Send], again forced by elimination.
+ *   - Anything else (0, 1, or 2 unlabeled remaining icons with Comment
+ *     not identified) is genuinely ambiguous — could be any subset of
+ *     the three — and is left as `null` rather than guessed. Guessing
+ *     wrong here is exactly the bug this replaces.
+ * Callers must treat a `null` field as "skip this action for this post",
+ * never fall back to a fixed coordinate.
+ */
+export async function findFeedActionIcons(serial: string): Promise<FeedActionIcons | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+
+  const likeM = xml.match(/content-desc="Like"[^>]*bounds="([^"]+)"/);
+  if (!likeM) return null;
+  const like = _parseCenter(likeM[1]);
+  if (!like) return null;
+
+  const { w } = _getScreenSize(xml);
+  const rowTolerance = 20;
+  const saveCutoffX = Math.round(w * 0.80);
+
+  type RowNode = { x: number; y: number; cd: string };
+  const rowNodes: RowNode[] = [];
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let nm: RegExpExecArray | null;
+  while ((nm = nodeRe.exec(xml)) !== null) {
+    const attrs = nm[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+    if (!bm) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (Math.abs(c.y - like.y) > rowTolerance) continue;
+    if (c.x <= like.x + 4) continue; // Like itself, or anything left of it
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const cd = cdM ? cdM[1] : "";
+    if (/favorit|save/i.test(cd)) continue; // bookmark, labeled
+    if (c.x > saveCutoffX) continue; // bookmark, unlabeled — far-right heuristic
+    rowNodes.push({ x: c.x, y: c.y, cd });
+  }
+  rowNodes.sort((a, b) => a.x - b.x);
+
+  const pos = (n: RowNode) => ({ x: n.x, y: n.y });
+  let comment: { x: number; y: number } | null = null;
+  let shareFeed: { x: number; y: number } | null = null;
+  let shareDm: { x: number; y: number } | null = null;
+
+  if (rowNodes.length === 3) {
+    // All three possible icons present — order forced by elimination.
+    comment = pos(rowNodes[0]);
+    shareFeed = pos(rowNodes[1]);
+    shareDm = pos(rowNodes[2]);
+  } else {
+    const commentLabeled = rowNodes.find(n => /comment/i.test(n.cd));
+    if (commentLabeled) {
+      comment = pos(commentLabeled);
+      const others = rowNodes.filter(n => n !== commentLabeled);
+      if (others.length === 2) {
+        shareFeed = pos(others[0]);
+        shareDm = pos(others[1]);
+      }
+      // others.length is 0 or 1 here: ambiguous or both disabled — leave
+      // shareFeed/shareDm null rather than guess which one a lone icon is.
+    }
+    // rowNodes.length is 0, 1, or 2 with no Comment label found: can't
+    // safely tell which action(s) these icon(s) actually are — everything
+    // stays null (skip comment identification and both share actions).
+  }
+
+  return { like, comment, shareFeed, shareDm };
+}
+
 /**
  * Minimal, dependency-free PNG decoder for `adb exec-out screencap -p`
  * output. Android's screencap always emits 8-bit RGBA (colorType 6); plain
