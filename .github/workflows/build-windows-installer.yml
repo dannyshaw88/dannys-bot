@@ -2,7 +2,8 @@ name: Build Windows Installer
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -19,8 +20,6 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
-        env:
-          npm_config_minimum_release_age: "0"
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
       - name: Build frontend
@@ -52,10 +51,6 @@ jobs:
           name: web-dist
       - name: Install Electron deps
         working-directory: artifacts/electron
-        # --ignore-scripts skips better-sqlite3 node-gyp compile and
-        # puppeteer Chromium download. electron-builder rebuilds native
-        # modules correctly via its own npmRebuild step using the right
-        # Electron headers — no manual VS toolchain needed here.
         run: npm install --ignore-scripts
       - name: Build Electron bundle
         working-directory: artifacts/electron
@@ -70,7 +65,7 @@ jobs:
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, "refs/tags/v")
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/electron/release/*.exe
