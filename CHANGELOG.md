@@ -4,6 +4,48 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.473] — 2026-07-11
+
+### Fix: story like/share taps missed on reposted Reels and privacy-restricted stories
+
+Story likes and shares were blind-tapping a single hardcoded screen
+coordinate. A `screen-layout-scan` on a real device showed why that could
+never work: Instagram draws the story action bar entirely on canvas with
+**zero accessible child elements** — there is no content-desc, text, or
+resource-id for "Like" or "Share" to search for in the story viewer. Worse,
+that bar's position and icon count both change depending on content —
+reposted Reels use a different, higher bar than a plain story — and per-story
+owner settings (likes/comments/shares can each be individually disabled,
+which removes icons and re-centers the rest). One fixed `(x%, y%)` pair could
+only ever match one of those layouts; on every other layout the tap landed on
+the reply text field or the story background and silently did nothing.
+
+**Fix:** added a pixel-based icon locator (`findStoryActionIcons` in
+`androidManager.ts`) that captures a real screenshot via
+`adb exec-out screencap -p`, decodes it with a small dependency-free PNG
+decoder (Node's built-in `zlib`, no new packages), and scans the bottom of
+the screen for Instagram's dark gradient scrim plus the bright icon glyphs
+sitting on it. Instagram always keeps Like leftmost and Share/Send rightmost
+regardless of how many icons sit between them, so the story loop now taps
+whichever icon is actually on screen instead of a guessed spot. If only one
+icon is found (can't distinguish Like from Share) or none at all (that story
+has them disabled), the action is skipped rather than risking a tap on the
+wrong control. If the screenshot approach is unavailable on a given device,
+it falls back to the previous accessibility-tree/fixed-coordinate behavior so
+nothing regresses. Feed-level like/share logic is untouched — this only
+changes the story-viewing loop.
+
+### UI: merged "View Stories from Feed" into the Step 2 card
+
+"View Stories from Feed" was showing as its own step (STEP3) even though it
+runs as part of the same feed-viewing pass as the like/share settings above
+it — there's no separate step 3 in the actual automation cycle. It now lives
+inside the Step 2 card, under a border separator beneath the like/share
+settings, with its own "(STEP3)" label removed. Added a bit more breathing
+room between the "(STEP2)" label and the "View Feed" title.
+
+---
+
 ## [1.1.472] — 2026-07-11
 
 ### Fix: mirror catch-up lag (spawnSync→async) + Send button never pressed

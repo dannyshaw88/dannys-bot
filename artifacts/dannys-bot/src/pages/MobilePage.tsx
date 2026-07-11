@@ -1252,7 +1252,7 @@ function AutomationSettingsPanel({
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-        <div className="space-y-1">
+        <div className="space-y-2">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
           <p className="text-sm font-semibold text-foreground">View Feed</p>
         </div>
@@ -1394,12 +1394,12 @@ function AutomationSettingsPanel({
         </div>
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
-      </div>
 
-      {/* View Stories from Feed */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        {/* Border separator between the like/share settings above and View
+            Stories from Feed below — same card/step (STEP2), not its own step. */}
+        <div className="border-t border-border" />
+
         <div className="space-y-1">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
           <p className="text-sm font-semibold text-foreground">View Stories from Feed</p>
         </div>
 
