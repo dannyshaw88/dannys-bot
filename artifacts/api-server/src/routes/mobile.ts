@@ -1387,19 +1387,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const willLike  = likeChance  > 0 && Math.random() < likeChance;
       const willShare = shareChance > 0 && Math.random() < shareChance;
 
-      // Watch this story for a random percentage of its ~6s duration.
-      // Floor is 1500 ms so even a very short story has enough runway
-      // to act before it auto-advances. When a DM-share is scheduled, cap
-      // the watch time so enough of the slide's own ~6s timer is left for
-      // the multi-step share sequence (icon scan + tap + recipient + Send,
-      // roughly 3-4s of scripted waits) to finish BEFORE the slide would
-      // auto-advance on its own — previously watchMs could run up to 100%
-      // of the slide, leaving zero runway and guaranteeing the share
-      // sequence ran into the next slide (or the feed) mid-flow.
-      const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
-        Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-      let watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
-      if (willShare) watchMs = Math.min(watchMs, 2000);
+      // Watch this story for a random percentage of its ~6s duration — but
+      // ONLY when no action is scheduled on this slide. Root-cause fix
+      // (Jul 2026, user-reported): stories run on their own fixed real-world
+      // timer no matter what the script does, and the multi-step DM-share
+      // sequence alone (icon scan, tap, wait for sheet, pick recipient,
+      // wait, tap Send) costs several real seconds. Any deliberate "watch"
+      // delay before even STARTING a scheduled like/share eats directly
+      // into that fixed timer and was the main reason share attempts ran
+      // out of runway before finishing — not the icon detection or the
+      // close-Instagram logic. When a like and/or a share is scheduled,
+      // fire immediately (minimal delay, just enough for the opened-story
+      // frame to actually be on screen) so the full remaining slide timer
+      // is available for the action(s). Pure viewing (neither action
+      // scheduled) keeps the old randomized watch time since there's
+      // nothing time-critical to rush toward.
+      let watchMs: number;
+      if (willLike || willShare) {
+        watchMs = 250;
+      } else {
+        const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
+          Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
+        watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
+      }
       await sleepOrAbort(serial, watchMs);
 
       // Bail out of the ENTIRE remaining loop — not just this slide — the
@@ -1434,7 +1444,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.doubleTap(serial, cx, cy);
         logger.info({ serial, story: s + 1 }, "[view-stories] liked story (double-tap on content)");
         onLog?.(`Story ${s + 1}: liked (double-tap at (${cx},${cy}))`);
-        await sleepOrAbort(serial, 600); // wait for heart animation
+        // When a share is also scheduled on this slide, don't linger here —
+        // every extra ms is runway the DM-share sequence won't have. Only
+        // pause for the full heart-animation beat when nothing else needs
+        // to happen next.
+        await sleepOrAbort(serial, willShare ? 150 : 600);
       }
 
       if (willShare && !(await stillInStoryViewer())) {

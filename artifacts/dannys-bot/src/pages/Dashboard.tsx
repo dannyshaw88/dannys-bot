@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.485",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Liking or sharing a story used to wait a bit before acting, to look more like a real person watching first. But stories don't wait for the software, so that pause was often eating up the time needed to actually finish sending a share. Likes and shares now happen right away instead of waiting, so there's real time left to complete a share.",
+      },
+      {
+        category: "Fixed",
+        text: "When closing Instagram at the end of a cycle, the software sometimes kept trying to close it 4 more times even after the very first try had already worked, because it checked too quickly and thought it had failed. It now waits longer to confirm before trying again, and won't keep retrying blindly when there's nothing left to close.",
+      },
+    ],
+  },
+  {
     version: "1.1.484",
     date: "11 Jul 2026",
     items: [

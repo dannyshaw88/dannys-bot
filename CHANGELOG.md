@@ -4,6 +4,46 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.485] — 2026-07-11
+
+### Fix: like/share on stories fired after a "watch" delay, running out of time before finishing (user-reported, CRITICAL)
+
+Log evidence (`Story 1: liked` at 42.3s → `share icon scan` at 47.4s → `share
+skipped — tap opened keyboard` at 49.2s → `story viewer already closed` at
+52.1s) showed the DM-share sequence eating almost the entire remaining
+runway of the slide's own fixed real-world timer, because a deliberate
+"watch this story for a random % of its duration" delay ran *before* the
+scheduled like/share even started. The story doesn't pause for the script —
+every second spent "watching" before acting is a second the multi-step share
+sequence (icon scan, tap, wait for sheet, pick recipient, wait, tap Send)
+didn't have.
+
+Fix: when a like and/or a share is scheduled on a slide, both now fire
+immediately (minimal ~250ms delay, just enough for the frame to be on
+screen) instead of waiting out a randomized watch period first, and the gap
+between the like tap and starting the share sequence was cut from 600ms to
+150ms when both are scheduled. Pure viewing (no action scheduled) is
+unaffected. This does not fix icon-detection accuracy by itself, but removes
+the timing starvation that was preventing the share sequence from ever
+having a fair shot at finishing.
+
+### Fix: closing Instagram kept re-attempting the recents-swipe after it had already worked
+
+User-reported: with only one app open, the very first left-drag correctly
+dismissed it, but the software still repeated the swipe 4 more times against
+an already-closed/empty screen before moving on to airplane mode. Root
+cause: Instagram's background services keep its process alive briefly after
+the card is dismissed, and the code checked `pidof` only once, 600ms after
+the swipe — too soon to see the process actually exit, so it looked like the
+swipe had failed and tried again. Now polls for up to 3.5s after each swipe
+before concluding it didn't work, and — since this launcher's recents screen
+has never exposed a text label for any card in testing, so the "how many
+cards are left" detection has no ground truth to count on — caps blind
+retries at 2 instead of 5 when no card labels are found at all, only looping
+the full 5 when real per-card labels are actually detected.
+
+---
+
 ## [1.1.484] — 2026-07-11
 
 ### Fix: close-Instagram gesture swiped UP, which does nothing on this device's recents screen (CRITICAL)

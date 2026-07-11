@@ -976,20 +976,54 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
   await openRecentApps(serial);
   await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
 
-  // Up to 5 drag passes: each one may only clear the left-most of several
-  // stacked floating windows (not necessarily Instagram itself), so the
-  // "find left-most card, drag it left" gesture must repeat until Instagram
-  // is confirmed gone, not just attempted once.
-  const MAX_ATTEMPTS = 5;
+  // Poll pidof for up to POLL_MS after a swipe instead of a single check at
+  // a fixed delay. Root-cause fix (Jul 2026): a real, correctly-aimed drag
+  // was dismissing the card (user-confirmed visually) but the underlying
+  // process doesn't always die within a fixed short window — Instagram
+  // keeps background services (notifications, etc.) alive briefly after
+  // its UI is dismissed. A single check at 600ms was catching it mid-death
+  // and concluding "still running", so the loop kept re-swiping an already
+  // -empty screen 4 more times for no reason (~20s wasted every cycle).
+  // Polling gives the same single successful swipe a real chance to
+  // register as closed before we ever attempt a second one.
+  const POLL_MS = 3500;
+  const POLL_STEP_MS = 400;
+  const waitForClosed = async (): Promise<boolean> => {
+    const deadline = Date.now() + POLL_MS;
+    while (Date.now() < deadline) {
+      if (!pidof()) return true;
+      await new Promise(r => setTimeout(r, POLL_STEP_MS));
+    }
+    return !pidof();
+  };
+
+  // This launcher's recents dump has never once exposed a text/content-desc
+  // "Instagram" label in real testing (every attempt logs "no label found"),
+  // so the multi-card left-most detection below is effectively a no-op on
+  // this device — the switcher shows cards as bare thumbnails with no
+  // accessible caption. Without any way to *see* how many cards remain, we
+  // can't justify looping 5 times "just in case" — that was the source of
+  // the wasted repeat swiping on an already-closed/empty screen the user
+  // reported. Cap blind (no-label) attempts at 2: one real attempt, and one
+  // retry only if the generous poll above still says Instagram is running
+  // (e.g. the first drag genuinely missed). If a labelled card IS found on
+  // a device where the dump does expose captions, keep looping per distinct
+  // card as before, up to 5, since that count is then actual ground truth.
+  const MAX_BLIND_ATTEMPTS = 2;
+  const MAX_LABELLED_ATTEMPTS = 5;
   let method = "no attempts made";
   let attemptsRun = 0;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  let attempt = 0;
+  let sawAnyLabel = false;
+  while (true) {
+    attempt++;
     attemptsRun = attempt;
     if (!pidof()) { method = `Instagram already gone before attempt ${attempt}`; break; }
 
     const xml = await _uiDump(adb, serial);
     const igCard = xml ? _findElem(xml, "Instagram") : null;
     const card = (igCard && xml) ? (_findLeftmostLabelInBand(xml, igCard.y, 120) ?? igCard) : null;
+    if (card) sawAnyLabel = true;
 
     if (card) {
       // Drag fully off the left edge — a short flick isn't enough to
@@ -999,15 +1033,22 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
       await swipe(serial, card.x, card.y, dragToX, card.y, 400);
       method = `attempt ${attempt}: dragged left-most card at (${card.x},${card.y}) left to (${dragToX},${card.y})`;
     } else {
-      // Couldn't find any label at all (e.g. dump failed) — fall back to a
-      // centred left-drag, which is correct for the common single-app case.
+      // Couldn't find any label at all (e.g. dump failed, or — as observed
+      // on this device — the launcher just never exposes card captions) —
+      // fall back to a centred left-drag, which is correct for the common
+      // single-app case.
       const cardX = Math.round(w * 0.5);
       const cardY = Math.round(h * 0.45);
       await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);
       method = `attempt ${attempt}: no label found in recents tree — fell back to centred drag-left (${cardX},${cardY})`;
     }
-    await new Promise(r => setTimeout(r, 600));
-    if (!pidof()) { method += " — Instagram closed"; break; }
+
+    const closed = await waitForClosed();
+    if (closed) { method += " — Instagram closed"; break; }
+
+    const capReached = sawAnyLabel ? attempt >= MAX_LABELLED_ATTEMPTS : attempt >= MAX_BLIND_ATTEMPTS;
+    if (capReached) { method += ` — still running after ${attempt} attempt(s), giving up on the recents gesture`; break; }
+
     // The drag can also fully back out of the overview on some launchers;
     // re-open it before the next pass in case that happened.
     await openRecentApps(serial);
@@ -1015,7 +1056,8 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
   }
 
   const runningNow = pidof();
-  log(`[close-ig] attempt ${attemptsRun}/${MAX_ATTEMPTS}: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
+  const capLabel = sawAnyLabel ? MAX_LABELLED_ATTEMPTS : MAX_BLIND_ATTEMPTS;
+  log(`[close-ig] attempt ${attemptsRun}/${capLabel}: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions — a "closed completely" requirement can't rely on the gesture
