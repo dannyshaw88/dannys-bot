@@ -26,9 +26,6 @@ jobs:
         env:
           npm_config_minimum_release_age: '0'
 
-      - name: Build db lib
-        run: pnpm --filter @workspace/db run build
-
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
 
