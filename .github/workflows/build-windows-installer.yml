@@ -49,6 +49,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
+          path: ${{ github.workspace }}
       - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install --ignore-scripts
