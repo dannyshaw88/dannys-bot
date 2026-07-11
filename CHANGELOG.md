@@ -4,6 +4,61 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.466] — 2026-07-11
+
+### Fix: Human Session Tool stalls + empty log during automation cycles
+
+**Root cause — three separate problems found from the log:**
+
+1. **Stall watchdog was too aggressive during automation** — the 6-second
+   no-data threshold is correct for an idle mirror session (screen off = stall
+   immediately). But during an active automation cycle the phone is busy running
+   adb commands: each `dismissAdsChoiceDialog` and `dismissInstagramInterstitials`
+   call fires a UIAutomator accessibility dump that takes 1–2 s, and they're
+   called in sequence — `dismissAdsChoiceDialog` + `dismissInstagramInterstitials`
+   on launch + `dismissInstagramInterstitials` on each scroll. On a loaded MIUI
+   device these can chain to 4–6 s with no screenrecord output, which fired the
+   watchdog right in the middle of legitimate work. The watchdog killed
+   screenrecord, the restart got a brief burst of frames (resetting the
+   `stallNotified` flag), then stalled again — causing the repeating "Stream
+   stalled" messages seen in the log.
+   **Fix:** stall threshold raised from 6 s → 30 s while
+   `automationCycleInProgress` contains this serial. Drops back to 6 s the
+   moment the cycle ends. The stall message is also updated to say
+   *"Stream paused — automation busy (UIAutomator / adb). Restarting stream…"*
+   instead of "screen may be off" when automation is active.
+
+2. **Log panel was completely blank during automation** — the cycle runs as a
+   single blocking HTTP POST. No intermediate steps were ever pushed to the
+   client. The user saw "Cycle starting" then silence, assumed everything was
+   frozen, and turned off the toggle — aborting a cycle that was actually
+   running fine.
+   **Fix:** added a `videoSessionWS` map (`serial → WebSocket`) that the video
+   stream handler populates when a client connects and clears on disconnect.
+   Added `sendVideoLog(serial, msg)` helper that pushes `{ info: msg }` through
+   that socket. The Log panel now shows real-time step-by-step progress from
+   the automation backend:
+   - `▶ Waking screen…`
+   - `▶ Unlocking screen…`
+   - `▶ Opening Instagram…`
+   - `▶ Checking for launch dialogs…`
+   - `▶ Starting feed scroll — N posts`
+   - `  Scroll 1/3`, `  Scroll 2/3`, `  Scroll 3/3` (per-scroll via `onLog`
+     callback added to `runCheckFeedLoop`)
+   - `▶ Feed done — N likes, N feed-shares, N DM-shares`
+   - `▶ Starting stories (up to N)` / `▶ Stories done — N watched`
+   - `▶ Closing Instagram…`
+   - `▶ Airplane mode ON — recycling network…` / `▶ Airplane mode OFF`
+   - `▶ Locking phone — cycle complete ✓`
+
+3. **Video delay does NOT cause automation delay** — the automation sends adb
+   commands directly to the phone, completely independently of the video
+   stream. The video is for monitoring only. The user was seeing a false
+   correlation: the automation was running fine while the video stream stalled.
+   With the new progress messages this is now self-evident from the log.
+
+---
+
 ## [1.1.465] — 2026-07-11
 
 ### UI: Redesigned Mobile sidebar icon; Windows installer CI now builds on every push to main

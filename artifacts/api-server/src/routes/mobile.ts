@@ -329,6 +329,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // processes left behind by something outside this server's tracking
   // (a crashed tab, a previous server run, etc).
   const videoSessionActive = new Set<string>();
+  // Maps serial → the currently-connected video WebSocket for that device.
+  // Populated when a video WS client connects, cleared on disconnect.
+  // Used by the automation cycle to push real-time progress messages into
+  // the client's Log panel without a separate channel.
+  const videoSessionWS = new Map<string, import('ws').WebSocket>();
+
+  // Helper: push an info message to the connected video WebSocket for a
+  // device (if one is connected).  Used by the automation cycle to stream
+  // step-by-step progress into the Log panel.  No-ops silently when no WS
+  // is connected, so callers don't need to guard the call.
+  const sendVideoLog = (serial: string, msg: string): void => {
+    const vws = videoSessionWS.get(serial);
+    if (vws && vws.readyState === 1) {
+      try { vws.send(JSON.stringify({ info: msg })); } catch { /* ignore */ }
+    }
+  };
 
   httpServer.on("upgrade", (request, socket, head) => {
     const url = request.url ?? "";
@@ -399,6 +415,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         cleanedUp = true;
         running = false;
         videoSessionActive.delete(serial);
+        videoSessionWS.delete(serial);
         if (lagWatchdog) clearInterval(lagWatchdog);
         try { currentChild?.kill(); } catch { /* ignore */ }
         try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
@@ -481,16 +498,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const armStall = (ms: number) => {
           if (stallTimer) clearTimeout(stallTimer);
           stallTimer = setTimeout(() => {
-            logger.warn({ serial, bytesTotal }, "[mobile-video] stream stalled — no data for 6s, forcing restart");
+            // During an active automation cycle the phone is busy running adb
+        // commands — UIAutomator dumps, swipes, taps — and screenrecord can
+        // legitimately pause for several seconds between frames.  6s is too
+        // aggressive there; use 30s while automation is active so the watchdog
+        // doesn't kill screenrecord in the middle of a UIAutomator dump.
+        const stallThresholdMs = () => automationCycleInProgress.has(serial) ? 30_000 : 6_000;
+        logger.warn({ serial, bytesTotal }, `[mobile-video] stream stalled — no data for ${stallThresholdMs() / 1000}s, forcing restart`);
             if (!stallNotified) {
               stallNotified = true;
-              if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Stream stalled — screen may be off. Tap the mirror to wake." }));
+              const cycleActive = automationCycleInProgress.has(serial);
+              const msg = cycleActive
+                ? "Stream paused — automation busy (UIAutomator / adb). Restarting stream…"
+                : "Stream stalled — screen may be off. Tap the mirror to wake.";
+              if (ws.readyState === 1) ws.send(JSON.stringify({ info: msg }));
             }
             // WAKEUP intentionally omitted: wake must only come from user input.
             try { child.kill(); } catch { /* ignore — close handler restarts */ }
           }, ms);
         };
-        armStall(6_000);
+        armStall(stallThresholdMs());
 
         child.stdout.on("data", (chunk: Buffer) => {
           if (!sawAnyData) {
@@ -499,7 +526,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           sawAnyData = true;
           bytesTotal += chunk.length;
           stallNotified = false;
-          armStall(6_000);
+          armStall(stallThresholdMs());
           if (ws.readyState === 1) ws.send(chunk);
         });
         child.stderr?.on("data", (d: Buffer) => {
@@ -558,6 +585,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         spawnSync(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], { encoding: "utf8", timeout: 3000 });
       }
       videoSessionActive.add(serial);
+      videoSessionWS.set(serial, ws);
       logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: pkill stale screenrecord done");
 
       // NOTE: an earlier fix here assumed the display being off explained
@@ -870,11 +898,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin?: number; shareFeedPercentMax?: number;
     shareDmPercentMin?: number; shareDmPercentMax?: number;
+    onLog?: (msg: string) => void;
   }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; strayNavRecoveries: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
       shareDmPercentMin = 0, shareDmPercentMax = 0,
+      onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
     const delayHiSec = Math.max(delayMinSec, delayMaxSec);
@@ -949,6 +979,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      onLog?.(`Scroll ${i + 1}/${count}`);
       logger.info({ serial, target: "feed-scroll", from: [x, y1], to: [x, y2] }, "[check-feed] swipe");
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 180);
@@ -1360,6 +1391,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
+      sendVideoLog(serial, "▶ Waking screen…");
       await android.wakeScreen(serial);
       steps.push("power-on");
       await sleepOrAbort(serial, 1200); // let the screen finish waking
@@ -1370,11 +1402,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // taps land on the keyguard instead of Instagram.  A real swipe gesture
       // also resets the screen-off timeout so the display stays on while the
       // cycle runs (KEYCODE_WAKEUP alone does not count as touch input).
+      sendVideoLog(serial, "▶ Unlocking screen…");
       await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
       // 2. Open Instagram.
+      sendVideoLog(serial, "▶ Opening Instagram…");
       await android.launchInstagram(serial);
       steps.push("launch-instagram");
       // Reduced from 3500 → 2000 ms. The dismissAdsChoiceDialog and
@@ -1390,9 +1424,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // It blocks the whole screen, so every scripted tap after it would
       // silently land on the modal instead of the feed. Walk through it if
       // present; this is a no-op if the dialog isn't showing.
+      sendVideoLog(serial, "▶ Checking for launch dialogs…");
       const adsChoice = await android.dismissAdsChoiceDialog(serial).catch(() => ({ dismissed: false, steps: [] as string[] }));
       if (adsChoice.dismissed) {
         steps.push(`ads-choice-dialog(${adsChoice.steps.length} steps)`);
+        sendVideoLog(serial, `▶ Dismissed ads-choice dialog (${adsChoice.steps.length} taps)`);
         await sleepOrAbort(serial, 1000); // let the feed settle after the modal closes
       }
 
@@ -1401,21 +1437,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const launchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
       if (launchPopup) {
         steps.push(`launch-popup-dismissed(${launchPopup})`);
+        sendVideoLog(serial, `▶ Dismissed launch popup (${launchPopup})`);
         await sleepOrAbort(serial, 600);
       }
 
       // 3. Scroll the feed (Step 2 in the UI).
+      sendVideoLog(serial, `▶ Starting feed scroll — ${count} posts`);
       const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
+        onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
       });
       steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+      sendVideoLog(serial, `▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
 
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
       // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
       // very top of the feed so the stories row is visible again.
       if (viewStoriesSlidesMax > 0) {
+        sendVideoLog(serial, "▶ Tapping Home tab for stories…");
         // Find the real Home tab via the accessibility tree instead of a
         // guessed screen percentage — the fixed 10%/97.5% coordinates were
         // landing on a feed post instead of the bottom-nav house icon on
@@ -1445,7 +1486,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // upper bound; on the user's device the story tray reliably reloads
         // in 3–5 s. Cutting it to 5 s eliminates the long dead pause the
         // user sees after scrolling ends and before any story opens.
+        sendVideoLog(serial, "▶ Waiting for story tray to load…");
         await sleepOrAbort(serial, 5000);
+        sendVideoLog(serial, `▶ Starting stories (up to ${viewStoriesSlidesMax})`);
         const result = await runViewStoriesFromFeedLoop(serial, {
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
@@ -1454,21 +1497,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
         storiesWatched = result.storiesWatched;
         steps.push(`stories(${result.storiesWatched} watched)`);
+        sendVideoLog(serial, `▶ Stories done — ${result.storiesWatched} watched`);
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
+      sendVideoLog(serial, "▶ Closing Instagram…");
       await android.closeInstagramViaRecents(serial);
       steps.push("closed-instagram");
 
       // 6. Cycle airplane mode on, wait, then off — forces a fresh network
       // session on the next run.
+      sendVideoLog(serial, "▶ Airplane mode ON — recycling network…");
       await android.setAirplaneMode(serial, true);
       steps.push("airplane-mode-on");
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
       await sleepOrAbort(serial, Math.round(waitSec * 1000));
+      sendVideoLog(serial, "▶ Airplane mode OFF");
       await android.setAirplaneMode(serial, false);
       steps.push("airplane-mode-off");
 
@@ -1477,6 +1524,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
+      sendVideoLog(serial, "▶ Locking phone — cycle complete ✓");
       await android.sleepScreen(serial);
       steps.push("power-off");
 
