@@ -76,12 +76,14 @@ type AutomationSettings = {
   shareDmPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
-  viewStoriesUsersMin: number;
-  viewStoriesUsersMax: number;
   viewStoriesSlidesMin: number;
   viewStoriesSlidesMax: number;
   viewStoriesSlideWatchPctMin: number;
   viewStoriesSlideWatchPctMax: number;
+  viewStoriesLikePercentMin: number;
+  viewStoriesLikePercentMax: number;
+  viewStoriesShareDmPercentMin: number;
+  viewStoriesShareDmPercentMax: number;
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -645,12 +647,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareDmPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
-    viewStoriesUsersMin: z.number().min(0).max(50).default(0),
-    viewStoriesUsersMax: z.number().min(0).max(50).default(0),
-    viewStoriesSlidesMin: z.number().min(1).max(50).default(3),
-    viewStoriesSlidesMax: z.number().min(1).max(50).default(6),
+    viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
+    viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
     viewStoriesSlideWatchPctMax: z.number().min(1).max(100).default(90),
+    viewStoriesLikePercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
@@ -661,9 +665,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareFeedPercentMin: 0, shareFeedPercentMax: 0,
       shareDmPercentMin: 0, shareDmPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
-      viewStoriesUsersMin: 0, viewStoriesUsersMax: 0,
-      viewStoriesSlidesMin: 3, viewStoriesSlidesMax: 6,
+      viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
+      viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
+      viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
@@ -996,67 +1001,94 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   async function runViewStoriesFromFeedLoop(serial: string, params: {
-    usersMin: number; usersMax: number;
     slidesMin: number; slidesMax: number;
     slideWatchPctMin: number; slideWatchPctMax: number;
-  }): Promise<{ usersWatched: number; slidesWatched: number }> {
-    const { usersMin, usersMax, slidesMin, slidesMax, slideWatchPctMin, slideWatchPctMax } = params;
-    const numUsers = Math.floor(
-      Math.min(usersMin, usersMax) +
-      Math.random() * (Math.max(usersMin, usersMax) - Math.min(usersMin, usersMax) + 1)
+    likePercentMin: number; likePercentMax: number;
+    shareDmPercentMin: number; shareDmPercentMax: number;
+  }): Promise<{ storiesWatched: number }> {
+    const {
+      slidesMin, slidesMax,
+      slideWatchPctMin, slideWatchPctMax,
+      likePercentMin, likePercentMax,
+      shareDmPercentMin, shareDmPercentMax,
+    } = params;
+
+    const totalStories = Math.floor(
+      Math.min(slidesMin, slidesMax) +
+      Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
     );
-    if (numUsers <= 0) return { usersWatched: 0, slidesWatched: 0 };
+    if (totalStories <= 0) return { storiesWatched: 0 };
 
     const { w, h } = getScreenSize(serial);
 
-    let usersWatched = 0;
-    let slidesWatched = 0;
+    // Per-story action chances — sampled once for the whole session so
+    // the overall distribution stays consistent.
+    const likeChance  = (Math.min(likePercentMin, likePercentMax) +
+      Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
+    const shareChance = (Math.min(shareDmPercentMin, shareDmPercentMax) +
+      Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
 
-    for (let u = 0; u < numUsers; u++) {
+    // Open the story viewer: tap a random friend's story bubble.
+    const picked = await pickAndOpenRandomStory(serial, w, h);
+    logger.info({ serial, picked, totalStories }, "[view-stories] opened story viewer");
+    await sleepOrAbort(serial, 1800); // let viewer animate open
+
+    let storiesWatched = 0;
+
+    for (let s = 0; s < totalStories; s++) {
       if (isCycleAborted(serial)) break;
 
-      // Pick a random bubble (1-10) via the hold-and-slide-right gesture and
-      // let the viewer open. This runs fresh for every user — we're back at
-      // the feed's story bar each time (see the "close" step at the bottom
-      // of the loop), so the same random 1-10 pick applies every round.
-      const picked = await pickAndOpenRandomStory(serial, w, h);
-      logger.info({ serial, target: "stories", picked }, "[view-stories] hold-and-slide picked bubble");
-      await sleepOrAbort(serial, 1800); // let story viewer open
+      // Watch this story for a random percentage of its ~6s duration.
+      const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
+        Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
+      const watchMs = Math.max(400, Math.round((watchPct / 100) * 6000));
+      await sleepOrAbort(serial, watchMs);
 
-      const numSlides = Math.floor(
-        Math.min(slidesMin, slidesMax) +
-        Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
-      );
-      for (let s = 0; s < numSlides; s++) {
-        if (isCycleAborted(serial)) break;
-        // Each slide gets its own randomly chosen watch percentage.
-        const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
-          Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-        // Typical Instagram story slide is 7 seconds for videos; use 6s as
-        // a conservative baseline so even 100% watch doesn't overshoot.
-        const watchMs = Math.max(400, Math.round((watchPct / 100) * 6000));
-        await sleepOrAbort(serial, watchMs);
-        slidesWatched++;
-        // Tap the right ~70% of the screen to advance to the next slide.
-        await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
-        await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
+      // Like the story?
+      // Story action bar sits at the very bottom (~97–98% Y). Coordinates
+      // confirmed via screen-layout scan on the user's 1080×2226 device:
+      //   like  ≈ 15% X, 97.8% Y
+      //   share ≈ 43% X, 97.8% Y  (paper-plane / DM icon)
+      if (likeChance > 0 && Math.random() < likeChance) {
+        // Try the accessibility tree first (same method as feed likes).
+        const likeBtn = await android.findLikeButton(serial).catch(() => null);
+        if (likeBtn) {
+          await android.tap(serial, likeBtn.x, likeBtn.y);
+        } else {
+          await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.978));
+        }
+        logger.info({ serial, story: s + 1 }, "[view-stories] liked story");
+        await sleepOrAbort(serial, 400 + Math.round(Math.random() * 200));
       }
-      usersWatched++;
 
-      if (u < numUsers - 1) {
-        // More users left to watch: drag down *slightly* to close this
-        // story back to the feed (not a full dismissive swipe) — then the
-        // pick-and-slide-right cycle runs again for the next user.
-        await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.55), 260);
-        await sleepOrAbort(serial, 900 + Math.round(Math.random() * 400));
-      } else {
-        // Last user: exit the story viewer fully by swiping down.
-        await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.50), Math.round(w / 2), Math.round(h * 0.92), 300);
-        await sleepOrAbort(serial, 800);
+      // Share via DM?
+      if (shareChance > 0 && Math.random() < shareChance) {
+        // Tap the paper-plane / send icon to open the DM picker.
+        await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.978));
+        await sleepOrAbort(serial, 1200); // wait for picker sheet
+        // Close without sending (registers the share intent, looks human).
+        await android.pressBack(serial);
+        logger.info({ serial, story: s + 1 }, "[view-stories] shared story DM picker opened then closed");
+        await sleepOrAbort(serial, 600);
       }
+
+      storiesWatched++;
+
+      // Advance to the next story by tapping the right ~75% of the screen.
+      await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
+      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
     }
 
-    return { usersWatched, slidesWatched };
+    // Exit the story viewer by swiping down.
+    await android.swipe(
+      serial,
+      Math.round(w / 2), Math.round(h * 0.50),
+      Math.round(w / 2), Math.round(h * 0.92),
+      300,
+    );
+    await sleepOrAbort(serial, 800);
+
+    return { storiesWatched };
   }
 
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
@@ -1088,12 +1120,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMax: z.number().min(0).max(100).default(0),
     shareDmPercentMin: z.number().min(0).max(100).default(0),
     shareDmPercentMax: z.number().min(0).max(100).default(0),
-    viewStoriesUsersMin: z.number().min(0).max(50).default(0),
-    viewStoriesUsersMax: z.number().min(0).max(50).default(0),
-    viewStoriesSlidesMin: z.number().min(1).max(50).default(3),
-    viewStoriesSlidesMax: z.number().min(1).max(50).default(6),
+    viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
+    viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
     viewStoriesSlideWatchPctMax: z.number().min(1).max(100).default(90),
+    viewStoriesLikePercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -1136,9 +1170,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         airplaneWaitMinSec, airplaneWaitMaxSec,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
-        viewStoriesUsersMin, viewStoriesUsersMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
+        viewStoriesLikePercentMin, viewStoriesLikePercentMax,
+        viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -1191,7 +1226,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
       // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
       // very top of the feed so the stories row is visible again.
-      if (viewStoriesUsersMax > 0) {
+      if (viewStoriesSlidesMax > 0) {
         // Find the real Home tab via the accessibility tree instead of a
         // guessed screen percentage — the fixed 10%/97.5% coordinates were
         // landing on a feed post instead of the bottom-nav house icon on
@@ -1218,12 +1253,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         await sleepOrAbort(serial, 10000);
         const result = await runViewStoriesFromFeedLoop(serial, {
-          usersMin: viewStoriesUsersMin, usersMax: viewStoriesUsersMax,
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
+          likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
+          shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
         });
-        storiesWatched = result.usersWatched;
-        steps.push(`stories(${result.usersWatched} users, ${result.slidesWatched} slides)`);
+        storiesWatched = result.storiesWatched;
+        steps.push(`stories(${result.storiesWatched} watched)`);
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a

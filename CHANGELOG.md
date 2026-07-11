@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.459] — 2026-07-11
+
+### Rework: Stories settings — total story count, per-story like %, per-story share DM %
+
+**Removed:** "Users to watch" — the concept of per-user story sessions is gone.
+
+**Renamed:** "Slides per user" → **"Stories to watch"** (min/max). This is now
+the total number of story slides watched in one session regardless of which
+account they belong to. Set both to 0 to skip story viewing entirely.
+
+**Behaviour change:** The bot taps one random story bubble to open the viewer,
+then advances through stories one at a time (tap right side) until the
+configured count is reached, then swipes down to exit. No separate "user"
+loop.
+
+**Added:** **"Like stories %"** (min/max). Per-story chance to tap the heart
+icon. Uses the accessibility tree (`content-desc="Like"`) with a pixel-
+coordinate fallback (15.1% X, 97.8% Y from the scan on the user's device).
+
+**Added:** **"Share stories via DM %"** (min/max). Per-story chance to tap
+the paper-plane / send icon (43.2% X, 97.8% Y), open the DM picker, then
+close it without sending — registers the share intent in a human-looking
+way.
+
+All three new percentage fields default to 0 (opt-in).
+
+---
+
 ## [1.1.458] — 2026-07-11
 
 ### Fix: automation now dismisses Instagram interstitial popups automatically

@@ -897,12 +897,14 @@ interface AutomationSettingsData {
   shareDmPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
-  viewStoriesUsersMin: number;
-  viewStoriesUsersMax: number;
   viewStoriesSlidesMin: number;
   viewStoriesSlidesMax: number;
   viewStoriesSlideWatchPctMin: number;
   viewStoriesSlideWatchPctMax: number;
+  viewStoriesLikePercentMin: number;
+  viewStoriesLikePercentMax: number;
+  viewStoriesShareDmPercentMin: number;
+  viewStoriesShareDmPercentMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -912,9 +914,10 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   shareFeedPercentMin: 0, shareFeedPercentMax: 0,
   shareDmPercentMin: 0, shareDmPercentMax: 0,
   feedScrollMin: 5, feedScrollMax: 10,
-  viewStoriesUsersMin: 0, viewStoriesUsersMax: 0,
-  viewStoriesSlidesMin: 3, viewStoriesSlidesMax: 6,
+  viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
+  viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
+  viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1056,12 +1059,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             shareFeedPercentMax: s.shareFeedPercentMax,
             shareDmPercentMin: s.shareDmPercentMin,
             shareDmPercentMax: s.shareDmPercentMax,
-            viewStoriesUsersMin: s.viewStoriesUsersMin,
-            viewStoriesUsersMax: s.viewStoriesUsersMax,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
             viewStoriesSlideWatchPctMax: s.viewStoriesSlideWatchPctMax,
+            viewStoriesLikePercentMin: s.viewStoriesLikePercentMin,
+            viewStoriesLikePercentMax: s.viewStoriesLikePercentMax,
+            viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
+            viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1366,66 +1371,39 @@ function AutomationSettingsPanel({
         <div className="space-y-1">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
           <p className="text-sm font-semibold text-foreground">View Stories from Feed</p>
-          <p className="text-xs text-muted-foreground">Set users to 0 to skip story viewing. Each story slide watches a randomly chosen % within your range — no two slides get the same duration.</p>
+          <p className="text-xs text-muted-foreground">Set stories to 0 to skip. Opens one random story bubble then watches that many stories in sequence — like and share chances apply individually to each story watched.</p>
         </div>
 
         <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Users to watch</Label>
+            <Label className="text-sm text-muted-foreground">Stories to watch</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
                 min={0}
-                max={50}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
-                value={settings.viewStoriesUsersMin}
-                onChange={e => setSettings(s => ({ ...s, viewStoriesUsersMin: Math.min(50, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={0}
-                max={50}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
-                value={settings.viewStoriesUsersMax}
-                onChange={e => setSettings(s => ({ ...s, viewStoriesUsersMax: Math.min(50, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Slides per user</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={1}
-                max={50}
+                max={100}
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlidesMin}
-                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMin: Math.min(50, clamp4(Number(e.target.value))) }))}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
               <span className="text-muted-foreground text-sm">to</span>
               <Input
                 type="number"
-                min={1}
-                max={50}
+                min={0}
+                max={100}
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlidesMax}
-                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMax: Math.min(50, clamp4(Number(e.target.value))) }))}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
             </div>
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">% of each slide to watch</Label>
+            <Label className="text-sm text-muted-foreground">% of each story to watch</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -1446,6 +1424,64 @@ function AutomationSettingsPanel({
                 className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlideWatchPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Like stories</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesLikePercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesLikePercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share stories via DM</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesShareDmPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesShareDmPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
               <span className="text-muted-foreground text-sm">%</span>
