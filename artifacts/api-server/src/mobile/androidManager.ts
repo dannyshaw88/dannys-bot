@@ -920,63 +920,110 @@ export async function openRecentApps(serial: string): Promise<void> {
 }
 
 /**
+ * Given a reference y-coordinate (the vertical centre of a known card/label,
+ * e.g. "Instagram" in the floating-windows recents strip), finds every
+ * text/content-desc-bearing element in the same UI dump that sits in the
+ * same horizontal band and returns the one with the smallest x — i.e. the
+ * LEFT-MOST card currently visible in that strip, whatever app it belongs
+ * to. This device's recents UI is a Xiaomi "floating windows" carousel, not
+ * stock Android recents: it shows at most two card labels side by side at a
+ * time, and user-confirmed screen recordings show cards are dismissed by
+ * dragging the left-most one off the left edge — dismissing it then slides
+ * the next card into the left slot, so the same "find left-most, drag left"
+ * gesture must repeat rather than always retargeting "Instagram" by name.
+ */
+function _findLeftmostLabelInBand(xml: string, refY: number, bandPx: number): { x: number; y: number } | null {
+  const re = /(?:text|content-desc)="[^"]+"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+  let best: { x: number; y: number } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const x1 = +m[1], y1 = +m[2], x2 = +m[3], y2 = +m[4];
+    const cy = Math.floor((y1 + y2) / 2);
+    const cx = Math.floor((x1 + x2) / 2);
+    if (Math.abs(cy - refY) > bandPx) continue;
+    if (!best || cx < best.x) best = { x: cx, y: cy };
+  }
+  return best;
+}
+
+/**
  * Closes Instagram the way a person would: open the recent-apps switcher,
- * then swipe its card off the left edge of the screen to dismiss it —
+ * then drag its card off the LEFT edge of the screen to dismiss it —
  * deliberately a real gesture rather than `am force-stop`, per user
  * instruction, so the automation cycle behaves like someone actually using
  * the phone rather than a script killing a process in the background.
+ *
+ * Root-cause fix (Jul 2026): this device's recents screen is a Xiaomi
+ * "floating windows" card carousel (confirmed via screenshot), NOT stock
+ * Android recents. The previous implementation swiped the Instagram card
+ * UPWARD, which is the stock-Android dismiss gesture and does nothing on
+ * this launcher — Instagram stayed running every time and the code always
+ * fell through to a force-stop. The user's own description of the real
+ * gesture: with a single app open, tap-hold-drag it left from centre; with
+ * more than one app open, the strip shows two cards at a time and you keep
+ * dragging the LEFT-MOST card further left until each is gone in turn.
  */
 export async function closeInstagramViaRecents(serial: string, onLog?: (msg: string) => void): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
   const log = (m: string) => { onLog?.(m); console.log(`[androidManager] ${m}`); };
-  // Sometimes more than one app ends up stacked in the recents switcher —
-  // an accidental tap opened something, or the phone's own background
-  // activity (a notification, a system prompt) launched an app on top of
-  // Instagram. A single open-recents + swipe only ever dismisses the one
-  // card on top, leaving anything else stacked behind it still open.
-  // Repeat the same "open recents, dismiss the top card" gesture 5 times in
-  // a row before moving on — each pass is a no-op if recents is already
-  // empty (KEYCODE_APP_SWITCH on an empty stack just shows nothing to swipe).
   const pidof = () => {
     const r = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
     return (r.stdout ?? "").trim().length > 0;
   };
-  // One attempt with the recents gesture, then immediately force-stop if it
-  // didn't work.  The original 5-attempt loop was wasting ~25 seconds on
-  // Xiaomi HyperOS devices where MIUI memory management "locks" apps in the
-  // recents stack so the swipe-to-dismiss gesture never actually kills the
-  // process — all 5 passes failed in user testing with Instagram still
-  // running after each one.  A single real-UI attempt is the right balance:
-  // it keeps the "looks like a person" behaviour when the swipe succeeds, and
-  // falls through to the reliable force-stop within ~3 s when it doesn't.
+
   await openRecentApps(serial);
   await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
 
-  const xml = await _uiDump(adb, serial);
-  const igCard = xml ? _findElem(xml, "Instagram") : null;
-  let method: string;
-  if (igCard) {
-    await swipe(serial, igCard.x, igCard.y, igCard.x, Math.round(h * 0.08), 220);
-    method = `found "Instagram" card at (${igCard.x},${igCard.y}) — swiped it up`;
-  } else {
-    const cardX = Math.round(w * 0.5);
-    const cardY = Math.round(h * 0.45);
-    await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
-    method = `no "Instagram" label in recents tree — fell back to centred swipe-left (${cardX},${cardY})`;
+  // Up to 5 drag passes: each one may only clear the left-most of several
+  // stacked floating windows (not necessarily Instagram itself), so the
+  // "find left-most card, drag it left" gesture must repeat until Instagram
+  // is confirmed gone, not just attempted once.
+  const MAX_ATTEMPTS = 5;
+  let method = "no attempts made";
+  let attemptsRun = 0;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    attemptsRun = attempt;
+    if (!pidof()) { method = `Instagram already gone before attempt ${attempt}`; break; }
+
+    const xml = await _uiDump(adb, serial);
+    const igCard = xml ? _findElem(xml, "Instagram") : null;
+    const card = (igCard && xml) ? (_findLeftmostLabelInBand(xml, igCard.y, 120) ?? igCard) : null;
+
+    if (card) {
+      // Drag fully off the left edge — a short flick isn't enough to
+      // register as a dismiss-drag on this launcher; use a slower,
+      // longer-distance move (matches "tap, hold, swipe left").
+      const dragToX = Math.max(Math.round(w * 0.02), card.x - Math.round(w * 0.5));
+      await swipe(serial, card.x, card.y, dragToX, card.y, 400);
+      method = `attempt ${attempt}: dragged left-most card at (${card.x},${card.y}) left to (${dragToX},${card.y})`;
+    } else {
+      // Couldn't find any label at all (e.g. dump failed) — fall back to a
+      // centred left-drag, which is correct for the common single-app case.
+      const cardX = Math.round(w * 0.5);
+      const cardY = Math.round(h * 0.45);
+      await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);
+      method = `attempt ${attempt}: no label found in recents tree — fell back to centred drag-left (${cardX},${cardY})`;
+    }
+    await new Promise(r => setTimeout(r, 600));
+    if (!pidof()) { method += " — Instagram closed"; break; }
+    // The drag can also fully back out of the overview on some launchers;
+    // re-open it before the next pass in case that happened.
+    await openRecentApps(serial);
+    await new Promise(r => setTimeout(r, 800));
   }
-  await new Promise(r => setTimeout(r, 500));
+
   const runningNow = pidof();
-  log(`[close-ig] attempt 1/1: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
+  log(`[close-ig] attempt ${attemptsRun}/${MAX_ATTEMPTS}: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions — a "closed completely" requirement can't rely on the gesture
   // alone landing right every time. Verify Instagram is no longer a running
-  // process and, if every swipe attempt missed, fall back to a clean
+  // process and, if every drag attempt missed, fall back to a clean
   // force-stop so the app is guaranteed closed before the cycle moves on.
-  if (pidof()) {
-    log("[close-ig] still running after all recents-swipe attempts — falling back to force-stop");
+  if (runningNow) {
+    log("[close-ig] still running after all recents-drag attempts — falling back to force-stop");
     await stopInstagram(serial);
   } else {
     log("[close-ig] confirmed closed");
@@ -1428,8 +1475,19 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
   const { width, height, channels, pixels } = img;
   if (!width || !height) return null;
 
-  const bandTop = Math.round(height * 0.70);
-  const bandBottom = Math.round(height * 0.97);
+  // Widened from 0.70–0.97 (Jul 2026): that band was calibrated against one
+  // specific device's screenshot (1080×2226). This automation farm runs
+  // several different phone models with different screen aspect ratios, and
+  // the story reply-bar's relative Y position shifts with aspect ratio (and
+  // with gesture-nav vs 3-button-nav bar height) — on a device where the bar
+  // sits above 70% of height, the icon row fell entirely outside the old
+  // band and the scan always returned 0 candidates, logging a false
+  // "sharing disabled" even when the paper-plane was visibly on screen.
+  // Widening the band costs a little scan time but doesn't add false
+  // positives: the icon-sized/uniform-width/gap-isolation filters below
+  // already reject anything that isn't a tight row of same-size glyphs.
+  const bandTop = Math.round(height * 0.55);
+  const bandBottom = Math.round(height * 0.99);
   const rowStep = 3;
   const brightThreshold = 165; // icon glyph luminance (white/light on dark scrim)
   const darkRowThreshold = 70; // row must average this dark to confirm the scrim is present

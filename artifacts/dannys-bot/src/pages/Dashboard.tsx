@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.484",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Closing Instagram at the end of a cycle was swiping the wrong way for this phone's app switcher, so the swipe never actually closed anything and the software always had to force-close it instead. It now drags the app card off to the left, the correct way for this phone's switcher, repeating if more than one app is open.",
+      },
+      {
+        category: "Fixed",
+        text: "The story share button was sometimes reported as missing even when it was clearly on screen, so a story never got shared. The area the software checks for the share button has been widened to cover more phone screen sizes.",
+      },
+    ],
+  },
+  {
     version: "1.1.483",
     date: "11 Jul 2026",
     items: [

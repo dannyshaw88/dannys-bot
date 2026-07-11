@@ -4,6 +4,39 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.484] — 2026-07-11
+
+### Fix: close-Instagram gesture swiped UP, which does nothing on this device's recents screen (CRITICAL)
+
+Screenshot evidence showed this farm's phones use a Xiaomi "floating windows"
+recents carousel, not stock Android recents — cards sit side by side (up to
+two visible at once) and are dismissed by dragging them off the LEFT edge,
+not by swiping up. The previous close-Instagram code swiped the Instagram
+card upward (the stock-Android gesture), which is a no-op on this launcher,
+so Instagram was never actually dismissed by the "real gesture" and every
+cycle silently fell through to a force-stop instead.
+
+Fix: `closeInstagramViaRecents` now drags the left-most visible card off the
+left edge of the screen, and repeats this (up to 5 times) since dismissing
+one card slides the next into the left-most slot — matching the confirmed
+real interaction ("if more than one app is open, keep dragging the very-left
+one to the left; if only one is open, it's already centred").
+
+### Fix: story share icon scan missed a visibly-present paper-plane icon on some devices
+
+The icon-detection scan only looked in the bottom 70–97% of the screen for
+the like/share icon row. That band was calibrated against one specific
+phone's screenshot; this farm runs multiple phone models with different
+screen aspect ratios, and on a device where the reply bar sits higher up,
+the real icon row fell outside the band entirely — the scan found nothing
+and logged "sharing disabled" even though the paper-plane icon was visibly
+on screen. Widened the scan band to 55–99% of screen height. Also added a
+one-line log of the actual device resolution at the start of each stories
+run so a mismatch like this is visible in the log immediately instead of
+requiring another guess-and-check round.
+
+---
+
 ## [1.1.483] — 2026-07-11
 
 ### Fix: story share-to-DM (and like) taps landing on the home feed (root-cause, not another icon heuristic)

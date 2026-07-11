@@ -1330,6 +1330,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (totalStories <= 0) return { storiesWatched: 0 };
 
     const { w, h } = getScreenSize(serial);
+    // Logged once per run so a bad like/share tap or a false "sharing
+    // disabled" can be cross-checked against the actual device resolution —
+    // this farm runs multiple phone models with different aspect ratios,
+    // and every tap coordinate and icon-scan band in this loop is a
+    // percentage of w/h calibrated against one reference device.
+    onLog?.(`Story loop: device resolution ${w}×${h}`);
 
     // Per-story action chances — sampled once for the whole session so
     // the overall distribution stays consistent.
