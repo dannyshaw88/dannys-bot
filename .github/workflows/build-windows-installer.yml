@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Step 1: Build the web bundle on Ubuntu ────────────────────────────────
   build-web:
-    name: Build Web (Ubuntu)
+    name: Build Web Bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,120 +19,73 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: pnpm
+          node-version: 20
 
-      - name: Install workspace dependencies
-        # minimumReleaseAge in pnpm-workspace.yaml is a supply-chain guard for
-        # local dev — on CI we re-resolve from the lockfile so we override it
-        # to 0 to prevent phantom install failures when a transitive dep had a
-        # patch released in the last 24 h.  --ignore-scripts is intentional:
-        # native modules (better-sqlite3, puppeteer) don't need to be compiled
-        # here — this step only produces the esbuild/vite web bundle.
+      - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
         env:
           npm_config_minimum_release_age: '0'
 
-      - name: Build lib/db
+      - name: Build db lib
         run: pnpm --filter @workspace/db run build
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
 
-      - name: Build React frontend
+      - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
 
-      - name: Archive build outputs
-        run: tar -czf web-builds.tar.gz artifacts/api-server/dist artifacts/dannys-bot/dist
-
-      - name: Upload web builds
+      - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
-          name: web-builds
-          path: web-builds.tar.gz
-          if-no-files-found: error
+          name: web-dist
+          path: |
+            artifacts/api-server/dist
+            artifacts/dannys-bot/dist
 
-  # ── Step 2: Package the Electron installer on Windows ─────────────────────
-  package-windows:
-    name: Package Windows Installer
+  build-installer:
+    name: Build Windows Installer
     runs-on: windows-latest
     needs: build-web
     defaults:
       run:
-        shell: bash   # use Git Bash for all steps so forward-slash paths work
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
-      - name: Cache Electron npm dependencies
-        uses: actions/cache@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: artifacts/electron/node_modules
-          key: ${{ runner.os }}-electron-npm-${{ hashFiles('artifacts/electron/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-npm-
+          name: web-dist
 
-      - name: Download web builds
-        uses: actions/download-artifact@v4
-        with:
-          name: web-builds
-
-      - name: Extract build outputs
-        run: tar -xzf web-builds.tar.gz
-
-      - name: Install Electron dependencies
+      - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install
 
-      - name: Bundle Electron main process
+      - name: Build Electron bundle
         working-directory: artifacts/electron
-        # DANNY_BOT_UPDATER_TOKEN is optional — if the secret is not configured
-        # in the repo, build.mjs falls back to an empty string gracefully.
         run: node build.mjs
-        env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
 
-      - name: Package Windows installer (.exe)
+      - name: Build installer
         working-directory: artifacts/electron
-        # --publish never: just build the .exe locally; we upload it ourselves
-        # in the steps below.  Using --publish always / electron-builder's
-        # built-in GitHub publisher requires a GH_TOKEN with specific release
-        # permissions and a pre-existing draft release, which is fragile on CI.
-        # The softprops/action-gh-release step below handles the release upload
-        # in a much more reliable way using the always-available GITHUB_TOKEN.
         run: npx electron-builder --win --publish never
 
-      # Always upload the .exe so it can be downloaded from the Actions run
-      # page even when no GitHub Release is being created (e.g. manual runs).
-      - name: Upload installer to Actions artifacts
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: Equinox-Windows-Installer
+          name: Equinox-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
 
-      # On tag pushes (e.g. v1.1.464) create/update a GitHub Release and
-      # attach the installer so users and the auto-updater can find it.
-      # Uses secrets.GITHUB_TOKEN which is always present — no custom secret needed.
-      - name: Create GitHub Release and attach installer
+      - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/electron/release/*.exe
-          generate_release_notes: false
-          body: |
-            ## Equinox ${{ github.ref_name }}
-
-            ### How to install
-            1. Download **equinox-setup-*.exe** below.
-            2. Run it — if Windows SmartScreen appears, click **More info → Run anyway**.
-            3. Launch **Equinox** from your desktop or Start menu.
-
-            See [CHANGELOG.md](https://github.com/dannyshaw88/dannys-bot/blob/main/CHANGELOG.md) for what changed in this release.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
