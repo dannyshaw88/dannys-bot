@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.479",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Story Like and Share taps missed on short stories (1–6 seconds) — the bot was taking a screenshot to locate the Like/Share icons AFTER the watch timer expired, which ate into the remaining story time. On a fast story the screenshot was still being processed when the story auto-advanced, so both taps landed on the wrong slide. The screenshot is now taken the instant a story opens (while icons are definitely on screen), saved, and the saved positions are used directly when it's time to act — no second screenshot needed.",
+      },
+      {
+        category: "Fixed",
+        text: "Stories set to very low view percentages could leave almost no time to tap — a 6-second story at 1% gave only 60ms of runway. The minimum watch time is now 1.5 seconds regardless of the percentage, so even the shortest real story still gives enough time to like and share before it ends.",
+      },
+      {
+        category: "Fixed",
+        text: "Story Like tap and Share tap had a 400–600ms gap between them, enough for a fast story to advance to the next slide in between. The gap is now 100ms — the Like animation registers in well under that, and the Share tap follows almost immediately so the story has no window to move on.",
+      },
+    ],
+  },
+  {
     version: "1.1.478",
     date: "11 Jul 2026",
     items: [
