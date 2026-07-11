@@ -4,6 +4,56 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.480] — 2026-07-11
+
+### Fix: phone screen waking on software restart with toggle on
+
+Root cause: scrcpy's `stay_awake=true` option (present since the mirror
+was introduced) sets Android's `STAY_ON_WHILE_PLUGGED_IN` system flag on the
+device the instant scrcpy connects. On Xiaomi/MIUI, that system flag wakes
+the physical screen immediately — even though `power_on=false` (added in
+v1.1.478) blocks scrcpy's own screen-on action, `STAY_ON_WHILE_PLUGGED_IN`
+fires through a completely independent code path. This wake occurred on
+every connect, including the automatic mirror connection that fires when
+the automation toggle is left on and the software restarts. Changed to
+`stay_awake=false`: scrcpy no longer modifies the device's stay-awake
+setting. The automation cycle's own explicit `wakeScreen()` call (which
+happens at the start of each tick when the screen is genuinely needed) is
+unaffected.
+
+### Fix: story Like and Share taps consistently missing (keyboard opens instead)
+
+Root cause (pixel scan): Instagram renders the entire story reply-bar — the
+message input field, the heart icon, and the paper-plane icon — on a
+hardware-accelerated canvas with zero accessible elements in the
+UIAutomator tree. The previous approach used a pixel-brightness scan of a
+screenshot to locate the icon glyphs. The "Send message" placeholder text
+is white on the same dark scrim as the icons, and word-breaks in the text
+produce bright clusters that are similar in width and count to real icon
+clusters. The gap-isolation filter that was supposed to reject text
+clusters consistently failed under real conditions, causing taps to land
+inside the message text field (opening the keyboard) rather than on the
+icons.
+
+Two-part fix:
+
+**Like — double-tap on story content (no icon detection)**
+Instagram registers a double-tap anywhere on the story image as a Like —
+the same gesture used in the feed. Changed from "scan for heart icon, tap
+it" to `doubleTap(w×50%, h×44%)`. No screenshot required, no cluster
+analysis, works regardless of which icons the story owner has enabled.
+
+**Share — fixed right-edge coordinates**
+The paper-plane (Send to DM) icon is always the rightmost element in the
+story bar and sits consistently at approximately 92% screen width × 91%
+screen height on standard Instagram layouts. Changed from "scan for
+rightmost cluster" to a direct tap at `(w×92%, h×91%)`. Added a keyboard
+check: if the tap lands in the message field (story owner has sharing
+disabled), the keyboard is detected, the code backs out, and the share is
+skipped cleanly for that story.
+
+---
+
 ## [1.1.479] — 2026-07-11
 
 ### Fix: story like/share misses on short stories

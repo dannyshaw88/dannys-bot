@@ -1346,113 +1346,66 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (isCycleAborted(serial)) break;
 
       // Like and/or share this story?
-      //
-      // The like/share icon bar sits at a DIFFERENT position depending on
-      // content type (plain story vs. a reposted Reel, which uses a
-      // visually different, higher bar) and shifts/loses icons entirely
-      // when the story owner disables likes, comments, or shares — none of
-      // which a single hardcoded (x%, y%) pair can track (see
-      // findStoryActionIcons() for the full history).
-      //
-      // IMPORTANT: we scan icon positions HERE — at the very start of each
-      // story, before the watch-duration sleep — not after it. Short stories
-      // (as little as 1–3 s) can advance while we're waiting the view %, so
-      // if we leave the screenshot call until after the sleep we're racing
-      // against an already-advancing next slide. Scanning first, saving the
-      // coordinates, then sleeping means the action sequence (tap Like, tap
-      // Share) uses pre-found positions and never needs another screenshot,
-      // keeping the total post-sleep action time under ~300 ms.
-      const willLike = likeChance > 0 && Math.random() < likeChance;
+      const willLike  = likeChance  > 0 && Math.random() < likeChance;
       const willShare = shareChance > 0 && Math.random() < shareChance;
 
-      let actionIcons: { x: number; y: number }[] | null = null;
-      if (willLike || willShare) {
-        actionIcons = await android.findStoryActionIcons(serial).catch(() => null);
-        onLog?.(`Story ${s + 1}: icon scan found ${actionIcons ? `${actionIcons.length} icon(s) at [${actionIcons.map(p => `(${p.x},${p.y})`).join(", ")}]` : "nothing (screenshot unavailable — using fallback)"}`);
-      }
-
       // Watch this story for a random percentage of its ~6s duration.
-      // Floor is 1500 ms (not 400) so that even a 1-second story gives
-      // enough runway to both watch and act before it auto-advances.
+      // Floor is 1500 ms so even a very short story has enough runway
+      // to act before it auto-advances.
       const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
         Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
       const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
       await sleepOrAbort(serial, watchMs);
 
       if (willLike) {
-        if (actionIcons && actionIcons.length >= 2) {
-          // Instagram always keeps Like leftmost regardless of how many
-          // icons sit between it and Share.
-          const heart = actionIcons[0];
-          await android.tap(serial, heart.x, heart.y);
-          // Safety net: pixel-based icon detection can still be fooled by
-          // reply-box placeholder text that happens to look icon-sized
-          // (see findStoryActionIcons doc comment). If that tap actually
-          // landed on the text field instead of the heart, the keyboard
-          // pops up — an unmistakable signal we hit the wrong control.
-          // Back out immediately rather than let a comment attempt sit
-          // there half-open.
-          await sleepOrAbort(serial, 500);
-          if (await android.isKeyboardShown(serial).catch(() => false)) {
-            await android.pressBack(serial);
-            logger.warn({ serial, story: s + 1 }, "[view-stories] like tap opened the reply keyboard instead — wrong control, backed out, not counted as liked");
-            onLog?.(`Story ${s + 1}: Like tap at (${heart.x},${heart.y}) opened the keyboard instead — wrong control, backed out`);
-          } else {
-            logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] liked story (icon detected)");
-            onLog?.(`Story ${s + 1}: liked (tapped (${heart.x},${heart.y}))`);
-          }
-        } else if (actionIcons) {
-          // 0 = icons genuinely absent (likes/comments/shares disabled by
-          // the owner), 1 = can't tell Like from Share. Either way, tapping
-          // blind risks hitting the wrong control or the story itself —
-          // skip rather than guess.
-          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped like — icon not distinguishable on this story");
-          onLog?.(`Story ${s + 1}: skipped like — only ${actionIcons.length} icon(s) found, can't tell Like from Share`);
-        } else {
-          // Screenshot capture/decode unavailable on this device — old
-          // fallback chain: accessibility tree, then fixed coordinate.
-          const likeBtn = await android.findLikeButton(serial).catch(() => null);
-          if (likeBtn) {
-            await android.tap(serial, likeBtn.x, likeBtn.y);
-          } else {
-            await android.tap(serial, Math.round(w * 0.151), Math.round(h * 0.931));
-          }
-          logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fixed-coordinate fallback — icon scan unavailable)");
-          onLog?.(`Story ${s + 1}: liked using fallback coordinates (icon scan unavailable)`);
-        }
-        // Minimal gap before Share — just enough for the Like animation to
-        // register. The old 400–600 ms window was giving the story time to
-        // advance between the two taps; 100 ms is sufficient.
-        await sleepOrAbort(serial, 100);
+        // Double-tap the centre of the story content to Like.
+        //
+        // Previous approach: pixel-scan for the heart icon, tap it.
+        // Problem: Instagram renders the story reply-bar on a canvas with
+        // ZERO accessible elements, so the pixel scan had to find the
+        // bright icon glyphs by luminance. The "Send message" placeholder
+        // text is also bright white on the same dark scrim and consistently
+        // fooled the scan — clusters from the text were returned as "icons",
+        // the tap landed in the message field, and the keyboard opened.
+        // Patching the gap filter only partially helped; the text produced
+        // clusters that survived every heuristic.
+        //
+        // Fix: double-tap anywhere on the story content (not the action
+        // bar). Instagram registers that as a like — same gesture as the
+        // feed heart animation. Zero icon detection required; works
+        // regardless of which icons the story owner has enabled or disabled.
+        const cx = Math.round(w * 0.50);
+        const cy = Math.round(h * 0.44);
+        await android.doubleTap(serial, cx, cy);
+        logger.info({ serial, story: s + 1 }, "[view-stories] liked story (double-tap on content)");
+        onLog?.(`Story ${s + 1}: liked (double-tap at (${cx},${cy}))`);
+        await sleepOrAbort(serial, 600); // wait for heart animation
       }
 
       if (willShare) {
+        // Tap the paper-plane (Send/Share) icon.
+        //
+        // Same pixel-scan problem as Like: the icon can't be located via
+        // UIAutomator (the whole bar is one unlabelled canvas container),
+        // and pixel-scan mistakes text for icons. The paper-plane is always
+        // at the far right of the bar — ~92% of screen width, ~91% of
+        // screen height — on every standard Instagram story layout.
+        // If the story owner has sharing disabled the icon is absent; this
+        // tap would land in the message field instead (keyboard opens) and
+        // the keyboard check below catches and backs out cleanly.
+        const shareX = Math.round(w * 0.920);
+        const shareY = Math.round(h * 0.906);
+        await android.tap(serial, shareX, shareY);
+        await sleepOrAbort(serial, 500);
         let opened = false;
-        if (actionIcons && actionIcons.length >= 2) {
-          // Instagram always keeps Share/Send rightmost.
-          const shareIcon = actionIcons[actionIcons.length - 1];
-          await android.tap(serial, shareIcon.x, shareIcon.y);
-          // Same keyboard safety net as the Like path above — confirm the
-          // tap actually opened the share sheet and not the reply text
-          // field before proceeding into the recipient-picking flow.
-          await sleepOrAbort(serial, 500);
-          if (await android.isKeyboardShown(serial).catch(() => false)) {
-            await android.pressBack(serial);
-            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened the reply keyboard instead — wrong control, backed out, not shared");
-            onLog?.(`Story ${s + 1}: Share tap at (${shareIcon.x},${shareIcon.y}) opened the keyboard instead — wrong control, backed out`);
-          } else {
-            opened = true;
-            onLog?.(`Story ${s + 1}: share sheet opened (tapped (${shareIcon.x},${shareIcon.y}))`);
-          }
-        } else if (actionIcons) {
-          logger.info({ serial, story: s + 1, iconsFound: actionIcons.length }, "[view-stories] skipped share — icon not distinguishable on this story");
-          onLog?.(`Story ${s + 1}: skipped share — only ${actionIcons.length} icon(s) found, can't tell Like from Share`);
+        if (await android.isKeyboardShown(serial).catch(() => false)) {
+          await android.pressBack(serial);
+          logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard — story owner has sharing disabled, skipped");
+          onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (keyboard opened at (${shareX},${shareY}))`);
         } else {
-          await android.tap(serial, Math.round(w * 0.432), Math.round(h * 0.931));
           opened = true;
-          onLog?.(`Story ${s + 1}: share sheet opened using fallback coordinates (icon scan unavailable)`);
+          onLog?.(`Story ${s + 1}: share sheet opened (tapped (${shareX},${shareY}))`);
         }
-
         if (opened) {
           await sleepOrAbort(serial, 1200); // wait for picker sheet
           // Pick a random recipient, then look for the real Send button —

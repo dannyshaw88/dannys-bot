@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.480",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone screen waking every time the software was restarted with the automation toggle on — the mirror engine was telling Android to 'stay awake while plugged in' the instant it connected, which overrides the screen-off state on Xiaomi regardless of the other wake settings. The mirror no longer touches that system setting; the automation cycle still turns the screen on explicitly when it actually needs it.",
+      },
+      {
+        category: "Fixed",
+        text: "Story Like taps kept landing in the message box (opening the keyboard) instead of the heart icon — Instagram draws the entire story action bar as an image with no detectable elements, so every attempt to find the heart by scanning pixels was being fooled by the 'Send message' placeholder text, which looks identical in brightness. Replaced with a double-tap on the story image itself: Instagram registers that as a Like the same way it does in the feed, and no icon detection is needed at all.",
+      },
+      {
+        category: "Fixed",
+        text: "Story Share taps had the same pixel-scan problem as Like — the paper-plane icon was never reliably found. It now taps a fixed position at the far right of the action bar (where the paper-plane always sits). If a story owner has sharing turned off, the tap correctly detects that (keyboard check) and skips sharing for that story without breaking the cycle.",
+      },
+    ],
+  },
+  {
     version: "1.1.479",
     date: "11 Jul 2026",
     items: [

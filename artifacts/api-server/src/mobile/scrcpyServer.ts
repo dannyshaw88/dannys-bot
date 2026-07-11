@@ -236,7 +236,17 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
     // still calls wakeScreen() explicitly when it actually needs the
     // screen on.
     "power_on=false",
-    "stay_awake=true",
+    // stay_awake=false: scrcpy's stay_awake option sets Android's
+    // STAY_ON_WHILE_PLUGGED_IN system flag on the device the instant it
+    // connects. On Xiaomi/MIUI devices that flag causes the physical screen
+    // to wake immediately — even though power_on=false blocks scrcpy's own
+    // screen-on action, the system setting fires independently on connect
+    // (and on every DRM-restart reconnect). This was the actual remaining
+    // cause of "phone wakes when software is restarted with toggle on".
+    // The automation cycle calls wakeScreen() explicitly at the start of
+    // each tick when it genuinely needs the screen on; scrcpy does not need
+    // to override the device's screen-awake setting.
+    "stay_awake=false",
     "video_codec=h264",
     `video_bit_rate=${opts.bitRate ?? 8_000_000}`,
     `max_size=${opts.maxSize ?? 0}`,
