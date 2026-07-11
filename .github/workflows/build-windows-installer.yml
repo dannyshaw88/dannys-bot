@@ -7,33 +7,59 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Build frontend
+        run: pnpm --filter @workspace/dannys-bot run build
+        env:
+          REPL_ID: ci
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            artifacts/api-server/dist
+            artifacts/dannys-bot/dist
+
+  build-installer:
     name: Build Windows Installer
     runs-on: windows-latest
+    needs: build-web
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.1
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install workspace deps
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Download web-dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: _dist
 
-      - name: Build API server
-        run: pnpm --filter @workspace/api-server run build
-
-      - name: Build frontend
-        run: pnpm --filter @workspace/dannys-bot run build
-        env:
-          REPL_ID: ci
+      - name: Place dist files
+        run: |
+          mkdir -p artifacts/api-server
+          mkdir -p artifacts/dannys-bot
+          cp -r _dist/artifacts/api-server/dist artifacts/api-server/dist
+          cp -r _dist/artifacts/dannys-bot/dist artifacts/dannys-bot/dist
 
       - name: Install Electron deps
         working-directory: artifacts/electron
@@ -47,7 +73,7 @@ jobs:
         working-directory: artifacts/electron
         run: npx electron-builder --win --publish never
 
-      - name: Upload installer artifact
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: Equinox-Installer
