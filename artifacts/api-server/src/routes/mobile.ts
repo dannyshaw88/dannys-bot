@@ -1576,6 +1576,74 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Story-tray scanner: reads the live accessibility tree, filters to the top
+  // 20% of the screen, and returns plain-English lines for every named element
+  // found there.  The front-end "Scan Story Tray" button calls this and prints
+  // the results straight into the Log tab — no terminal or adb knowledge needed.
+  app.get("/api/mobile/devices/:serial/story-tray-scan", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const xml = await android.dumpUi(serial);
+      if (!xml || xml.length < 200) {
+        res.json({ ok: false, lines: ["(empty dump — is the phone awake and showing the Instagram Home screen?)"] });
+        return;
+      }
+
+      // Screen dimensions from the root hierarchy node.
+      const rootM = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+      const screenW = rootM ? parseInt(rootM[1]) : 0;
+      const screenH = rootM ? parseInt(rootM[2]) : 0;
+      // Scan the top 20 % — the story tray sits in the top ~8-10 % but scan
+      // a bit wider so we catch any element whose label might help us orient.
+      const topCutoff = screenH > 0 ? Math.round(screenH * 0.20) : 400;
+
+      const lines: string[] = [];
+      lines.push(`Screen: ${screenW}×${screenH}  |  top-strip cutoff: y < ${topCutoff} (top 20 %)`);
+      lines.push("─".repeat(60));
+
+      const nodeRe = /<node\s([^/\n>]+)\s*\/>/g;
+      let m: RegExpExecArray | null;
+      let count = 0;
+      while ((m = nodeRe.exec(xml)) !== null) {
+        const attrs = m[1];
+        const boundsM = attrs.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+        if (!boundsM) continue;
+        const boundsStr = boundsM[1];
+        const bm = boundsStr.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+        if (!bm) continue;
+        const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]), x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
+        const cy = Math.floor((y1 + y2) / 2);
+        if (cy > topCutoff) continue;
+
+        const get = (attr: string) => { const am = attrs.match(new RegExp(`${attr}="([^"]*)"`)); return am ? am[1] : ""; };
+        const cd  = get("content-desc");
+        const rid = get("resource-id").replace(/^.*\//, ""); // strip package prefix
+        const txt = get("text");
+        const cls = get("class").replace(/^.*\./, "");       // short class name
+
+        // Skip completely anonymous/invisible nodes — they add noise.
+        if (!cd && !rid && !txt) continue;
+
+        const cx = Math.floor((x1 + x2) / 2);
+        lines.push(`  center=(${cx},${cy})  bounds=${boundsStr}`);
+        if (cls)  lines.push(`    class: ${cls}`);
+        if (rid)  lines.push(`    id:    ${rid}`);
+        if (cd)   lines.push(`    desc:  ${cd}`);
+        if (txt)  lines.push(`    text:  ${txt}`);
+        count++;
+      }
+
+      if (count === 0) {
+        lines.push("No named elements found in top 20% — make sure Instagram is open on the Home tab before scanning.");
+      } else {
+        lines.push("─".repeat(60));
+        lines.push(`${count} element(s) found in top strip.`);
+      }
+
+      res.json({ ok: true, lines, screenW, screenH });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   const swipeSchema = z.object({
     x1: z.number(),
     y1: z.number(),

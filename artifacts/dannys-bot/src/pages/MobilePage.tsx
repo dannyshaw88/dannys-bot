@@ -1717,17 +1717,42 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear }: { lines: string[]; onClear: () => void }) {
+function LogPanel({ lines, onClear, serial, onScanTray }: {
+  lines: string[];
+  onClear: () => void;
+  serial?: string | null;
+  onScanTray?: () => Promise<void>;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [scanning, setScanning] = React.useState(false);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  const handleScan = async () => {
+    if (!onScanTray) return;
+    setScanning(true);
+    try { await onScanTray(); } finally { setScanning(false); }
+  };
 
   return (
     <div className="h-full flex flex-col p-6">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h2 className="text-lg font-bold text-foreground">Log</h2>
-        <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
-          Clear
-        </Button>
+        <div className="flex items-center gap-2">
+          {serial && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleScan}
+              disabled={scanning}
+              title="Open Instagram on the Home tab first, then click this to read the real story-tray coordinates off the phone"
+            >
+              {scanning ? "Scanning…" : "🔍 Scan Story Tray"}
+            </Button>
+          )}
+          <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
+            Clear
+          </Button>
+        </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed text-green-400/90">
         {lines.length === 0
@@ -1937,7 +1962,22 @@ export function MobilePage() {
                     nextRunAt={automation.nextRunAt}
                   />
                 )}
-                {activeTab === "log"     && <LogPanel lines={logLines} onClear={() => setLogLines([])} />}
+                {activeTab === "log"     && (
+                  <LogPanel
+                    lines={logLines}
+                    onClear={() => setLogLines([])}
+                    serial={activeSerial}
+                    onScanTray={activeSerial ? async () => {
+                      addLog("── Scanning story tray… (phone must be on Instagram Home tab) ──");
+                      try {
+                        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/story-tray-scan`);
+                        const body = await r.json();
+                        if (!r.ok) { addLog(`Scan failed: ${body?.error ?? r.status}`); return; }
+                        for (const line of (body.lines as string[])) addLog(line);
+                      } catch (e: any) { addLog(`Scan error: ${e?.message ?? "network error"}`); }
+                    } : undefined}
+                  />
+                )}
               </div>
             </div>
           </div>

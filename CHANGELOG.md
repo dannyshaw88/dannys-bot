@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.455] — 2026-07-11
+
+### Add: "Scan Story Tray" button in the Log tab
+
+Instead of asking the user to run adb commands in a terminal, a one-click
+button now does the coordinate discovery for us:
+
+1. User opens Instagram on the phone and navigates to the Home tab so the
+   story tray is visible.
+2. In the app, they open the **Log** tab and click **🔍 Scan Story Tray**.
+3. The app calls a new `GET /api/mobile/devices/:serial/story-tray-scan`
+   endpoint which runs `uiautomator dump`, parses every accessibility node
+   whose vertical centre sits in the top 20 % of the screen, and returns
+   the real pixel coordinates (plus resource-id / content-desc / text) for
+   each named element found there.
+4. Each line is printed directly into the Log panel — no terminal needed.
+
+This tells us exactly what Y coordinate and element labels Instagram puts
+on the story-tray row, so we can fix the tap/swipe coordinates with real
+data instead of guessing percentages.
+
+---
+
 ## [1.1.454] — 2026-07-10
 
 ### Fix: hold-and-slide gesture opened the Reels tab instead of a story
