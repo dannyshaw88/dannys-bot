@@ -2,10 +2,12 @@ name: Build Windows Installer
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
+  # ── Step 1: Build the web bundle on Linux (fast, free) ────────────────────
   build-web:
     name: Build Web (Ubuntu)
     runs-on: ubuntu-latest
@@ -45,6 +47,7 @@ jobs:
           path: web-builds.tar.gz
           if-no-files-found: error
 
+  # ── Step 2: Package the Electron installer on Windows ─────────────────────
   package-windows:
     name: Package Windows Installer
     runs-on: windows-latest
@@ -56,11 +59,11 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache npm dependencies
+      - name: Cache Electron npm dependencies
         uses: actions/cache@v4
         with:
           path: artifacts/electron/node_modules
-          key: ${{ runner.os }}-electron-npm-${{ hashFiles('artifacts/electron/package-lock.json') }}
+          key: ${{ runner.os }}-electron-npm-${{ hashFiles('artifacts/electron/package.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-npm-
 
@@ -82,15 +85,38 @@ jobs:
         env:
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
 
-      - name: Package Windows installer
+      - name: Package Windows installer (.exe)
         working-directory: artifacts/electron
         env:
           GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
         run: ./node_modules/.bin/electron-builder --win --publish always
 
+      # Always upload the .exe as an Actions artifact so you can download it
+      # from the Actions run page regardless of whether a tag release exists.
       - name: Upload installer to Actions artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Equinox-Windows-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
+
+      # When the workflow is triggered by a version tag (e.g. v1.1.464),
+      # also attach the .exe to a GitHub Release so users can download it
+      # from the Releases page and the auto-updater can find it.
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/electron/release/*.exe
+          generate_release_notes: false
+          body: |
+            ## Equinox ${{ github.ref_name }}
+
+            ### How to install
+            1. Download **equinox-setup-*.exe** below.
+            2. Run it — if Windows SmartScreen appears, click **More info → Run anyway**.
+            3. Launch **Equinox** from your desktop or Start menu.
+
+            See [CHANGELOG.md](https://github.com/dannyshaw88/dannys-bot/blob/main/CHANGELOG.md) for what changed.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
