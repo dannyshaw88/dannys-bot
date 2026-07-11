@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.458] — 2026-07-11
+
+### Fix: automation now dismisses Instagram interstitial popups automatically
+
+Instagram randomly shows blocking popups mid-cycle ("Your notifications are
+off", "Save your login info?", permission dialogs, etc.). Previously these
+would silently stall the automation since every subsequent tap would land on
+the popup instead of the feed/story.
+
+New `dismissInstagramInterstitials()` function in `androidManager.ts`:
+- Does a quick ui-dump and looks for any of these dismiss labels in order:
+  "Not now", "Skip", "Maybe Later", "No thanks", "Later", "Dismiss",
+  "Don't Allow", "Deny", "Cancel"
+- Taps the first match and waits 600 ms for the modal to close
+- Never taps positive-action buttons ("Turn on", "Allow", "Continue") so
+  it can't accidentally grant unwanted permissions
+
+Called automatically at three points per cycle:
+1. **After Instagram launches** — catches the notifications prompt that
+   often appears on first open
+2. **Every feed scroll** — catches popups that appear mid-browse
+3. **Before story viewing starts** — catches the notifications prompt that
+   often fires again when the feed refreshes after tapping Home
+
+If nothing needs dismissing the call is a no-op (one fast ui-dump, no tap).
+Dismissed popup labels are recorded in the cycle `steps` log.
+
+---
+
 ## [1.1.457] — 2026-07-11
 
 ### Improve: "Scan Story Tray" → "📋 Scan Screen Layout" (general-purpose)

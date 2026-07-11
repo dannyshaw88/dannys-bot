@@ -654,6 +654,57 @@ export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismisse
   return { dismissed: true, steps };
 }
 
+/**
+ * Dismiss any Instagram interstitial/popup that blocks the current screen.
+ * Looks for common "soft-dismiss" button labels — "Not now", "Skip", "Maybe
+ * later", etc. — and taps the first one it finds.  This is intentionally
+ * non-destructive: it will never tap "Turn on", "Allow", "Continue", or any
+ * positive-action button, so it can be called safely at any point in the
+ * automation cycle without accidentally accepting unwanted permissions.
+ *
+ * Known popups handled:
+ *   • "Your notifications are off" → taps "Not now"
+ *   • "Turn on notifications" (variant) → taps "Not now" / "Skip"
+ *   • Android system permission dialogs → taps "Don't allow" / "Deny"
+ *   • "Save your login info?" → taps "Not now"
+ *   • Any other sheet with a "Skip", "Maybe later", "Later", "Cancel" button
+ *
+ * Returns the label that was tapped, or null if nothing needed dismissing.
+ */
+export async function dismissInstagramInterstitials(serial: string): Promise<string | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  // Ordered by specificity — more specific labels first so we don't
+  // accidentally tap a generic "Cancel" when a targeted dismiss exists.
+  const DISMISS_LABELS = [
+    "Not now",
+    "Not Now",
+    "Skip",
+    "Maybe Later",
+    "Maybe later",
+    "No thanks",
+    "No Thanks",
+    "Later",
+    "Dismiss",
+    "Don't Allow",
+    "Deny",
+    "Cancel",
+  ];
+
+  for (const label of DISMISS_LABELS) {
+    const pos = _findElem(xml, label);
+    if (pos) {
+      _adbTap(adb, serial, pos.x, pos.y);
+      await _sleep(600);
+      return label;
+    }
+  }
+  return null;
+}
+
 export async function stopInstagram(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

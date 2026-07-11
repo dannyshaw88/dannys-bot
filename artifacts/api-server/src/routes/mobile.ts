@@ -847,6 +847,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
+      // Dismiss any interstitial popup that appeared mid-scroll (e.g.
+      // "Your notifications are off → Not now", permission dialogs).
+      // This is fast when there's nothing to dismiss (one ui-dump, no match).
+      const midPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+      if (midPopup) {
+        logger.info({ serial, dismissed: midPopup }, "[check-feed] dismissed mid-scroll popup");
+        await sleepOrAbort(serial, 400);
+      }
+
       if (likeChance > 0 && Math.random() < likeChance) {
         await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
         // Look up the real Like button for whatever's on screen right now
@@ -1163,6 +1172,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 1000); // let the feed settle after the modal closes
       }
 
+      // 2c. Dismiss any other interstitial that may have appeared on launch
+      // (e.g. "Your notifications are off → Not now", "Save login → Not now").
+      const launchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+      if (launchPopup) {
+        steps.push(`launch-popup-dismissed(${launchPopup})`);
+        await sleepOrAbort(serial, 600);
+      }
+
       // 3. Scroll the feed (Step 2 in the UI).
       const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
@@ -1192,6 +1209,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ~10s to reload after the refresh. Tapping the story bar before then
         // lands on empty space (no story opens) and the whole stories step
         // silently no-ops. 1.5s was nowhere near enough; wait the full 10s.
+        // Dismiss any popup that appeared after tapping Home (notifications
+        // prompt often fires here since the feed just refreshed).
+        const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+        if (preStoriesPopup) {
+          steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
+          await sleepOrAbort(serial, 600);
+        }
         await sleepOrAbort(serial, 10000);
         const result = await runViewStoriesFromFeedLoop(serial, {
           usersMin: viewStoriesUsersMin, usersMax: viewStoriesUsersMax,
