@@ -1111,6 +1111,19 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
  * catch both). Falls back to null if not found so the caller can decide on
  * a fixed-percentage fallback.
  */
+/**
+ * Find any clickable element whose text or content-desc exactly matches
+ * `label` (case-sensitive). Used to locate dynamic share-sheet buttons
+ * ("Repost", "Close") that appear at unpredictable positions.
+ */
+export async function findButtonByLabel(serial: string, label: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  return _findElem(xml, label);
+}
+
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

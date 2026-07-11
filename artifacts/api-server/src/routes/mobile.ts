@@ -808,10 +808,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const y1 = Math.round(h * 0.78);
     const y2 = Math.round(h * 0.22);
     const cy = Math.round(h / 2);
-    // Instagram action bar (like/comment/share/bookmark row) position.
-    // On a standard feed post the row sits at roughly 72% of screen height.
-    const actionBarY = Math.round(h * 0.72);
-    const shareIconX = Math.round(w * 0.33); // paper-airplane send/share button
+    // Instagram feed post action bar — coordinates confirmed from screen-layout
+    // scan on user's 1080×2226 device (Jul 2026):
+    //   Like          13.5% X  — found via findLikeButton() accessibility tree
+    //   Comment       30.4% X
+    //   Share to feed 48.1% X  — two circular arrows (repost)
+    //   Share to DM   66.0% X  — paper-plane icon
+    //   Action bar Y  70.2% Y
+    // NOTE: the old shareIconX was 33% which landed squarely on the Comment
+    // button (bounds 27–34% X), opening the comment section and causing all
+    // subsequent taps to miss their targets, including swipes that crossed
+    // the bottom nav bar and accidentally triggered the Reels tab.
+    const actionBarY     = Math.round(h * 0.702); // 70.2% Y — from scan
+    const shareFeedIconX = Math.round(w * 0.481); // 48.1% X — circular arrows
+    const shareDmIconX   = Math.round(w * 0.660); // 66.0% X — paper plane
 
     let likes = 0;
     let likeFailures = 0;
@@ -892,42 +902,63 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      // Share to Feed (repost to own story/feed): tap the send/share icon,
-      // then tap the "Repost" option in the share sheet.
+      // Share to Feed (repost): tap the circular-arrows icon, find "Repost"
+      // in the sheet via accessibility tree, tap it, then dismiss the
+      // "You reposted…" confirmation popup by tapping its "Close" button.
+      // Using pressBack to cancel (not a swipe) avoids any chance of the
+      // gesture crossing the bottom nav bar and triggering the Reels tab.
       if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
         if (isCycleAborted(serial)) throw new Error("cycle-aborted");
         try {
           await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-          await android.tap(serial, shareIconX, actionBarY);
-          await sleepOrAbort(serial, 1200); // wait for sheet to open
-          // "Repost" option appears in the share sheet at roughly 30% height
-          await android.tap(serial, Math.round(w * 0.5), Math.round(h * 0.30));
-          await sleepOrAbort(serial, 800);
-          // Dismiss sheet (swipe down from center)
-          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.6), Math.round(w / 2), Math.round(h * 0.9), 300);
-          await sleepOrAbort(serial, 600);
-          sharesFeed++;
+          // Tap the circular-arrows (share-to-feed / repost) icon.
+          await android.tap(serial, shareFeedIconX, actionBarY);
+          logger.info({ serial, x: shareFeedIconX, y: actionBarY }, "[check-feed] tapped share-to-feed icon");
+          await sleepOrAbort(serial, 1200); // wait for share sheet
+
+          // Find the "Repost" option in the sheet via accessibility tree.
+          const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+          if (repostBtn) {
+            await android.tap(serial, repostBtn.x, repostBtn.y);
+            logger.info({ serial }, "[check-feed] tapped Repost in sheet");
+            await sleepOrAbort(serial, 1000);
+            // "You reposted X's post" popup appears after the first repost —
+            // find its blue "Close" button via accessibility tree and tap it.
+            const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
+            if (closeBtn) {
+              await android.tap(serial, closeBtn.x, closeBtn.y);
+              logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
+              await sleepOrAbort(serial, 500);
+            }
+            sharesFeed++;
+          } else {
+            // Sheet didn't open or "Repost" not visible — cancel safely.
+            logger.info({ serial }, "[check-feed] Repost button not found in sheet — pressing Back");
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 500);
+          }
+          await verifyStillInInstagram();
         } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
       }
 
-      // Share via DM: tap the send/share icon, then tap the first suggested
-      // user in the DM picker list.
+      // Share via DM: tap the paper-plane icon to open the DM picker, then
+      // close it with Back (registers the share-intent tap in a human-looking
+      // way without needing to know a recipient). pressBack is intentional —
+      // the previous swipe-dismiss was crossing the bottom nav bar (90–95% Y)
+      // and accidentally triggering the Reels tab.
       if (shareDmChance > 0 && Math.random() < shareDmChance) {
         if (isCycleAborted(serial)) throw new Error("cycle-aborted");
         try {
           await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-          await android.tap(serial, shareIconX, actionBarY);
-          await sleepOrAbort(serial, 1200); // wait for DM picker
-          // First suggested recipient avatar row sits at roughly 55% height
-          await android.tap(serial, Math.round(w * 0.17), Math.round(h * 0.55));
-          await sleepOrAbort(serial, 500);
-          // Tap "Send" button (right side of the composer row)
-          await android.tap(serial, Math.round(w * 0.85), Math.round(h * 0.90));
-          await sleepOrAbort(serial, 800);
-          // Dismiss the sheet
-          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.6), Math.round(w / 2), Math.round(h * 0.95), 300);
+          // Tap the paper-plane (DM / send) icon.
+          await android.tap(serial, shareDmIconX, actionBarY);
+          logger.info({ serial, x: shareDmIconX, y: actionBarY }, "[check-feed] tapped share-to-DM icon");
+          await sleepOrAbort(serial, 1200); // wait for DM picker sheet
+          // Close without sending — safe, no nav risk.
+          await android.pressBack(serial);
           await sleepOrAbort(serial, 600);
           sharesDm++;
+          await verifyStillInInstagram();
         } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
       }
 

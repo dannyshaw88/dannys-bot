@@ -1378,112 +1378,62 @@ function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Stories to watch</Label>
             <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlidesMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlidesMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
             </div>
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">% of each story to watch</Label>
+            <Label className="text-sm text-muted-foreground">% to watch</Label>
             <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlideWatchPctMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMin: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlideWatchPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Like stories</Label>
+            <Label className="text-sm text-muted-foreground">Like %</Label>
             <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesLikePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share stories via DM</Label>
+            <Label className="text-sm text-muted-foreground">Share DM %</Label>
             <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>

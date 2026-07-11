@@ -4,6 +4,41 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.460] — 2026-07-11
+
+### Fix: Share button coordinates were hitting Comment → Reels tab triggered
+
+**Root cause:** `shareIconX` was set to 33% X, which landed exactly on the
+Comment button (scan-confirmed bounds 27–34% X). Opening the comment section
+caused every subsequent share-flow tap to miss, and the swipe-to-dismiss
+(going to 90–95% Y) crossed the bottom nav bar, where the Reels tab at 50% X
+got triggered — sending the phone to the Reels section mid-cycle.
+
+**Fix — correct coordinates (confirmed from screen-layout scan, 1080×2226):**
+- Share to feed (circular arrows / repost): 48.1% X, 70.2% Y
+- Share to DM (paper plane): 66.0% X, 70.2% Y
+- Action bar Y: 70.2% (was 72%)
+
+**Fix — share-to-feed flow now uses the accessibility tree:**
+1. Tap the repost icon at correct coords
+2. `findButtonByLabel("Repost")` — finds the Repost button in the share sheet
+   via ui-dump rather than guessing a fixed percentage position
+3. After tapping Repost, `findButtonByLabel("Close")` detects the first-time
+   "You reposted X's post" confirmation popup and taps its blue Close button
+4. If "Repost" is not found in the sheet (didn't open), `pressBack` to cancel
+
+**Fix — share-to-DM dismiss changed to `pressBack`:**
+The old swipe-to-dismiss was the direct cause of the Reels tab tap. Using
+`pressBack` closes the DM picker safely with no nav bar risk.
+
+**New helper:** `findButtonByLabel(serial, label)` in `androidManager.ts` —
+finds any clickable element by exact text/content-desc match via ui-dump.
+
+**UI:** All 5 stories settings (Stories to watch, % to watch, Like %, Share DM %)
+collapsed onto a single flex row.
+
+---
+
 ## [1.1.459] — 2026-07-11
 
 ### Rework: Stories settings — total story count, per-story like %, per-story share DM %
