@@ -399,12 +399,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         cleanedUp = true;
         running = false;
         videoSessionActive.delete(serial);
+        if (lagWatchdog) clearInterval(lagWatchdog);
         try { currentChild?.kill(); } catch { /* ignore */ }
         try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
         logger.info({ serial, reason }, "[mobile-video] session cleaned up");
       };
       ws.on("close", () => cleanup("close"));
       ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
+
+      // ── Lag watchdog ─────────────────────────────────────────────────────
+      // "The delay/lag is awful" / "video is no longer 30fps" reports trace
+      // back to the same mechanism: ws.send() here is fire-and-forget. If the
+      // browser (or the Node event loop itself, e.g. an unrelated slow
+      // synchronous block introduced by some other code change) can't drain
+      // the socket as fast as screenrecord produces bytes, Node queues the
+      // backlog in `ws.bufferedAmount` and keeps growing it forever — WS/TCP
+      // backpressure never self-corrects here because we never checked for
+      // it. The stream doesn't visibly break, it just falls further and
+      // further behind real time, which looks exactly like "stopped being
+      // 30fps" / "awful lag" to the user, and — critically — never recovers
+      // on its own; only a full reconnect used to clear it. Poll the queued
+      // byte count and force a fresh screenrecord (which restarts from a
+      // clean IDR frame with an empty send queue) whenever it backs up past
+      // ~2 seconds of video at the stream's own bit rate, so lag is bounded
+      // and self-healing instead of compounding for the rest of the session.
+      const LAG_BYTES_THRESHOLD = 2_000_000; // ~2s of buffered video at 8Mbps
+      let lastLagRestart = 0;
+      const lagWatchdog = setInterval(() => {
+        if (!running || ws.readyState !== 1) return;
+        const buffered = ws.bufferedAmount;
+        if (buffered > LAG_BYTES_THRESHOLD && Date.now() - lastLagRestart > 5000) {
+          lastLagRestart = Date.now();
+          logger.warn({ serial, buffered }, "[mobile-video] send buffer backed up — forcing screenrecord restart to clear lag");
+          if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Mirror fell behind — resyncing…" }));
+          try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
+        }
+      }, 1000);
 
       // Scoped to the whole WS session (not per screenrecord restart) so a
       // stall that persists across several internal restarts still only

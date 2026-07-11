@@ -4,6 +4,42 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.462] — 2026-07-11
+
+### Fix: Mirror lag/FPS drift + close-all-apps only dismissed one stray app
+
+**Mirror lag / "no longer 30fps":** The live H.264 mirror (`/api/mobile/video/:serial`)
+piped `screenrecord`'s stdout straight into `ws.send()` with no backpressure
+check. If the browser (or the Node event loop itself — e.g. some *other*,
+unrelated code change adding a slow synchronous block) couldn't drain the
+socket as fast as the device produced video, Node silently queued the
+backlog in `ws.bufferedAmount` forever. TCP/WS backpressure doesn't
+self-correct: once the queue starts growing, the stream keeps falling
+further behind real time — which looks exactly like "stopped being smooth
+30fps" / "awful lag" — and previously only a full page reconnect cleared it.
+
+**Fix:** Added a 1s-interval watchdog per mirror session. If
+`ws.bufferedAmount` backs up past ~2 seconds of video (2MB at the stream's
+8Mbps bit rate), it kills the current `screenrecord` process — the existing
+restart logic immediately relaunches it with a clean IDR frame and an empty
+send queue — instead of leaving the growing backlog to compound for the
+rest of the session. Lag is now bounded and self-healing rather than
+sensitive to whatever else the process happens to be doing at the time.
+
+**Close-all-apps only swiped away one card:** `closeInstagramViaRecents()`
+opened the recents switcher and swiped away exactly one card. When more
+than one app ends up stacked in recents — an accidental tap opened
+something, or the phone's own background activity launched an app on top
+of Instagram — only the topmost card got dismissed, leaving the others
+still open for the next cycle.
+
+**Fix:** The "open recents, swipe the top card left" gesture now repeats
+5 times in a row at the end of the flow before the cycle continues. Each
+pass is a no-op once recents is already empty, so this is safe even when
+there was only ever one app to close.
+
+---
+
 ## [1.1.461] — 2026-07-11
 
 ### Fix: Mobile feed loop was acting on non-post content (ads, embedded Reels, Instagram's own "feedback" / snooze cards)

@@ -929,15 +929,26 @@ export async function closeInstagramViaRecents(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
-  await openRecentApps(serial);
-  await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
-  // Quick horizontal swipe left — no hold, no long press. The MIUI recents
-  // card just needs a simple click-drag a short distance to the left; a hold
-  // triggers the long-press context menu instead of dismissing the card.
+  // Sometimes more than one app ends up stacked in the recents switcher —
+  // an accidental tap opened something, or the phone's own background
+  // activity (a notification, a system prompt) launched an app on top of
+  // Instagram. A single open-recents + swipe-left only ever dismisses the
+  // one card on top, leaving anything else stacked behind it still open.
+  // Repeat the same "open recents, swipe the top card away" gesture 5 times
+  // in a row before moving on, so any handful of stray apps get swiped away
+  // too, not just Instagram — each pass is a no-op if recents is already
+  // empty (KEYCODE_APP_SWITCH on an empty stack just shows nothing to swipe).
   const cardX = Math.round(w * 0.5);
   const cardY = Math.round(h * 0.45);
-  await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
-  await new Promise(r => setTimeout(r, 500));
+  for (let i = 0; i < 5; i++) {
+    await openRecentApps(serial);
+    await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
+    // Quick horizontal swipe left — no hold, no long press. The MIUI recents
+    // card just needs a simple click-drag a short distance to the left; a hold
+    // triggers the long-press context menu instead of dismissing the card.
+    await swipe(serial, cardX, cardY, Math.round(w * 0.1), cardY, 220);
+    await new Promise(r => setTimeout(r, 500));
+  }
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions (some dismiss on a horizontal swipe, some need vertical) — a
