@@ -1481,21 +1481,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // It blocks the whole screen, so every scripted tap after it would
       // silently land on the modal instead of the feed. Walk through it if
       // present; this is a no-op if the dialog isn't showing.
-      tLog("▶ Checking for launch dialogs…");
+      // Each dismissal call runs a UIAutomator accessibility dump which can
+      // take 5–15 s on the Instagram splash screen. Log before AND after every
+      // call so the user can see exactly what is eating time in the Log tab —
+      // previously the whole 20 s was a single silent gap between two lines.
+      tLog("▶ UIAutomator: scanning for ads-choice dialog…");
       const adsChoice = await android.dismissAdsChoiceDialog(serial).catch(() => ({ dismissed: false, steps: [] as string[] }));
       if (adsChoice.dismissed) {
         steps.push(`ads-choice-dialog(${adsChoice.steps.length} steps)`);
         tLog(`▶ Dismissed ads-choice dialog (${adsChoice.steps.length} taps)`);
-        await sleepOrAbort(serial, 1000); // let the feed settle after the modal closes
+        await sleepOrAbort(serial, 1000);
+      } else {
+        tLog("▶ No ads-choice dialog — continuing");
       }
 
-      // 2c. Dismiss any other interstitial that may have appeared on launch
-      // (e.g. "Your notifications are off → Not now", "Save login → Not now").
+      // 2c. Dismiss any other interstitial (notifications, save-login, etc.)
+      tLog("▶ UIAutomator: scanning for other launch popups…");
       const launchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
       if (launchPopup) {
         steps.push(`launch-popup-dismissed(${launchPopup})`);
         tLog(`▶ Dismissed launch popup (${launchPopup})`);
         await sleepOrAbort(serial, 600);
+      } else {
+        tLog("▶ No launch popup — feed ready");
       }
 
       // 3. Scroll the feed (Step 2 in the UI).

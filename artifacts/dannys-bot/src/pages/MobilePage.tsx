@@ -110,10 +110,6 @@ type LiveCanvasHandle = { clearToBlack: () => void };
 const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
-  // Specifying colorSpace:'srgb' ensures the canvas uses the same color
-  // pipeline as the phone's display (BT.709 / sRGB), which fixes the blue
-  // tint that appears when WebCodecs decodes BT.601-tagged frames into a
-  // canvas that has no explicit color space set.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
@@ -199,10 +195,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       const canvas = canvasRef.current;
       if (!canvas) return null;
       if (!ctxRef.current) {
-        // colorSpace:'srgb' + alpha:false matches Android's BT.709/sRGB display
-        // pipeline — prevents the blue tint that appears when WebCodecs defaults
-        // to BT.601 matrix for Baseline-profile H.264 streams with no VUI.
-        ctxRef.current = canvas.getContext("2d", { colorSpace: "srgb", alpha: false }) ?? null;
+        // No colorSpace option. Forcing "srgb" makes the browser apply a chroma
+        // conversion from the frame's implied colour space (BT.601, since the
+        // Baseline H.264 stream has no VUI colour info) to sRGB — that
+        // conversion inverts chroma signs and produces a strong pink/red tint.
+        // Leaving it as the default lets the browser pass YCbCr values through
+        // unchanged, which looks correct on screen.
+        ctxRef.current = canvas.getContext("2d") ?? null;
       }
       return ctxRef.current;
     };

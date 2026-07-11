@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.470",
+    date: "11 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Mirror colour — the forced sRGB colour-space on the canvas (added in v1.1.469) was WRONG and made the colour WORSE (pink/red tint instead of the original slight blue). The browser inverts chroma when it converts BT.601-tagged H.264 to sRGB. Reverted to no colorSpace option; the browser now passes YCbCr values through unchanged which looks correct.",
+      },
+      {
+        category: "Fixed",
+        text: "20-second silent gap before feed scroll — UIAutomator dumps hang for up to 10 s while the Instagram splash screen is loading because the accessibility tree is being rebuilt. Hard timeout cut from 10 s to 5 s so a hung dump fails fast instead of blocking. Log now shows 'UIAutomator: scanning…' and 'No ads-choice dialog' lines so every second of the gap is visible instead of one dead jump.",
+      },
+    ],
+  },
+  {
     version: "1.1.469",
     date: "11 Jul 2026",
     items: [

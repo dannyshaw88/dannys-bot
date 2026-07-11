@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.470] — 2026-07-11
+
+### Fix: mirror colour revert (pink tint), UIAutomator 20s silent hang
+
+**Mirror colour — revert sRGB canvas (pink/red tint introduced in v1.1.469):**  
+Forcing `colorSpace: "srgb"` on the 2D canvas context caused the browser to
+apply a BT.601→sRGB chroma conversion on every VideoFrame blit. Android
+screenrecord H.264 has no VUI colour info, so WebCodecs defaults to BT.601;
+converting BT.601 to sRGB inverts the Cb/Cr signs — producing a strong
+pink/red tint across the entire mirror. Reverted: `getContext("2d")` with no
+colour-space option passes YCbCr through unchanged, which matches what the
+phone display actually shows. Context caching is retained (no perf regression).
+
+**UIAutomator 20-second silent hang:**  
+`_uiDump` (UIAutomator accessibility dump) had a 10 s `spawnSync` timeout.
+During the Instagram splash/loading screen the accessibility tree is being
+rebuilt continuously; UIAutomator consistently timed out at the full 10 s,
+then the `adb pull` added another 6 s — 16 s per call, invisible in the log.
+Two calls in `dismissAdsChoiceDialog` = the 20-second black hole seen between
+`[4.6s] Checking for launch dialogs` and `[24.9s] Starting feed scroll`.  
+**Fixes:**
+- `_uiDump` hard timeout: 10 000 → 5 000 ms (adb shell), 6 000 → 4 000 ms (adb pull)
+- Added `tLog` lines before AND after every dialog scan call:  
+  `UIAutomator: scanning for ads-choice dialog…` → `No ads-choice dialog — continuing`  
+  `UIAutomator: scanning for other launch popups…` → `No launch popup — feed ready`  
+  Every second of the startup sequence is now visible in the Log tab.
+
+---
+
 ## [1.1.469] — 2026-07-11
 
 ### Fix: mirror lag, blue tint, IG open delay, log timestamps

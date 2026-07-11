@@ -1325,8 +1325,13 @@ export async function dumpUi(serial: string): Promise<string> {
 async function _uiDump(adb: string, serial: string): Promise<string> {
   const tmpDev = "/sdcard/equinox_ui_dump.xml";
   const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
-  spawnSync(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { encoding: "utf8", timeout: 10000 });
-  spawnSync(adb, ["-s", serial, "pull", tmpDev, tmpHost], { encoding: "utf8", timeout: 6000 });
+  // 5 s hard cap (was 10 s). During the Instagram splash screen the
+  // accessibility tree is being rebuilt continuously; the old 10 s timeout
+  // let UIAutomator hang the full duration, making every dialog-check call
+  // take 10–16 s with zero log visibility. 5 s is enough for a settled UI
+  // and fails fast enough on a loading screen to not block the cycle.
+  spawnSync(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { encoding: "utf8", timeout: 5000 });
+  spawnSync(adb, ["-s", serial, "pull", tmpDev, tmpHost], { encoding: "utf8", timeout: 4000 });
   try {
     const xml = fs.readFileSync(tmpHost, "utf8");
     try { fs.unlinkSync(tmpHost); } catch { /**/ }
