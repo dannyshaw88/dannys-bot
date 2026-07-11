@@ -4,7 +4,7 @@ All notable changes to Equinox are documented here.
 
 ---
 
-## [1.1.466] — 2026-07-11
+## [1.1.466] — 2026-07-11 (hotfix included)
 
 ### Fix: Human Session Tool stalls + empty log during automation cycles
 
