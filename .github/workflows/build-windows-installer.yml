@@ -52,7 +52,11 @@ jobs:
           name: web-dist
       - name: Install Electron deps
         working-directory: artifacts/electron
-        run: npm install
+        # --ignore-scripts skips better-sqlite3 node-gyp compile and
+        # puppeteer Chromium download. electron-builder rebuilds native
+        # modules correctly via its own npmRebuild step using the right
+        # Electron headers — no manual VS toolchain needed here.
+        run: npm install --ignore-scripts
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
