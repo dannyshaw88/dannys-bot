@@ -1345,12 +1345,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let s = 0; s < totalStories; s++) {
       if (isCycleAborted(serial)) break;
 
-      // Watch this story for a random percentage of its ~6s duration.
-      const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
-        Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-      const watchMs = Math.max(400, Math.round((watchPct / 100) * 6000));
-      await sleepOrAbort(serial, watchMs);
-
       // Like and/or share this story?
       //
       // The like/share icon bar sits at a DIFFERENT position depending on
@@ -1358,10 +1352,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // visually different, higher bar) and shifts/loses icons entirely
       // when the story owner disables likes, comments, or shares — none of
       // which a single hardcoded (x%, y%) pair can track (see
-      // findStoryActionIcons() for the full history). Take one screenshot
-      // up front (reused for both actions this slide) and locate the real
-      // icons by pixel; only fall back to the old fixed coordinates if the
-      // screenshot/accessibility approach is entirely unavailable.
+      // findStoryActionIcons() for the full history).
+      //
+      // IMPORTANT: we scan icon positions HERE — at the very start of each
+      // story, before the watch-duration sleep — not after it. Short stories
+      // (as little as 1–3 s) can advance while we're waiting the view %, so
+      // if we leave the screenshot call until after the sleep we're racing
+      // against an already-advancing next slide. Scanning first, saving the
+      // coordinates, then sleeping means the action sequence (tap Like, tap
+      // Share) uses pre-found positions and never needs another screenshot,
+      // keeping the total post-sleep action time under ~300 ms.
       const willLike = likeChance > 0 && Math.random() < likeChance;
       const willShare = shareChance > 0 && Math.random() < shareChance;
 
@@ -1370,6 +1370,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         actionIcons = await android.findStoryActionIcons(serial).catch(() => null);
         onLog?.(`Story ${s + 1}: icon scan found ${actionIcons ? `${actionIcons.length} icon(s) at [${actionIcons.map(p => `(${p.x},${p.y})`).join(", ")}]` : "nothing (screenshot unavailable — using fallback)"}`);
       }
+
+      // Watch this story for a random percentage of its ~6s duration.
+      // Floor is 1500 ms (not 400) so that even a 1-second story gives
+      // enough runway to both watch and act before it auto-advances.
+      const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
+        Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
+      const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
+      await sleepOrAbort(serial, watchMs);
 
       if (willLike) {
         if (actionIcons && actionIcons.length >= 2) {
@@ -1412,7 +1420,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fixed-coordinate fallback — icon scan unavailable)");
           onLog?.(`Story ${s + 1}: liked using fallback coordinates (icon scan unavailable)`);
         }
-        await sleepOrAbort(serial, 400 + Math.round(Math.random() * 200));
+        // Minimal gap before Share — just enough for the Like animation to
+        // register. The old 400–600 ms window was giving the story time to
+        // advance between the two taps; 100 ms is sufficient.
+        await sleepOrAbort(serial, 100);
       }
 
       if (willShare) {

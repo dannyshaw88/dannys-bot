@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.479] — 2026-07-11
+
+### Fix: story like/share misses on short stories
+
+Root cause: `findStoryActionIcons` (the screenshot + pixel decode call) was
+happening AFTER the watch-% sleep. On a short story (1–6 s) at even a moderate
+view %, the screenshot call ate into the remaining story time, and if the story
+auto-advanced during it the subsequent taps landed on the next story's icons
+(or worse, empty space). Between the Like tap and the Share tap there was also
+a 400–600 ms sleep — another window for a short story to advance.
+
+Three-part fix:
+1. **Pre-scan at story load** — `findStoryActionIcons` is now called at the
+   very start of each loop iteration, before the watch-% sleep, while the story
+   is freshly loaded and icons are definitely visible. The saved coordinates are
+   used directly for both Like and Share; no second screenshot is taken.
+2. **Minimum watchMs floor raised 400 → 1500 ms** — ensures even a 1-second
+   story gives the bot enough runway to watch and act before it auto-advances.
+3. **Like → Share inter-tap gap cut 400–600 ms → 100 ms** — once Like lands
+   (no keyboard = confirmed success), Share is tapped almost immediately so the
+   story has no gap to advance between the two actions.
+
+---
+
 ## [1.1.478] — 2026-07-11
 
 ### Fix (real root cause this time): phone screen turning on just from opening the Mobile tool
