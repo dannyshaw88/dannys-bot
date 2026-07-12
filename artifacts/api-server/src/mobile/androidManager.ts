@@ -2018,24 +2018,40 @@ export async function dumpUi(serial: string): Promise<string> {
   return _uiDump(adb, serial);
 }
 
-async function _uiDump(adb: string, serial: string): Promise<string> {
+/**
+ * Dumps once and pulls the accessibility tree XML. Not exported — always go
+ * through `_uiDump`, which validates the result and retries on truncation
+ * (see below). A raw single-shot dump on a busy screen (deep scrollable
+ * list + soft keyboard both mounted) can get killed by the timeout before
+ * the on-device XML write finishes, which silently truncates the document
+ * — every node written *after* the cut point (often everything below the
+ * top of the screen) simply isn't there, even though it's visibly on
+ * screen. That looked exactly like "0 elements" in the middle/bottom of
+ * the layout scan and "0 keys mapped" for the keyboard, even with the
+ * keyboard genuinely open.
+ */
+async function _uiDumpOnce(adb: string, serial: string): Promise<string> {
   const tmpDev = "/sdcard/equinox_ui_dump.xml";
   const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
   // CRITICAL: use async spawn (not spawnSync) so the Node event loop stays
-  // free during the 4–5 s UIAutomator dump. spawnSync was blocking the entire
+  // free during the UIAutomator dump. spawnSync was blocking the entire
   // event loop, preventing the video WebSocket from flushing frames to the
   // client — ws.bufferedAmount spiked, the lag watchdog fired, screenrecord
   // restarted, and the client got a 10–20 s black screen then "catch-up".
   // With async spawn the video stream keeps flowing uninterrupted.
+  // Timeout raised 5000ms → 9000ms: a screen with a deep/virtualized list
+  // (search "Recent" results) plus an open soft keyboard can take the
+  // on-device dump noticeably longer than a simple static screen, and
+  // killing it mid-write is what produced truncated XML in the first place.
   await new Promise<void>((resolve) => {
     const child = spawn(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { stdio: "ignore" });
-    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 5000);
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 9000);
     child.on("close", () => { clearTimeout(t); resolve(); });
     child.on("error", () => { clearTimeout(t); resolve(); });
   });
   await new Promise<void>((resolve) => {
     const child = spawn(adb, ["-s", serial, "pull", tmpDev, tmpHost], { stdio: "ignore" });
-    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 4000);
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 6000);
     child.on("close", () => { clearTimeout(t); resolve(); });
     child.on("error", () => { clearTimeout(t); resolve(); });
   });
@@ -2044,6 +2060,19 @@ async function _uiDump(adb: string, serial: string): Promise<string> {
     try { fs.unlinkSync(tmpHost); } catch { /**/ }
     return xml;
   } catch { return ""; }
+}
+
+async function _uiDump(adb: string, serial: string): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const xml = await _uiDumpOnce(adb, serial);
+    // A complete dump always closes its root element. A truncated write
+    // (killed mid-dump, or a partial pull) is missing this — retry instead
+    // of silently handing back a document that's only populated near the
+    // top of the tree.
+    if (xml && xml.includes("</hierarchy>")) return xml;
+    if (attempt < 2) await _sleep(400);
+  }
+  return "";
 }
 
 /** Parse "[x1,y1][x2,y2]" bounds → centre point. */
@@ -2691,7 +2720,19 @@ export async function typeViaOnscreenKeyboard(
     await refreshKeyMap("letters");
   }
   if (keyMap.size < 5) {
-    onLog?.("[keyboard] keyboard did not appear — aborting type");
+    // The accessibility dump never surfaced the on-screen keyboard's keys —
+    // on some devices/IME builds uiautomator's window walk misses the IME
+    // window (or a slow dump gets truncated) even though the keyboard is
+    // genuinely visible and focused. Previously this returned here having
+    // typed NOTHING, which silently dropped the whole username. Since the
+    // field is confirmed focused (that's a precondition of this function),
+    // fall back to injecting the text directly via the device's input
+    // method instead of aborting — better a real IME-driven type than no
+    // type at all. Per-character tap mode remains the default path
+    // whenever key positions ARE discoverable, since that's the more
+    // human-like gesture this tool is built around.
+    onLog?.(`[keyboard] keyboard keys not found in accessibility tree after retries — falling back to IME text injection for the whole string`);
+    _adbType(adb, serial, text);
     return;
   }
 

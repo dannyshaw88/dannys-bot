@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.492] — 2026-07-12
+
+### Fix: Follow Users typed nothing at all (keyboard dump reliability) + manual-tap coordinate misalignment + Follow Users UI row layout
+
+**Backend — `typeViaOnscreenKeyboard` no longer silently types nothing**
+
+The previous fix (v1.1.491) added a retry loop that waits for the keyboard's key map to populate before typing, but if it *still* came back empty after retries, the function just returned — having typed **zero characters** of the username, which is exactly what was observed ("clicked in the search field correctly, however nothing was typed at all, and the tool proceeded to the final step"). Root cause: on this device, `uiautomator dump` sometimes never surfaces the on-screen keyboard's key nodes in the accessibility tree at all (confirmed via the Scan Screen Layout tool: the top of the screen was captured correctly, but the entire middle/bottom — including the fully visible Gboard keyboard and the Recent-searches list — came back with 0 elements). Now, when the key map still can't be built after retries, the function falls back to injecting the whole string via the device's IME (`adb shell input text`) instead of aborting — the field is already confirmed focused, so this reliably lands the text even when the tap-based path can't see the keyboard. Per-character tap gestures remain the default/preferred path whenever key positions *are* discoverable; the IME fallback only kicks in as a last resort so a run is never silently dropped.
+
+**Backend — `_uiDump` truncation fix (root cause of "0 elements" mid/lower-screen scans)**
+
+Found the likely reason the keyboard (and other lower-screen content) was invisible to `uiautomator dump` in the first place: the on-device dump was killed after a fixed 5000 ms timeout, which can be too short when the screen has both a deep/virtualized list (the Explore/Search "Recent" results) and an open soft keyboard mounted at once — killing the dump mid-write truncates the XML, and everything written *after* the cut point (typically most of the screen below the very top) is simply missing from the document, even though it's visibly on screen. Fixed by:
+- Raising the dump timeout 5000 ms → 9000 ms and the pull timeout 4000 ms → 6000 ms.
+- Validating every dump for a closing `</hierarchy>` tag before accepting it as complete, and retrying up to 3 times (with a short pause) if the tag is missing instead of silently handing back partial/empty content to every caller.
+
+**Backend — manual mirror-tap coordinate misalignment (the "click 123, get a comma" bug)**
+
+Diagnosed why tapping the on-screen keyboard's `123` key through the mirrored phone view sometimes registered a `,` instead — but tapping the very left edge of the same key worked correctly (an error that grows with distance from the top-left corner is the signature of a *scale* mismatch, not a fixed offset). `rescaleForDevice` (used by every manual tap/swipe from the mirror) reads the device's screen size via `adb shell wm size` and rescales the video-frame coordinate into real device pixels. `wm size` can print **both** a `Physical size` and an `Override size` line when a display-size override is active — Android's input system maps touch coordinates against the *current logical size* (the override, when one is set), not the physical panel resolution. The old code always matched the *first* number pair in the output, which is always `Physical size`, so if an override was ever active on this device, every rescaled tap was proportionally wrong, worse the further the tap was from the origin — exactly the reported symptom. Fixed to prefer `Override size` when present, falling back to `Physical size` otherwise.
+
+**Frontend — Follow Users header consolidated onto one row**
+
+- The tickbox, "Follow Users" label, **Sources** button, and **Followed** button (renamed from **View**) now sit on a single row, in that order.
+- Removed the separate "Target Sources (N)" and "Followed Users" text headers above their respective panels — the buttons on the main row are now the only way to open/close them, with the same collapsible behavior as before.
+- Reworded "Users to follow per cycle" → "Users to follow per operation".
+
+---
+
 ## [1.1.491] — 2026-07-12
 
 ### Fix: Follow Users search-bar tap misfired below the field + UI cleanup (description removed, Target Sources collapsible)

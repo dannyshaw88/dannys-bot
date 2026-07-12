@@ -2456,7 +2456,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const adbPath = tools.adb.path;
       if (!adbPath) return { x, y };
       const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-      const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+      const out = wm.stdout ?? "";
+      // `wm size` can print BOTH a "Physical size" and an "Override size"
+      // line when a display-size override is active (e.g. a prior
+      // testing/scaling change). Touch input is interpreted against the
+      // CURRENT logical size, which is the override when one is set — not
+      // the physical panel resolution. Picking the first match (always
+      // "Physical size") when an override was active meant every rescaled
+      // tap was proportionally off from the true target, growing with
+      // distance from the top-left corner — exactly the "tap the left edge
+      // of a key = correct, tap its centre = lands one key over" pattern
+      // reported on this device. Prefer Override size when present.
+      const overrideM = out.match(/Override size:\s*(\d+)x(\d+)/);
+      const physicalM = out.match(/Physical size:\s*(\d+)x(\d+)/);
+      const m = overrideM ?? physicalM ?? out.match(/(\d+)x(\d+)/);
       if (!m) return { x, y };
       const realW = parseInt(m[1]);
       const realH = parseInt(m[2]);

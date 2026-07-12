@@ -1596,7 +1596,9 @@ function AutomationSettingsPanel({
             divider above between View Feed and View Stories from Feed. */}
         <div className="border-t border-border" />
 
-        {/* ── Follow Users header ─────────────────────────────── */}
+        {/* ── Follow Users header — tickbox, label, Sources, Followed all
+               on one row (Sources/Followed panels are collapsible below,
+               same pattern as before — only the buttons live on this row). */}
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -1607,11 +1609,21 @@ function AutomationSettingsPanel({
             className="w-4 h-4 accent-primary cursor-pointer"
           />
           <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
+          <Button
+            variant="outline" size="sm"
+            className="h-7 text-xs px-3 ml-auto"
+            onClick={() => setShowSources(v => !v)}
+          >{showSources ? 'Hide' : `Sources${settings.followSources.length > 0 ? ` (${settings.followSources.length})` : ''}`}</Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs px-3"
+            disabled={loadingFollowed}
+            onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
+          >{showFollowedUsers ? 'Hide' : `Followed${mobileFollowedList.length > 0 ? ` (${mobileFollowedList.length})` : ''}`}</Button>
         </div>
 
-        {/* ── Users to follow per cycle ─────────────────────── */}
+        {/* ── Users to follow per operation ─────────────────── */}
         <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Users to follow per cycle</Label>
+          <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
           <div className="flex items-center gap-3">
             <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
               value={settings.followUsersMin}
@@ -1741,18 +1753,8 @@ function AutomationSettingsPanel({
           </div>
         )}
 
-        {/* ── Target Sources (collapsible) ─────────────────── */}
+        {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="text-sm text-muted-foreground">
-              Target Sources{settings.followSources.length > 0 ? ` (${settings.followSources.length})` : ''}
-            </Label>
-            <Button
-              variant="outline" size="sm"
-              className="h-7 text-xs px-3 ml-auto"
-              onClick={() => setShowSources(v => !v)}
-            >{showSources ? 'Hide' : 'Sources'}</Button>
-          </div>
           {showSources && (
             <div className="border border-border rounded-lg p-3 space-y-2">
               {/* Existing sources list */}
@@ -1825,16 +1827,8 @@ function AutomationSettingsPanel({
           )}
         </div>
 
-        {/* ── Followed Users ───────────────────────────────── */}
+        {/* ── Followed Users panel (toggled via the Followed button above) */}
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="text-sm text-muted-foreground">Followed Users</Label>
-            <Button
-              variant="outline" size="sm" className="h-7 text-xs px-3 ml-auto"
-              disabled={loadingFollowed}
-              onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
-            >{showFollowedUsers ? 'Hide' : `View${mobileFollowedList.length > 0 ? ` (${mobileFollowedList.length})` : ''}`}</Button>
-          </div>
           {showFollowedUsers && (
             <div className="border border-border rounded-lg overflow-hidden">
               {loadingFollowed ? (
