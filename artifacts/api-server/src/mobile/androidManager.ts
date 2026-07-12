@@ -3144,11 +3144,27 @@ export async function tapFollowButtonOnProfilePage(serial: string): Promise<bool
   await _sleep(1500);
   const xml = await _uiDump(adb, serial);
   if (!xml) return false;
-  const btn = _findElem(xml, "Follow") ||
+  // Use an exact-match regex for "Follow" so we never accidentally match
+  // "Following" (already following — tapping that would UNfollow) or
+  // "Unfollow" (same problem). _findElem's substring fallback would incorrectly
+  // match both of those. Same pattern as findStoryFollowButton.
+  const exactFollowRe = /(?:text|content-desc)="Follow"[^>]*bounds="([^"]+)"/;
+  const exactM = xml.match(exactFollowRe);
+  const btn = (exactM ? _parseCenter(exactM[1]) : null) ||
     _findByResId(xml, ":id/follow_button", ":id/follow_btn", ":id/button_follow");
   if (!btn) return false;
   _adbTap(adb, serial, btn.x, btn.y);
-  return true;
+  // Verify the Follow tap actually worked by confirming the button label
+  // changed to "Following" (public account) or "Requested" (private account).
+  // Only then do we report success — this prevents false positive follow logs
+  // that were appearing when the tap landed but Instagram rejected it silently.
+  await _sleep(2000);
+  const xml2 = await _uiDump(adb, serial);
+  if (!xml2) return false;
+  const confirmed =
+    /(?:text|content-desc)="Following"/.test(xml2) ||
+    /(?:text|content-desc)="Requested"/.test(xml2);
+  return confirmed;
 }
 
 /** Deactivate Drony: open it and tap the ON/active toggle. */

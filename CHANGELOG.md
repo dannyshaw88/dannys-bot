@@ -4,6 +4,58 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.515] — 2026-07-12
+
+### Fix: Inject Browsing — DM share now verifies the Send button actually closed the sheet
+
+**Symptom**: The log showed "Inject Browsing: shared the post via DM" but no DM was ever received. The action was silently failing every time.
+
+**Root cause**: `sendShareSheet` tapped the blue "Send" button and immediately returned `true` without checking whether the tap actually worked. When no recipient was selected (because `tapRandomShareSheetRecipient` missed its target — either the a11y scan returned empty and the coordinate fallback hit the wrong spot, or the avatar tap didn't register), tapping "Send" does nothing — Instagram requires at least one recipient to be checked. The sheet stayed open but the function had already declared success.
+
+**Fix**: After tapping Send (both the label-scan path and the coordinate-fallback path), wait 900 ms and re-check whether the "Send" button is still present in the accessibility tree. If it's gone the sheet closed and the DM was sent — return `true`. If it's still there the send failed — return `false` so the caller presses Back and does not log a false success.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `sendShareSheet`: added post-tap sheet-closure verification on both code paths
+
+---
+
+### Fix: Inject Browsing — stranded on post/Reel when `findFeedActionIcons` returned null
+
+**Symptom**: When the "Click post %" roll landed on a Reel or ad (which has a non-standard action bar with no accessible "Like" node), `findFeedActionIcons` returned null and the function returned early — without pressing Back. The Follow step then ran while still inside the Reel viewer or ad, where the Follow button does not exist, so follow was silently skipped.
+
+**Fix**: Added `pressBack` + 500 ms settle before the early return in the `!icons` branch so the caller is always returned to the profile page regardless of what was opened.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser`: pressBack in the no-icons early-return branch
+
+---
+
+### Fix: Follow — scroll profile back to top before tapping Follow
+
+**Symptom**: When Inject Browsing was enabled and scrolled the profile grid (even if no post was opened), the Follow button in the profile header was scrolled off-screen. `tapFollowButtonOnProfilePage` couldn't find it in the accessibility tree and the follow was silently skipped.
+
+**Fix**: After `runProfileBrowsingForUser` returns, the follow loop now performs 4 quick upward swipes to scroll the profile grid back to the top before calling `tapFollowButtonOnProfilePage`. This ensures the Follow button in the profile header is visible regardless of how far browsing scrolled.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — follow loop: scroll-to-top swipes inserted after inject browsing block
+
+---
+
+### Fix: Follow — verified state change before logging success; exact "Follow" match
+
+**Symptom 1**: The follow was logged as "✓ followed" the moment the button was tapped, even if Instagram rejected the action silently (e.g. rate-limited, already following, or the tap landed slightly off). The button state was never checked.
+
+**Symptom 2**: `_findElem`'s substring fallback could match "Following" (already following) since it contains "Follow". On a profile where the account was already followed, this would tap "Following" to unfollow, then the state change would fail to confirm and return false — but the wrong tap still fired.
+
+**Fix** (`tapFollowButtonOnProfilePage` in `androidManager.ts`):
+- Changed the button search to use a strict regex `content-desc="Follow"` / `text="Follow"` (exact match, same pattern as `findStoryFollowButton`) so "Following" and "Unfollow" are never mistakenly selected.
+- After tapping, waits 2 s and re-dumps the accessibility tree. Only returns `true` if the button label is now "Following" (public account accepted) or "Requested" (private account — follow request sent). Returns `false` for everything else.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `tapFollowButtonOnProfilePage`: exact-match regex + post-tap state-change verification
+
+---
+
 ## [1.1.514] — 2026-07-12
 
 ### Fix: `injectBrowsingActivatePctMin is not defined` — missing destructure in automation-cycle endpoint

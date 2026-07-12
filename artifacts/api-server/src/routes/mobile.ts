@@ -1041,7 +1041,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
-      return true;
+      // Verify the tap actually sent: a successful send closes the share sheet,
+      // so the "Send" button disappears. If no recipient was selected the button
+      // does nothing and the sheet stays open — we detect that here and return
+      // false so the caller can close the sheet rather than logging a false success.
+      await sleepOrAbort(serial, 900);
+      const sheetStillOpen = await android.findButtonByLabel(serial, "Send").catch(() => null);
+      return !sheetStillOpen;
     }
     // UIAutomator didn't find "Send" — this previously fell back to a
     // fixed-coordinate tap and unconditionally returned true regardless of
@@ -1057,7 +1063,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ?? await android.findButtonByLabel(serial, "To").catch(() => null);
     if (!sheetOpen) return false;
     await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
-    return true;
+    // Same verification for the coordinate-fallback path.
+    await sleepOrAbort(serial, 900);
+    const sheetStillOpen2 = await android.findButtonByLabel(serial, "Send").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "Direct").catch(() => null);
+    return !sheetStillOpen2;
   }
 
   // Shared by the standalone `/check-feed` route and the full
@@ -2128,6 +2138,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!icons) {
       onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — returning to profile");
       logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — no Like button found in accessibility tree; post may already be liked (content-desc='Unlike'), or this is a Reel/ad with a non-standard action bar");
+      // Press Back to leave whatever was opened (Reel viewer, ad, etc.) so the
+      // caller (Follow step) is back on the profile page, not stranded mid-view.
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 500);
       return;
     }
 
@@ -2402,9 +2416,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
           });
+          // Browsing may have scrolled the profile grid, pushing the Follow
+          // button (in the profile header) off-screen. Scroll back to the top
+          // of the profile before attempting the Follow tap.
+          const { w: bw, h: bh } = getScreenSize(serial);
+          for (let _si = 0; _si < 4; _si++) {
+            await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.30), Math.round(bw / 2), Math.round(bh * 0.75), 280);
+            await sleepOrAbort(serial, 180);
+          }
+          await sleepOrAbort(serial, 400);
         }
 
-        // Tap Follow on the profile page
+        // Tap Follow on the profile page. Only logs success when the button
+        // is confirmed to have changed to "Following" or "Requested".
         const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
         if (didFollow) {
           followed++;
@@ -2412,7 +2436,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`Follow: ✓ followed @${username} (${followed}/${targets.length})`);
           await sleepOrAbort(serial, 1000 + Math.round(Math.random() * 1500));
         } else {
-          onLog?.(`Follow: Follow button not found on @${username} — already following?`);
+          onLog?.(`Follow: Follow button not found or state did not change on @${username} — already following?`);
         }
 
         // Go back to search only when there are more users to follow.
