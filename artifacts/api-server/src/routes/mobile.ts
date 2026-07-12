@@ -1397,9 +1397,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // (e.g. a single-story tray with no multi-segment progress bar), and
     // only THEN do we pay for the slow-but-proven accessibility-tree check.
     const stillInStoryViewer = async () => {
+      const fastStart = Date.now();
       const fast = await android.isStoryViewerOpenFast(serial).catch(() => null);
       if (fast === true) return true;
-      return android.findHomeTab(serial).then(r => r === null).catch(() => true);
+      // Instrumented (12 Jul 2026): the previous version of this fix
+      // assumed the fast pixel-scan check would hit most of the time and
+      // never verified it in the field. Log every fallback with real
+      // timings so the next report shows hard numbers (how often the fast
+      // check misses, how long the slow dump actually costs on this
+      // device) instead of guessing from story-loop timestamps.
+      const slowStart = Date.now();
+      const result = await android.findHomeTab(serial).then(r => r === null).catch(() => true);
+      onLog?.(`  (story-viewer check: fast scan ${slowStart - fastStart}ms inconclusive → slow dump ${Date.now() - slowStart}ms)`);
+      return result;
     };
 
     // Open the story viewer: tap a random friend's story bubble.
@@ -1548,6 +1558,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         if (opened) {
           await sleepOrAbort(serial, 900); // wait for picker sheet (trimmed from 1200ms to leave more runway)
+          // Confirm the sheet actually rendered BEFORE firing the recipient
+          // tap. Root-cause fix (12 Jul 2026, user-reported): the only gate
+          // that used to exist here was "no keyboard AND still in story
+          // viewer" — but that's true both when the sheet genuinely opened
+          // AND when the paper-plane tap landed on something that did
+          // neither (e.g. a slightly mis-scanned icon position that missed
+          // every real element). In that second case `opened` was still set
+          // true, and the very next line blind-tapped recipient slot 1 at
+          // x≈15% of screen width — which, on the plain story screen
+          // underneath (no sheet actually covering it), is squarely inside
+          // Instagram's "go to previous story" tap zone. That's the
+          // "clicked backwards" bug: the bot wasn't confused about DM UI,
+          // it just never verified the DM sheet was really there before
+          // tapping into it blind.
+          //
+          // The Send button only ever exists inside this DM share sheet, so
+          // finding it is a reliable positive signal the sheet is open —
+          // unlike the absence checks used above, which can't tell "sheet
+          // open" apart from "nothing happened at all".
+          const sheetConfirmed = await android.findButtonByLabel(serial, "Send").catch(() => null) !== null;
+          if (!sheetConfirmed) {
+            logger.warn({ serial, story: s + 1 }, "[view-stories] share sheet not confirmed open (no Send button found) — skipping recipient tap to avoid a blind tap on the story underneath");
+            onLog?.(`Story ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
+          } else {
           // Pick a random recipient, then look for the real Send button —
           // previously this just opened the sheet and pressed Back, never
           // actually sending to anyone (same bug as the feed's share-to-DM).
@@ -1571,6 +1605,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
             onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
             await sleepOrAbort(serial, 600);
+          }
           }
           }
         }

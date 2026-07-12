@@ -1661,7 +1661,19 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
  */
 export async function isStoryViewerOpenFast(serial: string): Promise<boolean | null> {
   const img = await _captureScreenPixels(serial);
-  if (!img) return null;
+  if (!img) {
+    // Root-cause fix (12 Jul 2026): this used to fail SILENTLY. If a
+    // device's screencap PNG ever fails to capture or decode (timeout,
+    // unsupported bit depth/color type, truncated buffer), _captureScreenPixels
+    // swallows the error and returns null — which means every single call
+    // on that device falls straight through to the slow uiautomator-dump
+    // path, permanently, with zero visibility that the "fast" check was
+    // never actually running. Logging here is the only way to tell "fast
+    // check is failing to even capture" apart from "fast check ran but the
+    // bar pattern wasn't detected" from the server log.
+    logger.warn({ serial }, "[isStoryViewerOpenFast] screenshot capture/decode failed — always falling back to slow check on this device/frame");
+    return null;
+  }
   const { width, height, channels, pixels } = img;
   if (!width || !height) return null;
 
@@ -1673,13 +1685,26 @@ export async function isStoryViewerOpenFast(serial: string): Promise<boolean | n
   // Progress-bar segments sit in a thin strip just under the status bar /
   // camera cutout. Scan several rows in that region to tolerate devices
   // with different status-bar heights or notch designs.
-  const bandTop = Math.round(height * 0.015);
-  const bandBottom = Math.round(height * 0.06);
-  const brightThreshold = 150; // segments are near-white even when "unwatched"/dimmed
+  //
+  // Widened + relaxed (12 Jul 2026): the original band (1.5%-6% height,
+  // threshold 150, uniform-width ratio 1.8, coverage 55%) was tuned against
+  // one reference capture and, per user report, was essentially NEVER
+  // matching on a real 1080×2460 device in the field — every check fell
+  // back to the ~3-4s uiautomator dump, which fully explains why likes/
+  // shares still weren't landing quickly despite the fast-path fix. Widened
+  // the search band and relaxed every threshold so more real devices/
+  // status-bar heights/lighting conditions are covered; the multi-segment,
+  // near-uniform-width, wide-spanning pattern this looks for is still
+  // distinctive enough that it won't false-positive on ordinary UI chrome.
+  const bandTop = Math.round(height * 0.008);
+  const bandBottom = Math.round(height * 0.10);
+  const brightThreshold = 110; // segments are near-white even when "unwatched"/dimmed, but can read dimmer over dark gradients than first assumed
 
   let bestClusterCount = 0;
+  let rowsScanned = 0;
 
   for (let y = bandTop; y <= bandBottom; y += 2) {
+    rowsScanned++;
     const clusters: { x1: number; x2: number }[] = [];
     let runStart = -1;
     for (let x = 0; x < width; x++) {
@@ -1699,14 +1724,18 @@ export async function isStoryViewerOpenFast(serial: string): Promise<boolean | n
     if (clusters.length < 2) continue;
     const widths = clusters.map(c => c.x2 - c.x1);
     const maxW = Math.max(...widths), minW = Math.min(...widths);
-    if (maxW / minW > 1.8) continue; // segments must be near-uniform width
+    if (maxW / minW > 2.6) continue; // segments must be roughly-uniform width (relaxed from 1.8)
     const covered = widths.reduce((a, b) => a + b, 0);
-    if (covered < width * 0.55) continue; // segments must span most of the width
+    if (covered < width * 0.42) continue; // segments must span most of the width (relaxed from 55%)
 
     if (clusters.length > bestClusterCount) bestClusterCount = clusters.length;
   }
 
-  return bestClusterCount >= 2 ? true : null;
+  if (bestClusterCount < 2) {
+    logger.debug({ serial, rowsScanned, bestClusterCount, width, height }, "[isStoryViewerOpenFast] no progress-bar pattern found — falling back to slow check");
+    return null;
+  }
+  return true;
 }
 
 /**

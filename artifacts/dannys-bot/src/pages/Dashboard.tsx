@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.488",
+    date: "12 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "The quick on-screen check from last update (meant to make story likes/shares instant) almost never triggered on this device, so it was falling back to the slow check anyway — widened and relaxed it so it actually works, and added logging that shows exactly when it does.",
+      },
+      {
+        category: "Fixed",
+        text: "Found and fixed the cause of the \"tapped backwards\" behaviour — if the DM share sheet didn't actually open after tapping the share icon, the bot could blind-tap where a recipient avatar should be, which landed on \"go to previous story\" instead. It now checks the DM sheet is really there before tapping into it, and skips the share cleanly if it isn't.",
+      },
+    ],
+  },
+  {
     version: "1.1.487",
     date: "11 Jul 2026",
     items: [

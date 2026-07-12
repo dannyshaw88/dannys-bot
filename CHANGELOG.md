@@ -4,6 +4,40 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.488] — 2026-07-12
+
+### Fix: v1.1.487's "fast" story-viewer check wasn't actually firing, and a blind DM-recipient tap could hit "previous story"
+
+Two separate bugs, both surfaced by the same log:
+
+1. **The fast check from v1.1.487 was effectively never matching.** Its
+   pixel-scan band (1.5%-6% of screen height, 150 brightness threshold,
+   strict uniform-width/coverage ratios) was tuned against a single
+   reference capture and, on the reported 1080×2460 device, essentially
+   always fell through to `null` — meaning every safety check in the story
+   loop was still paying the full ~3-4s uiautomator-dump cost, exactly as
+   before v1.1.487. Widened the scan band, relaxed every threshold, and
+   added a warning log when the screenshot itself fails to capture/decode
+   (previously a silent failure that looked identical to "pattern not
+   found" in the logs, so there was no way to tell the two apart). Also
+   added live timing logs for every fallback to the slow check, so the
+   next report shows real numbers instead of back-calculated guesses from
+   story-loop timestamps.
+2. **A blind tap could land on "previous story" instead of a DM recipient.**
+   After tapping the paper-plane share icon, the only gate before firing
+   the next tap (an avatar ~15% from the left edge of the screen) was "no
+   keyboard opened AND still technically in a story" — true whether the DM
+   sheet actually rendered or the tap simply landed on nothing. When the
+   sheet didn't open, that left-edge avatar coordinate landed on the plain
+   story screen underneath, squarely inside Instagram's "go to previous
+   story" tap zone — explaining the reported backwards-navigation. Now the
+   code positively confirms the sheet is open (checks for the "Send" button,
+   which only ever exists inside that sheet) before firing the recipient
+   tap, and cleanly aborts the share instead of tapping blind if it can't
+   confirm.
+
+---
+
 ## [1.1.487] — 2026-07-11
 
 ### Fix: story likes/shares were still stalling instead of firing instantly, even after the earlier timing fix
