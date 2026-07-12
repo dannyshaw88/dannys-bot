@@ -2005,11 +2005,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const item = await android.findRandomNotificationItem(serial).catch(() => null);
       if (item) {
         await android.tap(serial, item.x, item.y);
-        onLog?.("Random Jitter: tapped notification item");
+        onLog?.("Random Jitter: ✓ tapped notification item");
         await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
         await android.pressBack(serial);
         await sleepOrAbort(serial, 600);
+      } else {
+        onLog?.("Random Jitter: no clickable notification row found — skipping click");
       }
+    } else {
+      onLog?.("Random Jitter: click-notification roll missed — skipping click");
     }
     // Return to home feed.
     await android.pressBack(serial);
@@ -2152,7 +2156,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareFeedCoords: icons.shareFeed ?? null, shareDmCoords: icons.shareDm ?? null },
       "[inject-browsing] action-bar icons found for this profile post"
     );
-    onLog?.(`Inject Browsing: icons — Like✓ Comment:${icons.comment?'✓':'✗'} ShareFeed:${icons.shareFeed?'✓':'✗'} ShareDM:${icons.shareDm?'✓':'✗'}`);
+    // Only report Like/Comment from the icon scan — ShareFeed and ShareDM are
+    // resolved by findButtonByLabel("Repost"/"Send") which runs later and is
+    // more reliable than the positional icon scan. Showing them here as ✗
+    // was misleading users into thinking the repost/share hadn't worked even
+    // when it had (the label-scan found the button even when the icon scan
+    // failed to detect it by position).
+    onLog?.(`Inject Browsing: icons — Like✓ Comment:${icons.comment?'✓':'✗'}`);
 
     const likeChance = rollRange(browsing.likePctMin, browsing.likePctMax) / 100;
     logger.info({ serial, likeChance: Math.round(likeChance * 100) }, "[inject-browsing] like chance rolled");

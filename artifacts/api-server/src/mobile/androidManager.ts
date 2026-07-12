@@ -2827,18 +2827,35 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
   const { w, h } = getScreenSize(serial);
-  const topSkip  = Math.round(h * 0.10); // skip fixed header row
-  const botSkip  = Math.round(h * 0.92); // skip nav bar
-  const rightMax = Math.round(w * 0.25); // avatar column stays on the left
-  // Collect clickable Views whose centre is in the avatar column and below the header.
+  const topSkip = Math.round(h * 0.10); // skip the fixed header row ("Notifications")
+  const botSkip = Math.round(h * 0.92); // skip the bottom nav bar
+  // Notification rows span most of the screen width. Require the node to be
+  // at least 50% of screen width so we only pick full notification rows
+  // (not small avatar thumbnails, buttons, or the time label on the right).
+  //
+  // Old version used a class="android.widget.View" + rightMax=25% filter
+  // which was doubly broken:
+  //   1. UIAutomator XML attribute order is not guaranteed — clickable="true"
+  //      can appear after class=, so the fixed-order regex silently matched nothing.
+  //   2. cx > 25% filtered OUT full-width rows (centre ≈ 50%), keeping only
+  //      items in the leftmost quarter which in practice is always empty/avatar-only.
+  // Using the same <node …/> parser as every other findXxx function avoids both.
+  const minRowWidth = Math.round(w * 0.50);
   const candidates: { x: number; y: number }[] = [];
-  const re = /<[^>]+clickable="true"[^>]+class="android\.widget\.View"[^>]+bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    const cx = (Number(m[1]) + Number(m[3])) / 2;
-    const cy = (Number(m[2]) + Number(m[4])) / 2;
-    if (cy < topSkip || cy > botSkip || cx > rightMax) continue;
-    candidates.push({ x: Math.round(cx), y: Math.round(cy) });
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+    const rowWidth = x2 - x1;
+    if (rowWidth < minRowWidth) continue; // skip small tappable elements
+    const cx = Math.round((x1 + x2) / 2);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < topSkip || cy > botSkip) continue;
+    candidates.push({ x: cx, y: cy });
   }
   if (!candidates.length) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];

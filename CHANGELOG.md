@@ -4,6 +4,53 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.516] — 2026-07-12
+
+### Fix: Icons log no longer shows misleading ✗ for ShareFeed/ShareDM
+
+The "Inject Browsing: icons —" log line was showing `ShareFeed:✗ ShareDM:✗` even when the repost/share-DM actions subsequently succeeded. Those two actions are resolved by `findButtonByLabel("Repost"/"Send")` — a separate, more reliable scan — not by the positional icon scan that populates `icons.shareFeed/shareDm`. The ✗ was from the positional scan missing the icon (expected on many builds), not from the action failing. The log now shows only `Like:✓ Comment:✗/✓` which reflects what the positional scan actually resolved.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser`: removed ShareFeed/ShareDM from icon diagnostic `onLog` line
+
+---
+
+### Fix: "Share via DM % of posts" and "Share to DM %" disabled in UI (red strikethrough)
+
+Both DM share fields are disabled until the DM send flow is confirmed working. Labels now show red strikethrough text; inputs are forced disabled and pointer-events removed so they cannot be interacted with. No backend logic changed.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — check-feed "Share via DM % of posts" block; inject browsing "Share to DM %" block
+
+---
+
+### Fix: Random Jitter — Visit My Profile fields now on same row as Check Notifications
+
+"Visit My Profile" title and Chance % fields were rendered in a separate block below Check Notifications, creating an unnecessary second section. Both groups are now in a single `flex-wrap` row so they sit side by side on wide screens and stack only when the panel is too narrow.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — Random Jitter expanded panel: merged into one `flex-wrap` row with group labels
+
+---
+
+### Fix: Click notification % now actually clicks notification items
+
+**Root cause (double bug in `findRandomNotificationItem`)**:
+
+1. **Attribute-order regex failure** — the old regex required `clickable="true"` to appear *before* `class="android.widget.View"` in the XML node. UIAutomator attribute order is not guaranteed, so on this device the attributes appeared in the opposite order and the regex matched zero nodes, causing the function to always return null.
+
+2. **Horizontal filter too narrow** — `cx > rightMax` (where `rightMax = 25% of screen width`) was intended to target avatar bubbles on the left, but notification *rows* are full-width elements whose centre is at ~50% of the screen. Those rows were filtered *out* by the condition, so even if the regex had matched, no candidates would have been kept.
+
+**Fix**: Rewrote `findRandomNotificationItem` to use the same `<node …/>` attribute parser used throughout the rest of `androidManager.ts` (attribute order independent). Changed the filter to accept any clickable node that spans ≥50% of screen width — this reliably targets the full-width notification rows while excluding small buttons, avatar thumbnails, and the nav bar.
+
+**Also**: added a log line when `findRandomNotificationItem` returns null ("no clickable notification row found — skipping click") and when the chance roll misses, so the user can distinguish the two cases.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findRandomNotificationItem`: full rewrite
+- `artifacts/api-server/src/routes/mobile.ts` — `runCheckNotifications`: log lines for null-item and missed-roll cases
+
+---
+
 ## [1.1.515] — 2026-07-12
 
 ### Fix: Inject Browsing — DM share now verifies the Send button actually closed the sheet

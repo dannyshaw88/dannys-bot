@@ -1488,8 +1488,8 @@ function AutomationSettingsPanel({
             </div>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
+          <div className="space-y-3 opacity-50 pointer-events-none select-none">
+            <Label className="text-sm text-red-400 line-through decoration-red-500">Share via DM % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -1498,8 +1498,8 @@ function AutomationSettingsPanel({
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.shareDmPercentMin}
-                onChange={e => setSettings(s => ({ ...s, shareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
+                onChange={() => {}}
+                disabled
               />
               <span className="text-muted-foreground text-sm">to</span>
               <Input
@@ -1509,8 +1509,8 @@ function AutomationSettingsPanel({
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.shareDmPercentMax}
-                onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
+                onChange={() => {}}
+                disabled
               />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
@@ -1733,12 +1733,12 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Share to DM %</Label>
+            <div className="space-y-1.5 opacity-50 pointer-events-none select-none">
+              <Label className="text-xs text-red-400 line-through decoration-red-500">Share to DM %</Label>
               <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={() => {}} disabled />
                 <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={() => {}} disabled />
               </div>
             </div>
           </div>
@@ -1762,71 +1762,74 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.randomJitterEnabled && (
-            <div className="space-y-4 pl-1">
-              {/* Check Notifications */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-foreground">Check Notifications</Label>
-                <div className="flex items-start gap-6 flex-wrap">
+            <div className="pl-1">
+              {/* All jitter settings on one flex-wrap row, grouped by section title */}
+              <div className="flex items-start gap-8 flex-wrap">
+                {/* ── Check Notifications group ── */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-foreground">Check Notifications</Label>
+                  <div className="flex items-start gap-6 flex-wrap">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Chance %</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsPctMin}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMin: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                        <span className="text-muted-foreground text-sm">to</span>
+                        <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsPctMax}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Scrolls</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsScrollsMin}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                        <span className="text-muted-foreground text-sm">to</span>
+                        <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsScrollsMax}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Click notification %</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsClickPctMin}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                        <span className="text-muted-foreground text-sm">to</span>
+                        <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                          value={settings.checkNotificationsClickPctMax}
+                          onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMax: clamp4(Number(e.target.value)) }))}
+                          disabled={loading} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Visit My Profile group — same row via flex-wrap ── */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-foreground">Visit My Profile</Label>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Chance %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsPctMin}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMin: clamp4(Number(e.target.value)) }))}
+                        value={settings.visitProfilePctMin}
+                        onChange={e => setSettings(s => ({ ...s, visitProfilePctMin: clamp4(Number(e.target.value)) }))}
                         disabled={loading} />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsPctMax}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
+                        value={settings.visitProfilePctMax}
+                        onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
                         disabled={loading} />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Scrolls</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsScrollsMin}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsScrollsMax}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
-                        disabled={loading} />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Click notification %</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsClickPctMin}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.checkNotificationsClickPctMax}
-                        onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMax: clamp4(Number(e.target.value)) }))}
-                        disabled={loading} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Visit My Profile */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-foreground">Visit My Profile</Label>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Chance %</Label>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.visitProfilePctMin}
-                      onChange={e => setSettings(s => ({ ...s, visitProfilePctMin: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.visitProfilePctMax}
-                      onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
                   </div>
                 </div>
               </div>
