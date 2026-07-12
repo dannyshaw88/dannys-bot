@@ -2710,9 +2710,12 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
     const xml = await _uiDump(adb, serial);
     if (!xml) continue;
 
-    // 20 % gives up to 480 px on a 2400 px screen — comfortably above the
+    // 30 % gives up to 720 px on a 2400 px screen — comfortably above the
     // search bar while still safely below any Explore-grid content.
-    const topLimit = Math.round(screenH * 0.20);
+    // Raised from 20% (480 px): on some Xiaomi MIUI builds the Explore page
+    // has a larger top chrome (status bar + category pills) that pushes the
+    // search bar past 480 px, causing spurious "not found" results.
+    const topLimit = Math.round(screenH * 0.30);
 
     // 1. Known resource IDs — most reliable; trust them regardless of y-pos
     const byId = _findByResId(xml,

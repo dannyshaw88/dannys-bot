@@ -1375,7 +1375,7 @@ function AutomationSettingsPanel({
             <label htmlFor="feed-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
           </div>
         </div>
-        <div className="flex items-start gap-6 flex-wrap">
+        {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
             <div className="flex items-center gap-3">
@@ -1424,10 +1424,10 @@ function AutomationSettingsPanel({
               />
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Like + Share to Feed + Share via DM — all three on the same row */}
-        <div className="flex items-start gap-6 flex-wrap">
+        {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Like % of posts</Label>
             <div className="flex items-center gap-3">
@@ -1511,7 +1511,7 @@ function AutomationSettingsPanel({
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
 
@@ -1533,7 +1533,7 @@ function AutomationSettingsPanel({
           </div>
         </div>
 
-        <div className="flex items-start gap-6">
+        {settings.storiesEnabled && <div className="flex items-start gap-6">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Stories to watch</Label>
             <div className="flex items-center gap-3">
@@ -1596,7 +1596,7 @@ function AutomationSettingsPanel({
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Border separator between View Stories from Feed above and the new
             Follow Users feature below — same card/step (STEP2), mirrors the
@@ -1629,7 +1629,7 @@ function AutomationSettingsPanel({
         </div>
 
         {/* ── Users to follow per operation ─────────────────── */}
-        <div className="space-y-3">
+        {settings.followEnabled && <div className="space-y-3">
           <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
           <div className="flex items-center gap-3">
             <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
@@ -1642,7 +1642,7 @@ function AutomationSettingsPanel({
               onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
               disabled={loading} />
           </div>
-        </div>
+        </div>}
 
         {/* ── Inject Browsing ─────────────────────────────────
              Always visible, never collapsible — this drives real
@@ -1670,11 +1670,8 @@ function AutomationSettingsPanel({
             <label htmlFor="inject-browsing-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Inject Browsing</label>
           </div>
 
-          {/* Row 2: Browse before follow / Feed chance / Feed posts / Click posts %
-               All four fields share the same gap-6 so spacing is identical
-               between every adjacent pair. With flex-wrap, the next row
-               (Like / Share feed / Share to DM) starts at the left edge,
-               placing Like % directly below Browse before follow. */}
+          {settings.injectBrowsingEnabled && (<>
+          {/* Row 2: Browse before follow / Feed chance / Feed posts / Click posts % */}
           <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
@@ -1710,8 +1707,7 @@ function AutomationSettingsPanel({
             </div>
           </div>
 
-          {/* Row 3: Like / Share feed / Share to DM — wraps naturally below row 2,
-               with Like % landing directly below Browse before follow. */}
+          {/* Row 3: Like / Share feed / Share to DM */}
           <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Like %</Label>
@@ -1738,6 +1734,7 @@ function AutomationSettingsPanel({
               </div>
             </div>
           </div>
+          </>)}
         </div>
 
         {/* ── Random Jitter — probabilistic human-like actions each cycle ─ */}

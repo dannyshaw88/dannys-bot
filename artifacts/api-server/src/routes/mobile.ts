@@ -2227,7 +2227,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const searchTab = await android.findInstagramSearchTab(serial).catch(() => null);
     if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
     await android.tap(serial, searchTab.x, searchTab.y);
-    await sleepOrAbort(serial, 1500);
+    // Give the Explore page more time to fully render — 1500 ms was sometimes
+    // too short on slower devices / cold-launch (only Follow enabled, no prior
+    // feed scroll), leaving the search bar absent from the accessibility tree.
+    await sleepOrAbort(serial, 2500);
 
     for (let _fi = 0; _fi < targets.length; _fi++) {
       const username = targets[_fi];
