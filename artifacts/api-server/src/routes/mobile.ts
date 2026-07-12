@@ -817,8 +817,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
     injectBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
-    injectBrowsingFeedMin: z.number().min(1).max(50).default(3),
-    injectBrowsingFeedMax: z.number().min(1).max(50).default(6),
+    injectBrowsingFeedMin: z.number().min(0).max(50).default(3),
+    injectBrowsingFeedMax: z.number().min(0).max(50).default(6),
     injectBrowsingClickPostPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingClickPostPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingLikePctMin: z.number().min(0).max(100).default(0),
@@ -1812,8 +1812,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
     // How many rows to scroll down (Instagram's profile grid is 3 posts per
     // row) when the feed-chance roll above succeeds.
-    injectBrowsingFeedMin: z.number().min(1).max(50).default(3),
-    injectBrowsingFeedMax: z.number().min(1).max(50).default(6),
+    injectBrowsingFeedMin: z.number().min(0).max(50).default(3),
+    injectBrowsingFeedMax: z.number().min(0).max(50).default(6),
     // Chance to open (click) one of the scrolled-past posts.
     injectBrowsingClickPostPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingClickPostPctMax: z.number().min(0).max(100).default(0),
@@ -1890,7 +1890,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
 
-    const rows = Math.max(1, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
+    const rows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
+    if (rows === 0) {
+      onLog?.("Inject Browsing: feed posts rolled to 0 — skipping grid scroll");
+      return;
+    }
     onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
     const seenPostSlots: { x: number; y: number }[] = [];
     const x = Math.round(w / 2);

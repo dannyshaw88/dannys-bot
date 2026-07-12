@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.495] — 2026-07-12
+
+### Fix: Inject Browsing "Feed posts" rejected 0 with a raw validation error
+
+Setting Feed posts min to 0 (meaning "don't scroll the grid this pass") threw a raw red Zod error onto the panel instead of saving — the save/load schema and the input's `min` attribute both required at least 1. 0 is now accepted everywhere: the settings schema, the input fields, and the actual Inject Browsing run — which previously forced at least 1 row of scrolling no matter what was entered. Feed posts = 0 now correctly means "skip the grid scroll for this pass" rather than being silently bumped up to 1.
+
+---
+
 ## [1.1.494] — 2026-07-12
 
 ### Fix: Inject Browsing settings were never actually saved (looked like "resetting on restart")
