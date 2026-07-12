@@ -839,6 +839,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    // ── Random Jitter fields — were missing from this persistence schema,
+    //    causing zod to silently strip them on every POST so they never reached
+    //    disk and reset to defaults on every restart.
+    randomJitterEnabled: z.boolean().default(false),
+    checkNotificationsPctMin: z.number().min(0).max(100).default(0),
+    checkNotificationsPctMax: z.number().min(0).max(100).default(0),
+    checkNotificationsScrollsMin: z.number().min(0).default(2),
+    checkNotificationsScrollsMax: z.number().min(0).default(5),
+    checkNotificationsClickPctMin: z.number().min(0).max(100).default(0),
+    checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
+    visitProfilePctMin: z.number().min(0).max(100).default(0),
+    visitProfilePctMax: z.number().min(0).max(100).default(0),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
@@ -864,6 +876,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
       injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
       injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+      randomJitterEnabled: false,
+      checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
+      checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
+      checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
+      visitProfilePctMin: 0, visitProfilePctMax: 0,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
@@ -1901,8 +1918,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Check Notifications: taps the heart icon, scrolls, optionally taps an item.
     checkNotificationsPctMin: z.number().min(0).max(100).default(0),
     checkNotificationsPctMax: z.number().min(0).max(100).default(0),
-    checkNotificationsScrollsMin: z.number().min(0).max(20).default(2),
-    checkNotificationsScrollsMax: z.number().min(0).max(20).default(5),
+    checkNotificationsScrollsMin: z.number().min(0).default(2),
+    checkNotificationsScrollsMax: z.number().min(0).default(5),
     checkNotificationsClickPctMin: z.number().min(0).max(100).default(0),
     checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
     // Visit My Profile: taps the profile icon in the bottom nav, then returns.

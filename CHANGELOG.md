@@ -4,6 +4,39 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.517] — 2026-07-12
+
+### Fix: Random Jitter fields reset to defaults on every restart
+
+**Root cause**: The `automationSchema` (the persistence-layer zod schema used by `POST /api/mobile/devices/:serial/automation-settings`) was missing all Random Jitter fields. Zod in non-strict mode silently strips keys not declared in the schema, so every save POST discarded them before they reached disk. On GET the backend returned the in-memory defaults (all 0 / false), which looked like a settings reset.
+
+**Also**: the runtime cycle-start schema (used to parse the body of `POST /api/mobile/run`) had `.max(20)` on both Scrolls fields, causing "Cycle failed" with `too_big` errors whenever the user set Scrolls above 20.
+
+**Fix**: Added all jitter fields to `automationSchema` (no `.max()` on Scrolls). Removed `.max(20)` from the runtime schema too. Added jitter field defaults to the GET handler's defaults object.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `automationSchema`: added randomJitterEnabled, checkNotifications*, visitProfile* fields; removed `.max(20)` from Scrolls in both schemas; added jitter defaults to GET handler
+
+---
+
+### Fix: Scrolls — no upper limit in UI
+
+Removed `max={20}` from both Scrolls `<Input>` elements in the Random Jitter section of MobilePage.tsx. There is no meaningful upper bound; the user sets what they want.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — Scrolls inputs: removed `max={20}`
+
+---
+
+### Fix: View Stories from Feed — "Share DM %" also disabled (red strikethrough)
+
+Consistent with the other two DM share fields added in v1.1.516.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — viewStoriesShareDm block: red strikethrough label, forced disabled, pointer-events removed
+
+---
+
 ## [1.1.516] — 2026-07-12
 
 ### Fix: Icons log no longer shows misleading ✗ for ShareFeed/ShareDM
