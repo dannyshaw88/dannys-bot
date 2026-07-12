@@ -2368,8 +2368,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // too short: on slower devices the bar tap could land below the field
         // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
         // before typeViaOnscreenKeyboard started.
-        const searchBar = await android.findInstagramSearchBar(serial).catch(() => null);
-        if (!searchBar) { onLog?.("Follow: search bar not found — giving up"); break; }
+        const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
+        if (!searchBar) { onLog?.("Follow: search bar lookup threw — giving up"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 1500);
 

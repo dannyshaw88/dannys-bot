@@ -2754,7 +2754,10 @@ export async function findInstagramSearchTab(serial: string): Promise<{ x: numbe
  * that looked like a swipe/pull-to-refresh).  Now strictly constrained to the
  * top 15 % of the screen with retries so the Explore page has time to settle.
  */
-export async function findInstagramSearchBar(serial: string): Promise<{ x: number; y: number } | null> {
+export async function findInstagramSearchBar(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
@@ -2766,7 +2769,7 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
   // ~180–260 px from the top, so 135 px rejected it every time → "search bar
   // not found". getScreenSize(serial) runs `adb shell wm size` and defaults to
   // 1080×2400 on error — both are correct for a portrait phone.
-  const { h: screenH } = getScreenSize(serial);
+  const { w: screenW, h: screenH } = getScreenSize(serial);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await _sleep(800);
@@ -2775,9 +2778,6 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
 
     // 30 % gives up to 720 px on a 2400 px screen — comfortably above the
     // search bar while still safely below any Explore-grid content.
-    // Raised from 20% (480 px): on some Xiaomi MIUI builds the Explore page
-    // has a larger top chrome (status bar + category pills) that pushes the
-    // search bar past 480 px, causing spurious "not found" results.
     const topLimit = Math.round(screenH * 0.30);
 
     // 1. Known resource IDs — most reliable; trust them regardless of y-pos
@@ -2787,7 +2787,7 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
       ":id/search_bar_container");
     if (byId) return byId;
 
-    // 2. Any EditText in the top 15 %
+    // 2. Any EditText in the top 30%
     const etRe = /class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
     let m: RegExpExecArray | null;
     while ((m = etRe.exec(xml)) !== null) {
@@ -2796,7 +2796,7 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
       return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
     }
 
-    // 3. Clickable "Search" element strictly in the top 15 %
+    // 3. Clickable "Search" element in the top 30%
     //    (Explore-page pre-tap state — the bar is a View/FrameLayout, not yet an
     //    EditText, until the user taps it the first time)
     for (const re2 of [
@@ -2811,7 +2811,18 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
     }
     // attempt loop continues — wait and re-dump
   }
-  return null;
+
+  // Positional fallback — Instagram's Explore search bar does not appear in the
+  // UIAutomator accessibility tree on some device/app combinations (the Scan
+  // Screen Layout tool confirms 0 elements in the TOP zone even when the bar is
+  // visually present).  The bar is always at the very top of the Explore page,
+  // centred horizontally, sitting at ~3.8 % of screen height (~85 px on a
+  // 2226 px device).  Since the caller has already navigated to the Search tab
+  // and waited for the page to settle, tapping this position is safe.
+  const fallbackY = Math.round(screenH * 0.038);
+  const fallbackX = Math.round(screenW / 2);
+  onLog?.(`Follow: search bar not in a11y tree — using positional fallback (${fallbackX}, ${fallbackY})`);
+  return { x: fallbackX, y: fallbackY };
 }
 
 /**

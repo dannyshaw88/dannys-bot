@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## v1.1.510
+
+### Bug fix — Follow: search bar positional fallback
+
+On this device/Instagram version the Explore page search bar does not appear
+in the UIAutomator accessibility tree (Scan Screen Layout confirms 0 elements
+in the top zone even when the bar is visually present at ~y=85).
+`findInstagramSearchBar` was returning null after 3 failed tree-parse attempts,
+which caused the follow loop to abort with "search bar not found — giving up".
+
+Fix: after all accessibility-tree attempts fail the function now returns a
+screen-relative positional fallback — centred horizontally, at ~3.8 % of
+screen height (~85 px on a 2226 px screen) — which is where the bar reliably
+sits on the Explore page.  A log line is emitted when the fallback fires so
+it is visible in the Log tab.  The follow step then continues normally.
+
+---
+
 ## [1.1.509] — 2026-07-12
 
 ### Fix: reverted incorrect "Reels never have Repost" assumption
