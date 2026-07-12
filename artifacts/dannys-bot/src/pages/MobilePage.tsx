@@ -1621,8 +1621,13 @@ function AutomationSettingsPanel({
              "Get Suggested Users" was removed, and the old separate
              "Inject Profile Browsing" toggle was a duplicate of this
              whole section — injectBrowsingEnabled alone gates everything
-             below. All 7 roll settings fit on two rows (4 + 3). */}
-        <div className="space-y-2">
+             below. Row 1 = title + checkbox. Row 2 = Browse before
+             follow / Feed chance / Feed posts (3-up). Row 3 = Click
+             posts / Like / Share feed / Share to DM (4-up). Labels sit
+             above their min–max fields, matching the panel's other
+             settings (e.g. "Users to follow per operation" above). */}
+        <div className="space-y-3">
+          {/* Row 1: title + checkbox only */}
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -1632,29 +1637,70 @@ function AutomationSettingsPanel({
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="inject-browsing-enabled" className="text-sm text-muted-foreground cursor-pointer select-none">Inject Browsing</label>
+            <label htmlFor="inject-browsing-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Inject Browsing</label>
           </div>
-          <div className="pl-6 grid grid-cols-4 gap-x-3 gap-y-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1 flex-wrap">Browse before follow
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingBeforeFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
+
+          {/* Row 2: Browse before follow / Feed chance / Feed posts */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Feed chance
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Feed chance %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Feed posts
-              <Input type="number" min={1} max={50} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={1} max={50} className="w-12 text-center text-xs" value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Feed posts</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={1} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={1} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Click post
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingClickPostPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingClickPostPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
+          </div>
+
+          {/* Row 3: Click posts / Like / Share feed / Share to DM */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Click posts %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Like %
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingLikePctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Like %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingLikePctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Share feed %
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingShareFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingShareFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Share feed %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">Share DM %
-              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Share to DM %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
             </div>
           </div>
         </div>
@@ -2269,7 +2315,18 @@ export function MobilePage() {
                     idx={i}
                     onLog={addLog}
                     onDimensions={(w, h) => setPhoneDims({ w, h })}
-                    live={!!(phone && (liveOn[phone.serial] || automation.settings.enabled))}
+                    // Only auto-connect the live feed while a cycle is
+                    // actually executing (automation.running) — NOT merely
+                    // because the master toggle is enabled. Previously this
+                    // used `automation.settings.enabled`, so after a
+                    // restart/update with the toggle left on, opening this
+                    // tab reconnected the phone's video feed immediately
+                    // just to "check if it's alive" even though the
+                    // automation loop was idle, waiting for its next
+                    // scheduled run — an unnecessary connection. Clicking
+                    // Power (liveOn) is still a deliberate manual-view
+                    // action and always connects regardless of execution.
+                    live={!!(phone && (liveOn[phone.serial] || automation.running))}
                     onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   />
                 ))}

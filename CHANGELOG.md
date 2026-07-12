@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.494] — 2026-07-12
+
+### Fix: Inject Browsing settings were never actually saved (looked like "resetting on restart")
+
+The `automation-settings` save/load endpoint used a much older, narrower validation schema than the one used to run cycles — it didn't list `followEnabled`/`followUsersMin`/`followUsersMax`/`followSources` or any of the `injectBrowsing*` fields at all. Since the validator silently drops any field it doesn't recognize, every autosave wrote Follow Users and Inject Browsing settings to nothing — they only ever lived in the page's in-memory state, so any reload, restart, or update sent the frontend straight back to defaults. Feed/stories/general settings were unaffected — this only hit Follow Users + Inject Browsing. The save/load schema and defaults now cover every setting the panel actually has.
+
+### Layout: Inject Browsing rows rebuilt to match the panel's existing style
+
+Reworked per feedback — the previous two-row grid was cramped and had labels sitting beside fields instead of above them. Now:
+- Row 1: title + checkbox only.
+- Row 2: Browse before follow % / Feed chance % / Feed posts (3 across).
+- Row 3: Click posts % / Like % / Share feed % / Share to DM % (4 across).
+- Every field's label sits above its min–max inputs, matching the style already used elsewhere in the panel (e.g. "Users to follow per operation").
+
+### Fix: phone mirror auto-connected on view even when idle
+
+Opening the Human Session Tool tab to view a phone was reconnecting the live video feed immediately whenever the master automation toggle was on — even if no cycle was actually running (e.g. right after a restart/update, idle between scheduled runs). The feed now only auto-connects while a cycle is actually executing; clicking Power to manually view the phone still always connects, regardless of execution state.
+
+---
+
 ## [1.1.493] — 2026-07-12
 
 ### Feature: Inject Browsing rewired into the actual Follow Users flow (was UI-only until now)

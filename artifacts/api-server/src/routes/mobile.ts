@@ -67,6 +67,8 @@ type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
   enabled: boolean;
+  feedEnabled?: boolean;
+  storiesEnabled?: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -85,6 +87,30 @@ type AutomationSettings = {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  // Follow Users — HikerAPI-driven follow flow (persisted here too; this
+  // schema previously only covered the feed/stories fields, so these were
+  // silently stripped by automationSchema.parse() on every autosave and
+  // never actually reached disk — see fix note 12 Jul 2026).
+  followEnabled?: boolean;
+  followUsersMin?: number;
+  followUsersMax?: number;
+  followSources?: { type: string; value: string }[];
+  // Inject Browsing — per-user profile-browsing behaviour (same fix).
+  injectBrowsingEnabled?: boolean;
+  injectBrowsingBeforeFollowPctMin?: number;
+  injectBrowsingBeforeFollowPctMax?: number;
+  injectBrowsingFeedChanceMin?: number;
+  injectBrowsingFeedChanceMax?: number;
+  injectBrowsingFeedMin?: number;
+  injectBrowsingFeedMax?: number;
+  injectBrowsingClickPostPctMin?: number;
+  injectBrowsingClickPostPctMax?: number;
+  injectBrowsingLikePctMin?: number;
+  injectBrowsingLikePctMax?: number;
+  injectBrowsingShareFeedPctMin?: number;
+  injectBrowsingShareFeedPctMax?: number;
+  injectBrowsingShareDmPctMin?: number;
+  injectBrowsingShareDmPctMax?: number;
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -748,10 +774,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   // ── Per-device automation settings (isolated to the Mobile tab) ─────────────
+  // NOTE (12 Jul 2026 fix): this schema previously only covered the
+  // feed/stories fields. Any keys NOT listed in a z.object() schema are
+  // silently stripped by .parse() (zod's default, non-strict behaviour) —
+  // so every autosave of Follow Users / Inject Browsing settings was
+  // dropping those fields before they ever reached disk. The frontend
+  // sends them right back on the next load from AUTOMATION_DEFAULTS,
+  // which is exactly what looked like "settings reset on restart". Any
+  // NEW persisted field must be added here too, or it will silently never
+  // survive a save.
+  const followSourceSchema = z.object({ type: z.string(), value: z.string() });
   const automationSchema = z.object({
     enabled: z.boolean().default(false),
     cycleIntervalMin: z.number().min(1).max(9999).optional(),
     cycleIntervalMax: z.number().min(1).max(9999).optional(),
+    feedEnabled: z.boolean().default(true),
+    storiesEnabled: z.boolean().default(true),
     actionDelayMin: z.number().min(0).max(9999),
     actionDelayMax: z.number().min(0).max(9999),
     likePercentMin: z.number().min(0).max(100),
@@ -770,11 +808,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    followEnabled: z.boolean().default(false),
+    followUsersMin: z.number().min(0).max(9999).default(1),
+    followUsersMax: z.number().min(0).max(9999).default(3),
+    followSources: z.array(followSourceSchema).default([]),
+    injectBrowsingEnabled: z.boolean().default(false),
+    injectBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
+    injectBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
+    injectBrowsingFeedMin: z.number().min(1).max(50).default(3),
+    injectBrowsingFeedMax: z.number().min(1).max(50).default(6),
+    injectBrowsingClickPostPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingClickPostPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingLikePctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingLikePctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingShareFeedPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+      feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
       likePercentMin: 3, likePercentMax: 5,
       shareFeedPercentMin: 0, shareFeedPercentMax: 0,
@@ -784,6 +842,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
       viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
       viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+      followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
+      injectBrowsingEnabled: false,
+      injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
+      injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
+      injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
+      injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
+      injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
+      injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
+      injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
