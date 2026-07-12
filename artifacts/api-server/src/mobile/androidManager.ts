@@ -1417,34 +1417,39 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   shareFeed = repostNode   ? pos(repostNode)   : null;
   shareDm   = sendNode     ? pos(sendNode)     : null;
 
-  // Reels opened from a profile grid tile (":id/reel_viewer_*" present in
-  // the tree — same marker used by findStoryFollowButton) do NOT have a
-  // separate Repost icon in their action bar at all — only Like, Comment,
-  // a single Share icon (labeled "Send"/"Direct", which opens a sheet that
-  // may itself offer a "Repost" option), and Save. Confirmed from a live
-  // device run: content-desc correctly found Comment and Send, but with no
-  // "Repost"-labelled node anywhere, the old positional fallback below
-  // consumed whatever leftover clickable node was on that row (e.g. the
-  // "More options" "•••" control) and mislabelled it `shareFeed`, so every
-  // attempt tapped the wrong control and reported "Repost sheet did not
-  // open" even though nothing sensible was ever tapped. On Reels, leave
-  // `shareFeed` null when it wasn't positively identified by content-desc
-  // — never guess a position for it — so callers correctly skip
-  // share-to-feed on Reels instead of tapping an unrelated icon.
-  const isReelViewer = /reel_viewer|clips_viewer/i.test(xml);
+  // Whether Repost is available at all is genuinely account/post-specific
+  // (Instagram lets an account or a specific post disable resharing to
+  // feed, the same way Comment can be disabled per-post) — it is NOT tied
+  // to whether the post is a Reel or a normal feed post, and it must not
+  // be assumed either way from post type. A prior version of this code
+  // special-cased Reels to skip positional fallback for shareFeed, based
+  // on a single misread screenshot rather than real accessibility-tree
+  // evidence — that assumption was wrong and has been removed.
+  //
+  // What IS true generally: unlike Comment/Send (whose content-desc labels
+  // are consistently present, so their positions are known with
+  // confidence), a missing "Repost" content-desc match is genuinely
+  // ambiguous — it could mean Repost is disabled for this
+  // account/post (nothing to find, correctly null), or it could mean the
+  // label just isn't set on this device/build (present, but unlabeled).
+  // Positionally guessing in that situation risks grabbing an unrelated
+  // leftover control (e.g. a "More options" icon) and mislabelling it
+  // `shareFeed` — confirmed from a live run where that happened. So
+  // `shareFeed` is only ever set from a positive "Repost" content-desc
+  // match; it is never filled in positionally. `null` here always means
+  // "skip this action for this post" per this function's contract,
+  // regardless of whether the post disabled repost or the label is just
+  // missing — both cases are handled identically and safely by callers.
 
   // Positional fallback for roles that content-desc did not resolve.
   // Consume nodes left-to-right, skipping those already claimed above.
+  // (shareFeed is deliberately excluded — see note above.)
   const claimed = new Set<RowNode>([commentNode, repostNode, sendNode].filter(Boolean) as RowNode[]);
   const pool = () => rowNodes.filter(n => !claimed.has(n));
 
   if (!comment) {
     const c = pool()[0];
     if (c) { comment = pos(c); claimed.add(c); }
-  }
-  if (!shareFeed && !isReelViewer) {
-    const c = pool()[0];
-    if (c) { shareFeed = pos(c); claimed.add(c); }
   }
   if (!shareDm) {
     const c = pool()[0];

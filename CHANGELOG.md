@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.509] — 2026-07-12
+
+### Fix: reverted incorrect "Reels never have Repost" assumption
+
+v1.1.508 special-cased Reels to always skip Share-to-Feed positional fallback, based on a single screenshot that was misread — Repost availability is account/post-specific (same as Comment can be disabled per post), not tied to whether the post is a Reel. That reel-only branching has been removed.
+
+The actual, general-purpose fix kept from that change: `shareFeed` is now only ever set from a positive "Repost" content-desc match, never filled in positionally. A missing match is genuinely ambiguous (repost disabled for this account/post vs. label just absent) and guessing risks grabbing an unrelated leftover icon — this now applies uniformly to every post, feed or Reel alike, with no post-type detection involved.
+
+---
+
 ## [1.1.508] — 2026-07-12
 
 ### Fix: Share-to-Feed still misfiring on Reels (no distinct Repost icon), and Followed Users list wiped on every restart of the packaged app
