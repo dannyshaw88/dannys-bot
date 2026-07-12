@@ -1321,7 +1321,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // reliable signal the tap missed (e.g. hit the follow badge, dismissed
       // a suggestion chip, or missed the bubble/tray band entirely) rather
       // than opening a story.
-      const stillOnFeed = await android.findHomeTab(serial).then(r => r !== null).catch(() => false);
+      // Root-cause fix (12 Jul 2026, user-reported "not instant" reports):
+      // this used to call findHomeTab directly — a full uiautomator dump +
+      // adb pull, ~3-4s on this farm's devices — on every single tray-tap
+      // attempt, adding several real seconds to the very start of every
+      // story cycle before the fast pixel-scan path (added for the rest of
+      // the loop) ever got a chance to run. Try the fast screenshot-based
+      // check first and only pay for the slow dump when it's inconclusive.
+      const stillOnFeedFast = await android.isStoryViewerOpenFast(serial).catch(() => null);
+      const stillOnFeed = stillOnFeedFast === true
+        ? false
+        : await android.findHomeTab(serial).then(r => r !== null).catch(() => false);
       if (!stillOnFeed) {
         onLog?.(`Story tray: slot ${target} opened successfully`);
         return { slot: target, opened: true };
@@ -1532,8 +1542,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.info({ serial, story: s + 1, iconsFound: iconScan?.length ?? 0 }, "[view-stories] share skipped — paper-plane not found in icon scan");
           onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
         } else {
-          await android.tap(serial, shareIconPos.x, shareIconPos.y);
-          await sleepOrAbort(serial, 500);
+          // Root-cause fix (12 Jul 2026, user-reported): a missed tap used
+          // to be a dead end — one shot at the scanned coordinates, and if
+          // the keyboard opened (meaning we hit the message field instead
+          // of the paper-plane) we just gave up on the whole share. The
+          // scan can't be made perfectly reliable across every device in
+          // this farm, but the keyboard-open signal already tells us
+          // definitively that we missed — so use it as live feedback and
+          // retry further right (the paper-plane is always the rightmost
+          // element of the bar) instead of stopping after one attempt.
+          let attemptX = shareIconPos.x;
+          let opened_ = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            await android.tap(serial, attemptX, shareIconPos.y);
+            await sleepOrAbort(serial, 500);
+            const keyboardShown = await android.isKeyboardShown(serial).catch(() => false);
+            if (!keyboardShown) { opened_ = true; break; }
+            await android.pressBack(serial);
+            logger.warn({ serial, story: s + 1, attempt, attemptX }, "[view-stories] share tap opened keyboard — retrying further right");
+            onLog?.(`Story ${s + 1}: share tap at (${attemptX},${shareIconPos.y}) opened keyboard — retrying further right`);
+            attemptX = Math.min(Math.round(w * 0.97), attemptX + Math.round(w * 0.05));
+            await sleepOrAbort(serial, 300);
+          }
           // The sheet is a modal over the story, so its own presence isn't
           // directly checkable via findHomeTab — but if the story has
           // ALREADY exited to the feed underneath (auto-advanced past the
@@ -1541,19 +1571,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // even though no keyboard is showing. That combination used to
           // read as "sheet opened successfully" and every tap after this
           // point (recipient, Send) landed on the feed instead.
-          const keyboardShown = await android.isKeyboardShown(serial).catch(() => false);
-          const backOnFeed = !keyboardShown && await stillInStoryViewer().then(v => !v);
-          if (keyboardShown) {
-            // Safety net: scan coordinates landed in the message field after all
-            await android.pressBack(serial);
-            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard despite icon scan — backed out");
-            onLog?.(`Story ${s + 1}: share skipped — tap at (${shareIconPos.x},${shareIconPos.y}) opened keyboard (scan may have mis-identified icon)`);
+          const backOnFeed = opened_ && await stillInStoryViewer().then(v => !v);
+          if (!opened_) {
+            // Every retry hit the message field — give up rather than risk
+            // a 4th blind tap.
+            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard on every retry — giving up");
+            onLog?.(`Story ${s + 1}: share skipped — every retry landed on the message field, could not locate the paper-plane`);
           } else if (backOnFeed) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] story exited to feed instead of opening share sheet — no further taps");
             onLog?.(`Story ${s + 1}: share skipped — story ended before the share sheet opened (back on home feed)`);
           } else {
             opened = true;
-            onLog?.(`Story ${s + 1}: share sheet opened — tapped paper-plane at (${shareIconPos.x},${shareIconPos.y})`);
+            onLog?.(`Story ${s + 1}: share sheet opened — tapped paper-plane at (${attemptX},${shareIconPos.y})`);
           }
         }
         if (opened) {

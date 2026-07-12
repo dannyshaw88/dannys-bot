@@ -1615,10 +1615,28 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
 
   if (candidateRows.length === 0) return [];
 
-  // The true icon row has the most distinct clusters; ties go to the
-  // darkest row (deepest into the scrim, least likely a coincidental
-  // bright edge from content).
-  candidateRows.sort((a, b) => b.clusters.length - a.clusters.length || a.avgLum - b.avgLum);
+  // Root-cause fix (12 Jul 2026, user-reported): this used to rank
+  // candidates by cluster count first (most distinct clusters wins, ties
+  // broken by darkness). That let a coincidental content match — a poll,
+  // mention chip, or link sticker rendered on a dark background somewhere
+  // in the middle of the frame, which can easily produce 2-4 bright
+  // uniform-ish clusters — outrank the REAL reply bar whenever the real
+  // bar happened to only show fewer/dimmer clusters that story (e.g. only
+  // 2 icons visible, or a lighter scrim over a bright background). Two
+  // real-device captures in the same session picked rows at 65% and 88%
+  // of screen height for what should be the same physical control —
+  // confirming the ranking was landing on unrelated content, not just a
+  // slightly-off calibration.
+  //
+  // The reply bar is a system-anchored control: on every device in this
+  // farm it sits at the LOWEST position in the frame that still shows a
+  // qualifying dark+icon row (there is nothing below it but the nav-bar
+  // inset). Any false content match is virtually always positioned higher
+  // up the screen than that, since Instagram deliberately avoids drawing
+  // captions/stickers into the reply-bar's own footprint. Prefer the
+  // bottom-most (largest y) qualifying row; only fall back to
+  // cluster-count/darkness to break an exact tie.
+  candidateRows.sort((a, b) => b.y - a.y || b.clusters.length - a.clusters.length || a.avgLum - b.avgLum);
   const best = candidateRows[0];
 
   return best.clusters

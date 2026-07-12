@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.489",
+    date: "12 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Found the last slow step in opening a story — confirming a story actually opened after tapping the tray was still using the old slow check, adding several seconds before anything else even started.",
+      },
+      {
+        category: "Fixed",
+        text: "Diagnosed the wrong-tap shares more precisely from your log: the scan was sometimes locking onto something else on screen (a poll, mention, or link sticker) instead of the real like/share row. It now always prefers the row closest to the bottom of the screen, which is where that row always is.",
+      },
+      {
+        category: "Fixed",
+        text: "If a share tap still misses (keyboard pops up), it now backs out and tries again slightly further right up to twice more, instead of giving up on the first miss.",
+      },
+    ],
+  },
+  {
     version: "1.1.488",
     date: "12 Jul 2026",
     items: [

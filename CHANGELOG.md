@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.489] — 2026-07-12
+
+### Fix: story-open confirmation was still using the slow check, and share-icon detection could lock onto the wrong row on screen
+
+Second pass at the same log, after finding the fast/slow check itself was working correctly this time (no fallback log lines showed up at all) — the remaining "not instant" time and the wrong-tap shares had two different, more specific causes:
+
+1. **The story-tray-tap confirmation ("did a story actually open?") was never switched to the fast check** — only the per-slide safety checks were fixed in the previous round. Every tray tap (and every retry when the first tray slot missed) was still paying the full ~3-4s uiautomator-dump cost before the loop even started. Now uses the same fast screenshot check first, same as everywhere else.
+2. **The share-icon scan was picking the wrong row on screen.** It ranked candidate rows by "most icon-like clusters, ties to darkest," which let a coincidental bright element elsewhere in the story (a poll, mention chip, link sticker) outrank the real reply bar whenever that story's real bar showed fewer clusters than usual. Two attempts in the same session picked rows at 65% and 88% of screen height for what should be the same physical control — hard evidence it was landing on content, not the bar. The reply bar is always the lowest surviving candidate on screen (nothing else renders below it); the scan now prefers the bottom-most match instead of the most-clusters match.
+3. **Added recovery instead of one-shot failure.** Even with a better row pick, exact icon x-position can still be off by a few pixels on any given device. Previously a missed tap (detected via the keyboard opening) just gave up on the whole share. It now backs out and retries up to 2 more times further to the right — the paper-plane is always the rightmost element in the bar — before giving up.
+
+---
+
 ## [1.1.488] — 2026-07-12
 
 ### Fix: v1.1.487's "fast" story-viewer check wasn't actually firing, and a blind DM-recipient tap could hit "previous story"
