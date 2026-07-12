@@ -1417,6 +1417,22 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   shareFeed = repostNode   ? pos(repostNode)   : null;
   shareDm   = sendNode     ? pos(sendNode)     : null;
 
+  // Reels opened from a profile grid tile (":id/reel_viewer_*" present in
+  // the tree — same marker used by findStoryFollowButton) do NOT have a
+  // separate Repost icon in their action bar at all — only Like, Comment,
+  // a single Share icon (labeled "Send"/"Direct", which opens a sheet that
+  // may itself offer a "Repost" option), and Save. Confirmed from a live
+  // device run: content-desc correctly found Comment and Send, but with no
+  // "Repost"-labelled node anywhere, the old positional fallback below
+  // consumed whatever leftover clickable node was on that row (e.g. the
+  // "More options" "•••" control) and mislabelled it `shareFeed`, so every
+  // attempt tapped the wrong control and reported "Repost sheet did not
+  // open" even though nothing sensible was ever tapped. On Reels, leave
+  // `shareFeed` null when it wasn't positively identified by content-desc
+  // — never guess a position for it — so callers correctly skip
+  // share-to-feed on Reels instead of tapping an unrelated icon.
+  const isReelViewer = /reel_viewer|clips_viewer/i.test(xml);
+
   // Positional fallback for roles that content-desc did not resolve.
   // Consume nodes left-to-right, skipping those already claimed above.
   const claimed = new Set<RowNode>([commentNode, repostNode, sendNode].filter(Boolean) as RowNode[]);
@@ -1426,7 +1442,7 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
     const c = pool()[0];
     if (c) { comment = pos(c); claimed.add(c); }
   }
-  if (!shareFeed) {
+  if (!shareFeed && !isReelViewer) {
     const c = pool()[0];
     if (c) { shareFeed = pos(c); claimed.add(c); }
   }

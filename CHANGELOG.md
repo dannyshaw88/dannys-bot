@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.508] — 2026-07-12
+
+### Fix: Share-to-Feed still misfiring on Reels (no distinct Repost icon), and Followed Users list wiped on every restart of the packaged app
+
+**Bug 1 — Share-to-Feed on Reels**: Log kept showing `Repost sheet did not open — skipping share-to-feed` for posts opened from a Reels tile in the profile grid, confirmed from a live device screenshot (header reads "Reels"; action bar is Like/Comment/Share/Save, no separate double-arrow Repost icon at all). `findFeedActionIcons`'s positional fallback — designed for normal feed posts, where a missing content-desc match is filled in by grabbing the next unclaimed icon on the row — was consuming whatever leftover clickable control sat in that slot on Reels (e.g. the "More options" "•••" button) and mislabelling it `shareFeed`. Every attempt then tapped an unrelated control, so it correctly never saw a Repost-labelled node afterward and (correctly, but unhelpfully) reported failure.
+  - Fix: detect the Reels player via its `reel_viewer`/`clips_viewer` resource-id marker (same one `findStoryFollowButton` already uses) and, when detected, leave `shareFeed` as `null` rather than guessing a position for it if content-desc didn't positively identify a "Repost" icon. Callers already treat `shareFeed: null` as "skip this action, icon not identifiable" — so Reels now cleanly skip share-to-feed instead of tapping the wrong control.
+
+**Bug 2 — Followed Users wiped on restart**: The mobile farm's per-device followed-users JSON log was written to `path.join(process.cwd(), "data", "mobile-followed")`. In the packaged Windows app, `process.cwd()` is not a stable location across launches (it can land in a different, often read-only or empty, folder depending on how the exe was spawned) — exactly the reason `database.db`, `equinox-debug.log`, and `mobile-instances.json` are all anchored to a stable app-data directory instead of cwd. This file was the one place that hadn't been fixed, so every restart could silently start reading/writing a different (empty-looking) folder, appearing as if the list had been wiped.
+  - Fix: anchor to `EQUINOX_DATA_DIR` (Electron's stable userData path, already used by `configFilePath()` for `mobile-instances.json`), with a one-time migration step that copies over any existing per-device files from the old cwd-based location so no history is lost on upgrade.
+
+---
+
 ## [1.1.507] — 2026-07-12
 
 ### Fix: Successful single-tap Repost misread as failure, then wrongly triggered a recovery Back press that skipped Share via DM

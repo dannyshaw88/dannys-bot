@@ -1885,8 +1885,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   type MobileFollowedEntry = { username: string; source: string; followedAt: number };
   const mobileFollowedUsers = new Map<string, MobileFollowedEntry[]>();
 
-  const FOLLOWED_DIR = path.join(process.cwd(), "data", "mobile-followed");
+  // Must NOT be derived from process.cwd() — in the packaged Windows app,
+  // cwd is not a stable, guaranteed-writable location across launches (it
+  // can land in a read-only Program Files path or vary by how the exe was
+  // spawned). EQUINOX_DATA_DIR (set by electron/main.ts to Electron's
+  // userData path) is the established stable location this codebase
+  // already uses for exactly this reason — see configFilePath() above,
+  // which anchors mobile-instances.json the same way. This file used cwd
+  // instead, so every restart of the packaged app could resolve to a
+  // different (often empty) folder, making previously followed users look
+  // "wiped" even though the old JSON file was still sitting untouched in
+  // the previous cwd.
+  const FOLLOWED_DIR = process.env.EQUINOX_DATA_DIR
+    ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-followed")
+    : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-followed");
   try { fs.mkdirSync(FOLLOWED_DIR, { recursive: true }); } catch { /* already exists */ }
+
+  // One-time migration: earlier builds wrote here (process.cwd()-based),
+  // so carry any existing per-device files forward into the new stable
+  // location instead of silently orphaning them.
+  try {
+    const legacyDir = path.join(process.cwd(), "data", "mobile-followed");
+    if (legacyDir !== FOLLOWED_DIR && fs.existsSync(legacyDir)) {
+      for (const f of fs.readdirSync(legacyDir)) {
+        const dest = path.join(FOLLOWED_DIR, f);
+        if (!fs.existsSync(dest)) fs.copyFileSync(path.join(legacyDir, f), dest);
+      }
+    }
+  } catch { /* best effort */ }
 
   const _followedFilePath = (serial: string) =>
     path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
