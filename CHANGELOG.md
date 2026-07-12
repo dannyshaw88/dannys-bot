@@ -4,6 +4,41 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.511] — 2026-07-12
+
+### Fix: ShareFeed / ShareDM icons invisible to accessibility tree on Xiaomi MIUI (unlabeled ImageView fallback)
+
+**Symptom**: Log showed `Inject Browsing: icons — Like✓ Comment:✓ ShareFeed:✗ ShareDM:✗` on every Inject Browsing cycle, even though the Repost and Send icons were plainly visible on the phone mirror. The post was liked but neither share action ran.
+
+**Root cause — confirmed from phone mirror + log**:
+
+The screenshot showed all four action-bar icons on screen (heart, comment bubble, curved-arrow Repost, paper-plane Send). The accessibility labels for Like and Comment were found correctly. But `findFeedActionIcons` returned `null` for both `shareFeed` and `shareDm` every time.
+
+On this Xiaomi MIUI + Instagram build, the Repost and Send icons are rendered as `android.widget.ImageView` nodes with `clickable="true"` but **zero accessibility attributes** — no `content-desc`, no `text`. This made them indistinguishable from the audio/music disc node that Instagram renders between Comment and Repost on posts with music (also an unlabeled `ImageView`). The existing audio-disc filter:
+
+```
+if (cls === "android.widget.ImageView" && !cd && !/\d/.test(txt)) continue;
+```
+
+was correctly preventing the disc from entering `rowNodes` and causing position-shift bugs on other devices — but on this device it also silently discarded the Repost and Send icons. They never reached the content-desc matcher or the positional-fallback pool, so both came back `null`.
+
+`findButtonByLabel("Repost")` (the secondary scan in the caller) also failed for the same reason: it searches for a node whose `content-desc` matches `"Repost"` — and on this build that attribute simply isn't set.
+
+**Fix — soft-save unlabeled ImageViews, use as last-resort positional fallback**:
+
+The audio-disc filter is preserved for the primary `rowNodes` list (no regression on other devices). Unlabeled `ImageView` nodes that would previously have been discarded are now saved in a separate `unlabeledImgViews` list and used as a final fallback only when both content-desc matching AND the labeled-pool fallback have already failed to resolve `shareFeed` or `shareDm`.
+
+**Safety filter**: the audio disc sits immediately to the right of Comment in x (typically within 40–60 px), while Repost and Send are one and two icon-gaps further right (gap = `comment.x − like.x`, typically 90–130 px). Only unlabeled candidates more than **60 % of one icon-gap to the right of Comment** are accepted. This reliably excludes the disc while accepting Repost and Send.
+
+Assignment order: left-to-right. The leftmost accepted unlabeled candidate → `shareFeed` (Repost), the next → `shareDm` (Send). If only one of the two is still null, the rightmost (or leftmost, respectively) remaining candidate is used.
+
+On devices where the disc appears AND Repost/Send are properly labeled: shareFeed/shareDm are resolved by content-desc (✓ from `rowNodes`) and `unlabeledImgViews` is never consulted — no change in behaviour.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findFeedActionIcons`: audio-disc filter changed from `continue` to save into `unlabeledImgViews`; unlabeled positional fallback block added after existing pool fallback, with disc-proximity exclusion.
+
+---
+
 ## [1.1.510] — 2026-07-12
 
 ### Fix: Follow — search bar positional fallback when UIAutomator accessibility tree returns nothing

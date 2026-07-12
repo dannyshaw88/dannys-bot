@@ -1353,6 +1353,23 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
 
   type RowNode = { x: number; y: number; cd: string };
   const rowNodes: RowNode[] = [];
+  // Nodes that match the audio-disc profile (ImageView, no content-desc, no digit
+  // text) are NOT immediately discarded. They are saved here and used as a
+  // last-resort positional fallback for shareFeed/shareDm when all label-based
+  // and pool-based detection has failed.
+  //
+  // Why keep them at all: on Xiaomi MIUI + certain Instagram builds the Repost
+  // and Send icons are rendered as plain ImageViews with clickable="true" but
+  // zero accessibility labelling — no content-desc, no text. They are
+  // indistinguishable from the audio-disc node on other devices/builds. Dropping
+  // them unconditionally causes ShareFeed:✗ / ShareDM:✗ on those phones even
+  // when both icons are plainly visible on screen.
+  //
+  // Safety: these nodes are only used when everything else fails, AND only when
+  // they sit at least (iconGap × 0.6) to the right of the Comment icon — the
+  // audio disc appears immediately after Comment (close in x), while Repost and
+  // Send are one and two icon-gaps further right.
+  const unlabeledImgViews: RowNode[] = [];
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
@@ -1371,21 +1388,21 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
     const cd = cdM ? cdM[1] : "";
     if (/favorit|save/i.test(cd)) continue; // bookmark, labeled
     if (c.x > saveCutoffX) continue; // bookmark, unlabeled — far-right heuristic
-    // On profile "Posts" views, Instagram renders an audio/music disc indicator
-    // as a clickable android.widget.ImageView in the same horizontal row as the
-    // action icons (between Comment and Repost). It has no content-desc AND no
-    // numeric count text (e.g. "342", "1.8K") — both of which every real action
-    // icon carries at least one of. Admitting it into rowNodes shifts all
-    // positional assignments one slot to the right, so shareFeed lands on the
-    // audio disc and shareDm lands on Repost. Filter it out here.
     const clsM = attrs.match(/class="([^"]*)"/);
     const cls = clsM ? clsM[1] : "";
     const txtM = attrs.match(/\btext="([^"]*)"/);
     const txt = txtM ? txtM[1] : "";
-    if (cls === "android.widget.ImageView" && !cd && !/\d/.test(txt)) continue;
+    if (cls === "android.widget.ImageView" && !cd && !/\d/.test(txt)) {
+      // Potential audio disc OR unlabeled Repost/Send — save separately, don't
+      // add to rowNodes (keeps the disc-tapping regression fix intact for devices
+      // where the disc is present and Repost/Send ARE labeled).
+      unlabeledImgViews.push({ x: c.x, y: c.y, cd });
+      continue;
+    }
     rowNodes.push({ x: c.x, y: c.y, cd });
   }
   rowNodes.sort((a, b) => a.x - b.x);
+  unlabeledImgViews.sort((a, b) => a.x - b.x);
 
   const pos = (n: RowNode) => ({ x: n.x, y: n.y });
   let comment: { x: number; y: number } | null = null;
@@ -1454,6 +1471,43 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   if (!shareDm) {
     const c = pool()[0];
     if (c) { shareDm = pos(c); claimed.add(c); }
+  }
+
+  // --- Unlabeled-ImageView positional fallback (last resort) ---
+  //
+  // Only fires when shareFeed or shareDm is STILL null after all content-desc
+  // and pool fallbacks above, AND unlabeledImgViews has candidates.
+  //
+  // Safety filter: the audio disc sits immediately to the right of Comment in x
+  // (disc.x ≈ comment.x + ~40 px), while Repost and Send sit at comment.x + gap
+  // and comment.x + 2×gap (where gap = comment.x − like.x, typically 90–130 px).
+  // Requiring a node to be at least 60 % of one icon-gap to the right of Comment
+  // reliably excludes the disc while accepting Repost and Send.
+  //
+  // If both shareFeed and shareDm are still null, assign left→right:
+  //   first  unlabeled candidate → shareFeed (Repost position)
+  //   second unlabeled candidate → shareDm   (Send position)
+  // If only shareDm is null (shareFeed was resolved), use the rightmost
+  // remaining candidate (Send is always to the right of Repost).
+  if ((!shareFeed || !shareDm) && unlabeledImgViews.length > 0) {
+    const iconGap = like && comment ? comment.x - like.x : 0;
+    const minX = comment ? comment.x + Math.max(iconGap * 0.6, 30) : like.x + 4;
+    const candidates = unlabeledImgViews.filter(n => n.x > minX); // excludes disc
+    if (candidates.length > 0) {
+      if (!shareFeed && !shareDm) {
+        // Assign left-to-right: first = Repost, second = Send
+        shareFeed = pos(candidates[0]);
+        if (candidates[1]) shareDm = pos(candidates[1]);
+      } else if (!shareDm) {
+        // shareFeed already resolved — Send is the rightmost remaining candidate
+        const rightmost = candidates[candidates.length - 1];
+        if (rightmost.x !== shareFeed?.x) shareDm = pos(rightmost);
+      } else if (!shareFeed) {
+        // shareDm already resolved — Repost is the leftmost candidate not = shareDm
+        const c = candidates.find(n => n.x !== shareDm?.x);
+        if (c) shareFeed = pos(c);
+      }
+    }
   }
 
   return { like, comment, shareFeed, shareDm };
