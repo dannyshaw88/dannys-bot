@@ -1348,21 +1348,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     slideWatchPctMin: number; slideWatchPctMax: number;
     likePercentMin: number; likePercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
+    followEnabled?: boolean;
+    followPercentMin?: number; followPercentMax?: number;
+    followDelayAfterMinSec?: number; followDelayAfterMaxSec?: number;
+    followSkipIndianUsers?: boolean;
+    canFollowNow?: () => boolean;
+    onFollowed?: () => void;
     onLog?: (msg: string) => void;
-  }): Promise<{ storiesWatched: number }> {
+  }): Promise<{ storiesWatched: number; followed: number }> {
     const {
       slidesMin, slidesMax,
       slideWatchPctMin, slideWatchPctMax,
       likePercentMin, likePercentMax,
       shareDmPercentMin, shareDmPercentMax,
+      followEnabled = false,
+      followPercentMin = 0, followPercentMax = 0,
+      followDelayAfterMinSec = 5, followDelayAfterMaxSec = 15,
+      followSkipIndianUsers = false,
+      canFollowNow = () => true,
+      onFollowed,
       onLog,
     } = params;
+    let followed = 0;
 
     const totalStories = Math.floor(
       Math.min(slidesMin, slidesMax) +
       Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
     );
-    if (totalStories <= 0) return { storiesWatched: 0 };
+    if (totalStories <= 0) return { storiesWatched: 0, followed: 0 };
 
     const { w, h } = getScreenSize(serial);
     // Logged once per run so a bad like/share tap or a false "sharing
@@ -1378,6 +1391,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
     const shareChance = (Math.min(shareDmPercentMin, shareDmPercentMax) +
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
+    const followChance = (Math.min(followPercentMin, followPercentMax) +
+      Math.random() * Math.abs(followPercentMax - followPercentMin)) / 100;
 
     // Returns true only while the story viewer is genuinely still on screen.
     // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
@@ -1434,7 +1449,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // accidentally interacting with the wrong screen.
     if (!storyOpened) {
       onLog?.("Story tray: no story opened — skipping story actions for this cycle");
-      return { storiesWatched: 0 };
+      return { storiesWatched: 0, followed: 0 };
     }
 
     await sleepOrAbort(serial, 1800); // let viewer animate open
@@ -1640,6 +1655,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
+      // Follow the story owner via the inline "Follow" pill in the story
+      // header — no navigation away from the viewer required. Gated behind
+      // stillInStoryViewer() same as every other action here; a story that
+      // already advanced/closed has nothing left to follow.
+      if (followEnabled && Math.random() < followChance && (await stillInStoryViewer())) {
+        if (!canFollowNow()) {
+          onLog?.(`Story ${s + 1}: follow skipped — daily/hourly follow limit reached`);
+        } else {
+          let skip = false;
+          if (followSkipIndianUsers) {
+            const uname = await android.getStoryOwnerUsername(serial).catch(() => null);
+            if (uname && hasIndianScript(uname)) {
+              skip = true;
+              onLog?.(`Story ${s + 1}: follow skipped — Indian-script username (@${uname})`);
+            }
+          }
+          if (!skip) {
+            const followBtn = await android.findStoryFollowButton(serial).catch(() => null);
+            if (followBtn && (await stillInStoryViewer())) {
+              await android.tap(serial, followBtn.x, followBtn.y);
+              followed++;
+              onFollowed?.();
+              onLog?.(`Story ${s + 1}: followed story owner (tap at (${followBtn.x},${followBtn.y}))`);
+              const delayLo = Math.min(followDelayAfterMinSec, followDelayAfterMaxSec);
+              const delayHi = Math.max(followDelayAfterMinSec, followDelayAfterMaxSec);
+              const delayMs = Math.round((delayLo + Math.random() * (delayHi - delayLo)) * 1000);
+              await sleepOrAbort(serial, delayMs);
+            } else {
+              onLog?.(`Story ${s + 1}: follow skipped — already following or Follow button not found`);
+            }
+          }
+        }
+      }
+
       // Don't tap "advance to next slide" if we've already left the story
       // viewer — that tap would land on the feed and register as a like/
       // navigation there instead of harmlessly advancing a story slide.
@@ -1671,7 +1720,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 800);
 
-    return { storiesWatched };
+    return { storiesWatched, followed };
   }
 
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
@@ -1699,6 +1748,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const automationCycleSchema = checkFeedSchema.extend({
     airplaneWaitMinSec: z.number().min(1).max(120).default(15),
     airplaneWaitMaxSec: z.number().min(1).max(120).default(20),
+    // Master on/off switches for each slide of the cycle (12 Jul 2026).
+    // When a step is unticked in the UI, its whole block never runs — this
+    // is purely a gate, not a percentage/chance like the fields below.
+    feedEnabled: z.boolean().default(true),
+    storiesEnabled: z.boolean().default(true),
     shareFeedPercentMin: z.number().min(0).max(100).default(0),
     shareFeedPercentMax: z.number().min(0).max(100).default(0),
     shareDmPercentMin: z.number().min(0).max(100).default(0),
@@ -1711,8 +1765,55 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    // Follow Users (12 Jul 2026) — follows the owner of a story just watched,
+    // using the inline "Follow" pill in the story header (no navigation away
+    // from the story viewer required). Settings mirror the old, separate
+    // Follow Tool's limits/safety fields; the scraping-based candidate
+    // sources from that tool ("Get Suggested Users", "Search by Username")
+    // don't apply here — candidates are simply whoever's story was just
+    // watched, so those two fields were intentionally left out.
+    followEnabled: z.boolean().default(false),
+    followPercentMin: z.number().min(0).max(100).default(0),
+    followPercentMax: z.number().min(0).max(100).default(0),
+    followDelayAfterMinSec: z.number().min(0).max(300).default(5),
+    followDelayAfterMaxSec: z.number().min(0).max(300).default(15),
+    followMaxPerDayMin: z.number().min(0).max(9999).default(0),
+    followMaxPerDayMax: z.number().min(0).max(9999).default(0),
+    followMaxPerHourMin: z.number().min(0).max(9999).default(0),
+    followMaxPerHourMax: z.number().min(0).max(9999).default(0),
+    followSkipIndianUsers: z.boolean().default(false),
+    followStopOnBlockEnabled: z.boolean().default(false),
+    followStopOnBlockMinutes: z.number().min(0).max(1440).default(60),
   });
   const automationCycleInProgress = new Set<string>();
+
+  // Per-serial Follow Users rate-limit state (12 Jul 2026). Kept in memory,
+  // module-scoped like the other per-serial Sets/Maps above — it resets if
+  // the server restarts, same tradeoff the rest of this file already makes
+  // for cycle-abort tracking. dailyCount/hourlyCount reset lazily the next
+  // time a follow is attempted after their window has elapsed, rather than
+  // on a timer, so an idle device costs nothing.
+  type FollowState = {
+    dailyCount: number; dailyResetAt: number;
+    hourlyCount: number; hourlyResetAt: number;
+    blockedUntil: number;
+  };
+  const followState = new Map<string, FollowState>();
+  const getFollowState = (serial: string): FollowState => {
+    const now = Date.now();
+    let s = followState.get(serial);
+    if (!s) {
+      s = { dailyCount: 0, dailyResetAt: now + 86_400_000, hourlyCount: 0, hourlyResetAt: now + 3_600_000, blockedUntil: 0 };
+      followState.set(serial, s);
+    }
+    if (now >= s.dailyResetAt) { s.dailyCount = 0; s.dailyResetAt = now + 86_400_000; }
+    if (now >= s.hourlyResetAt) { s.hourlyCount = 0; s.hourlyResetAt = now + 3_600_000; }
+    return s;
+  };
+  // Covers Devanagari, Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu,
+  // Kannada, Malayalam — all major South Asian Indic scripts. Mirrors the
+  // same check already used by the older, separate Follow Tool.
+  const hasIndianScript = (text: string): boolean => /[\u0900-\u0D7F]/.test(text);
 
   // Abort endpoint — called by the frontend when the master toggle is switched
   // off mid-cycle.  The frontend passes the same cycleId it used to start the
@@ -1758,13 +1859,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         airplaneWaitMinSec, airplaneWaitMaxSec,
+        feedEnabled, storiesEnabled,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
+        followEnabled, followPercentMin, followPercentMax,
+        followDelayAfterMinSec, followDelayAfterMaxSec,
+        followMaxPerDayMin, followMaxPerDayMax,
+        followMaxPerHourMin, followMaxPerHourMax,
+        followSkipIndianUsers,
+        followStopOnBlockEnabled, followStopOnBlockMinutes,
       } = automationCycleSchema.parse(req.body);
+
+      // Follow Users rate-limit gate for this cycle — sampled once so the
+      // caps stay consistent across every story slide in this run, same
+      // pattern as the like/share chances below.
+      const fst = getFollowState(serial);
+      const followMaxPerDay  = Math.round(Math.min(followMaxPerDayMin, followMaxPerDayMax) +
+        Math.random() * Math.abs(followMaxPerDayMax - followMaxPerDayMin));
+      const followMaxPerHour = Math.round(Math.min(followMaxPerHourMin, followMaxPerHourMax) +
+        Math.random() * Math.abs(followMaxPerHourMax - followMaxPerHourMin));
+      const canFollowNow = () => {
+        if (followStopOnBlockEnabled && Date.now() < fst.blockedUntil) return false;
+        if (followMaxPerDay > 0 && fst.dailyCount >= followMaxPerDay) return false;
+        if (followMaxPerHour > 0 && fst.hourlyCount >= followMaxPerHour) return false;
+        return true;
+      };
+      const onFollowed = () => { fst.dailyCount++; fst.hourlyCount++; };
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
@@ -1826,21 +1950,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       tLog("  ✓ Instagram open");
 
-      // 3. Scroll the feed (Step 2 in the UI).
-      tLog(`▶ Starting feed scroll — ${count} posts`);
-      const { likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
-        count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-        shareFeedPercentMin, shareFeedPercentMax,
-        shareDmPercentMin, shareDmPercentMax,
-        onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
-      });
-      steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-      tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
+      // 3. Scroll the feed (Step 2 in the UI) — skipped entirely when the
+      // "View Feed" checkbox is unticked, per-slide enable/disable (12 Jul 2026).
+      let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
+      if (feedEnabled) {
+        tLog(`▶ Starting feed scroll — ${count} posts`);
+        ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
+          count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+          shareFeedPercentMin, shareFeedPercentMax,
+          shareDmPercentMin, shareDmPercentMax,
+          onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
+        }));
+        steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+        tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
+      } else {
+        steps.push("feed(skipped — View Feed disabled)");
+        tLog("▶ View Feed disabled — skipping feed scroll");
+      }
 
-      // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll.
-      // Tap the Instagram Home tab in the bottom nav bar to scroll back to the
-      // very top of the feed so the stories row is visible again.
-      if (viewStoriesSlidesMax > 0) {
+      // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll,
+      // skipped entirely when the "View Stories from Feed" checkbox is
+      // unticked.
+      let followedCount = 0;
+      if (storiesEnabled && viewStoriesSlidesMax > 0) {
         tLog("▶ Tapping Home tab for stories…");
         // Find the real Home tab via the accessibility tree instead of a
         // guessed screen percentage — the fixed 10%/97.5% coordinates were
@@ -1879,11 +2011,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
           likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
           shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
+          followEnabled, followPercentMin, followPercentMax,
+          followDelayAfterMinSec, followDelayAfterMaxSec,
+          followSkipIndianUsers,
+          canFollowNow, onFollowed,
           onLog: (msg) => tLog(`  ${msg}`),
         });
         storiesWatched = result.storiesWatched;
-        steps.push(`stories(${result.storiesWatched} watched)`);
-        tLog(`▶ Stories done — ${result.storiesWatched} watched`);
+        followedCount = result.followed;
+        steps.push(`stories(${result.storiesWatched} watched, ${result.followed} followed)`);
+        tLog(`▶ Stories done — ${result.storiesWatched} watched, ${result.followed} followed`);
+      } else if (!storiesEnabled) {
+        steps.push("stories(skipped — View Stories from Feed disabled)");
+        tLog("▶ View Stories from Feed disabled — skipping stories");
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
@@ -1924,7 +2064,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.sleepScreen(serial);
       steps.push("power-off");
 
-      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, strayNavRecoveries, steps });
+      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
       res.status(aborted ? 200 : 400).json({

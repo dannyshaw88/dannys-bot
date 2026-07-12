@@ -1827,6 +1827,58 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   return _findByResId(xml, ":id/feed_tab", ":id/home_tab");
 }
 
+/**
+ * Find the inline "Follow" pill Instagram shows in the story viewer header,
+ * next to the account name, when the signed-in account doesn't already
+ * follow the story owner. This is a genuine uiautomator dump (~3-4s), so
+ * callers should only invoke it when a follow attempt has already been
+ * decided (chance roll + rate limits passed) — not on every slide.
+ *
+ * Returns null if no such button is present (already following, or the
+ * button isn't rendered on this device/build) — callers must treat that as
+ * "nothing to follow here", not an error.
+ */
+export async function findStoryFollowButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  // Word-boundary anchored so this never matches "Following" (already
+  // followed — tapping that would UNfollow, the opposite of intent) or a
+  // button belonging to some other on-screen element.
+  const re = /content-desc="Follow"[^>]*bounds="([^"]+)"/;
+  const m = xml.match(re);
+  if (m) return _parseCenter(m[1]);
+  return _findByResId(xml, ":id/follow_button_text", ":id/reel_viewer_follow_button");
+}
+
+/**
+ * Best-effort extraction of the current story owner's @username from the
+ * accessibility tree, for the "skip Indian users" filter only. Instagram's
+ * story header renders the username as a plain TextView near the top of the
+ * screen; this looks for the first TextView in that band whose text looks
+ * like a username. Returns null (never guesses) when nothing plausible is
+ * found — callers must treat null as "can't tell, don't filter" rather than
+ * "definitely not a match".
+ */
+export async function getStoryOwnerUsername(serial: string): Promise<string | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  const { h } = _getScreenSize(xml);
+  const topBandLimit = h ? Math.round(h * 0.15) : Infinity;
+  const re = /class="android\.widget\.TextView"[^>]*text="([^"]+)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const [, text, , y1] = m;
+    if (+y1 > topBandLimit) continue;
+    const candidate = text.trim();
+    if (/^[A-Za-z0-9._]{2,30}$/.test(candidate)) return candidate;
+  }
+  return null;
+}
+
 export type SignupRecipeStep =
   | { type: "wait"; ms: number; label?: string }
   | { type: "tap"; x: number; y: number; label?: string }

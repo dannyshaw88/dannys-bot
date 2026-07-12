@@ -917,6 +917,11 @@ interface AutomationSettingsData {
   enabled: boolean;
   cycleIntervalMin: number;
   cycleIntervalMax: number;
+  // Per-slide on/off switches (12 Jul 2026) — when unticked, that whole
+  // slide of the cycle never runs. Independent of the percentage/chance
+  // fields below, which only take effect once a slide is enabled.
+  feedEnabled: boolean;
+  storiesEnabled: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -935,10 +940,28 @@ interface AutomationSettingsData {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  // Follow Users (12 Jul 2026) — settings mirrored from the old, separate
+  // Follow Tool (Accounts → Human Session Tool), minus the two candidate-
+  // sourcing fields that don't apply to this feed-driven flow ("Get
+  // Suggested Users", "Search by Username"): here the candidate is simply
+  // whoever's story was just watched.
+  followEnabled: boolean;
+  followPercentMin: number;
+  followPercentMax: number;
+  followDelayAfterMinSec: number;
+  followDelayAfterMaxSec: number;
+  followMaxPerDayMin: number;
+  followMaxPerDayMax: number;
+  followMaxPerHourMin: number;
+  followMaxPerHourMax: number;
+  followSkipIndianUsers: boolean;
+  followStopOnBlockEnabled: boolean;
+  followStopOnBlockMinutes: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+  feedEnabled: true, storiesEnabled: true,
   actionDelayMin: 5, actionDelayMax: 10,
   likePercentMin: 3, likePercentMax: 5,
   shareFeedPercentMin: 0, shareFeedPercentMax: 0,
@@ -948,6 +971,13 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+  followEnabled: false,
+  followPercentMin: 0, followPercentMax: 0,
+  followDelayAfterMinSec: 5, followDelayAfterMaxSec: 15,
+  followMaxPerDayMin: 0, followMaxPerDayMax: 0,
+  followMaxPerHourMin: 0, followMaxPerHourMax: 0,
+  followSkipIndianUsers: false,
+  followStopOnBlockEnabled: false, followStopOnBlockMinutes: 60,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1081,6 +1111,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           body: JSON.stringify({
             cycleId,
             count,
+            feedEnabled: s.feedEnabled,
+            storiesEnabled: s.storiesEnabled,
             delayMinSec: s.actionDelayMin,
             delayMaxSec: s.actionDelayMax,
             likePercentMin: s.likePercentMin,
@@ -1097,6 +1129,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesLikePercentMax: s.viewStoriesLikePercentMax,
             viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
+            followEnabled: s.followEnabled,
+            followPercentMin: s.followPercentMin,
+            followPercentMax: s.followPercentMax,
+            followDelayAfterMinSec: s.followDelayAfterMinSec,
+            followDelayAfterMaxSec: s.followDelayAfterMaxSec,
+            followMaxPerDayMin: s.followMaxPerDayMin,
+            followMaxPerDayMax: s.followMaxPerDayMax,
+            followMaxPerHourMin: s.followMaxPerHourMin,
+            followMaxPerHourMax: s.followMaxPerHourMax,
+            followSkipIndianUsers: s.followSkipIndianUsers,
+            followStopOnBlockEnabled: s.followStopOnBlockEnabled,
+            followStopOnBlockMinutes: s.followStopOnBlockMinutes,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1254,7 +1298,18 @@ function AutomationSettingsPanel({
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <div className="space-y-2">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
-          <p className="text-sm font-semibold text-foreground">View Feed</p>
+          <br />
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="feed-enabled"
+              checked={settings.feedEnabled}
+              onChange={e => setSettings(s => ({ ...s, feedEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="feed-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
+          </div>
         </div>
         <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
@@ -1400,7 +1455,17 @@ function AutomationSettingsPanel({
         <div className="border-t border-border" />
 
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">View Stories from Feed</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="stories-enabled"
+              checked={settings.storiesEnabled}
+              onChange={e => setSettings(s => ({ ...s, storiesEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="stories-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Stories from Feed</label>
+          </div>
         </div>
 
         <div className="flex items-start gap-6 flex-wrap">
@@ -1464,6 +1529,126 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Border separator between View Stories from Feed above and the new
+            Follow Users feature below — same card/step (STEP2), mirrors the
+            divider above between View Feed and View Stories from Feed. */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="follow-enabled"
+              checked={settings.followEnabled}
+              onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
+          </div>
+          <p className="text-xs text-muted-foreground pl-6">
+            Follows the owner of a story that was just watched above, using the inline Follow button in the story header. Settings mirrored from the old Follow Tool.
+          </p>
+        </div>
+
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Follow % of stories watched</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followPercentMin}
+                onChange={e => setSettings(s => ({ ...s, followPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followPercentMax}
+                onChange={e => setSettings(s => ({ ...s, followPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Delay after each follow (seconds)</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followDelayAfterMinSec}
+                onChange={e => setSettings(s => ({ ...s, followDelayAfterMinSec: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followDelayAfterMaxSec}
+                onChange={e => setSettings(s => ({ ...s, followDelayAfterMaxSec: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Max follows per day</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followMaxPerDayMin}
+                onChange={e => setSettings(s => ({ ...s, followMaxPerDayMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followMaxPerDayMax}
+                onChange={e => setSettings(s => ({ ...s, followMaxPerDayMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">(0 = no cap)</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Max follows per hour</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followMaxPerHourMin}
+                onChange={e => setSettings(s => ({ ...s, followMaxPerHourMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followMaxPerHourMax}
+                onChange={e => setSettings(s => ({ ...s, followMaxPerHourMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">(0 = no cap)</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-6">
+            <input
+              type="checkbox"
+              id="follow-skip-indian"
+              checked={settings.followSkipIndianUsers}
+              onChange={e => setSettings(s => ({ ...s, followSkipIndianUsers: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="follow-skip-indian" className="text-sm text-muted-foreground cursor-pointer select-none">Skip Indian Users</label>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="follow-stop-on-block"
+                checked={settings.followStopOnBlockEnabled}
+                onChange={e => setSettings(s => ({ ...s, followStopOnBlockEnabled: e.target.checked }))}
+                disabled={loading}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <label htmlFor="follow-stop-on-block" className="text-sm text-muted-foreground cursor-pointer select-none">Stop on block</label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followStopOnBlockMinutes}
+                onChange={e => setSettings(s => ({ ...s, followStopOnBlockMinutes: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">minutes</span>
             </div>
           </div>
         </div>
