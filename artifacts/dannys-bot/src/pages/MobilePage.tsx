@@ -1598,7 +1598,7 @@ function AutomationSettingsPanel({
             variant="outline" size="sm"
             className="h-7 text-xs px-3 ml-auto"
             onClick={() => setShowSources(v => !v)}
-          >{showSources ? 'Hide' : `Sources${settings.followSources.length > 0 ? ` (${settings.followSources.length})` : ''}`}</Button>
+          >{showSources ? 'Hide' : 'Sources'}</Button>
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingFollowed}
@@ -1806,6 +1806,7 @@ function AutomationSettingsPanel({
                     <thead className="sticky top-0 bg-muted">
                       <tr>
                         <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Username</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Source</th>
                         <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Followed at</th>
                       </tr>
                     </thead>
@@ -1813,6 +1814,7 @@ function AutomationSettingsPanel({
                       {mobileFollowedList.map((u, i) => (
                         <tr key={i} className="border-t border-border">
                           <td className="px-3 py-1.5 text-foreground">@{u.username}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{u.source ?? '—'}</td>
                           <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.followedAt).toLocaleTimeString()}</td>
                         </tr>
                       ))}

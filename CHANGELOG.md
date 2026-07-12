@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.499] — 2026-07-12
+
+### Fix: findFeedActionIcons — identify icons by content-desc label, not position
+
+**Root cause**: the `>= 3` positional-assignment branch assumed Instagram always shows icons in [Comment, Repost, Send] order, so it blindly assigned `nodes[0] → comment`, `nodes[1] → shareFeed`, `nodes[2] → shareDm`. When an account has the Repost action disabled, Instagram removes that icon entirely. The row then contains only [Comment, Send]. With exactly 2 nodes the code fell to the `else` branch — but if anything pushed the count to 3 (e.g. a secondary icon present in that account's layout), `nodes[1]` was Send, not Repost, so `shareFeed` received the Send icon's coordinates and the tap that was supposed to Share-to-Feed instead opened the DM share sheet or worse tapped Comment.
+
+**Fix**: each icon role is now identified primarily by its Instagram accessibility label (`content-desc`):
+- Comment → `\bcomment\b`
+- Share to Feed (Repost) → `\brepost\b`
+- Share to DM (Send) → `\b(send|direct|message)\b`
+
+If a role's label is not found (devices/versions that omit accessibility labels), the code falls back to consuming the next unassigned node in left-to-right order via an exclusion set. This hybrid approach is correct for all account configurations: Repost-enabled, Repost-disabled, and label-free accessibility trees.
+
+### UI: Sources button — remove active-source count from label
+
+The Sources button was showing `Sources (N)` when sources were configured. Removed; it now reads only "Sources" / "Hide".
+
+### UI: Followed Users table — show Source column
+
+Each row in the Followed Users table now displays the source the account was discovered from (e.g. the hashtag used), populated from the `source` field already stored in `MobileFollowedEntry`. A dash is shown when the field is absent for legacy entries.
+
+---
+
 ## [1.1.498] — 2026-07-12
 
 ### Fix: Share-to-Feed / Share-via-DM still not found even after v1.1.497 saveCutoffX fix

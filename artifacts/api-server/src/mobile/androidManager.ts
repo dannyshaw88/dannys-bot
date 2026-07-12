@@ -1380,33 +1380,47 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   let shareFeed: { x: number; y: number } | null = null;
   let shareDm: { x: number; y: number } | null = null;
 
-  if (rowNodes.length >= 3) {
-    // Instagram never reorders Comment → Repost → Send, only omits disabled
-    // ones. When 3 or more nodes are found, the left-most three are always
-    // [Comment, Repost, Send] in that order — any additional nodes to the
-    // right (e.g. the Bookmark/Save icon that slipped past the saveCutoffX
-    // heuristic when the screen-width query returned a wrong default) are
-    // discarded. Slicing to exactly 3 is safer than relying solely on the
-    // saveCutoffX percentage, which only works correctly when getScreenSize
-    // returns the real device width.
-    const [c, sf, sd] = rowNodes;
-    comment  = pos(c);
-    shareFeed = pos(sf);
-    shareDm   = pos(sd);
-  } else {
-    const commentLabeled = rowNodes.find(n => /comment/i.test(n.cd));
-    if (commentLabeled) {
-      comment = pos(commentLabeled);
-      const others = rowNodes.filter(n => n !== commentLabeled);
-      if (others.length === 2) {
-        shareFeed = pos(others[0]);
-        shareDm = pos(others[1]);
-      }
-      // others.length is 0 or 1: ambiguous (one of Repost/Send is disabled) —
-      // leave shareFeed/shareDm null rather than guess which one it is.
-    }
-    // rowNodes.length is 0, 1, or 2 with no Comment label: can't safely
-    // identify the remaining icons by position alone — leave all null.
+  // --- Icon identification: content-desc first, positional fallback ---
+  //
+  // Relying solely on position (node[0]=Comment, node[1]=Repost, node[2]=Send)
+  // breaks when accounts have Repost disabled — the icon roster shrinks and
+  // every position shifts left, mapping node[0] to Comment but node[1] now to
+  // Send instead of Repost. The software then taps the wrong icon.
+  //
+  // Primary strategy: match each role by its Instagram accessibility label.
+  // Instagram consistently labels these icons in English regardless of account
+  // locale (the content-desc is set by the apk, not the system language).
+  //   Comment → "Comment"
+  //   Share to Feed (Repost) → "Repost"
+  //   Share to DM (Send) → "Send" | "Direct" | "Message"
+  //
+  // Fallback strategy: for any role whose label was not found, consume the
+  // next unassigned node in left-to-right order. This preserves correct
+  // behaviour on devices/versions where content-desc attributes are absent.
+  const commentNode  = rowNodes.find(n => /\bcomment\b/i.test(n.cd)) ?? null;
+  const repostNode   = rowNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
+  const sendNode     = rowNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd)) ?? null;
+
+  comment   = commentNode  ? pos(commentNode)  : null;
+  shareFeed = repostNode   ? pos(repostNode)   : null;
+  shareDm   = sendNode     ? pos(sendNode)     : null;
+
+  // Positional fallback for roles that content-desc did not resolve.
+  // Consume nodes left-to-right, skipping those already claimed above.
+  const claimed = new Set<RowNode>([commentNode, repostNode, sendNode].filter(Boolean) as RowNode[]);
+  const pool = () => rowNodes.filter(n => !claimed.has(n));
+
+  if (!comment) {
+    const c = pool()[0];
+    if (c) { comment = pos(c); claimed.add(c); }
+  }
+  if (!shareFeed) {
+    const c = pool()[0];
+    if (c) { shareFeed = pos(c); claimed.add(c); }
+  }
+  if (!shareDm) {
+    const c = pool()[0];
+    if (c) { shareDm = pos(c); claimed.add(c); }
   }
 
   return { like, comment, shareFeed, shareDm };
