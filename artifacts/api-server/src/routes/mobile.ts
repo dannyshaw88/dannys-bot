@@ -2071,22 +2071,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         settingsMin: browsing.shareFeedPctMin, settingsMax: browsing.shareFeedPctMax },
       "[inject-browsing] share-feed chance rolled"
     );
-    if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
+    if (!(shareFeedChance > 0 && Math.random() < shareFeedChance)) {
+      onLog?.("Inject Browsing: share-to-feed roll missed — skipping");
+    } else {
       try {
-        // Use findButtonByLabel("Repost") to locate the Repost icon directly
-        // by its accessibility label rather than relying on the row-scan
-        // coordinates from findFeedActionIcons. Row-scan has failed repeatedly
-        // because phantom nodes (audio disc, recycler neighbours) shift its
-        // positional assignments. Label lookup is unambiguous: if Instagram
-        // labels the icon "Repost", this finds it regardless of what else is
-        // on screen. No icon found → skip rather than tap the wrong element.
-        const repostIcon = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+        // Prefer the coordinates findFeedActionIcons already resolved for
+        // THIS post in the same scan that found the Like button — it's the
+        // same accessibility dump, so if it says shareFeed is at (x,y), that
+        // node is definitely on screen right now. Re-scanning independently
+        // via findButtonByLabel("Repost") was the previous approach, but on
+        // some devices/builds its content-desc match misses even when the
+        // row-scan plainly found the icon (confirmed via the "ShareFeed:✓"
+        // diagnostic immediately above while the tap never happened) —
+        // that's what silently "skipped" this step with no rescue log.
+        // findButtonByLabel is now only a fallback when the row-scan came
+        // back null for this icon.
+        const repostIcon = icons.shareFeed ?? await android.findButtonByLabel(serial, "Repost").catch(() => null);
         if (!repostIcon) {
-          onLog?.("Inject Browsing: Repost icon not found by label on this post — skipping share-to-feed");
-          logger.warn({ serial }, "[inject-browsing] findButtonByLabel('Repost') returned null — icon may be absent on this post (sharing disabled by poster, or Repost not labeled on this device/version)");
+          onLog?.("Inject Browsing: Repost icon not found on this post — skipping share-to-feed");
+          logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Repost') found the icon — likely absent on this post (sharing disabled by poster)");
         } else {
           await android.tap(serial, repostIcon.x, repostIcon.y);
-          logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon (found by label)");
+          logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon");
           // Wait for the share sheet to slide up before re-scanning.
           // 1500 ms instead of 1000 ms — slower devices need more time.
           await sleepOrAbort(serial, 1500);
@@ -2106,12 +2112,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
             if (closeBtn) { await android.tap(serial, closeBtn.x, closeBtn.y); await sleepOrAbort(serial, 400); }
           } else {
+            onLog?.("Inject Browsing: Repost sheet did not open — skipping share-to-feed");
             logger.warn({ serial, repostBtn, repostIcon }, "[inject-browsing] Repost sheet did not open (same-coords guard triggered) — pressing Back");
             await android.pressBack(serial);
             await sleepOrAbort(serial, 400);
           }
         }
-      } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Inject Browsing: share-to-feed error — ${e?.message}`);
+      }
     }
 
     const shareDmChance = rollRange(browsing.shareDmPctMin, browsing.shareDmPctMax) / 100;
@@ -2120,34 +2130,65 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         settingsMin: browsing.shareDmPctMin, settingsMax: browsing.shareDmPctMax },
       "[inject-browsing] share-DM chance rolled"
     );
-    if (shareDmChance > 0 && Math.random() < shareDmChance) {
+    if (!(shareDmChance > 0 && Math.random() < shareDmChance)) {
+      onLog?.("Inject Browsing: share-via-DM roll missed — skipping");
+    } else {
       try {
-        // Same label-based approach as share-to-feed above: find the Send/DM
-        // icon directly by its accessibility label. Instagram uses "Send" on
-        // most versions; "Direct" and "Message" are also seen on some builds.
+        // Same reasoning as share-to-feed above: trust the coordinates
+        // findFeedActionIcons already resolved for THIS post (same scan
+        // that found Like) before falling back to an independent
+        // findButtonByLabel scan. Label-only lookup was silently missing
+        // the icon on some builds even though the row-scan diagnostic
+        // showed "ShareDM:✓" for the very same post.
         const sendIcon =
+          icons.shareDm ??
           await android.findButtonByLabel(serial, "Send").catch(() => null) ??
           await android.findButtonByLabel(serial, "Direct").catch(() => null) ??
           await android.findButtonByLabel(serial, "Message").catch(() => null);
         if (!sendIcon) {
-          onLog?.("Inject Browsing: Send icon not found by label on this post — skipping share-via-DM");
-          logger.warn({ serial }, "[inject-browsing] findButtonByLabel('Send'/'Direct'/'Message') all returned null — icon may be absent or uses an unlabeled version of Instagram");
+          onLog?.("Inject Browsing: Send icon not found on this post — skipping share-via-DM");
+          logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Send'/'Direct'/'Message') found the icon — likely absent or unlabeled on this build");
         } else {
           await android.tap(serial, sendIcon.x, sendIcon.y);
-          logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon (found by label)");
+          logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
           await sleepOrAbort(serial, 1200);
           await tapRandomShareSheetRecipient(serial, w, h);
           await sleepOrAbort(serial, 1500);
           const sent = await sendShareSheet(serial, w, h);
           if (sent) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
-          else { await android.pressBack(serial); await sleepOrAbort(serial, 400); }
+          else {
+            onLog?.("Inject Browsing: share sheet did not confirm send — skipping share-via-DM");
+            await android.pressBack(serial); await sleepOrAbort(serial, 400);
+          }
         }
-      } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Inject Browsing: share-via-DM error — ${e?.message}`);
+      }
     }
 
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
+
+    // Scroll the profile grid back to the top before returning. The loop
+    // above scrolled down `rows` times to browse the grid, and opening/
+    // closing a post preserves that scroll position — it does NOT reset
+    // it. If runFollowUsersStep taps Follow right after this returns while
+    // the header is still scrolled off the top of the screen, the Follow
+    // button is genuinely absent from the accessibility tree (it's not
+    // rendered off-screen) and tapFollowButtonOnProfilePage always reports
+    // "not found", so the user never gets followed. Undo exactly the
+    // scrolls this function made so the header is back on screen.
+    if (rows > 0) {
+      onLog?.("Inject Browsing: scrolling profile back to top before follow");
+      for (let i = 0; i < rows; i++) {
+        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+        await android.swipe(serial, x, y2, x, y1, 500 + Math.round(Math.random() * 200));
+        await sleepOrAbort(serial, 250 + Math.round(Math.random() * 150));
+      }
+      await sleepOrAbort(serial, 300);
+    }
   }
 
   async function runFollowUsersStep(
