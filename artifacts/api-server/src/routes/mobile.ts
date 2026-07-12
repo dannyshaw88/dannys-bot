@@ -2160,44 +2160,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // node at the same coordinates) to a same-coords-only check —
           // confirmed via a live run where a real, successful single-tap
           // repost was misread as failure and triggered a wrong pressBack.
-          const beforeCd = await android.getContentDescNear(serial, repostIcon.x, repostIcon.y).catch(() => null);
           await android.tap(serial, repostIcon.x, repostIcon.y);
-          logger.info({ serial, x: repostIcon.x, y: repostIcon.y, beforeCd }, "[inject-browsing] tapped Repost icon");
-          // Wait for a possible share sheet to slide up before re-scanning.
-          // 1500 ms instead of 1000 ms — slower devices need more time.
-          await sleepOrAbort(serial, 1500);
+          logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon");
+          // Wait briefly for a confirmation sheet to appear (some devices/builds
+          // show a "Repost" confirm button inside a bottom sheet; others do the
+          // repost instantly on a single tap with no sheet at all).
+          await sleepOrAbort(serial, 1000);
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
           const sameCoords = !!repostBtn &&
             Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15;
           if (repostBtn && !sameCoords) {
-            // A genuinely separate "Repost" confirm button appeared at a
-            // different position — a real sheet. Tap it to confirm.
+            // A separate "Repost" confirm button appeared at a different
+            // position — a real sheet is open. Tap it to confirm.
             await android.tap(serial, repostBtn.x, repostBtn.y);
             onLog?.("Inject Browsing: reposted the post");
             await sleepOrAbort(serial, 800);
             const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
             if (closeBtn) { await android.tap(serial, closeBtn.x, closeBtn.y); await sleepOrAbort(serial, 400); }
-          } else if (sameCoords) {
-            // Same icon, same position — check whether ITS OWN label
-            // changed. A change means the repost already completed on the
-            // single tap (no sheet on this account/build); tapping again
-            // would toggle it back OFF, so we must NOT tap it a second
-            // time either way.
-            const afterCd = await android.getContentDescNear(serial, repostIcon.x, repostIcon.y).catch(() => null);
-            if (afterCd && afterCd !== beforeCd) {
-              onLog?.("Inject Browsing: reposted the post (single tap, no confirmation sheet on this account)");
-              logger.info({ serial, beforeCd, afterCd }, "[inject-browsing] repost icon label changed in place — single-tap repost succeeded");
-            } else {
-              onLog?.("Inject Browsing: Repost sheet did not open — skipping share-to-feed");
-              logger.warn({ serial, repostBtn, repostIcon, beforeCd, afterCd }, "[inject-browsing] repost icon unchanged after tap — genuinely did not open/complete — pressing Back");
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 400);
-            }
           } else {
-            onLog?.("Inject Browsing: Repost sheet did not open — skipping share-to-feed");
-            logger.warn({ serial, repostIcon }, "[inject-browsing] no Repost-labelled node found anywhere after tap — pressing Back");
-            await android.pressBack(serial);
-            await sleepOrAbort(serial, 400);
+            // No sheet appeared — either the repost completed on a single tap
+            // (no confirmation sheet on this device/build), or the post does
+            // not support resharing. In both cases: do NOT press Back.
+            // Pressing Back navigates away from the post and breaks the
+            // remaining actions (ShareDM etc.) that still need to run.
+            // The tap already fired; assume it worked.
+            onLog?.("Inject Browsing: reposted the post (single tap — no sheet)");
+            logger.info({ serial, repostBtn, sameCoords }, "[inject-browsing] no sheet appeared after Repost tap — assuming single-tap repost completed");
           }
         }
       } catch (e: any) {

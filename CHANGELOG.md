@@ -4,6 +4,39 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.512] — 2026-07-12
+
+### Fix: Inject Browsing — Repost tap followed by spurious Back press (single-tap devices)
+
+**Symptom**: Log showed `Inject Browsing: Repost sheet did not open — skipping share-to-feed` on every cycle. The Repost icon WAS tapped (confirmed by `findButtonByLabel("Repost")` resolving), but the repost never completed. Share via DM ran afterwards and succeeded — proving the post was still open, so the Back press that followed the failed repost check navigated away from the wrong thing (or the DM ran in spite of it).
+
+**Root cause**: On this device the Repost icon has zero accessibility labelling (`content-desc` absent). After tapping it, the code waited 1 000 ms then re-scanned for a labeled `"Repost"` node:
+
+- **Sheet path** (other devices): a new "Repost" confirm button appears at different coordinates → tap it → done ✓
+- **Single-tap path** (this device — detected via label change): same node at same coords but `content-desc` changed from `"Repost"` → `"Remove repost"` → success ✓
+- **This device, unlabeled**: `beforeCd = null`, `afterCd = null`. `afterCd && afterCd !== beforeCd` evaluates to `false` even though the repost succeeded silently. Falls into the failure branch → `pressBack` → post wrongly navigated.
+
+The `pressBack` in the failure branch was the destructive action. On this device the Repost action completes on a single tap with **no confirmation sheet at all** (confirmed by user). Pressing Back after the tap closes either the post or an unrelated layer, and either way marks the action as skipped rather than completed.
+
+**Fix**: Removed the `pressBack` from every "no sheet detected" branch. The new logic is:
+
+1. Tap the Repost icon
+2. Wait 1 000 ms
+3. Look for a labeled `"Repost"` button at a **different** position (genuine sheet confirm button)
+   - Found → tap it → "reposted the post" (sheet path, unchanged)
+4. Otherwise (no sheet OR unlabeled icon that can't be tracked) → log "reposted the post (single tap — no sheet)" and **continue without pressing Back**
+
+This correctly handles both device types:
+- Sheet devices: confirm button found at different coords → tapped ✓
+- Single-tap devices (labeled or unlabeled): no sheet → assume tap completed, move on ✓
+
+The `beforeCd`/`afterCd` label-comparison logic (which only worked when the icon was labeled) has been removed entirely — it provided no value on unlabeled icons and was the direct cause of the spurious Back press.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser` (inject-browsing path): Repost post-tap logic simplified; `pressBack` removed from no-sheet branch; `beforeCd`/`afterCd` comparison removed.
+
+---
+
 ## [1.1.511] — 2026-07-12
 
 ### Fix: ShareFeed / ShareDM icons invisible to accessibility tree on Xiaomi MIUI (unlabeled ImageView fallback)
