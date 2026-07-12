@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.506] — 2026-07-12
+
+### Fix (regression): Comment icon tapped instead of Share to Feed / Share via DM
+
+**Symptom**: Immediately after the v1.1.505 fix, a live run showed Like working correctly, but the action logged as "reposted the post" / "shared the post via DM" was actually a tap on the Comment icon — the same failure mode that was fixed 5 versions earlier (v1.1.499/v1.1.500), now reappearing.
+
+**Root cause**: v1.1.505 changed the tap-target priority to prefer `icons.shareFeed`/`icons.shareDm` (coordinates from `findFeedActionIcons`'s row-scan) over the exact-label `findButtonByLabel("Repost"/"Send"/"Direct"/"Message")` scan, reasoning that the row-scan's diagnostic (`ShareFeed:✓`) proved the icon was on screen. That's true, but `findFeedActionIcons` only trusts content-desc labels for identification; when a role's label is missing or doesn't match on a given device/Instagram build, it silently falls back to positional guessing (leftmost unclaimed node) — the exact ambiguity that caused the original v1.1.499/v1.1.500 bug. Preferring that guess over the always-exact label scan reintroduced it: the "guessed" coordinate landed on the Comment icon, and the code taps first, checks second, so the tap fired before anything could catch the mismatch.
+
+**Fix**: restored `findButtonByLabel` as the trusted, primary lookup for both Share to Feed and Share via DM — it only ever returns a node whose content-desc literally matches, so it cannot mis-fire. `icons.shareFeed` / `icons.shareDm` are now used strictly as a last-resort fallback when the label scan finds nothing at all, not preferred over it. All of v1.1.505's added `onLog` diagnostics (roll-missed, icon-not-found, sheet-didn't-open, send-not-confirmed, errors) are unchanged and still fire on every path.
+
+**Rule for future changes to this code**: never prefer a positionally-guessed coordinate over an exact content-desc label match for these action-bar icons — this is now the second time inverting that priority caused the same bug.
+
+---
+
 ## [1.1.505] — 2026-07-12
 
 ### Fix: Share-to-DM (and Share-to-Feed) icon silently never tapped during Inject Browsing

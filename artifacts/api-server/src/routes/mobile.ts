@@ -2075,18 +2075,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Inject Browsing: share-to-feed roll missed — skipping");
     } else {
       try {
-        // Prefer the coordinates findFeedActionIcons already resolved for
-        // THIS post in the same scan that found the Like button — it's the
-        // same accessibility dump, so if it says shareFeed is at (x,y), that
-        // node is definitely on screen right now. Re-scanning independently
-        // via findButtonByLabel("Repost") was the previous approach, but on
-        // some devices/builds its content-desc match misses even when the
-        // row-scan plainly found the icon (confirmed via the "ShareFeed:✓"
-        // diagnostic immediately above while the tap never happened) —
-        // that's what silently "skipped" this step with no rescue log.
-        // findButtonByLabel is now only a fallback when the row-scan came
-        // back null for this icon.
-        const repostIcon = icons.shareFeed ?? await android.findButtonByLabel(serial, "Repost").catch(() => null);
+        // findButtonByLabel("Repost") is the trusted source — it only
+        // returns a node whose content-desc literally matches "Repost", so
+        // it can never point at the wrong icon. `icons.shareFeed` (from
+        // findFeedActionIcons) is NOT equally trustworthy: when this
+        // post's Repost icon has no content-desc, findFeedActionIcons
+        // falls back to positional guessing (leftmost unclaimed node),
+        // which silently mis-assigns the Comment icon's coordinates to
+        // `shareFeed` whenever an icon is missing/unlabeled on this
+        // device/build. That regression (Comment tapped instead of
+        // Share, previously fixed in v1.1.499/v1.1.500) came back when
+        // this code briefly preferred `icons.shareFeed` over the label
+        // scan — do NOT invert this priority again. `icons.shareFeed` is
+        // only used as a last resort when the label scan finds nothing.
+        const repostIcon = await android.findButtonByLabel(serial, "Repost").catch(() => null) ?? icons.shareFeed;
         if (!repostIcon) {
           onLog?.("Inject Browsing: Repost icon not found on this post — skipping share-to-feed");
           logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Repost') found the icon — likely absent on this post (sharing disabled by poster)");
@@ -2134,17 +2136,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Inject Browsing: share-via-DM roll missed — skipping");
     } else {
       try {
-        // Same reasoning as share-to-feed above: trust the coordinates
-        // findFeedActionIcons already resolved for THIS post (same scan
-        // that found Like) before falling back to an independent
-        // findButtonByLabel scan. Label-only lookup was silently missing
-        // the icon on some builds even though the row-scan diagnostic
-        // showed "ShareDM:✓" for the very same post.
+        // Same reasoning as share-to-feed above: the label scan is the
+        // trusted source because it only matches a node whose content-desc
+        // literally says "Send"/"Direct"/"Message". `icons.shareDm` can be
+        // a positional guess inside findFeedActionIcons and has previously
+        // mis-mapped onto the Comment icon when a role's label was
+        // missing/unmatched on-device — never prefer it over the label
+        // scan. It's used only as a last resort when the label scan finds
+        // nothing at all.
         const sendIcon =
-          icons.shareDm ??
-          await android.findButtonByLabel(serial, "Send").catch(() => null) ??
-          await android.findButtonByLabel(serial, "Direct").catch(() => null) ??
-          await android.findButtonByLabel(serial, "Message").catch(() => null);
+          (await android.findButtonByLabel(serial, "Send").catch(() => null)) ??
+          (await android.findButtonByLabel(serial, "Direct").catch(() => null)) ??
+          (await android.findButtonByLabel(serial, "Message").catch(() => null)) ??
+          icons.shareDm;
         if (!sendIcon) {
           onLog?.("Inject Browsing: Send icon not found on this post — skipping share-via-DM");
           logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Send'/'Direct'/'Message') found the icon — likely absent or unlabeled on this build");
