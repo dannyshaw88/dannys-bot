@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.514] — 2026-07-12
+
+### Fix: `injectBrowsingActivatePctMin is not defined` — missing destructure in automation-cycle endpoint
+
+**Symptom**: Every Follow run with Inject Browsing enabled immediately hit `▶ Follow step error — injectBrowsingActivatePctMin is not defined`, aborting inject browsing entirely.
+
+**Root cause**: The automation-cycle endpoint's destructuring block was not updated when `injectBrowsingActivatePctMin/Max` were added to the zod schema in v1.1.513. The zod schema parsed them fine and the browsing-params construction referenced them, but the variables were never extracted from the parsed object, so JS threw a `ReferenceError` at the point the browsing object literal was built.
+
+**Fix**: Added `injectBrowsingActivatePctMin, injectBrowsingActivatePctMax` to the destructuring at the top of the automation-cycle handler.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — destructuring block: two new variables added
+
+---
+
+### Fix: UI — Like % / Share feed % / Share to DM % moved onto same row as Click posts %
+
+The three post-action percentage fields (Like %, Share feed %, Share to DM %) were rendered in a separate `<div>` row below Click posts %, creating an unnecessary extra row in the Inject Browsing panel. All four fields now live in the same flex-wrap row. No logic change.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — removed the separate Row 3 wrapper; Like/Share feed/Share to DM divs merged into the existing Click posts % row
+
+---
+
 ## [1.1.513] — 2026-07-12
 
 ### Fix: Inject Browsing — DM share recipient not selected (accessibility scan replaces fixed coordinates)

@@ -2492,6 +2492,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
         followEnabled, followUsersMin, followUsersMax, followSources,
         injectBrowsingEnabled,
+        injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
         injectBrowsingFeedChanceMin, injectBrowsingFeedChanceMax,
         injectBrowsingFeedMin, injectBrowsingFeedMax,

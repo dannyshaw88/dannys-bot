@@ -1717,10 +1717,6 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-          </div>
-
-          {/* Row 3: Like / Share feed / Share to DM */}
-          <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Like %</Label>
               <div className="flex items-center gap-2">
