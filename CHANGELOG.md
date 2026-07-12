@@ -4,6 +4,53 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.490] — 2026-07-12
+
+### Feature: Follow Users overhaul — HikerAPI-based following + keyboard coordinate fix + new Target Sources & Inject Browsing UI
+
+Complete replacement of the mobile farm's **Follow Users** mechanism inside the Human Session Tool automation panel.
+
+#### What changed
+
+**Backend (`artifacts/api-server`)**
+
+- `src/routes/mobile.ts`
+  - **Removed** the story-inline follow mechanism entirely: `followEnabled`/`followPercentMin/Max`, `followDelayAfterMinSec/MaxSec`, `followMaxPerDayMin/Max`, `followMaxPerHourMin/Max`, `followSkipIndianUsers`, `followStopOnBlockEnabled/Minutes`, `getFollowState`, `hasIndianScript`, `canFollowNow`, `onFollowed` — all gone from `automationCycleSchema`, the cycle handler, and `runViewStoriesFromFeedLoop`.
+  - **Replaced** with a new post-cycle follow step (`runFollowUsersStep`) that fires after stories, before closing Instagram:
+    1. Reads `followUsersMin`/`followUsersMax` to pick a random per-cycle count.
+    2. Reads `followSources` (array of `{type, value}` stored inline in automation settings JSON) and calls HikerAPI (`getHashtagUsers` for hashtag sources, `getUserByUsername` + `getFollowers` for followers-of-account sources) to collect candidate usernames.
+    3. Shuffles candidates, deduplicates, and follows each one by navigating Instagram's Search tab, typing `@username` character-by-character on the on-screen keyboard via the new `typeViaOnscreenKeyboard` function, finding the user in results, and tapping Follow on their profile.
+  - Added `followUsersMin`, `followUsersMax`, `followSources` to `automationCycleSchema` (plus all 28 `injectProfile*`/`injectSearch*`/`injectSuggested*` browsing settings for UI parity with the desktop Follow Tool — stored but not yet wired into ADB automation actions).
+  - Added in-memory per-serial follow tracking (`mobileFollowedUsers` Map + `recordMobileFollow`) and a new `GET /api/mobile/devices/:serial/followed-users` endpoint that returns the session's follow log.
+  - `runViewStoriesFromFeedLoop` signature simplified: all follow parameters removed; return type is now `{ storiesWatched: number }` (no `followed` field).
+
+- `src/mobile/androidManager.ts`
+  - **`typeViaOnscreenKeyboard(serial, text, onLog?)`** — new exported function that fixes the `d→f` / `a→s` keyboard coordinate-offset bug. Instead of hardcoded or formula-derived x/y positions (which drift with DPI, keyboard theme, and per-row indent), it dumps the accessibility tree once per keyboard layer, finds each key's exact bounds from the XML, and taps the real centre. Handles the `@` symbol by switching to the `?123` symbol layer, tapping `@`, then switching back to ABC. Falls back to `adb shell input text` for any key that can't be found in the dump.
+  - **`findInstagramSearchTab(serial)`** — finds the Search (magnifying glass) icon in Instagram's bottom nav via UIAutomator, with resource-ID and content-desc fallbacks.
+  - **`findInstagramSearchBar(serial)`** — finds the search input field after tapping the Search tab; uses resource-ID first, then EditText position, then text match.
+  - **`findAndTapUserInSearch(serial, username)`** — waits for search results to populate and taps the first result matching the username.
+  - **`tapFollowButtonOnProfilePage(serial)`** — finds and taps the Follow button on a profile page via UIAutomator bounds.
+
+**Frontend (`artifacts/dannys-bot`)**
+
+- `src/pages/MobilePage.tsx`
+  - **`AutomationSettingsData` type** — replaced 11 old follow fields with `followUsersMin`, `followUsersMax`, `followSources: {type, value}[]`, and 28 inject-browsing settings.
+  - **`AUTOMATION_DEFAULTS`** — updated to match new type.
+  - **POST body** in `useAutomationSettings` fetch call — updated to send new fields.
+  - **`AutomationSettingsPanel`** — added 6 new local state variables (before the null-check early-return, honoring React hooks rules): `showBrowsingDialog`, `showFollowedUsers`, `newFollowSourceType`, `newFollowSourceValue`, `mobileFollowedList`, `loadingFollowed`; `loadFollowedUsers` callback to fetch from the new endpoint.
+  - **Follow Users UI section** completely replaced:
+    - Removed: description paragraph ("Follows the owner of a story…"), "Follow % of stories watched" percent fields, "Delay after each follow", "Max follows per day", "Max follows per hour", "Skip Indian Users" checkbox, "Stop on block" checkbox + minutes field.
+    - Added: **"Users to follow per cycle"** min/max integer fields.
+    - Added: **Inject Browsing** subsection — checkbox, quick Search session count inputs, and an "Open" button that launches a full-detail dialog covering Search Browsing, Suggested Browsing, and Profile Browsing with all sub-settings (before-follow %, feed chance %, feed posts, click post, like %, share-to-feed %, share-to-DM %).
+    - Added: **Target Sources** — inline list with per-entry remove buttons, type selector (Hashtag / Followers of Account), value input, Add/Clear-all controls. Sources are stored in `settings.followSources` (no separate DB table).
+    - Added: **Followed Users** — "View / Hide" toggle button that fetches from `GET /api/mobile/devices/:serial/followed-users` and renders a scrollable table of `@username` + followed-at time for the current server session.
+
+#### Keyboard coordinate bug fix (root cause)
+
+The old code calculated key x-positions with a single uniform formula applied to all keyboard rows, which ignored the left-indent offset of row 2 (a–l) relative to row 1 (q–p). On a 1080 px screen this shifted every row-2 tap roughly one key-width to the right, causing `d→f`, `a→s`, etc. The new `typeViaOnscreenKeyboard` sidesteps the entire coordinate-math problem: it reads key positions directly from the live accessibility tree on every keyboard-layer switch, so the correct bounds are always used regardless of screen size, keyboard theme, or OEM layout customisation.
+
+---
+
 ## [1.1.489] — 2026-07-12
 
 ### Fix: story-open confirmation was still using the slow check, and share-icon detection could lock onto the wrong row on screen

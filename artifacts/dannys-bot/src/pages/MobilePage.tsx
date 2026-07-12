@@ -940,23 +940,33 @@ interface AutomationSettingsData {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
-  // Follow Users (12 Jul 2026) — settings mirrored from the old, separate
-  // Follow Tool (Accounts → Human Session Tool), minus the two candidate-
-  // sourcing fields that don't apply to this feed-driven flow ("Get
-  // Suggested Users", "Search by Username"): here the candidate is simply
-  // whoever's story was just watched.
+  // Follow Users — HikerAPI-driven follow flow.
+  // followSources is stored inline (no separate DB table) to keep mobile
+  // settings self-contained. Each entry is a source the HikerAPI client
+  // will query for target usernames.
   followEnabled: boolean;
-  followPercentMin: number;
-  followPercentMax: number;
-  followDelayAfterMinSec: number;
-  followDelayAfterMaxSec: number;
-  followMaxPerDayMin: number;
-  followMaxPerDayMax: number;
-  followMaxPerHourMin: number;
-  followMaxPerHourMax: number;
-  followSkipIndianUsers: boolean;
-  followStopOnBlockEnabled: boolean;
-  followStopOnBlockMinutes: number;
+  followUsersMin: number;
+  followUsersMax: number;
+  followSources: { type: string; value: string }[];
+  // Inject Browsing (settings parity with desktop Follow Tool; stored but
+  // not yet wired into ADB mobile automation actions).
+  injectSearchEnabled: boolean;
+  injectSearchMin: number; injectSearchMax: number;
+  injectSuggestedEnabled: boolean;
+  injectSuggestedMin: number; injectSuggestedMax: number;
+  injectProfileBrowsingEnabled: boolean;
+  injectProfileBrowsingMin: number; injectProfileBrowsingMax: number;
+  injectProfileBrowsingBeforeFollow: boolean;
+  injectProfileBrowsingBeforeFollowPctMin: number; injectProfileBrowsingBeforeFollowPctMax: number;
+  injectProfileBrowsingFeedChanceMin: number; injectProfileBrowsingFeedChanceMax: number;
+  injectProfileBrowsingFeedMin: number; injectProfileBrowsingFeedMax: number;
+  injectProfileBrowsingClickPostMin: number; injectProfileBrowsingClickPostMax: number;
+  injectProfileBrowsingFeedOrderMin: number; injectProfileBrowsingFeedOrderMax: number;
+  injectProfileBrowsingLikePctMin: number; injectProfileBrowsingLikePctMax: number;
+  injectProfileBrowsingShareToFeedPctMin: number; injectProfileBrowsingShareToFeedPctMax: number;
+  injectProfileBrowsingShareToFeedPctOrderMin: number; injectProfileBrowsingShareToFeedPctOrderMax: number;
+  injectProfileBrowsingShareToDmPctMin: number; injectProfileBrowsingShareToDmPctMax: number;
+  injectProfileBrowsingShareToDmPctOrderMin: number; injectProfileBrowsingShareToDmPctOrderMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -972,12 +982,22 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
   followEnabled: false,
-  followPercentMin: 0, followPercentMax: 0,
-  followDelayAfterMinSec: 5, followDelayAfterMaxSec: 15,
-  followMaxPerDayMin: 0, followMaxPerDayMax: 0,
-  followMaxPerHourMin: 0, followMaxPerHourMax: 0,
-  followSkipIndianUsers: false,
-  followStopOnBlockEnabled: false, followStopOnBlockMinutes: 60,
+  followUsersMin: 1, followUsersMax: 3,
+  followSources: [],
+  injectSearchEnabled: false, injectSearchMin: 1, injectSearchMax: 1,
+  injectSuggestedEnabled: false, injectSuggestedMin: 1, injectSuggestedMax: 1,
+  injectProfileBrowsingEnabled: false, injectProfileBrowsingMin: 1, injectProfileBrowsingMax: 1,
+  injectProfileBrowsingBeforeFollow: false,
+  injectProfileBrowsingBeforeFollowPctMin: 0, injectProfileBrowsingBeforeFollowPctMax: 0,
+  injectProfileBrowsingFeedChanceMin: 100, injectProfileBrowsingFeedChanceMax: 100,
+  injectProfileBrowsingFeedMin: 3, injectProfileBrowsingFeedMax: 6,
+  injectProfileBrowsingClickPostMin: 0, injectProfileBrowsingClickPostMax: 0,
+  injectProfileBrowsingFeedOrderMin: 0, injectProfileBrowsingFeedOrderMax: 0,
+  injectProfileBrowsingLikePctMin: 0, injectProfileBrowsingLikePctMax: 0,
+  injectProfileBrowsingShareToFeedPctMin: 0, injectProfileBrowsingShareToFeedPctMax: 0,
+  injectProfileBrowsingShareToFeedPctOrderMin: 0, injectProfileBrowsingShareToFeedPctOrderMax: 0,
+  injectProfileBrowsingShareToDmPctMin: 0, injectProfileBrowsingShareToDmPctMax: 0,
+  injectProfileBrowsingShareToDmPctOrderMin: 0, injectProfileBrowsingShareToDmPctOrderMax: 0,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1130,17 +1150,36 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
             followEnabled: s.followEnabled,
-            followPercentMin: s.followPercentMin,
-            followPercentMax: s.followPercentMax,
-            followDelayAfterMinSec: s.followDelayAfterMinSec,
-            followDelayAfterMaxSec: s.followDelayAfterMaxSec,
-            followMaxPerDayMin: s.followMaxPerDayMin,
-            followMaxPerDayMax: s.followMaxPerDayMax,
-            followMaxPerHourMin: s.followMaxPerHourMin,
-            followMaxPerHourMax: s.followMaxPerHourMax,
-            followSkipIndianUsers: s.followSkipIndianUsers,
-            followStopOnBlockEnabled: s.followStopOnBlockEnabled,
-            followStopOnBlockMinutes: s.followStopOnBlockMinutes,
+            followUsersMin: s.followUsersMin,
+            followUsersMax: s.followUsersMax,
+            followSources: s.followSources,
+            injectSearchEnabled: s.injectSearchEnabled,
+            injectSearchMin: s.injectSearchMin, injectSearchMax: s.injectSearchMax,
+            injectSuggestedEnabled: s.injectSuggestedEnabled,
+            injectSuggestedMin: s.injectSuggestedMin, injectSuggestedMax: s.injectSuggestedMax,
+            injectProfileBrowsingEnabled: s.injectProfileBrowsingEnabled,
+            injectProfileBrowsingMin: s.injectProfileBrowsingMin, injectProfileBrowsingMax: s.injectProfileBrowsingMax,
+            injectProfileBrowsingBeforeFollow: s.injectProfileBrowsingBeforeFollow,
+            injectProfileBrowsingBeforeFollowPctMin: s.injectProfileBrowsingBeforeFollowPctMin,
+            injectProfileBrowsingBeforeFollowPctMax: s.injectProfileBrowsingBeforeFollowPctMax,
+            injectProfileBrowsingFeedChanceMin: s.injectProfileBrowsingFeedChanceMin,
+            injectProfileBrowsingFeedChanceMax: s.injectProfileBrowsingFeedChanceMax,
+            injectProfileBrowsingFeedMin: s.injectProfileBrowsingFeedMin,
+            injectProfileBrowsingFeedMax: s.injectProfileBrowsingFeedMax,
+            injectProfileBrowsingClickPostMin: s.injectProfileBrowsingClickPostMin,
+            injectProfileBrowsingClickPostMax: s.injectProfileBrowsingClickPostMax,
+            injectProfileBrowsingFeedOrderMin: s.injectProfileBrowsingFeedOrderMin,
+            injectProfileBrowsingFeedOrderMax: s.injectProfileBrowsingFeedOrderMax,
+            injectProfileBrowsingLikePctMin: s.injectProfileBrowsingLikePctMin,
+            injectProfileBrowsingLikePctMax: s.injectProfileBrowsingLikePctMax,
+            injectProfileBrowsingShareToFeedPctMin: s.injectProfileBrowsingShareToFeedPctMin,
+            injectProfileBrowsingShareToFeedPctMax: s.injectProfileBrowsingShareToFeedPctMax,
+            injectProfileBrowsingShareToFeedPctOrderMin: s.injectProfileBrowsingShareToFeedPctOrderMin,
+            injectProfileBrowsingShareToFeedPctOrderMax: s.injectProfileBrowsingShareToFeedPctOrderMax,
+            injectProfileBrowsingShareToDmPctMin: s.injectProfileBrowsingShareToDmPctMin,
+            injectProfileBrowsingShareToDmPctMax: s.injectProfileBrowsingShareToDmPctMax,
+            injectProfileBrowsingShareToDmPctOrderMin: s.injectProfileBrowsingShareToDmPctOrderMin,
+            injectProfileBrowsingShareToDmPctOrderMax: s.injectProfileBrowsingShareToDmPctOrderMax,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1228,6 +1267,24 @@ function AutomationSettingsPanel({
   running: boolean;
   nextRunAt: number | null;
 }) {
+  // Follow Users UI local state — hooks must come before any conditional return.
+  const [showBrowsingDialog, setShowBrowsingDialog] = useState(false);
+  const [showFollowedUsers, setShowFollowedUsers] = useState(false);
+  const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
+  const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
+  const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
+  const [loadingFollowed, setLoadingFollowed] = useState(false);
+
+  const loadFollowedUsers = React.useCallback(async () => {
+    if (!phone?.serial) return;
+    setLoadingFollowed(true);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/followed-users`);
+      const data = await r.json().catch(() => null);
+      if (data?.users) setMobileFollowedList(data.users);
+    } catch {} finally { setLoadingFollowed(false); }
+  }, [phone?.serial]);
+
   if (!phone) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
@@ -1538,6 +1595,7 @@ function AutomationSettingsPanel({
             divider above between View Feed and View Stories from Feed. */}
         <div className="border-t border-border" />
 
+        {/* ── Follow Users header ─────────────────────────────── */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <input
@@ -1551,106 +1609,250 @@ function AutomationSettingsPanel({
             <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
           </div>
           <p className="text-xs text-muted-foreground pl-6">
-            Follows the owner of a story that was just watched above, using the inline Follow button in the story header. Settings mirrored from the old Follow Tool.
+            After stories, navigates to Instagram Search and follows users sourced from HikerAPI (hashtags or followers of an account). Requires a HikerAPI token in Settings → Global.
           </p>
         </div>
 
-        <div className="flex items-start gap-6 flex-wrap">
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Follow % of stories watched</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followPercentMin}
-                onChange={e => setSettings(s => ({ ...s, followPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followPercentMax}
-                onChange={e => setSettings(s => ({ ...s, followPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
-            </div>
+        {/* ── Users to follow per cycle ─────────────────────── */}
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground">Users to follow per cycle</Label>
+          <div className="flex items-center gap-3">
+            <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+              value={settings.followUsersMin}
+              onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
+              disabled={loading} />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+              value={settings.followUsersMax}
+              onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
+              disabled={loading} />
           </div>
+        </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay after each follow (seconds)</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followDelayAfterMinSec}
-                onChange={e => setSettings(s => ({ ...s, followDelayAfterMinSec: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followDelayAfterMaxSec}
-                onChange={e => setSettings(s => ({ ...s, followDelayAfterMaxSec: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Max follows per day</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followMaxPerDayMin}
-                onChange={e => setSettings(s => ({ ...s, followMaxPerDayMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followMaxPerDayMax}
-                onChange={e => setSettings(s => ({ ...s, followMaxPerDayMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">(0 = no cap)</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Max follows per hour</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followMaxPerHourMin}
-                onChange={e => setSettings(s => ({ ...s, followMaxPerHourMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followMaxPerHourMax}
-                onChange={e => setSettings(s => ({ ...s, followMaxPerHourMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">(0 = no cap)</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-6">
+        {/* ── Inject Browsing ───────────────────────────────── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              id="follow-skip-indian"
-              checked={settings.followSkipIndianUsers}
-              onChange={e => setSettings(s => ({ ...s, followSkipIndianUsers: e.target.checked }))}
+              id="inject-search-enabled"
+              checked={settings.injectSearchEnabled}
+              onChange={e => setSettings(s => ({ ...s, injectSearchEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="follow-skip-indian" className="text-sm text-muted-foreground cursor-pointer select-none">Skip Indian Users</label>
+            <label htmlFor="inject-search-enabled" className="text-sm text-muted-foreground cursor-pointer select-none">Inject Browsing</label>
+            <Button
+              variant="outline" size="sm"
+              className="h-7 text-xs px-3 ml-auto"
+              onClick={() => setShowBrowsingDialog(true)}
+            >Open</Button>
           </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="follow-stop-on-block"
-                checked={settings.followStopOnBlockEnabled}
-                onChange={e => setSettings(s => ({ ...s, followStopOnBlockEnabled: e.target.checked }))}
-                disabled={loading}
-                className="w-4 h-4 accent-primary cursor-pointer"
-              />
-              <label htmlFor="follow-stop-on-block" className="text-sm text-muted-foreground cursor-pointer select-none">Stop on block</label>
-            </div>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followStopOnBlockMinutes}
-                onChange={e => setSettings(s => ({ ...s, followStopOnBlockMinutes: clamp4(Number(e.target.value)) }))}
+          {settings.injectSearchEnabled && (
+            <div className="pl-6 flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">Search:</span>
+              <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs"
+                value={settings.injectSearchMin}
+                onChange={e => setSettings(s => ({ ...s, injectSearchMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">minutes</span>
+              <span className="text-xs text-muted-foreground">–</span>
+              <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs"
+                value={settings.injectSearchMax}
+                onChange={e => setSettings(s => ({ ...s, injectSearchMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Inject Browsing dialog ────────────────────────── */}
+        {showBrowsingDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowBrowsingDialog(false)}>
+            <div className="bg-card border border-border rounded-xl p-6 w-[480px] max-h-[80vh] overflow-y-auto space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-foreground">Inject Browsing Settings</h3>
+                <button className="text-muted-foreground hover:text-foreground" onClick={() => setShowBrowsingDialog(false)}>✕</button>
+              </div>
+              <div className="space-y-4 text-sm">
+                {/* Search Browsing */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="inj-search" checked={settings.injectSearchEnabled}
+                      onChange={e => setSettings(s => ({ ...s, injectSearchEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
+                    <label htmlFor="inj-search" className="text-muted-foreground cursor-pointer">Inject Search Browsing</label>
+                  </div>
+                  <div className="pl-6 flex items-center gap-2">
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSearchMin}
+                      onChange={e => setSettings(s => ({ ...s, injectSearchMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-muted-foreground text-xs">–</span>
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSearchMax}
+                      onChange={e => setSettings(s => ({ ...s, injectSearchMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-xs text-muted-foreground">sessions</span>
+                  </div>
+                </div>
+                {/* Suggested Browsing */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="inj-sug" checked={settings.injectSuggestedEnabled}
+                      onChange={e => setSettings(s => ({ ...s, injectSuggestedEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
+                    <label htmlFor="inj-sug" className="text-muted-foreground cursor-pointer">Inject Suggested Browsing</label>
+                  </div>
+                  <div className="pl-6 flex items-center gap-2">
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSuggestedMin}
+                      onChange={e => setSettings(s => ({ ...s, injectSuggestedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-muted-foreground text-xs">–</span>
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSuggestedMax}
+                      onChange={e => setSettings(s => ({ ...s, injectSuggestedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-xs text-muted-foreground">sessions</span>
+                  </div>
+                </div>
+                {/* Profile Browsing */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="inj-profile" checked={settings.injectProfileBrowsingEnabled}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
+                    <label htmlFor="inj-profile" className="text-muted-foreground cursor-pointer">Inject Profile Browsing</label>
+                  </div>
+                  <div className="pl-6 flex items-center gap-2">
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingMin}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-muted-foreground text-xs">–</span>
+                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingMax}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-xs text-muted-foreground">sessions</span>
+                  </div>
+                  <div className="pl-6 flex items-center gap-2">
+                    <input type="checkbox" id="inj-profile-before" checked={settings.injectProfileBrowsingBeforeFollow}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollow: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
+                    <label htmlFor="inj-profile-before" className="text-xs text-muted-foreground cursor-pointer">Browse profile before follow</label>
+                    <Input type="number" min={0} max={100} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingBeforeFollowPctMin}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingBeforeFollowPctMax}
+                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                  <div className="pl-6 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">Feed chance <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%</div>
+                    <div className="flex items-center gap-1">Feed posts <Input type="number" min={1} max={50} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={1} max={50} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                    <div className="flex items-center gap-1">Click post <Input type="number" min={0} max={20} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingClickPostMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingClickPostMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={20} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingClickPostMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingClickPostMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                    <div className="flex items-center gap-1">Feed order <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedOrderMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedOrderMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedOrderMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedOrderMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                    <div className="flex items-center gap-1">Like % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingLikePctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingLikePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                    <div className="flex items-center gap-1">Share feed % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingShareToFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingShareToFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                    <div className="flex items-center gap-1">Share DM % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingShareToDmPctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingShareToDmPctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* ── Target Sources ────────────────────────────────── */}
+        <div className="space-y-2">
+          <Label className="text-sm text-muted-foreground">Target Sources</Label>
+          {settings.followSources.length > 0 ? (
+            <div className="space-y-1">
+              {settings.followSources.map((src, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
+                    {src.type === 'hashtag' ? '#' : '@'}
+                  </span>
+                  <span className="flex-1 text-foreground truncate">{src.value}</span>
+                  <button
+                    onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
+                    disabled={loading}
+                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No sources added yet. Add a hashtag or account below.</p>
+          )}
+          {/* Add new source */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={newFollowSourceType}
+              onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
+              disabled={loading}
+              className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+            >
+              <option value="hashtag">Hashtag</option>
+              <option value="target_followers">Followers of Account</option>
+            </select>
+            <Input
+              className="flex-1 min-w-0 text-xs h-8"
+              placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
+              value={newFollowSourceValue}
+              onChange={e => setNewFollowSourceValue(e.target.value)}
+              disabled={loading}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && newFollowSourceValue.trim()) {
+                  const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                  if (val) {
+                    setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                    setNewFollowSourceValue('');
+                  }
+                }
+              }}
+            />
+            <Button
+              variant="outline" size="sm" className="h-8 text-xs shrink-0"
+              disabled={loading || !newFollowSourceValue.trim()}
+              onClick={() => {
+                const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                if (val) {
+                  setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                  setNewFollowSourceValue('');
+                }
+              }}
+            >Add</Button>
+            {settings.followSources.length > 0 && (
+              <Button
+                variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                disabled={loading}
+                onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
+              >Clear all</Button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Followed Users ───────────────────────────────── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <Label className="text-sm text-muted-foreground">Followed Users</Label>
+            <Button
+              variant="outline" size="sm" className="h-7 text-xs px-3 ml-auto"
+              disabled={loadingFollowed}
+              onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
+            >{showFollowedUsers ? 'Hide' : `View${mobileFollowedList.length > 0 ? ` (${mobileFollowedList.length})` : ''}`}</Button>
+          </div>
+          {showFollowedUsers && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              {loadingFollowed ? (
+                <p className="text-xs text-muted-foreground p-3">Loading…</p>
+              ) : mobileFollowedList.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Username</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Followed at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mobileFollowedList.map((u, i) => (
+                        <tr key={i} className="border-t border-border">
+                          <td className="px-3 py-1.5 text-foreground">@{u.username}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.followedAt).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

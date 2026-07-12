@@ -18,6 +18,7 @@ import * as proxyRelay from "../mobile/proxyRelay";
 // a real device actually streams frames.
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
+import { HikerApiClient } from "../instagram/hikerApiClient";
 
 const execFileP = promisify(execFile);
 
@@ -1348,34 +1349,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     slideWatchPctMin: number; slideWatchPctMax: number;
     likePercentMin: number; likePercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
-    followEnabled?: boolean;
-    followPercentMin?: number; followPercentMax?: number;
-    followDelayAfterMinSec?: number; followDelayAfterMaxSec?: number;
-    followSkipIndianUsers?: boolean;
-    canFollowNow?: () => boolean;
-    onFollowed?: () => void;
     onLog?: (msg: string) => void;
-  }): Promise<{ storiesWatched: number; followed: number }> {
+  }): Promise<{ storiesWatched: number }> {
     const {
       slidesMin, slidesMax,
       slideWatchPctMin, slideWatchPctMax,
       likePercentMin, likePercentMax,
       shareDmPercentMin, shareDmPercentMax,
-      followEnabled = false,
-      followPercentMin = 0, followPercentMax = 0,
-      followDelayAfterMinSec = 5, followDelayAfterMaxSec = 15,
-      followSkipIndianUsers = false,
-      canFollowNow = () => true,
-      onFollowed,
       onLog,
     } = params;
-    let followed = 0;
 
     const totalStories = Math.floor(
       Math.min(slidesMin, slidesMax) +
       Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
     );
-    if (totalStories <= 0) return { storiesWatched: 0, followed: 0 };
+    if (totalStories <= 0) return { storiesWatched: 0 };
 
     const { w, h } = getScreenSize(serial);
     // Logged once per run so a bad like/share tap or a false "sharing
@@ -1391,8 +1379,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
     const shareChance = (Math.min(shareDmPercentMin, shareDmPercentMax) +
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
-    const followChance = (Math.min(followPercentMin, followPercentMax) +
-      Math.random() * Math.abs(followPercentMax - followPercentMin)) / 100;
 
     // Returns true only while the story viewer is genuinely still on screen.
     // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
@@ -1449,7 +1435,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // accidentally interacting with the wrong screen.
     if (!storyOpened) {
       onLog?.("Story tray: no story opened — skipping story actions for this cycle");
-      return { storiesWatched: 0, followed: 0 };
+      return { storiesWatched: 0 };
     }
 
     await sleepOrAbort(serial, 1800); // let viewer animate open
@@ -1655,40 +1641,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      // Follow the story owner via the inline "Follow" pill in the story
-      // header — no navigation away from the viewer required. Gated behind
-      // stillInStoryViewer() same as every other action here; a story that
-      // already advanced/closed has nothing left to follow.
-      if (followEnabled && Math.random() < followChance && (await stillInStoryViewer())) {
-        if (!canFollowNow()) {
-          onLog?.(`Story ${s + 1}: follow skipped — daily/hourly follow limit reached`);
-        } else {
-          let skip = false;
-          if (followSkipIndianUsers) {
-            const uname = await android.getStoryOwnerUsername(serial).catch(() => null);
-            if (uname && hasIndianScript(uname)) {
-              skip = true;
-              onLog?.(`Story ${s + 1}: follow skipped — Indian-script username (@${uname})`);
-            }
-          }
-          if (!skip) {
-            const followBtn = await android.findStoryFollowButton(serial).catch(() => null);
-            if (followBtn && (await stillInStoryViewer())) {
-              await android.tap(serial, followBtn.x, followBtn.y);
-              followed++;
-              onFollowed?.();
-              onLog?.(`Story ${s + 1}: followed story owner (tap at (${followBtn.x},${followBtn.y}))`);
-              const delayLo = Math.min(followDelayAfterMinSec, followDelayAfterMaxSec);
-              const delayHi = Math.max(followDelayAfterMinSec, followDelayAfterMaxSec);
-              const delayMs = Math.round((delayLo + Math.random() * (delayHi - delayLo)) * 1000);
-              await sleepOrAbort(serial, delayMs);
-            } else {
-              onLog?.(`Story ${s + 1}: follow skipped — already following or Follow button not found`);
-            }
-          }
-        }
-      }
-
       // Don't tap "advance to next slide" if we've already left the story
       // viewer — that tap would land on the feed and register as a like/
       // navigation there instead of harmlessly advancing a story slide.
@@ -1720,7 +1672,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 800);
 
-    return { storiesWatched, followed };
+    return { storiesWatched };
   }
 
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
@@ -1765,55 +1717,192 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
-    // Follow Users (12 Jul 2026) — follows the owner of a story just watched,
-    // using the inline "Follow" pill in the story header (no navigation away
-    // from the story viewer required). Settings mirror the old, separate
-    // Follow Tool's limits/safety fields; the scraping-based candidate
-    // sources from that tool ("Get Suggested Users", "Search by Username")
-    // don't apply here — candidates are simply whoever's story was just
-    // watched, so those two fields were intentionally left out.
+    // Follow Users — HikerAPI-driven follow flow. HikerAPI fetches candidates
+    // from the configured target sources (hashtags / followers-of-account);
+    // the software then navigates to Instagram Search and follows each user by
+    // typing their @username character-by-character on the on-screen keyboard.
     followEnabled: z.boolean().default(false),
-    followPercentMin: z.number().min(0).max(100).default(0),
-    followPercentMax: z.number().min(0).max(100).default(0),
-    followDelayAfterMinSec: z.number().min(0).max(300).default(5),
-    followDelayAfterMaxSec: z.number().min(0).max(300).default(15),
-    followMaxPerDayMin: z.number().min(0).max(9999).default(0),
-    followMaxPerDayMax: z.number().min(0).max(9999).default(0),
-    followMaxPerHourMin: z.number().min(0).max(9999).default(0),
-    followMaxPerHourMax: z.number().min(0).max(9999).default(0),
-    followSkipIndianUsers: z.boolean().default(false),
-    followStopOnBlockEnabled: z.boolean().default(false),
-    followStopOnBlockMinutes: z.number().min(0).max(1440).default(60),
+    followUsersMin: z.number().min(0).max(9999).default(1),
+    followUsersMax: z.number().min(0).max(9999).default(3),
+    followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
+    // Inject Browsing settings (stored for UI parity with the desktop Follow
+    // Tool; not yet wired into mobile ADB automation actions).
+    injectSearchEnabled: z.boolean().default(false),
+    injectSearchMin: z.number().min(0).max(100).default(1),
+    injectSearchMax: z.number().min(0).max(100).default(1),
+    injectSuggestedEnabled: z.boolean().default(false),
+    injectSuggestedMin: z.number().min(0).max(100).default(1),
+    injectSuggestedMax: z.number().min(0).max(100).default(1),
+    injectProfileBrowsingEnabled: z.boolean().default(false),
+    injectProfileBrowsingMin: z.number().min(0).max(100).default(1),
+    injectProfileBrowsingMax: z.number().min(0).max(100).default(1),
+    injectProfileBrowsingBeforeFollow: z.boolean().default(false),
+    injectProfileBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
+    injectProfileBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
+    injectProfileBrowsingFeedMin: z.number().min(1).max(50).default(3),
+    injectProfileBrowsingFeedMax: z.number().min(1).max(50).default(6),
+    injectProfileBrowsingClickPostMin: z.number().min(0).max(20).default(0),
+    injectProfileBrowsingClickPostMax: z.number().min(0).max(20).default(0),
+    injectProfileBrowsingFeedOrderMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingFeedOrderMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingLikePctMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingLikePctMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToFeedPctMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToFeedPctMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToFeedPctOrderMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToFeedPctOrderMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToDmPctMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToDmPctMax: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToDmPctOrderMin: z.number().min(0).max(100).default(0),
+    injectProfileBrowsingShareToDmPctOrderMax: z.number().min(0).max(100).default(0),
   });
   const automationCycleInProgress = new Set<string>();
 
-  // Per-serial Follow Users rate-limit state (12 Jul 2026). Kept in memory,
-  // module-scoped like the other per-serial Sets/Maps above — it resets if
-  // the server restarts, same tradeoff the rest of this file already makes
-  // for cycle-abort tracking. dailyCount/hourlyCount reset lazily the next
-  // time a follow is attempted after their window has elapsed, rather than
-  // on a timer, so an idle device costs nothing.
-  type FollowState = {
-    dailyCount: number; dailyResetAt: number;
-    hourlyCount: number; hourlyResetAt: number;
-    blockedUntil: number;
+  // Per-serial in-memory log of users followed during this server session.
+  // Resets on restart — kept lightweight intentionally (no DB write needed
+  // for mobile session follow tracking).
+  type MobileFollowedEntry = { username: string; source: string; followedAt: number };
+  const mobileFollowedUsers = new Map<string, MobileFollowedEntry[]>();
+  const getMobileFollowedList = (serial: string): MobileFollowedEntry[] => {
+    if (!mobileFollowedUsers.has(serial)) mobileFollowedUsers.set(serial, []);
+    return mobileFollowedUsers.get(serial)!;
   };
-  const followState = new Map<string, FollowState>();
-  const getFollowState = (serial: string): FollowState => {
-    const now = Date.now();
-    let s = followState.get(serial);
-    if (!s) {
-      s = { dailyCount: 0, dailyResetAt: now + 86_400_000, hourlyCount: 0, hourlyResetAt: now + 3_600_000, blockedUntil: 0 };
-      followState.set(serial, s);
+  const recordMobileFollow = (serial: string, username: string, source: string) => {
+    getMobileFollowedList(serial).unshift({ username, source, followedAt: Date.now() });
+  };
+
+  // ── HikerAPI-driven follow step ──────────────────────────────────────────
+  async function runFollowUsersStep(
+    serial: string,
+    params: {
+      usersMin: number;
+      usersMax: number;
+      sources: { type: string; value: string }[];
+      onLog?: (msg: string) => void;
+      recordFollow?: (username: string) => void;
+    },
+  ): Promise<number> {
+    const { usersMin, usersMax, sources, onLog, recordFollow } = params;
+
+    if (!sources.length) {
+      onLog?.("Follow: no target sources configured — skipping");
+      return 0;
     }
-    if (now >= s.dailyResetAt) { s.dailyCount = 0; s.dailyResetAt = now + 86_400_000; }
-    if (now >= s.hourlyResetAt) { s.hourlyCount = 0; s.hourlyResetAt = now + 3_600_000; }
-    return s;
-  };
-  // Covers Devanagari, Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu,
-  // Kannada, Malayalam — all major South Asian Indic scripts. Mirrors the
-  // same check already used by the older, separate Follow Tool.
-  const hasIndianScript = (text: string): boolean => /[\u0900-\u0D7F]/.test(text);
+
+    const globalSettings = await storage.getGlobalSettings();
+    const hikerApiToken: string = globalSettings?.hikerApiToken ?? "";
+    if (!hikerApiToken) {
+      onLog?.("Follow: HikerAPI token not configured (Settings → Global → HikerAPI) — skipping");
+      return 0;
+    }
+
+    const lo = Math.min(usersMin, usersMax);
+    const hi = Math.max(usersMin, usersMax);
+    const targetCount = lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo));
+    if (targetCount === 0) { onLog?.("Follow: target count is 0 — skipping"); return 0; }
+
+    onLog?.(`Follow: targeting ${targetCount} users from ${sources.length} source(s)`);
+
+    const hiker = new HikerApiClient(hikerApiToken);
+    const candidates: string[] = [];
+
+    for (const src of sources) {
+      if (candidates.length >= targetCount * 3) break;
+      try {
+        if (src.type === "hashtag") {
+          const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+          candidates.push(...res.users.map(u => u.username));
+          onLog?.(`Follow: #${src.value} → ${res.users.length} users`);
+        } else if (src.type === "target_followers") {
+          const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+          if (!userInfo?.pk) { onLog?.(`Follow: could not resolve @${src.value} — skipping source`); continue; }
+          const followers = await hiker.getFollowers(userInfo.pk, 50);
+          candidates.push(...followers.map(u => u.username));
+          onLog?.(`Follow: @${src.value} followers → ${followers.length} users`);
+        }
+      } catch (e: any) {
+        onLog?.(`Follow: HikerAPI error for source "${src.value}": ${e?.message}`);
+      }
+    }
+
+    if (!candidates.length) { onLog?.("Follow: no candidates collected — skipping"); return 0; }
+
+    const targets = [...new Set(candidates)].sort(() => Math.random() - 0.5).slice(0, targetCount);
+    onLog?.(`Follow: following ${targets.length} unique users`);
+
+    let followed = 0;
+
+    // Navigate to Search tab
+    const searchTab = await android.findInstagramSearchTab(serial).catch(() => null);
+    if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
+    await android.tap(serial, searchTab.x, searchTab.y);
+    await sleepOrAbort(serial, 1500);
+
+    for (const username of targets) {
+      try {
+        onLog?.(`Follow: → @${username}`);
+
+        // Tap the search bar
+        const searchBar = await android.findInstagramSearchBar(serial).catch(() => null);
+        if (!searchBar) { onLog?.("Follow: search bar not found — giving up"); break; }
+        await android.tap(serial, searchBar.x, searchBar.y);
+        await sleepOrAbort(serial, 600);
+
+        // Clear any existing text
+        await android.keyevent(serial, "KEYCODE_MOVE_END");
+        await sleepOrAbort(serial, 150);
+        await android.keyevent(serial, "KEYCODE_CTRL_A");
+        await sleepOrAbort(serial, 150);
+        await android.keyevent(serial, "KEYCODE_DEL");
+        await sleepOrAbort(serial, 300);
+
+        // Type @username character by character on the on-screen keyboard
+        // (fixes the d→f / a→s coordinate-offset bug via UIAutomator key detection)
+        await android.typeViaOnscreenKeyboard(serial, `@${username}`, onLog);
+        await sleepOrAbort(serial, 1200);
+
+        // Tap the matched user in results
+        const found = await android.findAndTapUserInSearch(serial, username).catch(() => false);
+        if (!found) {
+          onLog?.(`Follow: @${username} not found in results — skipping`);
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 500);
+          continue;
+        }
+
+        await sleepOrAbort(serial, 1500);
+
+        // Tap Follow on the profile page
+        const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
+        if (didFollow) {
+          followed++;
+          recordFollow?.(username);
+          onLog?.(`Follow: ✓ followed @${username} (${followed}/${targets.length})`);
+          await sleepOrAbort(serial, 1000 + Math.round(Math.random() * 1500));
+        } else {
+          onLog?.(`Follow: Follow button not found on @${username} — already following?`);
+        }
+
+        // Go back to search for next user
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 600);
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Follow: error on @${username}: ${e?.message}`);
+      }
+    }
+
+    return followed;
+  }
+
+  // ── Followed Users endpoint — returns in-memory follow log per device ─────
+  app.get("/api/mobile/devices/:serial/followed-users", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const list = getMobileFollowedList(serial);
+    res.json({ ok: true, users: list });
+  });
 
   // Abort endpoint — called by the frontend when the master toggle is switched
   // off mid-cycle.  The frontend passes the same cycleId it used to start the
@@ -1848,6 +1937,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
     let storiesWatched = 0;
+    let followedCount = 0;
     const cycleStart = Date.now();
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
@@ -1866,29 +1956,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
-        followEnabled, followPercentMin, followPercentMax,
-        followDelayAfterMinSec, followDelayAfterMaxSec,
-        followMaxPerDayMin, followMaxPerDayMax,
-        followMaxPerHourMin, followMaxPerHourMax,
-        followSkipIndianUsers,
-        followStopOnBlockEnabled, followStopOnBlockMinutes,
+        followEnabled, followUsersMin, followUsersMax, followSources,
       } = automationCycleSchema.parse(req.body);
-
-      // Follow Users rate-limit gate for this cycle — sampled once so the
-      // caps stay consistent across every story slide in this run, same
-      // pattern as the like/share chances below.
-      const fst = getFollowState(serial);
-      const followMaxPerDay  = Math.round(Math.min(followMaxPerDayMin, followMaxPerDayMax) +
-        Math.random() * Math.abs(followMaxPerDayMax - followMaxPerDayMin));
-      const followMaxPerHour = Math.round(Math.min(followMaxPerHourMin, followMaxPerHourMax) +
-        Math.random() * Math.abs(followMaxPerHourMax - followMaxPerHourMin));
-      const canFollowNow = () => {
-        if (followStopOnBlockEnabled && Date.now() < fst.blockedUntil) return false;
-        if (followMaxPerDay > 0 && fst.dailyCount >= followMaxPerDay) return false;
-        if (followMaxPerHour > 0 && fst.hourlyCount >= followMaxPerHour) return false;
-        return true;
-      };
-      const onFollowed = () => { fst.dailyCount++; fst.hourlyCount++; };
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
@@ -1971,7 +2040,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll,
       // skipped entirely when the "View Stories from Feed" checkbox is
       // unticked.
-      let followedCount = 0;
       if (storiesEnabled && viewStoriesSlidesMax > 0) {
         tLog("▶ Tapping Home tab for stories…");
         // Find the real Home tab via the accessibility tree instead of a
@@ -2011,19 +2079,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
           likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
           shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
-          followEnabled, followPercentMin, followPercentMax,
-          followDelayAfterMinSec, followDelayAfterMaxSec,
-          followSkipIndianUsers,
-          canFollowNow, onFollowed,
           onLog: (msg) => tLog(`  ${msg}`),
         });
         storiesWatched = result.storiesWatched;
-        followedCount = result.followed;
-        steps.push(`stories(${result.storiesWatched} watched, ${result.followed} followed)`);
-        tLog(`▶ Stories done — ${result.storiesWatched} watched, ${result.followed} followed`);
+        steps.push(`stories(${result.storiesWatched} watched)`);
+        tLog(`▶ Stories done — ${result.storiesWatched} watched`);
       } else if (!storiesEnabled) {
         steps.push("stories(skipped — View Stories from Feed disabled)");
         tLog("▶ View Stories from Feed disabled — skipping stories");
+      }
+
+      // 4b. Follow Users — HikerAPI-driven follow step. Runs after stories/feed
+      // so the phone is already on Instagram; navigates to Search, types each
+      // @username character by character on the on-screen keyboard, and taps Follow.
+      if (followEnabled) {
+        tLog("▶ Follow Users — fetching targets via HikerAPI…");
+        try {
+          const followCount = await runFollowUsersStep(serial, {
+            usersMin: followUsersMin,
+            usersMax: followUsersMax,
+            sources: followSources,
+            onLog: (msg) => tLog(`  ${msg}`),
+            recordFollow: (username) => recordMobileFollow(serial, username, "hikerapi"),
+          });
+          followedCount = followCount;
+          steps.push(`follow(${followCount} followed)`);
+          tLog(`▶ Follow done — ${followCount} users followed`);
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          tLog(`▶ Follow step error — ${e?.message}`);
+          steps.push("follow(error)");
+        }
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a

@@ -2510,6 +2510,235 @@ export async function installInstagramFromPlayStore(serial: string): Promise<{ o
   }
 }
 
+/**
+ * Find the Instagram Search tab (magnifying-glass icon) in the bottom nav.
+ * Returns the tap coordinates or null if not found.
+ */
+export async function findInstagramSearchTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  const byId = _findByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
+  if (byId) return byId;
+  return _findElem(xml, "Search", "Explore");
+}
+
+/**
+ * Find the Instagram search input bar (after tapping the Search tab).
+ * Returns the tap coordinates or null if not found.
+ */
+export async function findInstagramSearchBar(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  const byId = _findByResId(xml,
+    ":id/action_bar_search_edit_text", ":id/search_bar_input",
+    ":id/search_bar", ":id/search_input", ":id/search_field");
+  if (byId) return byId;
+  // EditText in top 30 % of screen is almost certainly the search field
+  const re = /class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
+  const { h } = _getScreenSize(xml);
+  const topLimit = Math.round(h * 0.30);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const [, x1, y1, x2, y2] = m;
+    const centerY = (Number(y1) + Number(y2)) / 2;
+    if (centerY > topLimit) continue;
+    const centerX = Math.round((Number(x1) + Number(x2)) / 2);
+    return { x: centerX, y: Math.round(centerY) };
+  }
+  return _findElem(xml, "Search", "Search Instagram");
+}
+
+/**
+ * Type text on the on-screen keyboard character by character.
+ *
+ * FIX for the "danny → fsnny" coordinate-offset bug: instead of calculating
+ * key positions from hardcoded or formula-derived x/y values (which drift
+ * with DPI, key width, and per-row indentation), this function dumps the
+ * accessibility tree once per keyboard layer, finds each key's bounds from
+ * the actual XML, and taps the exact centre of the found element.
+ *
+ * For the '@' symbol (which lives on the symbol/numeric keyboard layer) it
+ * switches layers via the '?123' key, taps '@', then switches back to ABC.
+ *
+ * Precondition: the target text field must already be focused (keyboard
+ * must be visible on screen) before this function is called.
+ */
+export async function typeViaOnscreenKeyboard(
+  serial: string,
+  text: string,
+  onLog?: (msg: string) => void,
+): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+
+  let keyMap = new Map<string, { x: number; y: number }>();
+  let keyMapMode: "letters" | "symbols" = "letters";
+
+  /** Rebuild the key-position map from the current UIAutomator dump. */
+  const refreshKeyMap = async (mode: "letters" | "symbols") => {
+    keyMapMode = mode;
+    keyMap.clear();
+    const xml = await _uiDump(adb, serial);
+    if (!xml) return;
+    const { h } = _getScreenSize(xml);
+    // Keyboard occupies the bottom ~45 % of the screen.
+    const keyboardTopY = Math.round(h * 0.55);
+    // Parse every clickable node with 1-3 char label in the keyboard zone.
+    // The regex covers both attribute orderings produced by different Android versions.
+    const patterns = [
+      /<node[^>]*\btext="([^"]{1,3})"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
+      /<node[^>]*\bcontent-desc="([^"]{1,3})"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
+      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\btext="([^"]{1,3})"[^/]*\/>/gi,
+      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\bcontent-desc="([^"]{1,3})"[^/]*\/>/gi,
+    ];
+    for (const re of patterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(xml)) !== null) {
+        // Groups differ by pattern: either (label, x1,y1,x2,y2) or (x1,y1,x2,y2,label)
+        let label: string, x1: string, y1: string, x2: string, y2: string;
+        if (m.length === 6) {
+          if (patterns.indexOf(re) < 2) {
+            [, label, x1, y1, x2, y2] = m;
+          } else {
+            [, x1, y1, x2, y2, label] = m;
+          }
+        } else continue;
+        const centerY = (Number(y1) + Number(y2)) / 2;
+        if (centerY < keyboardTopY) continue;
+        const key = label.trim();
+        if (!key || key.length > 3) continue;
+        const cx = Math.round((Number(x1) + Number(x2)) / 2);
+        const cy = Math.round(centerY);
+        if (!keyMap.has(key)) keyMap.set(key, { x: cx, y: cy });
+      }
+    }
+    onLog?.(`[keyboard] ${mode}: ${keyMap.size} keys mapped`);
+  };
+
+  const switchToSymbols = async () => {
+    if (keyMapMode === "symbols") return;
+    const sym = keyMap.get("?123") ?? keyMap.get("123") ?? keyMap.get("!#1") ?? keyMap.get("&=<");
+    if (sym) {
+      _adbTap(adb, serial, sym.x, sym.y);
+    } else {
+      // Try a fresh dump for the symbol-switch key
+      const xml2 = await _uiDump(adb, serial);
+      const symKey = _findByResId(xml2, ":id/sym_keyboard_key", ":id/key_switch_alpha_numeric", ":id/numberswitch_key") ||
+        _findElem(xml2, "?123", "123", "!#1");
+      if (symKey) _adbTap(adb, serial, symKey.x, symKey.y);
+    }
+    await _sleep(400);
+    await refreshKeyMap("symbols");
+  };
+
+  const switchToLetters = async () => {
+    if (keyMapMode === "letters") return;
+    const abc = keyMap.get("ABC") ?? keyMap.get("abc");
+    if (abc) {
+      _adbTap(adb, serial, abc.x, abc.y);
+    } else {
+      const xml2 = await _uiDump(adb, serial);
+      const abcKey = _findByResId(xml2, ":id/alpha_keyboard_key", ":id/key_switch_alpha_numeric") ||
+        _findElem(xml2, "ABC", "abc");
+      if (abcKey) _adbTap(adb, serial, abcKey.x, abcKey.y);
+    }
+    await _sleep(400);
+    await refreshKeyMap("letters");
+  };
+
+  await refreshKeyMap("letters");
+
+  for (const ch of text) {
+    if (ch === "@") {
+      await switchToSymbols();
+      const atKey = keyMap.get("@");
+      if (atKey) {
+        _adbTap(adb, serial, atKey.x, atKey.y);
+        onLog?.(`[keyboard] tapped @ at (${atKey.x},${atKey.y})`);
+      } else {
+        _adbType(adb, serial, "@");
+        onLog?.(`[keyboard] @ not found — used adb input text fallback`);
+      }
+      await _sleep(200 + Math.round(Math.random() * 100));
+      await switchToLetters();
+      continue;
+    }
+
+    if (ch >= "0" && ch <= "9") {
+      await switchToSymbols();
+      const numKey = keyMap.get(ch);
+      if (numKey) {
+        _adbTap(adb, serial, numKey.x, numKey.y);
+        onLog?.(`[keyboard] tapped '${ch}' at (${numKey.x},${numKey.y})`);
+      } else {
+        _adbType(adb, serial, ch);
+        onLog?.(`[keyboard] '${ch}' not found — used adb input text fallback`);
+      }
+      await _sleep(200 + Math.round(Math.random() * 100));
+      continue;
+    }
+
+    // Letters — ensure letter layer
+    if (keyMapMode !== "letters") await switchToLetters();
+    const lower = ch.toLowerCase();
+    let key = keyMap.get(lower) ?? keyMap.get(ch);
+    if (!key) {
+      // Refresh once — keyboard may have re-rendered
+      await refreshKeyMap("letters");
+      key = keyMap.get(lower) ?? keyMap.get(ch);
+    }
+    if (key) {
+      _adbTap(adb, serial, key.x, key.y);
+      onLog?.(`[keyboard] tapped '${ch}' at (${key.x},${key.y})`);
+    } else {
+      _adbType(adb, serial, ch);
+      onLog?.(`[keyboard] '${ch}' not found — used adb input text fallback`);
+    }
+    await _sleep(150 + Math.round(Math.random() * 100));
+  }
+}
+
+/**
+ * After typing a username in Instagram's search bar, wait for results and
+ * tap the first result matching that username. Returns true if tapped.
+ */
+export async function findAndTapUserInSearch(
+  serial: string,
+  username: string,
+): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await _sleep(1500);
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return false;
+  const clean = username.replace(/^@/, "");
+  const pos = _findElem(xml, clean, `@${clean}`);
+  if (!pos) return false;
+  _adbTap(adb, serial, pos.x, pos.y);
+  return true;
+}
+
+/**
+ * Tap the Follow button on an Instagram profile page.
+ * Returns true if the button was found and tapped.
+ */
+export async function tapFollowButtonOnProfilePage(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await _sleep(1500);
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return false;
+  const btn = _findElem(xml, "Follow") ||
+    _findByResId(xml, ":id/follow_button", ":id/follow_btn", ":id/button_follow");
+  if (!btn) return false;
+  _adbTap(adb, serial, btn.x, btn.y);
+  return true;
+}
+
 /** Deactivate Drony: open it and tap the ON/active toggle. */
 export async function deactivateDrony(serial: string): Promise<{ ok: boolean; steps: string[] }> {
   const tools = detectToolset();
