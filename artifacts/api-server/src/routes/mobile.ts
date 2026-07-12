@@ -1835,17 +1835,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const automationCycleInProgress = new Set<string>();
 
-  // Per-serial in-memory log of users followed during this server session.
-  // Resets on restart — kept lightweight intentionally (no DB write needed
-  // for mobile session follow tracking).
+  // Per-serial persistent log of users followed. Survives server restarts by
+  // writing each entry to a JSON file on disk alongside the database.
   type MobileFollowedEntry = { username: string; source: string; followedAt: number };
   const mobileFollowedUsers = new Map<string, MobileFollowedEntry[]>();
+
+  const FOLLOWED_DIR = path.join(process.cwd(), "data", "mobile-followed");
+  try { fs.mkdirSync(FOLLOWED_DIR, { recursive: true }); } catch { /* already exists */ }
+
+  const _followedFilePath = (serial: string) =>
+    path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
+
   const getMobileFollowedList = (serial: string): MobileFollowedEntry[] => {
-    if (!mobileFollowedUsers.has(serial)) mobileFollowedUsers.set(serial, []);
+    if (!mobileFollowedUsers.has(serial)) {
+      // Hydrate from disk on first access so data survives restarts.
+      try {
+        const raw = fs.readFileSync(_followedFilePath(serial), "utf8");
+        mobileFollowedUsers.set(serial, JSON.parse(raw) as MobileFollowedEntry[]);
+      } catch {
+        mobileFollowedUsers.set(serial, []);
+      }
+    }
     return mobileFollowedUsers.get(serial)!;
   };
+
   const recordMobileFollow = (serial: string, username: string, source: string) => {
-    getMobileFollowedList(serial).unshift({ username, source, followedAt: Date.now() });
+    const list = getMobileFollowedList(serial);
+    list.unshift({ username, source, followedAt: Date.now() });
+    // Persist to disk so data survives server restarts.
+    try { fs.writeFileSync(_followedFilePath(serial), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
   };
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
@@ -1938,11 +1956,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
     const icons = await android.findFeedActionIcons(serial).catch(() => null);
     if (!icons) {
-      onLog?.("Inject Browsing: no post opened here (empty grid cell) — returning to profile");
+      onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — returning to profile");
+      logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — no Like button found in accessibility tree; post may already be liked (content-desc='Unlike'), or this is a Reel/ad with a non-standard action bar");
       return;
     }
 
+    // Diagnostic: show exactly which icons were resolved so we can see
+    // what the accessibility tree contained for this specific post.
+    logger.info(
+      { serial, like: !!icons.like, comment: !!icons.comment, shareFeed: !!icons.shareFeed, shareDm: !!icons.shareDm,
+        shareFeedCoords: icons.shareFeed ?? null, shareDmCoords: icons.shareDm ?? null },
+      "[inject-browsing] action-bar icons found for this profile post"
+    );
+    onLog?.(`Inject Browsing: icons — Like✓ Comment:${icons.comment?'✓':'✗'} ShareFeed:${icons.shareFeed?'✓':'✗'} ShareDM:${icons.shareDm?'✓':'✗'}`);
+
     const likeChance = rollRange(browsing.likePctMin, browsing.likePctMax) / 100;
+    logger.info({ serial, likeChance: Math.round(likeChance * 100) }, "[inject-browsing] like chance rolled");
     if (likeChance > 0 && Math.random() < likeChance) {
       try {
         await android.tap(serial, icons.like.x, icons.like.y);
@@ -1952,9 +1981,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     const shareFeedChance = rollRange(browsing.shareFeedPctMin, browsing.shareFeedPctMax) / 100;
+    logger.info(
+      { serial, shareFeedChance: Math.round(shareFeedChance * 100), shareFeedIconFound: !!icons.shareFeed,
+        settingsMin: browsing.shareFeedPctMin, settingsMax: browsing.shareFeedPctMax },
+      "[inject-browsing] share-feed chance rolled"
+    );
     if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
       if (!icons.shareFeed) {
-        onLog?.("Inject Browsing: share-to-feed icon not found on this post — skipping");
+        onLog?.("Inject Browsing: share-to-feed icon NOT found in accessibility tree for this post — skipping (check server logs for icon details)");
+        logger.warn({ serial }, "[inject-browsing] share-feed rolled true but icons.shareFeed is null — audio disc filter or position heuristic excluded the Repost node; dump the accessibility tree for this post to diagnose");
       } else {
         try {
           await android.tap(serial, icons.shareFeed.x, icons.shareFeed.y);
@@ -1975,9 +2010,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     const shareDmChance = rollRange(browsing.shareDmPctMin, browsing.shareDmPctMax) / 100;
+    logger.info(
+      { serial, shareDmChance: Math.round(shareDmChance * 100), shareDmIconFound: !!icons.shareDm,
+        settingsMin: browsing.shareDmPctMin, settingsMax: browsing.shareDmPctMax },
+      "[inject-browsing] share-DM chance rolled"
+    );
     if (shareDmChance > 0 && Math.random() < shareDmChance) {
       if (!icons.shareDm) {
-        onLog?.("Inject Browsing: share-to-DM icon not found on this post — skipping");
+        onLog?.("Inject Browsing: share-to-DM icon NOT found in accessibility tree for this post — skipping (check server logs for icon details)");
+        logger.warn({ serial }, "[inject-browsing] share-DM rolled true but icons.shareDm is null — Send node not identified; check server logs for icon details");
       } else {
         try {
           await android.tap(serial, icons.shareDm.x, icons.shareDm.y);

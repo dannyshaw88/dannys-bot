@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.501] — 2026-07-12
+
+### Fix: Followed Users tab persists across server restarts
+
+**Root cause**: The Followed Users list was stored in a plain JavaScript `Map` in server memory — explicitly marked "resets on restart" in the original code. Every time the server was restarted or updated, the entire list was wiped. No data was written to the database or disk.
+
+**Fix**: On first access per device serial, the list is now hydrated from a JSON file on disk (`data/mobile-followed/<serial>.json`). Every new follow is written to that file immediately after being recorded in memory. The data directory is created automatically on startup. Existing entries written before this version will begin accumulating from the next follow onwards.
+
+### Improvement: Inject Browsing — detailed diagnostic logging for share actions
+
+Added structured log lines throughout `runProfileBrowsingForUser` so it is now possible to diagnose exactly why share-to-feed or share-via-DM is skipped on any given profile post:
+
+- After `findFeedActionIcons`: logs which of the four icons (Like / Comment / ShareFeed / ShareDM) were found and their coordinates, with a specific note if the function returned null explaining the likely cause (already-liked post showing "Unlike", non-standard Reel/ad action bar).
+- After each chance roll: logs the rolled percentage AND the min/max settings that produced it, so it is immediately obvious whether the action was configured to 0% vs. rolled unlucky vs. had no icon to tap.
+- When an icon is not found despite the chance rolling true: logs a `WARN`-level message naming the most likely filter that excluded the node.
+- The onLog (visible in the UI log tab) now shows the icon-found summary and the skip reason in plain text so the user can see it without reading server logs.
+
+---
+
 ## [1.1.500] — 2026-07-12
 
 ### Fix: findFeedActionIcons — filter audio/music disc from icon row on profile posts
