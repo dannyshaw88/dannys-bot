@@ -1903,6 +1903,65 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Scans the accessibility tree for tappable recipient items inside Instagram's
+ * DM share sheet.
+ *
+ * The share sheet opens as a bottom sheet and presents a grid/list of suggested
+ * contacts. Each contact row/bubble is a clickable node whose text or
+ * content-desc is the user's display name or username.
+ *
+ * The function returns ALL candidate tap targets so the caller can pick one
+ * at random. It never throws — callers fall back to coordinate tapping if the
+ * list is empty.
+ *
+ * Filters applied:
+ * - Node must be clickable="true"
+ * - Node's vertical centre must be in the 30–90 % zone of the screen
+ *   (the sheet always occupies the lower portion; Send is at ~99 %)
+ * - Node width must be ≤ 80 % of screen width (full-width rows like Send /
+ *   Search bar are excluded; only compact avatar bubbles or short name rows pass)
+ * - Node must carry a non-empty text or content-desc label
+ * - Label must not match obvious UI chrome: Send / Search / Write a message /
+ *   Direct / Share / To / Message / Cancel / OK / Close
+ * - Label must be ≤ 50 characters (display names, not article titles)
+ */
+export async function findShareSheetRecipients(serial: string): Promise<{ x: number; y: number }[]> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return [];
+
+  const { w, h } = getScreenSize(serial);
+  const minY = Math.round(h * 0.30);
+  const maxY = Math.round(h * 0.90);
+  const maxWidth = Math.round(w * 0.80);
+  const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
+
+  const results: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const cx = Math.round((x1 + x2) / 2);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < minY || cy > maxY) continue;
+    if ((x2 - x1) > maxWidth) continue;
+    const textM = attrs.match(/\btext="([^"]*)"/);
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const label = (textM?.[1] || cdM?.[1] || "").trim();
+    if (!label || label.length > 50) continue;
+    if (UI_CHROME.test(label)) continue;
+    results.push({ x: cx, y: cy });
+  }
+  return results;
+}
+
+/**
  * Returns the content-desc of whichever node's bounds-center sits within
  * `tolerance` px of (x, y), or null if nothing is there.
  *

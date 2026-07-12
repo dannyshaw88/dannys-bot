@@ -4,6 +4,59 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.513] — 2026-07-12
+
+### Fix: Inject Browsing — DM share recipient not selected (accessibility scan replaces fixed coordinates)
+
+**Symptom**: The DM share sheet opened correctly (visible in the phone mirror, showing a grid of suggested contacts), but no DM was ever received. The log reported "Inject Browsing: shared the post via DM" even though nothing was sent.
+
+**Root cause**: `tapRandomShareSheetRecipient` tapped a pre-computed percentage coordinate (`yPct = 0.786` → y ≈ 1 750 px on a 2 226 px screen) aimed at the expected avatar-bubble row. On this device the DM share sheet renders the suggested-contacts grid higher up on screen (approximately 45–55 % of screen height), making the fixed coordinate land on the compose area or empty space — not on any contact. No contact was selected; the Instagram Send button then silently ignores a tap when no recipient is chosen. `sendShareSheet` found the "Send" label via `findButtonByLabel` and tapped it, returning `true` — but Instagram discarded the tap because the recipient state was empty.
+
+**Fix**: Replaced the fixed-coordinate approach with a UIAutomator accessibility scan. A new `findShareSheetRecipients(serial)` function in `androidManager.ts` dumps the UI tree, then collects every clickable node whose:
+- Vertical centre falls in the 30–90 % zone (the sheet body; excludes the top chrome and the Send bar at 99 %)
+- Width is ≤ 80 % of screen width (excludes the full-width Send / Search bar rows)
+- Text or content-desc label is non-empty, ≤ 50 characters, and not UI chrome (`Send`, `Search`, `Write a message`, `Direct`, `Share`, `Message`, `Cancel`, `Suggested`)
+
+`tapRandomShareSheetRecipient` now calls `findShareSheetRecipients` first. If any candidates are returned it picks one at random and taps it. The old `SHARE_SHEET_AVATAR_SLOTS` coordinate-based tap is retained as a fallback only when the a11y scan returns nothing.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — new `findShareSheetRecipients(serial)` exported function
+- `artifacts/api-server/src/routes/mobile.ts` — `tapRandomShareSheetRecipient`: a11y scan primary, coordinate fallback secondary
+
+---
+
+### Fix: Inject Browsing — removed spurious scroll-back-to-top before Follow
+
+**What was removed**: After opening a post from the scrolled profile grid (and running like/share/DM actions inside it), `runProfileBrowsingForUser` was scrolling the profile grid back to the top (one swipe per row scrolled down) before returning, then the follow step tapped the Follow button.
+
+**Why it was there**: The scroll-back was added as a precaution so that `tapFollowButtonOnProfilePage` could find the Follow button in the accessibility tree (it lives in the profile header, which is off-screen when the grid is scrolled down). The intent was correct but the implementation is unnecessary extra automation noise that the user never requested — the Follow button tap has its own fallback logic.
+
+**What happens now**: After `pressBack` closes the opened post and returns to the profile grid, the function returns immediately. The follow step runs without any preceding scroll animation.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser`: scroll-back loop removed.
+
+---
+
+### New: Inject Browsing — "Activate Percentage" per-user outer gate
+
+**What it does**: A new **Activate Percentage** min/max field in the Inject Browsing settings section controls whether the entire inject-browsing sequence even runs for a given user. It is checked once per user, before the existing "Browse before follow %" roll. If the activate roll misses, inject browsing is skipped for that user entirely — no grid scroll, no post open, no like/share/DM.
+
+**Behaviour**:
+- Rolls independently per user exactly like all other min/max probability fields (a random value is drawn from the [min, max] range and compared against a second random roll).
+- If Inject Browsing is ticked and 10 users are being followed, each of the 10 gets its own independent activate roll.
+- Setting min=50/max=70 means roughly 60 % of users (on average) will trigger the inject browsing sequence; the other 40 % skip straight to Follow.
+- The existing "Browse before follow %" field is a SECOND inner gate — if the activate roll passes, the browse-before-follow % then determines whether the profile grid is scrolled and a post opened.
+
+**UI position**: "Activate Percentage" appears as the FIRST field in the Inject Browsing panel (before "Browse before follow %"), consistent with the logical order: outer gate → inner gates → post-action percentages.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — no change (frontend/backend only)
+- `artifacts/api-server/src/routes/mobile.ts` — `InjectBrowsingParams` interface: added `activatePctMin/Max`; `runProfileBrowsingForUser`: activate roll added at top; both zod schemas and defaults updated; browsing params construction updated
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — state type, defaults, API save mapping, and UI row all updated
+
+---
+
 ## [1.1.512] — 2026-07-12
 
 ### Fix: Inject Browsing — Repost tap followed by spurious Back press (single-tap devices)

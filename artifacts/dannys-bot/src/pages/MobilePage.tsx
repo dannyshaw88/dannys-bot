@@ -956,6 +956,7 @@ interface AutomationSettingsData {
   // panel is always visible (not a collapsible dialog) since it's core to
   // how following behaves, not an optional extra.
   injectBrowsingEnabled: boolean;
+  injectBrowsingActivatePctMin: number; injectBrowsingActivatePctMax: number;
   injectBrowsingBeforeFollowPctMin: number; injectBrowsingBeforeFollowPctMax: number;
   injectBrowsingFeedChanceMin: number; injectBrowsingFeedChanceMax: number;
   injectBrowsingFeedMin: number; injectBrowsingFeedMax: number;
@@ -988,6 +989,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followUsersMin: 1, followUsersMax: 3,
   followSources: [],
   injectBrowsingEnabled: false,
+  injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
   injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
   injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
   injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
@@ -1156,6 +1158,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followUsersMax: s.followUsersMax,
             followSources: s.followSources,
             injectBrowsingEnabled: s.injectBrowsingEnabled,
+            injectBrowsingActivatePctMin: s.injectBrowsingActivatePctMin,
+            injectBrowsingActivatePctMax: s.injectBrowsingActivatePctMax,
             injectBrowsingBeforeFollowPctMin: s.injectBrowsingBeforeFollowPctMin,
             injectBrowsingBeforeFollowPctMax: s.injectBrowsingBeforeFollowPctMax,
             injectBrowsingFeedChanceMin: s.injectBrowsingFeedChanceMin,
@@ -1671,8 +1675,16 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.injectBrowsingEnabled && (<>
-          {/* Row 2: Browse before follow / Feed chance / Feed posts / Click posts % */}
+          {/* Row 2: Activate Percentage (first field) / Browse before follow / Feed chance / Feed posts / Click posts % */}
           <div className="flex items-start flex-wrap gap-6">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Activate Percentage</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingActivatePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingActivatePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingActivatePctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingActivatePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
               <div className="flex items-center gap-2">

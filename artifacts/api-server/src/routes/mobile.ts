@@ -97,6 +97,8 @@ type AutomationSettings = {
   followSources?: { type: string; value: string }[];
   // Inject Browsing — per-user profile-browsing behaviour (same fix).
   injectBrowsingEnabled?: boolean;
+  injectBrowsingActivatePctMin?: number;
+  injectBrowsingActivatePctMax?: number;
   injectBrowsingBeforeFollowPctMin?: number;
   injectBrowsingBeforeFollowPctMax?: number;
   injectBrowsingFeedChanceMin?: number;
@@ -821,6 +823,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSources: z.array(followSourceSchema).default([]),
     injectBrowsingEnabled: z.boolean().default(false),
+    injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingActivatePctMax: z.number().min(0).max(100).default(0),
     injectBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
@@ -852,6 +856,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
       followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
       injectBrowsingEnabled: false,
+      injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
       injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
       injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
       injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
@@ -1001,6 +1006,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
   async function tapRandomShareSheetRecipient(serial: string, w: number, h: number): Promise<void> {
+    // Primary: scan the accessibility tree for tappable recipient rows/bubbles.
+    // The DM share sheet presents suggested contacts as clickable nodes with
+    // display-name or username labels; their pixel positions vary by device/
+    // screen size, so fixed coordinates are unreliable. The a11y scan finds
+    // whatever contacts are actually rendered.
+    const recipients = await android.findShareSheetRecipients(serial).catch(() => [] as { x: number; y: number }[]);
+    if (recipients.length > 0) {
+      const pick = recipients[Math.floor(Math.random() * recipients.length)];
+      await android.tap(serial, pick.x, pick.y);
+      return;
+    }
+    // Fallback: coordinate tap at an approximate avatar-bubble position.
     const slot = SHARE_SHEET_AVATAR_SLOTS[Math.floor(Math.random() * SHARE_SHEET_AVATAR_SLOTS.length)];
     await android.tap(serial, Math.round(w * slot.xPct), Math.round(h * slot.yPct));
   }
@@ -1841,9 +1858,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // injectBrowsingEnabled switch below gates everything; the roll
     // percentages/counts are re-rolled independently for every user.
     injectBrowsingEnabled: z.boolean().default(false),
-    // Rolled once per user: chance THIS user gets the profile-browsing
-    // sequence below run before they're followed. min=5/max=10 → each user
-    // independently has an ~7.5% (avg of the range) chance of it happening.
+    // Rolled once per user: outer gate — whether inject browsing runs at all
+    // for this user. min=30/max=60 → ~45% of users get the browsing sequence.
+    injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingActivatePctMax: z.number().min(0).max(100).default(0),
+    // Rolled once per user (if activate passed): chance THIS user gets the
+    // profile-browsing sequence before they're followed. min=5/max=10 → each
+    // user independently has an ~7.5% (avg of the range) chance of it happening.
     injectBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
     // Chance, once browsing is triggered for this user, that their grid of
@@ -2011,6 +2032,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
   interface InjectBrowsingParams {
+    activatePctMin: number; activatePctMax: number;
     beforeFollowPctMin: number; beforeFollowPctMax: number;
     feedChanceMin: number; feedChanceMax: number;
     feedMin: number; feedMax: number;
@@ -2047,6 +2069,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     browsing: InjectBrowsingParams,
     onLog?: (msg: string) => void,
   ): Promise<void> {
+    // Outer gate: "Activate Percentage" — rolls once per user before anything else.
+    // If it misses, inject browsing is skipped entirely for this user.
+    const activateChance = rollRange(browsing.activatePctMin, browsing.activatePctMax) / 100;
+    if (!(activateChance > 0 && Math.random() < activateChance)) return;
+
     const beforeFollowChance = rollRange(browsing.beforeFollowPctMin, browsing.beforeFollowPctMax) / 100;
     if (!(beforeFollowChance > 0 && Math.random() < beforeFollowChance)) return;
 
@@ -2242,25 +2269,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
-
-    // Scroll the profile grid back to the top before returning. The loop
-    // above scrolled down `rows` times to browse the grid, and opening/
-    // closing a post preserves that scroll position — it does NOT reset
-    // it. If runFollowUsersStep taps Follow right after this returns while
-    // the header is still scrolled off the top of the screen, the Follow
-    // button is genuinely absent from the accessibility tree (it's not
-    // rendered off-screen) and tapFollowButtonOnProfilePage always reports
-    // "not found", so the user never gets followed. Undo exactly the
-    // scrolls this function made so the header is back on screen.
-    if (rows > 0) {
-      onLog?.("Inject Browsing: scrolling profile back to top before follow");
-      for (let i = 0; i < rows; i++) {
-        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-        await android.swipe(serial, x, y2, x, y1, 500 + Math.round(Math.random() * 200));
-        await sleepOrAbort(serial, 250 + Math.round(Math.random() * 150));
-      }
-      await sleepOrAbort(serial, 300);
-    }
   }
 
   async function runFollowUsersStep(
@@ -2641,6 +2649,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog: (msg) => tLog(`  ${msg}`),
             recordFollow: (username, source) => recordMobileFollow(serial, username, source),
             browsing: injectBrowsingEnabled ? {
+              activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
               beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
               feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,
               feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
