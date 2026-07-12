@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.505] — 2026-07-12
+
+### Fix: Share-to-DM (and Share-to-Feed) icon silently never tapped during Inject Browsing
+
+**Symptom**: On a real device run, the Log tab showed the profile grid scroll, the opened post, and "liked the post" — then jumped straight to the Follow step with no mention of Share to Feed or Share to DM at all, even though both were set to 100% in Human Session Tool settings.
+
+**Root cause**: `runProfileBrowsingForUser` re-scanned the screen independently via `android.findButtonByLabel(serial, "Repost")` / `("Send"/"Direct"/"Message")` to find the Repost and Send icons, instead of reusing the coordinates `findFeedActionIcons` had *already* resolved for the exact same post moments earlier (the same scan that successfully found the Like button, and whose diagnostic line logs `ShareFeed:✓ ShareDM:✓`). On this device/Instagram build, the independent label-only lookup missed the icon even when the row-scan had just confirmed it was on screen. Because the "icon not found" branch and the "sheet/send didn't confirm" branch were the *only* paths through this code, and neither the roll-miss case nor those particular failure branches called `onLog`, the whole step vanished from the log with zero trace — it looked like the feature just didn't run.
+
+**Fix**:
+- Both the Share-to-Feed and Share-to-DM steps now use the coordinates `findFeedActionIcons` already found for that post (`icons.shareFeed` / `icons.shareDm`) as the primary tap target, falling back to the independent `findButtonByLabel` scan only when the row-scan came back null for that icon.
+- Added `onLog` messages for every previously-silent path: the percentage roll missing, the icon genuinely not found, the share sheet not opening, the DM send not confirming, and any other error — so a future failure is always visible in the Log tab instead of appearing as an unexplained gap.
+
+---
+
+### Fix: Follow button not found after Inject Browsing scrolls the profile grid
+
+**Symptom**: Same run — after Inject Browsing scrolled the profile grid down 10 rows and browsed a post, the Follow step logged `Follow button not found on @user — already following?` and the cycle finished with 0 users followed, even though the account was not already being followed.
+
+**Root cause**: `runProfileBrowsingForUser` scrolls the profile grid down by a random number of rows to browse posts, then opens/likes/shares a post and presses Back to return to the grid — but it never scrolled back up. `tapFollowButtonOnProfilePage` reads whatever is currently in the accessibility tree; with the header scrolled off the top of the screen, the Follow button genuinely isn't rendered, so it always reported "not found" regardless of follow state.
+
+**Fix**: `runProfileBrowsingForUser` now scrolls the profile grid back to the top (undoing exactly the number of rows it scrolled down) before returning, so the header and Follow button are back on screen by the time `runFollowUsersStep` taps Follow.
+
+---
+
 ## [1.1.503] — 2026-07-12
 
 ### Fix: Share-to-Feed double-tap / un-share bug
