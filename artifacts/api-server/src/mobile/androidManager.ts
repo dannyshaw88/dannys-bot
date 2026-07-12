@@ -1329,7 +1329,17 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   const like = _findCentermostLikeNode(xml);
   if (!like) return null;
 
-  const { w } = _getScreenSize(xml);
+  // Use the adb-queried screen width, NOT _getScreenSize(xml). The XML-parsed
+  // fallback returns w=1600 (landscape desktop) when the root bounds attribute
+  // is absent. That sets saveCutoffX = 1280 — well above the bookmark icon's
+  // real X position (~950 px on a 1080 px phone), so the bookmark is NOT
+  // excluded from rowNodes. It then appears as a 4th entry, rowNodes.length
+  // equals 4 instead of 3, the if-branch is skipped, and the ambiguous else
+  // branch leaves shareFeed/shareDm null even when both icons are plainly
+  // visible. getScreenSize(serial) uses `adb shell wm size` and defaults to
+  // 1080 px on error; 0.80 × 1080 = 864, which correctly sits LEFT of the
+  // bookmark at ~950 px → bookmark excluded → rowNodes.length = 3 → icons found.
+  const { w } = getScreenSize(serial);
   const rowTolerance = 20;
   const saveCutoffX = Math.round(w * 0.80);
   // Instagram's Comment/Repost/Send icons are small square glyphs (roughly

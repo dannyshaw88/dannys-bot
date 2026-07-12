@@ -1654,7 +1654,7 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Feed chance %</Label>
                 <div className="flex items-center gap-2">

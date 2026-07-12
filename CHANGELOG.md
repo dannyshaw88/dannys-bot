@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.497] — 2026-07-12
+
+### Fix: Share to Feed / Share via DM icons never found in Inject Browsing
+
+**Root cause**: `findFeedActionIcons` used `_getScreenSize(xml)` to measure screen width, which falls back to `w=1600` when the UIAutomator XML root element doesn't carry bounds. On the real 1080 px phone, `saveCutoffX = round(1600 × 0.80) = 1280` — far above the bookmark icon's actual position (~950 px), so the bookmark was **not excluded** from the row scan. It appeared as a 4th entry in `rowNodes`, making `rowNodes.length = 4` instead of 3. The detection branch requires exactly 3 to assign Comment/Repost/Send by elimination, so it fell through to the ambiguous `else` path and left `shareFeed` and `shareDm` as `null` for every post. Same root cause as the search-bar height bug fixed in v1.1.496. Fixed by switching to `getScreenSize(serial)` (adb-queried, correct 1080 px default): `saveCutoffX = round(1080 × 0.80) = 864`, which correctly sits left of the bookmark → bookmark excluded → `rowNodes.length = 3` → icons resolved.
+
+### UI: Feed Posts input moved a few pixels further right from Feed Chance
+
+The `gap-2` (8 px) between the Feed Chance and Feed Posts inputs was too tight. Increased to `gap-4` (16 px) so they read as distinct fields rather than appearing merged.
+
+---
+
 ## [1.1.496] — 2026-07-12
 
 ### Fix: Follow flow search bar never found — "search bar not found — giving up" on first attempt
