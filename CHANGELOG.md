@@ -4,6 +4,67 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.503] — 2026-07-12
+
+### Fix: Share-to-Feed double-tap / un-share bug
+
+**Root cause**: After tapping the Repost action-bar icon (which opens the share sheet), the code called `findButtonByLabel("Repost")` again to find the confirm button inside the sheet. If the sheet animation was still in progress, the accessibility tree still returned the action-bar icon at the same coordinates — because the sheet's own "Repost" button had not appeared yet. Tapping those same coordinates again toggled the repost OFF, producing the "shared then immediately un-shared" behaviour the user saw.
+
+**Fix**: After tapping `repostIcon`, the second `findButtonByLabel("Repost")` call now checks whether the returned coordinates are within 15 px of the icon that was just tapped. If they are, the sheet has not opened yet (same node in the tree, not the sheet button). In that case the code treats it as "sheet not visible" and presses Back to cancel cleanly. Wait time before the second scan was also increased from 1 000 ms to 1 500 ms to give slower devices more time for the sheet animation.
+
+---
+
+### Fix: Follow loop goes back to search page after the last user
+
+**Root cause**: `runFollowUsersStep` always called `pressBack` at the end of every loop iteration — including after the last user — to navigate from the profile page back to the search bar for the next user. When there was only one user (or this was the final user), this pressBack landed on the search/explore page unnecessarily, making it appear the flow went to search after following.
+
+**Fix**: The loop now tracks its index. `pressBack` is only called when there are more users remaining in the list. After the last user the code stays on the profile page and lets the normal cycle closure (`closeInstagramViaRecents`) handle navigation.
+
+---
+
+### UI: "Delay between actions (seconds)" → "Delay between actions" with "s" suffix
+
+The label for the action delay row in the View Feed section now reads **"Delay between actions"**. An **"s"** (for seconds) appears immediately after the minimum value input, between the min field and the "to" separator, instead of being part of the label text. Layout: `[min] s to [max]`.
+
+---
+
+### UI: Followed button — removed user count from label
+
+The **Followed** button in the Follow Users header no longer shows the running count in brackets (`Followed (12)`). It always reads **Followed** regardless of how many users are in the list. The full list is still visible when the panel is open.
+
+---
+
+### New: Random Jitter section (human-like interstitial actions per cycle)
+
+A new **Random Jitter** block appears below the Inject Browsing settings, separated by a divider line, with its own enable tickbox. When the tickbox is off the entire section is hidden and no jitter actions run. When on, each sub-feature rolls its own independent percentage chance on every cycle execution — the same probability model used by all other percentage settings (min % to max %, rolled once per cycle; 0 % = never runs).
+
+#### Check Notifications
+
+Taps the **heart/activity icon** in the top-right of the Instagram home feed. The icon is found by scanning the accessibility tree (resource ID → content-desc label → positional scan of clickable ImageViews in the top-right screen quadrant) rather than by fixed coordinates, so it works regardless of screen resolution or OEM chrome height.
+
+After opening the notifications page:
+- **Scrolls** down a random number of times in the configured range (default 2–5 mini-scrolls).
+- **Click notification %** — a second independent chance roll. If it fires, the code finds a random tappable notification-row avatar in the list and taps it, navigating passively to that user's profile before pressing Back. This is purely observational — no like, follow, or comment action is taken.
+- Returns to the home feed with a final `pressBack`.
+
+Settings exposed:
+- **Chance %** (min/max) — probability this step runs at all on this cycle.
+- **Scrolls** (min/max) — how many downward mini-scrolls to perform in the notifications list.
+- **Click notification %** (min/max) — probability a random notification item is tapped.
+
+#### Visit My Profile
+
+Taps the **profile icon** in the Instagram bottom navigation bar. The icon is located by resource ID (`tab_profile`, `nav_profile`, etc.) or the "Profile" content-desc label — not fixed coordinates. After navigating to the own profile the automation dwells for 1.5–2.5 s then returns to the home feed by tapping the Home tab (or pressing Back if Home tab is not found).
+
+Settings exposed:
+- **Chance %** (min/max) — probability this step runs at all on this cycle.
+
+#### Execution model
+
+Both jitter actions run **after** the main tools (Feed scroll → Stories → Follow Users) and **before** Instagram is closed. They run independently — both can fire on the same cycle, or neither, or just one. The cycle master toggle's "wait X–Y mins between cycles" interval controls how often cycles run; the jitter % controls whether each action fires within a given cycle.
+
+---
+
 ## [1.1.502] — 2026-07-12
 
 ### Fix: Share-to-Feed / Share-via-DM — replaced fragile row-scan with label-based icon lookup

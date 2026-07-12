@@ -2588,6 +2588,87 @@ export async function installInstagramFromPlayStore(serial: string): Promise<{ o
 }
 
 /**
+ * Find the Instagram Activity/Notifications icon (heart icon, top-right of the home
+ * feed header). Tries resource IDs and content-desc labels first; falls back to a
+ * positional scan of clickable ImageViews in the top-right screen quadrant so it
+ * works even when Instagram obfuscates IDs.
+ */
+export async function findInstagramNotificationsIcon(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const byId = _findByResId(xml,
+    ":id/notification", ":id/activity_icon", ":id/nav_notification",
+    ":id/action_notification", ":id/notification_bell", ":id/heart_icon");
+  if (byId) return byId;
+  const byLabel = _findElem(xml, "Activity", "Notifications", "Notification");
+  if (byLabel) return byLabel;
+  // Positional fallback: find clickable ImageViews in the top-right area
+  // (x > 65% of width, y < 12% of height).  Notifications icon is the
+  // rightmost one there (camera icon is further left on this model).
+  const { w, h } = getScreenSize(serial);
+  const rightThresh = Math.round(w * 0.65);
+  const topThresh  = Math.round(h * 0.12);
+  const imgRe = /class="android\.widget\.ImageView"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*clickable="true"/gi;
+  let m: RegExpExecArray | null;
+  let best: { x: number; y: number } | null = null;
+  while ((m = imgRe.exec(xml)) !== null) {
+    const cx = (Number(m[1]) + Number(m[3])) / 2;
+    const cy = (Number(m[2]) + Number(m[4])) / 2;
+    if (cx > rightThresh && cy < topThresh) {
+      if (!best || cx > best.x) best = { x: Math.round(cx), y: Math.round(cy) };
+    }
+  }
+  return best;
+}
+
+/**
+ * Find the Instagram Profile tab (person icon, rightmost bottom-nav item).
+ * Tries resource IDs and the "Profile" content-desc label.
+ */
+export async function findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const byId = _findByResId(xml,
+    ":id/profile", ":id/tab_profile", ":id/nav_profile",
+    ":id/bottom_tab_profile", ":id/avatar_tab");
+  if (byId) return byId;
+  return _findElem(xml, "Profile");
+}
+
+/**
+ * Find a random tappable item from the Instagram notifications page.
+ * Returns the centre of a clickable notification-row avatar View, or null if
+ * none is found.  Tapping the avatar navigates to the notifying user's
+ * profile — a completely passive action with no side effects.
+ */
+export async function findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w, h } = getScreenSize(serial);
+  const topSkip  = Math.round(h * 0.10); // skip fixed header row
+  const botSkip  = Math.round(h * 0.92); // skip nav bar
+  const rightMax = Math.round(w * 0.25); // avatar column stays on the left
+  // Collect clickable Views whose centre is in the avatar column and below the header.
+  const candidates: { x: number; y: number }[] = [];
+  const re = /<[^>]+clickable="true"[^>]+class="android\.widget\.View"[^>]+bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const cx = (Number(m[1]) + Number(m[3])) / 2;
+    const cy = (Number(m[2]) + Number(m[4])) / 2;
+    if (cy < topSkip || cy > botSkip || cx > rightMax) continue;
+    candidates.push({ x: Math.round(cx), y: Math.round(cy) });
+  }
+  if (!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+/**
  * Find the Instagram Search tab (magnifying-glass icon) in the bottom nav.
  * Returns the tap coordinates or null if not found.
  */

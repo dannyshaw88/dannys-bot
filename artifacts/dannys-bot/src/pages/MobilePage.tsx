@@ -963,6 +963,13 @@ interface AutomationSettingsData {
   injectBrowsingLikePctMin: number; injectBrowsingLikePctMax: number;
   injectBrowsingShareFeedPctMin: number; injectBrowsingShareFeedPctMax: number;
   injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
+  // Random Jitter — human-like interstitial actions fired probabilistically
+  // on each cycle run. Master gate: randomJitterEnabled tickbox.
+  randomJitterEnabled: boolean;
+  checkNotificationsPctMin: number; checkNotificationsPctMax: number;
+  checkNotificationsScrollsMin: number; checkNotificationsScrollsMax: number;
+  checkNotificationsClickPctMin: number; checkNotificationsClickPctMax: number;
+  visitProfilePctMin: number; visitProfilePctMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -988,6 +995,11 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
   injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
   injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+  randomJitterEnabled: false,
+  checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
+  checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
+  checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
+  visitProfilePctMin: 0, visitProfilePctMax: 0,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1158,6 +1170,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingShareFeedPctMax: s.injectBrowsingShareFeedPctMax,
             injectBrowsingShareDmPctMin: s.injectBrowsingShareDmPctMin,
             injectBrowsingShareDmPctMax: s.injectBrowsingShareDmPctMax,
+            randomJitterEnabled: s.randomJitterEnabled,
+            checkNotificationsPctMin: s.checkNotificationsPctMin,
+            checkNotificationsPctMax: s.checkNotificationsPctMax,
+            checkNotificationsScrollsMin: s.checkNotificationsScrollsMin,
+            checkNotificationsScrollsMax: s.checkNotificationsScrollsMax,
+            checkNotificationsClickPctMin: s.checkNotificationsClickPctMin,
+            checkNotificationsClickPctMax: s.checkNotificationsClickPctMax,
+            visitProfilePctMin: s.visitProfilePctMin,
+            visitProfilePctMax: s.visitProfilePctMax,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1381,7 +1402,7 @@ function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions (seconds)</Label>
+            <Label className="text-sm text-muted-foreground">Delay between actions</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -1391,6 +1412,7 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
               />
+              <span className="text-muted-foreground text-sm">s</span>
               <span className="text-muted-foreground text-sm">to</span>
               <Input
                 type="number"
@@ -1603,7 +1625,7 @@ function AutomationSettingsPanel({
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingFollowed}
             onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
-          >{showFollowedUsers ? 'Hide' : `Followed${mobileFollowedList.length > 0 ? ` (${mobileFollowedList.length})` : ''}`}</Button>
+          >{showFollowedUsers ? 'Hide' : 'Followed'}</Button>
         </div>
 
         {/* ── Users to follow per operation ─────────────────── */}
@@ -1716,6 +1738,95 @@ function AutomationSettingsPanel({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ── Random Jitter — probabilistic human-like actions each cycle ─ */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="random-jitter-enabled"
+              checked={settings.randomJitterEnabled}
+              onChange={e => setSettings(s => ({ ...s, randomJitterEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="random-jitter-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Jitter</label>
+          </div>
+
+          {settings.randomJitterEnabled && (
+            <div className="space-y-4 pl-1">
+              {/* Check Notifications */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-foreground">Check Notifications</Label>
+                <div className="flex items-start gap-6 flex-wrap">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Chance %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsPctMin}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMin: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsPctMax}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Scrolls</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsScrollsMin}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsScrollsMax}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Click notification %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsClickPctMin}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.checkNotificationsClickPctMax}
+                        onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMax: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visit My Profile */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-foreground">Visit My Profile</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Chance %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.visitProfilePctMin}
+                      onChange={e => setSettings(s => ({ ...s, visitProfilePctMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.visitProfilePctMax}
+                      onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}

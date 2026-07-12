@@ -1832,6 +1832,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    // ── Random Jitter — human-like interstitial actions fired on each cycle
+    // at a random percentage chance.  Master gate: randomJitterEnabled.
+    randomJitterEnabled: z.boolean().default(false),
+    // Check Notifications: taps the heart icon, scrolls, optionally taps an item.
+    checkNotificationsPctMin: z.number().min(0).max(100).default(0),
+    checkNotificationsPctMax: z.number().min(0).max(100).default(0),
+    checkNotificationsScrollsMin: z.number().min(0).max(20).default(2),
+    checkNotificationsScrollsMax: z.number().min(0).max(20).default(5),
+    checkNotificationsClickPctMin: z.number().min(0).max(100).default(0),
+    checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
+    // Visit My Profile: taps the profile icon in the bottom nav, then returns.
+    visitProfilePctMin: z.number().min(0).max(100).default(0),
+    visitProfilePctMax: z.number().min(0).max(100).default(0),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -1865,6 +1878,78 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Persist to disk so data survives server restarts.
     try { fs.writeFileSync(_followedFilePath(serial), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
   };
+
+  // ── Random Jitter helpers ─────────────────────────────────────────────────
+
+  /** Check Instagram notifications: tap heart icon → scroll → optionally tap item. */
+  async function runCheckNotifications(serial: string, opts: {
+    scrollsMin: number; scrollsMax: number;
+    clickPctMin: number; clickPctMax: number;
+    onLog?: (msg: string) => void;
+  }): Promise<void> {
+    const { scrollsMin, scrollsMax, clickPctMin, clickPctMax, onLog } = opts;
+    // Find the notifications heart icon via accessibility tree scan.
+    const icon = await android.findInstagramNotificationsIcon(serial).catch(() => null);
+    if (!icon) {
+      onLog?.("Random Jitter: notifications icon not found — skipping check notifications");
+      logger.warn({ serial }, "[jitter-check-notif] notifications icon not found by scan");
+      return;
+    }
+    await android.tap(serial, icon.x, icon.y);
+    await sleepOrAbort(serial, 1800);
+    onLog?.("Random Jitter: ✓ opened notifications");
+    // Scroll down x–y times to browse through them.
+    const scrollCount = rollRange(scrollsMin, scrollsMax);
+    const { w, h } = getScreenSize(serial);
+    for (let i = 0; i < scrollCount; i++) {
+      await android.swipe(
+        serial,
+        Math.round(w * 0.5), Math.round(h * 0.65),
+        Math.round(w * 0.5), Math.round(h * 0.30),
+        380 + Math.round(Math.random() * 120),
+      );
+      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
+    }
+    // Optionally tap a random notification item (passive: opens a profile or post).
+    const clickChance = rollRange(clickPctMin, clickPctMax) / 100;
+    if (clickChance > 0 && Math.random() < clickChance) {
+      const item = await android.findRandomNotificationItem(serial).catch(() => null);
+      if (item) {
+        await android.tap(serial, item.x, item.y);
+        onLog?.("Random Jitter: tapped notification item");
+        await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 600);
+      }
+    }
+    // Return to home feed.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+    onLog?.("Random Jitter: ✓ notifications check done");
+  }
+
+  /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
+  async function runVisitOwnProfile(serial: string, onLog?: (msg: string) => void): Promise<void> {
+    // Locate profile tab via accessibility tree — more reliable than fixed %
+    // coordinates which drift across screen resolutions and OEM skins.
+    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
+    if (!profileTab) {
+      onLog?.("Random Jitter: profile tab not found — skipping visit profile");
+      logger.warn({ serial }, "[jitter-visit-profile] profile tab not found by scan");
+      return;
+    }
+    await android.tap(serial, profileTab.x, profileTab.y);
+    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 1000));
+    onLog?.("Random Jitter: ✓ visited own profile");
+    // Return to home feed.
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (homeTab) {
+      await android.tap(serial, homeTab.x, homeTab.y);
+    } else {
+      await android.pressBack(serial);
+    }
+    await sleepOrAbort(serial, 600);
+  }
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
   interface InjectBrowsingParams {
@@ -2002,16 +2087,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else {
           await android.tap(serial, repostIcon.x, repostIcon.y);
           logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon (found by label)");
-          await sleepOrAbort(serial, 1000);
-          // Sheet is now open — find the "Repost" button inside the sheet.
+          // Wait for the share sheet to slide up before re-scanning.
+          // 1500 ms instead of 1000 ms — slower devices need more time.
+          await sleepOrAbort(serial, 1500);
+          // Sheet is now open. Find the "Repost" button INSIDE the sheet.
+          // Guard: if findButtonByLabel returns the SAME coordinates as the
+          // action-bar icon we just tapped, the sheet hasn't opened yet (the
+          // icon is still the only "Repost" node in the tree).  Tapping the
+          // same icon again would toggle the repost OFF — the original bug.
+          // In that case treat it as "sheet not found" and back out cleanly.
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-          if (repostBtn) {
+          const sheetOpened = repostBtn &&
+            !(Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15);
+          if (sheetOpened && repostBtn) {
             await android.tap(serial, repostBtn.x, repostBtn.y);
             onLog?.("Inject Browsing: reposted the post");
             await sleepOrAbort(serial, 800);
             const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
             if (closeBtn) { await android.tap(serial, closeBtn.x, closeBtn.y); await sleepOrAbort(serial, 400); }
           } else {
+            logger.warn({ serial, repostBtn, repostIcon }, "[inject-browsing] Repost sheet did not open (same-coords guard triggered) — pressing Back");
             await android.pressBack(serial);
             await sleepOrAbort(serial, 400);
           }
@@ -2134,7 +2229,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, searchTab.x, searchTab.y);
     await sleepOrAbort(serial, 1500);
 
-    for (const username of targets) {
+    for (let _fi = 0; _fi < targets.length; _fi++) {
+      const username = targets[_fi];
+      const isLastUser = _fi === targets.length - 1;
       try {
         onLog?.(`Follow: → @${username}`);
 
@@ -2194,9 +2291,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`Follow: Follow button not found on @${username} — already following?`);
         }
 
-        // Go back to search for next user
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 600);
+        // Go back to search only when there are more users to follow.
+        // After the last user the pressBack would land on the search/explore
+        // page unnecessarily — the cycle closes Instagram itself right after.
+        if (!isLastUser) {
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 600);
+        }
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
         onLog?.(`Follow: error on @${username}: ${e?.message}`);
@@ -2274,6 +2375,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingLikePctMin, injectBrowsingLikePctMax,
         injectBrowsingShareFeedPctMin, injectBrowsingShareFeedPctMax,
         injectBrowsingShareDmPctMin, injectBrowsingShareDmPctMax,
+        randomJitterEnabled,
+        checkNotificationsPctMin, checkNotificationsPctMax,
+        checkNotificationsScrollsMin, checkNotificationsScrollsMax,
+        checkNotificationsClickPctMin, checkNotificationsClickPctMax,
+        visitProfilePctMin, visitProfilePctMax,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -2435,6 +2541,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (e?.message === "cycle-aborted") throw e;
           tLog(`▶ Follow step error — ${e?.message}`);
           steps.push("follow(error)");
+        }
+      }
+
+      // 4c. Random Jitter — human-like interstitial actions run after the main
+      // tools but before closing Instagram.  Each one rolls its own chance
+      // independently so they can all fire, none fire, or any subset fires.
+      if (randomJitterEnabled) {
+        // Check Notifications
+        const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
+        if (notifChance > 0 && Math.random() < notifChance) {
+          tLog("▶ Random Jitter: checking notifications…");
+          await runCheckNotifications(serial, {
+            scrollsMin: checkNotificationsScrollsMin,
+            scrollsMax: checkNotificationsScrollsMax,
+            clickPctMin: checkNotificationsClickPctMin,
+            clickPctMax: checkNotificationsClickPctMax,
+            onLog: (msg) => tLog(`  ${msg}`),
+          });
+          steps.push("jitter-check-notifications");
+        }
+        // Visit My Profile
+        const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
+        if (profileChance > 0 && Math.random() < profileChance) {
+          tLog("▶ Random Jitter: visiting own profile…");
+          await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
+          steps.push("jitter-visit-profile");
         }
       }
 
