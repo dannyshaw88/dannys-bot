@@ -1640,8 +1640,12 @@ function AutomationSettingsPanel({
             <label htmlFor="inject-browsing-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Inject Browsing</label>
           </div>
 
-          {/* Row 2: Browse before follow / Feed chance / Feed posts */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Row 2: Browse before follow | [Feed chance  Feed posts] — Feed
+               chance and Feed posts sit right next to each other (gap-2)
+               as a paired group, matching the "few pixels apart" style of
+               the stories section above. Browse before follow has a larger
+               gap (gap-6) to visually separate it as the gate condition. */}
+          <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
               <div className="flex items-center gap-2">
@@ -1650,20 +1654,22 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Feed chance %</Label>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            <div className="flex items-start gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Feed chance %</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Feed posts</Label>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Feed posts</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                </div>
               </div>
             </div>
           </div>

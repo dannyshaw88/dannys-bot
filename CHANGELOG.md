@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.496] — 2026-07-12
+
+### Fix: Follow flow search bar never found — "search bar not found — giving up" on first attempt
+
+**Root cause**: `findInstagramSearchBar` computed the top-of-screen height limit from `_getScreenSize(xml)`, which parses the XML root element's `bounds="[0,0][w,h]"` attribute. When that attribute is absent or malformed (which happens on this Xiaomi device's UIAutomator dump), the function fell back to a hard-coded landscape default of `{ w: 1600, h: 900 }`. This set `topLimit = Math.round(900 × 0.15) = 135 px`. The actual Instagram search bar on this 2400 px-tall portrait phone sits at roughly 180–260 px from the top — consistently above the 135 px ceiling — so every attempt was rejected and the log printed "search bar not found — giving up" on the very first user in every cycle.
+
+**Fix**: replaced `_getScreenSize(xml)` with `getScreenSize(serial)`, which runs `adb shell wm size` and falls back to `1080 × 2400` (portrait) rather than `1600 × 900` (landscape). The top-limit percentage was also widened from 15 % to 20 % (480 px on a 2400 px screen), giving comfortable headroom for status bars of any height without any risk of matching Explore-grid content below.
+
+### Fix: Sources (follow target accounts/hashtags) deleted on software restart
+
+**Root cause**: `configFilePath()` used `process.cwd()` to locate `mobile-instances.json`. In the Replit dev workflow (`pnpm --filter @workspace/api-server run dev`), the working directory can differ from the package root depending on how pnpm launches the process, so the config file was written to and read from different paths between sessions — effectively lost on every restart.
+
+**Fix**: the path is now derived from `process.argv[1]` (the absolute path of the running entry script, e.g. `.../artifacts/api-server/dist/index.mjs`). One level up from its directory gives `artifacts/api-server/` reliably regardless of the working directory. Electron mode (`EQUINOX_DATA_DIR` env var set) is unchanged.
+
+### Fix: Close Multiple Windows — code toggled recents overlay off between swipes
+
+**Root cause**: when the close-via-recents loop needed a second swipe attempt (Instagram still running after the first), it called `openRecentApps()` (KEYCODE_APP_SWITCH) before each retry. On this Xiaomi floating-windows device the recents strip stays visible after each card is dismissed — the remaining cards are immediately swipeable. Pressing KEYCODE_APP_SWITCH while already inside the overlay **toggles it off**, sending the phone to the home screen. The next pass then re-opened it, producing the "swiped left correctly → went to phone UI → back to floating windows → swiped again" loop the user reported.
+
+**Fix**: removed the `openRecentApps()` call from inside the retry loop. The strip is already open and stays open; the next swipe fires immediately after a short 600 ms pause. The first `openRecentApps()` call (before the loop begins) is unchanged.
+
+### UI: Inject Browsing row 2 — Feed Chance and Feed Posts grouped tightly next to Browse Before Follow
+
+Row 2 of the Inject Browsing panel previously used a `grid-cols-3` layout that gave equal spacing between all three fields. Feed Chance and Feed Posts are now grouped into a tight pair (gap-2, a few pixels apart) that sits next to Browse Before Follow with the same larger gap (gap-6) used by the Stories section above — matching the visual style requested.
+
+---
+
 ## [1.1.495] — 2026-07-12
 
 ### Fix: Inject Browsing "Feed posts" rejected 0 with a raw validation error

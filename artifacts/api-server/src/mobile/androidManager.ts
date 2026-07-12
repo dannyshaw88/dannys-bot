@@ -1049,10 +1049,15 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
     const capReached = sawAnyLabel ? attempt >= MAX_LABELLED_ATTEMPTS : attempt >= MAX_BLIND_ATTEMPTS;
     if (capReached) { method += ` — still running after ${attempt} attempt(s), giving up on the recents gesture`; break; }
 
-    // The drag can also fully back out of the overview on some launchers;
-    // re-open it before the next pass in case that happened.
-    await openRecentApps(serial);
-    await new Promise(r => setTimeout(r, 800));
+    // DO NOT call openRecentApps() here. On this Xiaomi floating-windows
+    // device, the card strip STAYS VISIBLE after each card is dismissed —
+    // the remaining cards are immediately ready for the next swipe. Pressing
+    // KEYCODE_APP_SWITCH (openRecentApps) while already IN the recents overlay
+    // TOGGLES it off, sending the phone to the home screen. The next loop pass
+    // then can't find the overview, so it called openRecentApps again to bring
+    // it back — producing the "goes to phone UI → back to floating windows"
+    // loop the user reported. Just wait briefly and swipe the next card directly.
+    await new Promise(r => setTimeout(r, 600));
   }
 
   const runningNow = pidof();
@@ -2566,15 +2571,24 @@ export async function findInstagramSearchBar(serial: string): Promise<{ x: numbe
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
+  // Use the adb-queried screen size rather than parsing it from the XML dump.
+  // _getScreenSize(xml) falls back to { w:1600, h:900 } (a landscape/desktop
+  // default) when the XML root element doesn't carry the expected
+  // bounds="[0,0][w,h]" — which gives topLimit = Math.round(900*0.15) = 135 px.
+  // On this Xiaomi phone (portrait, ~2400 px tall) the search bar sits at
+  // ~180–260 px from the top, so 135 px rejected it every time → "search bar
+  // not found". getScreenSize(serial) runs `adb shell wm size` and defaults to
+  // 1080×2400 on error — both are correct for a portrait phone.
+  const { h: screenH } = getScreenSize(serial);
+
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await _sleep(800);
     const xml = await _uiDump(adb, serial);
     if (!xml) continue;
 
-    const { h } = _getScreenSize(xml);
-    // The search bar is always in the top 15 % of the screen — nothing else
-    // legitimately lives there with search-like attributes.
-    const topLimit = Math.round(h * 0.15);
+    // 20 % gives up to 480 px on a 2400 px screen — comfortably above the
+    // search bar while still safely below any Explore-grid content.
+    const topLimit = Math.round(screenH * 0.20);
 
     // 1. Known resource IDs — most reliable; trust them regardless of y-pos
     const byId = _findByResId(xml,

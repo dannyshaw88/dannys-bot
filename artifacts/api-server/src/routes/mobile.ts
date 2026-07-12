@@ -118,8 +118,16 @@ type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
-  const base = process.env.EQUINOX_DATA_DIR ?? process.cwd();
-  return path.join(base, "mobile-instances.json");
+  if (process.env.EQUINOX_DATA_DIR) {
+    return path.join(process.env.EQUINOX_DATA_DIR, "mobile-instances.json");
+  }
+  // In dev/server mode (no Electron), resolve relative to the running script
+  // rather than process.cwd() — cwd() can vary depending on how the server is
+  // launched (pnpm filter from workspace root vs. running directly from the
+  // package dir). process.argv[1] is always the entry script's absolute path
+  // (e.g. .../artifacts/api-server/dist/index.mjs), so one level up from its
+  // directory gives the stable artifacts/api-server/ package root.
+  return path.join(path.dirname(path.resolve(process.argv[1])), "..", "mobile-instances.json");
 }
 function loadInstanceConfigs(): InstanceConfigMap {
   try {
