@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.519] — 2026-07-12
+
+### Feature: "Activate Percentage" — per-execution chance gate for View Feed, View Stories from Feed, Follow Users, and Random Jitter
+
+Each of these four tools now has its own **Activate Percentage** (min/max, same UI pattern as Inject Browsing's existing "Activate Percentage") that is rolled **once per automation-cycle execution** — i.e. once every time the whole toggle-tick loop runs, driven by the configured wait-interval between executions. If the roll misses, that tool is skipped entirely for this execution, even if its own master checkbox is enabled and its internal settings would otherwise fire.
+
+This is a distinct, higher-level gate from the existing `Inject Browsing → Activate Percentage`, which rolls **per user** *inside* an already-running Follow Users step. The two compose: Follow Users must both (a) win its new per-execution Activate Percentage roll, and (b) be enabled, before Inject Browsing's own per-user Activate Percentage is ever considered — matching the existing rule that Inject Browsing is a sub-setting of Follow Users.
+
+- **View Feed** — `feedActivatePctMin` / `feedActivatePctMax` (default 100/100 — always runs, matching prior behaviour for existing users)
+- **View Stories from Feed** — `viewStoriesActivatePctMin` / `viewStoriesActivatePctMax` (default 100/100)
+- **Follow Users** — `followActivatePctMin` / `followActivatePctMax` (default 100/100)
+- **Random Jitter** — `randomJitterActivatePctMin` / `randomJitterActivatePctMax` (default 100/100) — this is an outer gate on top of (not a replacement for) each jitter sub-action's own independent chance (Check Notifications %, Visit My Profile %)
+
+All four default to 100/100 so upgrading does not silently start skipping an already-configured tool for existing installs; users who want a tool to only sometimes run per execution can now lower the range explicitly.
+
+Also fixed a pre-existing gap in the `AutomationSettings` TypeScript type: `randomJitterEnabled` and the Random Jitter fields (`checkNotificationsPct*`, `checkNotificationsScrolls*`, `checkNotificationsClickPct*`, `visitProfilePct*`) were used by the persistence schema and defaults object but missing from the type itself, which was failing typecheck.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `AutomationSettings` type, `automationSchema`, `automationCycleSchema`, GET `/automation-settings` defaults, new `rollActivate()` helper, automation-cycle handler gates for feed/stories/follow/jitter
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AutomationSettingsData`, `AUTOMATION_DEFAULTS`, new Activate Percentage inputs in the View Feed, View Stories from Feed, Follow Users, and Random Jitter sections
+
+---
+
 ## [1.1.518] — 2026-07-12
 
 ### Fix: Visit My Profile — press Back before scanning for profile tab

@@ -971,6 +971,13 @@ interface AutomationSettingsData {
   checkNotificationsScrollsMin: number; checkNotificationsScrollsMax: number;
   checkNotificationsClickPctMin: number; checkNotificationsClickPctMax: number;
   visitProfilePctMin: number; visitProfilePctMax: number;
+  // Activate Percentage — top-level per-execution chance gate for each tool
+  // (rolled once per automation-cycle run/"toggle tick", before the tool's
+  // own internal settings are even considered). 100/100 = always runs.
+  feedActivatePctMin: number; feedActivatePctMax: number;
+  viewStoriesActivatePctMin: number; viewStoriesActivatePctMax: number;
+  followActivatePctMin: number; followActivatePctMax: number;
+  randomJitterActivatePctMin: number; randomJitterActivatePctMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -1002,6 +1009,10 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
   checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
   visitProfilePctMin: 0, visitProfilePctMax: 0,
+  feedActivatePctMin: 100, feedActivatePctMax: 100,
+  viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
+  followActivatePctMin: 100, followActivatePctMax: 100,
+  randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1381,6 +1392,22 @@ function AutomationSettingsPanel({
         </div>
         {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.feedActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, feedActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.feedActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, feedActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
             <div className="flex items-center gap-3">
               <Input
@@ -1537,7 +1564,23 @@ function AutomationSettingsPanel({
           </div>
         </div>
 
-        {settings.storiesEnabled && <div className="flex items-start gap-6">
+        {settings.storiesEnabled && <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Stories to watch</Label>
             <div className="flex items-center gap-3">
@@ -1632,19 +1675,37 @@ function AutomationSettingsPanel({
           >{showFollowedUsers ? 'Hide' : 'Followed'}</Button>
         </div>
 
-        {/* ── Users to follow per operation ─────────────────── */}
-        {settings.followEnabled && <div className="space-y-3">
-          <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
-          <div className="flex items-center gap-3">
-            <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-              value={settings.followUsersMin}
-              onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
-              disabled={loading} />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-              value={settings.followUsersMax}
-              onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
-              disabled={loading} />
+        {/* ── Activate Percentage + Users to follow per operation ────── */}
+        {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, followActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, followActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followUsersMin}
+                onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.followUsersMax}
+                onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
           </div>
         </div>}
 
@@ -1765,6 +1826,27 @@ function AutomationSettingsPanel({
             <div className="pl-1">
               {/* All jitter settings on one flex-wrap row, grouped by section title */}
               <div className="flex items-start gap-8 flex-wrap">
+                {/* ── Activate Percentage — outer gate for the whole Random
+                     Jitter tool this execution, independent of each
+                     sub-action's own chance below. ── */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-foreground">Activate Percentage</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Chance %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.randomJitterActivatePctMin}
+                        onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMin: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.randomJitterActivatePctMax}
+                        onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMax: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                    </div>
+                  </div>
+                </div>
+
                 {/* ── Check Notifications group ── */}
                 <div className="space-y-2">
                   <Label className="text-xs font-medium text-foreground">Check Notifications</Label>

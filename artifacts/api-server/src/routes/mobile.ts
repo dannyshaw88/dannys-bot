@@ -113,6 +113,32 @@ type AutomationSettings = {
   injectBrowsingShareFeedPctMax?: number;
   injectBrowsingShareDmPctMin?: number;
   injectBrowsingShareDmPctMax?: number;
+  // Random Jitter — human-like interstitial actions (same persistence fix as
+  // Follow/Inject Browsing above; was missing from this type even though the
+  // zod schema and defaults object already used these keys).
+  randomJitterEnabled?: boolean;
+  checkNotificationsPctMin?: number;
+  checkNotificationsPctMax?: number;
+  checkNotificationsScrollsMin?: number;
+  checkNotificationsScrollsMax?: number;
+  checkNotificationsClickPctMin?: number;
+  checkNotificationsClickPctMax?: number;
+  visitProfilePctMin?: number;
+  visitProfilePctMax?: number;
+  // Activate Percentage — a top-level chance (rolled once per automation-cycle
+  // execution, i.e. once per "toggle tick") that gates whether the tool runs
+  // AT ALL on this execution, independent of its own internal settings. This
+  // is distinct from injectBrowsingActivatePct* above, which rolls per-user
+  // INSIDE an already-running Follow step. Default 100/100 (always runs)
+  // preserves existing behaviour for accounts saved before this field existed.
+  feedActivatePctMin?: number;
+  feedActivatePctMax?: number;
+  viewStoriesActivatePctMin?: number;
+  viewStoriesActivatePctMax?: number;
+  followActivatePctMin?: number;
+  followActivatePctMax?: number;
+  randomJitterActivatePctMin?: number;
+  randomJitterActivatePctMax?: number;
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -851,6 +877,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // ── Activate Percentage — top-level per-execution chance gate for each
+    // tool (rolled once per automation-cycle run, before the tool's own
+    // internal settings are even considered). Defaults to 100/100 (always
+    // runs) so upgrading doesn't silently start skipping an already-enabled
+    // tool for existing users.
+    feedActivatePctMin: z.number().min(0).max(100).default(100),
+    feedActivatePctMax: z.number().min(0).max(100).default(100),
+    viewStoriesActivatePctMin: z.number().min(0).max(100).default(100),
+    viewStoriesActivatePctMax: z.number().min(0).max(100).default(100),
+    followActivatePctMin: z.number().min(0).max(100).default(100),
+    followActivatePctMax: z.number().min(0).max(100).default(100),
+    randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
+    randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
@@ -881,6 +920,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
       checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
       visitProfilePctMin: 0, visitProfilePctMax: 0,
+      feedActivatePctMin: 100, feedActivatePctMax: 100,
+      viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
+      followActivatePctMin: 100, followActivatePctMax: 100,
+      randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
@@ -1925,6 +1968,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit My Profile: taps the profile icon in the bottom nav, then returns.
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // ── Activate Percentage — see AutomationSettings type for full comment.
+    // Rolled once per tool per automation-cycle execution, gating whether
+    // that tool runs at all THIS cycle, on top of its own enabled toggle.
+    feedActivatePctMin: z.number().min(0).max(100).default(100),
+    feedActivatePctMax: z.number().min(0).max(100).default(100),
+    viewStoriesActivatePctMin: z.number().min(0).max(100).default(100),
+    viewStoriesActivatePctMax: z.number().min(0).max(100).default(100),
+    followActivatePctMin: z.number().min(0).max(100).default(100),
+    followActivatePctMax: z.number().min(0).max(100).default(100),
+    randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
+    randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -2096,6 +2150,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   function rollRange(min: number, max: number): number {
     const lo = Math.min(min, max), hi = Math.max(min, max);
     return lo + Math.random() * (hi - lo);
+  }
+
+  /**
+   * Activate Percentage gate — rolls once per tool per automation-cycle
+   * execution ("execution" = one full run of the whole toggle-tick loop,
+   * i.e. once every wait-interval). A min/max of 100/100 always passes
+   * (back-compat default); e.g. 5/10 gives this execution roughly a 5-10%
+   * (~7.5% avg) chance of the tool being active at all this time around.
+   */
+  function rollActivate(min: number, max: number): boolean {
+    const chance = rollRange(min, max) / 100;
+    return chance > 0 && Math.random() < chance;
   }
 
   /**
@@ -2575,6 +2641,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin, checkNotificationsScrollsMax,
         checkNotificationsClickPctMin, checkNotificationsClickPctMax,
         visitProfilePctMin, visitProfilePctMax,
+        feedActivatePctMin, feedActivatePctMax,
+        viewStoriesActivatePctMin, viewStoriesActivatePctMax,
+        followActivatePctMin, followActivatePctMax,
+        randomJitterActivatePctMin, randomJitterActivatePctMax,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -2640,7 +2710,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 3. Scroll the feed (Step 2 in the UI) — skipped entirely when the
       // "View Feed" checkbox is unticked, per-slide enable/disable (12 Jul 2026).
       let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
-      if (feedEnabled) {
+      if (feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax)) {
         tLog(`▶ Starting feed scroll — ${count} posts`);
         ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
           count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
@@ -2650,15 +2720,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }));
         steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
         tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
-      } else {
+      } else if (!feedEnabled) {
         steps.push("feed(skipped — View Feed disabled)");
         tLog("▶ View Feed disabled — skipping feed scroll");
+      } else {
+        steps.push("feed(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ View Feed Activate Percentage roll missed — skipping feed scroll this execution");
       }
 
       // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll,
       // skipped entirely when the "View Stories from Feed" checkbox is
       // unticked.
-      if (storiesEnabled && viewStoriesSlidesMax > 0) {
+      if (storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin, viewStoriesActivatePctMax)) {
         tLog("▶ Tapping Home tab for stories…");
         // Find the real Home tab via the accessibility tree instead of a
         // guessed screen percentage — the fixed 10%/97.5% coordinates were
@@ -2705,12 +2778,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else if (!storiesEnabled) {
         steps.push("stories(skipped — View Stories from Feed disabled)");
         tLog("▶ View Stories from Feed disabled — skipping stories");
+      } else if (storiesEnabled && viewStoriesSlidesMax > 0) {
+        steps.push("stories(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ View Stories from Feed Activate Percentage roll missed — skipping stories this execution");
       }
 
       // 4b. Follow Users — HikerAPI-driven follow step. Runs after stories/feed
       // so the phone is already on Instagram; navigates to Search, types each
       // @username character by character on the on-screen keyboard, and taps Follow.
-      if (followEnabled) {
+      if (followEnabled && rollActivate(followActivatePctMin, followActivatePctMax)) {
         tLog("▶ Follow Users — fetching targets via HikerAPI…");
         try {
           const followCount = await runFollowUsersStep(serial, {
@@ -2738,12 +2814,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           tLog(`▶ Follow step error — ${e?.message}`);
           steps.push("follow(error)");
         }
+      } else if (!followEnabled) {
+        // no-op log line intentionally omitted — Follow Users disabled is
+        // the common/default state and would spam the log every cycle.
+      } else {
+        steps.push("follow(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ Follow Users Activate Percentage roll missed — skipping follow step this execution");
       }
 
       // 4c. Random Jitter — human-like interstitial actions run after the main
       // tools but before closing Instagram.  Each one rolls its own chance
       // independently so they can all fire, none fire, or any subset fires.
-      if (randomJitterEnabled) {
+      // The Activate Percentage below is an outer gate for the whole Random
+      // Jitter tool this execution, on top of (not instead of) each
+      // sub-action's own independent chance.
+      if (randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax)) {
         // Check Notifications
         const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
         if (notifChance > 0 && Math.random() < notifChance) {
@@ -2764,6 +2849,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
           steps.push("jitter-visit-profile");
         }
+      } else if (randomJitterEnabled) {
+        steps.push("jitter(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ Random Jitter Activate Percentage roll missed — skipping jitter this execution");
       }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
