@@ -1026,8 +1026,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
       return true;
     }
-    // UIAutomator didn't find "Send" — fall back to the known coordinate.
-    // On 720×1260 this is (304, 1195); scales correctly on other resolutions.
+    // UIAutomator didn't find "Send" — this previously fell back to a
+    // fixed-coordinate tap and unconditionally returned true regardless of
+    // whether the sheet was even open, which produced false "shared via
+    // DM" success logs while nothing was actually sent (confirmed on a
+    // live run: the DM step never fired, but the fallback tap + `true`
+    // return reported success anyway). The fixed coordinate is only a
+    // sensible tap target if the share sheet is actually open — confirm
+    // that first by checking for a recipient-list/sheet marker before
+    // trusting the blind tap.
+    const sheetOpen = await android.findButtonByLabel(serial, "Direct").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "Share").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "To").catch(() => null);
+    if (!sheetOpen) return false;
     await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
     return true;
   }
@@ -1208,12 +1219,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               try {
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                // Capture the icon's own label before tapping — see the
+                // same-name guard in runProfileBrowsingForUser for why:
+                // some accounts' Instagram build reposts instantly on a
+                // single tap with NO confirmation sheet, relabelling the
+                // SAME icon in place (e.g. "Repost" -> "Remove
+                // repost"/"Reposted") instead of showing a separate sheet
+                // button. Without this check, findButtonByLabel("Repost")
+                // matches that same relabelled icon via substring and this
+                // code taps it AGAIN — undoing the repost it just made.
+                const beforeCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
                 await android.tap(serial, shareFeedIconX, rowY);
-                logger.info({ serial, x: shareFeedIconX, y: rowY }, "[check-feed] tapped share-to-feed icon");
-                await sleepOrAbort(serial, 1200); // wait for share sheet
+                logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon");
+                await sleepOrAbort(serial, 1200); // wait for a possible share sheet
 
                 const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-                if (repostBtn) {
+                const sameCoords = !!repostBtn &&
+                  Math.abs(repostBtn.x - shareFeedIconX) < 15 && Math.abs(repostBtn.y - rowY) < 15;
+                if (repostBtn && !sameCoords) {
                   await android.tap(serial, repostBtn.x, repostBtn.y);
                   logger.info({ serial }, "[check-feed] tapped Repost in sheet");
                   await sleepOrAbort(serial, 1000);
@@ -1227,9 +1250,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     await sleepOrAbort(serial, 500);
                   }
                   sharesFeed++;
+                } else if (sameCoords) {
+                  const afterCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
+                  if (afterCd && afterCd !== beforeCd) {
+                    logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon label changed in place — single-tap repost succeeded, no sheet on this account");
+                    sharesFeed++;
+                  } else {
+                    logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon unchanged after tap — genuinely did not complete — pressing Back");
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 500);
+                  }
                 } else {
-                  // Sheet didn't open or "Repost" not visible — cancel safely.
-                  logger.info({ serial }, "[check-feed] Repost button not found in sheet — pressing Back");
+                  logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — pressing Back");
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 500);
                 }
@@ -2093,29 +2125,51 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.("Inject Browsing: Repost icon not found on this post — skipping share-to-feed");
           logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Repost') found the icon — likely absent on this post (sharing disabled by poster)");
         } else {
+          // Capture the icon's own label BEFORE tapping. Some accounts'
+          // Instagram build reposts instantly on a single tap with NO
+          // confirmation sheet at all — the icon just relabels itself in
+          // place (e.g. "Repost" -> "Remove repost"/"Reposted"). Comparing
+          // before/after lets us tell that apart from "sheet genuinely
+          // never opened", which both look identical (a "Repost"-matching
+          // node at the same coordinates) to a same-coords-only check —
+          // confirmed via a live run where a real, successful single-tap
+          // repost was misread as failure and triggered a wrong pressBack.
+          const beforeCd = await android.getContentDescNear(serial, repostIcon.x, repostIcon.y).catch(() => null);
           await android.tap(serial, repostIcon.x, repostIcon.y);
-          logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon");
-          // Wait for the share sheet to slide up before re-scanning.
+          logger.info({ serial, x: repostIcon.x, y: repostIcon.y, beforeCd }, "[inject-browsing] tapped Repost icon");
+          // Wait for a possible share sheet to slide up before re-scanning.
           // 1500 ms instead of 1000 ms — slower devices need more time.
           await sleepOrAbort(serial, 1500);
-          // Sheet is now open. Find the "Repost" button INSIDE the sheet.
-          // Guard: if findButtonByLabel returns the SAME coordinates as the
-          // action-bar icon we just tapped, the sheet hasn't opened yet (the
-          // icon is still the only "Repost" node in the tree).  Tapping the
-          // same icon again would toggle the repost OFF — the original bug.
-          // In that case treat it as "sheet not found" and back out cleanly.
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-          const sheetOpened = repostBtn &&
-            !(Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15);
-          if (sheetOpened && repostBtn) {
+          const sameCoords = !!repostBtn &&
+            Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15;
+          if (repostBtn && !sameCoords) {
+            // A genuinely separate "Repost" confirm button appeared at a
+            // different position — a real sheet. Tap it to confirm.
             await android.tap(serial, repostBtn.x, repostBtn.y);
             onLog?.("Inject Browsing: reposted the post");
             await sleepOrAbort(serial, 800);
             const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
             if (closeBtn) { await android.tap(serial, closeBtn.x, closeBtn.y); await sleepOrAbort(serial, 400); }
+          } else if (sameCoords) {
+            // Same icon, same position — check whether ITS OWN label
+            // changed. A change means the repost already completed on the
+            // single tap (no sheet on this account/build); tapping again
+            // would toggle it back OFF, so we must NOT tap it a second
+            // time either way.
+            const afterCd = await android.getContentDescNear(serial, repostIcon.x, repostIcon.y).catch(() => null);
+            if (afterCd && afterCd !== beforeCd) {
+              onLog?.("Inject Browsing: reposted the post (single tap, no confirmation sheet on this account)");
+              logger.info({ serial, beforeCd, afterCd }, "[inject-browsing] repost icon label changed in place — single-tap repost succeeded");
+            } else {
+              onLog?.("Inject Browsing: Repost sheet did not open — skipping share-to-feed");
+              logger.warn({ serial, repostBtn, repostIcon, beforeCd, afterCd }, "[inject-browsing] repost icon unchanged after tap — genuinely did not open/complete — pressing Back");
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 400);
+            }
           } else {
             onLog?.("Inject Browsing: Repost sheet did not open — skipping share-to-feed");
-            logger.warn({ serial, repostBtn, repostIcon }, "[inject-browsing] Repost sheet did not open (same-coords guard triggered) — pressing Back");
+            logger.warn({ serial, repostIcon }, "[inject-browsing] no Repost-labelled node found anywhere after tap — pressing Back");
             await android.pressBack(serial);
             await sleepOrAbort(serial, 400);
           }

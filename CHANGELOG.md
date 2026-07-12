@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.507] — 2026-07-12
+
+### Fix: Successful single-tap Repost misread as failure, then wrongly triggered a recovery Back press that skipped Share via DM
+
+**Symptom**: Log showed `Repost sheet did not open — skipping share-to-feed` immediately followed by `shared the post via DM`, but on-device the DM step never actually fired — the app instead jumped back to the profile feed, visibly scrolled. The account genuinely did repost successfully; there is no confirmation sheet for Repost on this account at all, just a single tap.
+
+**Root cause (two compounding bugs)**:
+1. `findButtonByLabel` matches content-desc by substring, not exact text. On accounts where Repost completes instantly on a single tap (no sheet), the tapped icon relabels itself in place (e.g. `"Repost"` → `"Remove repost"`/`"Reposted"`) but stays at the exact same coordinates. The existing "same-coords = sheet not open" guard couldn't tell that apart from a genuine failure — both look identical (a "Repost"-matching node at the same position) — so a real, successful repost was logged as failed.
+2. That false failure then ran the recovery `pressBack()`, which closed the open post and returned to the profile grid/feed. The Share-via-DM step that ran right after was then operating on stale, no-longer-valid coordinates from the closed post — explaining the "jumped back to the feed, scrolled" behaviour and why DM was never actually pressed. On top of that, `sendShareSheet()` unconditionally returned `true` even when it fell back to a blind coordinate tap with no evidence the DM sheet was open at all, so this failure was self-masking in the log ("shared the post via DM" printed regardless).
+
+**Fix**:
+- Added `getContentDescNear(serial, x, y)` (in `androidManager.ts`) to read a node's current label at a given position.
+- Both Repost flows (`runProfileBrowsingForUser`'s Inject-Browsing-before-Follow step, and `runCheckFeedLoop`'s View Feed step) now capture the icon's label *before* tapping and compare it to the label *after* tapping when the second scan lands on the same coordinates: a changed label means the single-tap repost already succeeded (logged as success, no second tap — tapping again would toggle it back off); an unchanged label means it genuinely didn't complete (logged as failure, Back pressed to cancel cleanly).
+- `sendShareSheet()` no longer returns `true` on its coordinate-fallback path unless it can positively confirm the share sheet is actually open first (checks for "Direct"/"Share"/"To" sheet markers); otherwise it now correctly returns `false` and the caller logs the real outcome.
+
+---
+
 ## [1.1.506] — 2026-07-12
 
 ### Fix (regression): Comment icon tapped instead of Share to Feed / Share via DM

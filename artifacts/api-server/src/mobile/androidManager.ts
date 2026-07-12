@@ -1828,6 +1828,48 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Returns the content-desc of whichever node's bounds-center sits within
+ * `tolerance` px of (x, y), or null if nothing is there.
+ *
+ * Used to tell apart two visually-similar outcomes after tapping an
+ * action-bar icon like Repost: (1) a real confirmation sheet appears
+ * elsewhere on screen — a genuinely separate button — vs (2) the SAME
+ * icon, at the SAME position, simply changes its own label in place
+ * (e.g. "Repost" -> "Remove repost" / "Reposted") because this account's
+ * Instagram build completes the repost instantly on a single tap with no
+ * sheet at all. Both cases produce a "Repost"-matching node at the same
+ * coordinates under `findButtonByLabel`'s substring match, which made
+ * them indistinguishable from "the sheet never opened" — confirmed via a
+ * live device run where the repost actually succeeded (single tap) but
+ * was logged as failed and triggered an incorrect recovery `pressBack`.
+ * Comparing the label captured here before vs. after the tap reveals
+ * which case actually happened.
+ */
+export async function getContentDescNear(serial: string, x: number, y: number, tolerance = 15): Promise<string | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let best: { cd: string; dist: number } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    const dist = Math.hypot(c.x - x, c.y - y);
+    if (dist > tolerance) continue;
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const cd = cdM ? cdM[1] : "";
+    if (!cd) continue;
+    if (!best || dist < best.dist) best = { cd, dist };
+  }
+  return best ? best.cd : null;
+}
+
+/**
  * Detects Instagram's "feedback on suggested content" card — the one that
  * says "Thanks for your feedback" with an "Undo" link, plus "Snooze all
  * suggested sets of reels in feed for 30 days" / "Manage content
