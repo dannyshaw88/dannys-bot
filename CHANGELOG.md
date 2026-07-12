@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.500] — 2026-07-12
+
+### Fix: findFeedActionIcons — filter audio/music disc from icon row on profile posts
+
+**Root cause**: On a user's profile "Posts" view, Instagram renders a clickable audio/music disc indicator (`android.widget.ImageView`) in the same horizontal row as the action icons, sitting between Comment and Repost. Unlike every real action icon, this element has no `content-desc` label AND no numeric count text (counts like "342", "1.8K" are always present on action icons but never on the audio disc). With the audio disc admitted into `rowNodes` as a 4th node, positional fallback assigned `shareFeed` to the audio disc and `shareDm` to Repost — the software tapped Comment-level coordinates as Share-to-Feed and opened a comment/audio page instead of the share sheet.
+
+This affects both video/Reel posts (which always have the audio disc) and static photo posts that have an associated audio track.
+
+**Fix**: Before adding a node to `rowNodes`, check its `class` attribute. If the class is `android.widget.ImageView` AND the node has neither a non-empty `content-desc` NOR any digit in its `text` attribute, the node is a decorative/media element — not an action icon — and is excluded. All legitimate action icons (Comment, Repost, Send, Like) carry at least one of those signals even when Instagram omits one of them for some account configurations.
+
+---
+
 ## [1.1.499] — 2026-07-12
 
 ### Fix: findFeedActionIcons — identify icons by content-desc label, not position

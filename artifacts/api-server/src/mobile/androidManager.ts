@@ -1371,6 +1371,18 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
     const cd = cdM ? cdM[1] : "";
     if (/favorit|save/i.test(cd)) continue; // bookmark, labeled
     if (c.x > saveCutoffX) continue; // bookmark, unlabeled — far-right heuristic
+    // On profile "Posts" views, Instagram renders an audio/music disc indicator
+    // as a clickable android.widget.ImageView in the same horizontal row as the
+    // action icons (between Comment and Repost). It has no content-desc AND no
+    // numeric count text (e.g. "342", "1.8K") — both of which every real action
+    // icon carries at least one of. Admitting it into rowNodes shifts all
+    // positional assignments one slot to the right, so shareFeed lands on the
+    // audio disc and shareDm lands on Repost. Filter it out here.
+    const clsM = attrs.match(/class="([^"]*)"/);
+    const cls = clsM ? clsM[1] : "";
+    const txtM = attrs.match(/\btext="([^"]*)"/);
+    const txt = txtM ? txtM[1] : "";
+    if (cls === "android.widget.ImageView" && !cd && !/\d/.test(txt)) continue;
     rowNodes.push({ x: c.x, y: c.y, cd });
   }
   rowNodes.sort((a, b) => a.x - b.x);
