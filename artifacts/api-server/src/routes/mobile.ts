@@ -2040,6 +2040,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
   async function runVisitOwnProfile(serial: string, onLog?: (msg: string) => void): Promise<void> {
+    // Press Back once before scanning so we are guaranteed to be on the
+    // Instagram home feed, not still on the notifications page or any other
+    // intermediate screen that could cause findInstagramProfileTab to match
+    // a wrong element (e.g. the "Add Story" + button in the top-left of the
+    // feed, which can appear in the accessibility tree with similar attributes
+    // to the profile tab when the nav-bar is not fully rendered yet).
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+
     // Locate profile tab via accessibility tree — more reliable than fixed %
     // coordinates which drift across screen resolutions and OEM skins.
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
@@ -2049,7 +2058,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
     await android.tap(serial, profileTab.x, profileTab.y);
-    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 1000));
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 1000));
+
+    // The profile / "Discover people" page sometimes triggers an
+    // "Allow Instagram to access your contacts?" system dialog.
+    // Dismiss it automatically so the cycle does not stall.
+    const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (dismissed) {
+      onLog?.(`Random Jitter: dismissed contacts popup ("${dismissed}")`);
+      await sleepOrAbort(serial, 600);
+    }
+
     onLog?.("Random Jitter: ✓ visited own profile");
     // Return to home feed.
     const homeTab = await android.findHomeTab(serial).catch(() => null);

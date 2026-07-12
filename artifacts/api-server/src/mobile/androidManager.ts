@@ -690,6 +690,11 @@ export async function dismissInstagramInterstitials(serial: string): Promise<str
     "No Thanks",
     "Later",
     "Dismiss",
+    // "Don't Allow Access" is the exact button text on the Instagram
+    // "Allow Instagram to access your contacts?" system dialog.
+    // Listed before the generic "Don't Allow" so the more specific match
+    // wins first (avoids relying on substring fallback).
+    "Don't Allow Access",
     "Don't Allow",
     "Deny",
     "Cancel",
@@ -2829,18 +2834,25 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   const { w, h } = getScreenSize(serial);
   const topSkip = Math.round(h * 0.10); // skip the fixed header row ("Notifications")
   const botSkip = Math.round(h * 0.92); // skip the bottom nav bar
-  // Notification rows span most of the screen width. Require the node to be
-  // at least 50% of screen width so we only pick full notification rows
-  // (not small avatar thumbnails, buttons, or the time label on the right).
+  // On the Instagram notifications page each row has a small circular avatar
+  // on the LEFT side of the screen — that is the tappable element.  The
+  // notification text to the right is a non-clickable TextView.  Scanning
+  // the screen layout (1080 px wide) shows the avatar Views at x≈132 px
+  // (~12 % of screen width) with bounds ≈ [55,y1][209,y2] (154 px wide).
   //
-  // Old version used a class="android.widget.View" + rightMax=25% filter
-  // which was doubly broken:
-  //   1. UIAutomator XML attribute order is not guaranteed — clickable="true"
-  //      can appear after class=, so the fixed-order regex silently matched nothing.
-  //   2. cx > 25% filtered OUT full-width rows (centre ≈ 50%), keeping only
-  //      items in the leftmost quarter which in practice is always empty/avatar-only.
-  // Using the same <node …/> parser as every other findXxx function avoids both.
-  const minRowWidth = Math.round(w * 0.50);
+  // The filter: keep only clickable nodes whose centre falls within the left
+  // 25 % of the screen (the avatar column).  rightMax = 25 % is generous
+  // enough to catch the avatar regardless of screen size or OEM skin.
+  //
+  // Previous v2 "fix" mistakenly required width ≥ 50 % of screen, which
+  // rejected all 154 px avatar Views and left candidates empty — so the
+  // click-notification feature still never ran.  Reverted to cx < rightMax.
+  //
+  // The important real fix (kept from v2): use the <node …/> regex rather
+  // than a fixed-attribute-order regex.  UIAutomator does NOT guarantee
+  // attribute order, so a pattern like clickable="true"…class="…"…bounds="…"
+  // silently matched nothing on this device.
+  const rightMax = Math.round(w * 0.25);
   const candidates: { x: number; y: number }[] = [];
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let m: RegExpExecArray | null;
@@ -2850,10 +2862,9 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
-    const rowWidth = x2 - x1;
-    if (rowWidth < minRowWidth) continue; // skip small tappable elements
     const cx = Math.round((x1 + x2) / 2);
     const cy = Math.round((y1 + y2) / 2);
+    if (cx > rightMax) continue;  // only left-column avatar elements
     if (cy < topSkip || cy > botSkip) continue;
     candidates.push({ x: cx, y: cy });
   }

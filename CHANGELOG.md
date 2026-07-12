@@ -4,6 +4,43 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.518] — 2026-07-12
+
+### Fix: Visit My Profile — press Back before scanning for profile tab
+
+Added a `pressBack + 800 ms` at the start of `runVisitOwnProfile` so the function always starts from the Instagram home feed rather than whatever screen the previous step (e.g. Check Notifications) left behind. Without this, `findInstagramProfileTab` was occasionally running while the notifications page was still visible, causing it to match a wrong element — the "Add Story" (+) button in the top-left of the feed — and tap it instead of the profile icon.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runVisitOwnProfile`: added pressBack + sleep at entry
+
+---
+
+### Fix: "Allow Instagram to access your contacts?" popup auto-dismissed
+
+The "Allow Instagram to access your contacts?" dialog appears when visiting the own profile / Discover People page. It now gets dismissed automatically as part of `runVisitOwnProfile`:
+
+- Added `"Don't Allow Access"` to `DISMISS_LABELS` in `dismissInstagramInterstitials` (listed before the generic "Don't Allow" so the more specific match wins). This is the exact button text shown in the Instagram contacts-permission dialog.
+- After tapping the profile tab, `runVisitOwnProfile` now calls `dismissInstagramInterstitials` and logs which button it tapped (if any), preventing the cycle from stalling on the popup.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `dismissInstagramInterstitials`: added "Don't Allow Access"
+- `artifacts/api-server/src/routes/mobile.ts` — `runVisitOwnProfile`: added dismiss call + log after tap
+
+---
+
+### Fix: Click-notification still broken after v1.1.516 — correct filter restored
+
+The v1.1.516 rewrite of `findRandomNotificationItem` introduced a wrong width-≥50% filter. The actual tappable elements on the notifications page are the circular avatar Views on the LEFT side of each row (~154 px wide, centre at x≈132, ~12% of 1080 px screen width). Requiring width ≥ 540 px rejected all of them, so the function still returned null every time.
+
+**Root cause of original bug**: only the fixed-attribute-order regex — not the filter — was broken. The `cx < rightMax (25%)` filter was correct all along.
+
+**Fix**: kept the `<node>` regex (attribute-order independent, from v1.1.516) and restored the `cx < rightMax` filter. Added a detailed comment referencing the layout scan so this is not reverted again.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findRandomNotificationItem`: reverted width filter to `cx < rightMax`
+
+---
+
 ## [1.1.517] — 2026-07-12
 
 ### Fix: Random Jitter fields reset to defaults on every restart
