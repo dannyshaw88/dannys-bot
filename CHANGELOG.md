@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.493] — 2026-07-12
+
+### Feature: Inject Browsing rewired into the actual Follow Users flow (was UI-only until now)
+
+**Inject Browsing was previously stored but never executed on the phone** — the settings existed in the UI but the code comment on them literally said "not yet wired into ADB mobile automation actions". This release wires the whole thing into the real follow flow and reworks the settings to match how it actually needs to behave per-user:
+
+**Settings simplified — mandatory/duplicate items removed**
+
+- **Inject Search Browsing** removed as a toggle — landing on a target's profile via Search is mandatory for every follow, so there's nothing to switch off.
+- **Inject Get Suggested Users** removed entirely — not part of the mobile follow flow.
+- **Inject Profile Browsing** (the old separate enable checkbox) removed — it was a duplicate of the "Inject Browsing" master toggle, which now gates the whole section by itself.
+- **Feed order** setting removed — asked for by name, not used by the new flow.
+- The panel is no longer a popup dialog behind an "Open" button — it's always visible under the Follow Users settings, since it now drives real behaviour rather than being an optional extra tucked away.
+
+**New behaviour — rolled independently for every user being followed**
+
+1. **Browse before follow %** (min–max) — rolled fresh per target user. A range of 5–10% gives each user roughly a 7.5% independent chance of getting the full browsing sequence below before the Follow tap; most users just get followed directly, exactly as before.
+2. If that roll hits: **Feed chance %** (min–max) decides whether the user's profile grid gets scrolled at all.
+3. If it scrolls: **Feed posts** (min–max) sets how many rows to scroll down (Instagram's profile grid is 3 posts per row).
+4. **Click post %** (min–max) then rolls whether one of the scrolled-past posts gets opened.
+5. If a post opens: **Like %**, **Share feed %** (repost), and **Share DM %** each roll independently to like / repost / send that post via DM.
+6. Every icon lookup (Like, Repost, Send) uses the same real accessibility-tree detection already used by the feed-scroll step (`findFeedActionIcons`) — if an icon can't be found on a given post (disabled by the poster, ambiguous layout, or the tap didn't land on a real post at all), that specific step is skipped rather than guessing a coordinate.
+7. All settings fit on two rows in the UI (4 + 3) instead of the old scattered dialog layout.
+
+Implemented as a new `runProfileBrowsingForUser` step in the mobile Follow Users flow, called after landing on a target's profile page and before the Follow button is tapped.
+
+---
+
 ## [1.1.492] — 2026-07-12
 
 ### Fix: Follow Users typed nothing at all (keyboard dump reliability) + manual-tap coordinate misalignment + Follow Users UI row layout

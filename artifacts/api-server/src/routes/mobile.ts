@@ -1725,38 +1725,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
-    // Inject Browsing settings (stored for UI parity with the desktop Follow
-    // Tool; not yet wired into mobile ADB automation actions).
-    injectSearchEnabled: z.boolean().default(false),
-    injectSearchMin: z.number().min(0).max(100).default(1),
-    injectSearchMax: z.number().min(0).max(100).default(1),
-    injectSuggestedEnabled: z.boolean().default(false),
-    injectSuggestedMin: z.number().min(0).max(100).default(1),
-    injectSuggestedMax: z.number().min(0).max(100).default(1),
-    injectProfileBrowsingEnabled: z.boolean().default(false),
-    injectProfileBrowsingMin: z.number().min(0).max(100).default(1),
-    injectProfileBrowsingMax: z.number().min(0).max(100).default(1),
-    injectProfileBrowsingBeforeFollow: z.boolean().default(false),
-    injectProfileBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
-    injectProfileBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
-    injectProfileBrowsingFeedMin: z.number().min(1).max(50).default(3),
-    injectProfileBrowsingFeedMax: z.number().min(1).max(50).default(6),
-    injectProfileBrowsingClickPostMin: z.number().min(0).max(20).default(0),
-    injectProfileBrowsingClickPostMax: z.number().min(0).max(20).default(0),
-    injectProfileBrowsingFeedOrderMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingFeedOrderMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingLikePctMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingLikePctMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToFeedPctMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToFeedPctMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToFeedPctOrderMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToFeedPctOrderMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToDmPctMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToDmPctMax: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToDmPctOrderMin: z.number().min(0).max(100).default(0),
-    injectProfileBrowsingShareToDmPctOrderMax: z.number().min(0).max(100).default(0),
+    // Inject Browsing — per-user profile-browsing behaviour woven into the
+    // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
+    // enable toggle anymore: search-browsing (landing on the profile via
+    // Search) is mandatory and always happens as part of following, "Get
+    // Suggested Users" was removed, and the old separate "Inject Profile
+    // Browsing" toggle was a duplicate of this whole section. The single
+    // injectBrowsingEnabled switch below gates everything; the roll
+    // percentages/counts are re-rolled independently for every user.
+    injectBrowsingEnabled: z.boolean().default(false),
+    // Rolled once per user: chance THIS user gets the profile-browsing
+    // sequence below run before they're followed. min=5/max=10 → each user
+    // independently has an ~7.5% (avg of the range) chance of it happening.
+    injectBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
+    // Chance, once browsing is triggered for this user, that their grid of
+    // posts gets scrolled at all.
+    injectBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
+    injectBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
+    // How many rows to scroll down (Instagram's profile grid is 3 posts per
+    // row) when the feed-chance roll above succeeds.
+    injectBrowsingFeedMin: z.number().min(1).max(50).default(3),
+    injectBrowsingFeedMax: z.number().min(1).max(50).default(6),
+    // Chance to open (click) one of the scrolled-past posts.
+    injectBrowsingClickPostPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingClickPostPctMax: z.number().min(0).max(100).default(0),
+    // Once a post is opened: chance to like it / repost it / share it via DM.
+    injectBrowsingLikePctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingLikePctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingShareFeedPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -1774,6 +1774,149 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   };
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
+  interface InjectBrowsingParams {
+    beforeFollowPctMin: number; beforeFollowPctMax: number;
+    feedChanceMin: number; feedChanceMax: number;
+    feedMin: number; feedMax: number;
+    clickPostPctMin: number; clickPostPctMax: number;
+    likePctMin: number; likePctMax: number;
+    shareFeedPctMin: number; shareFeedPctMax: number;
+    shareDmPctMin: number; shareDmPctMax: number;
+  }
+
+  /** Picks a value uniformly from [lo, hi], tolerating either order. */
+  function rollRange(min: number, max: number): number {
+    const lo = Math.min(min, max), hi = Math.max(min, max);
+    return lo + Math.random() * (hi - lo);
+  }
+
+  /**
+   * Runs the "Inject Browsing" sequence for ONE user's profile page, called
+   * (when it rolls true) BEFORE the Follow button is tapped for that user.
+   * Every roll below (whether the sequence runs at all, whether the feed
+   * gets scrolled, whether a post gets opened, liked, reposted, or shared
+   * via DM) is drawn fresh per user — a min/max pair is a range the actual
+   * chance for THIS user is drawn from, not a fixed percentage, so e.g.
+   * min=5/max=10 gives each user its own roll somewhere in that band
+   * (~7.5% on average) rather than exactly 7.5% every time.
+   *
+   * Must be called while already sitting on the target user's profile page
+   * (after findAndTapUserInSearch, before tapFollowButtonOnProfilePage).
+   * Every step degrades to a no-op (never throws, never leaves the profile
+   * page) if the expected icon/button can't be located — per spec, a
+   * missing icon just means that step is skipped for this user.
+   */
+  async function runProfileBrowsingForUser(
+    serial: string,
+    browsing: InjectBrowsingParams,
+    onLog?: (msg: string) => void,
+  ): Promise<void> {
+    const beforeFollowChance = rollRange(browsing.beforeFollowPctMin, browsing.beforeFollowPctMax) / 100;
+    if (!(beforeFollowChance > 0 && Math.random() < beforeFollowChance)) return;
+
+    onLog?.("Inject Browsing: rolled to browse this profile before following");
+    const { w, h } = getScreenSize(serial);
+
+    const feedChance = rollRange(browsing.feedChanceMin, browsing.feedChanceMax) / 100;
+    if (!(feedChance > 0 && Math.random() < feedChance)) {
+      onLog?.("Inject Browsing: feed-scroll roll missed — skipping grid scroll");
+      return;
+    }
+
+    const rows = Math.max(1, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
+    onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
+    const seenPostSlots: { x: number; y: number }[] = [];
+    const x = Math.round(w / 2);
+    const y1 = Math.round(h * 0.78);
+    const y2 = Math.round(h * 0.30);
+    for (let i = 0; i < rows; i++) {
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      // Instagram's profile grid is 3 columns; remember roughly where each
+      // column sat on THIS scroll position so a later "click post" roll can
+      // pick one of the rows actually scrolled past, not a guess.
+      seenPostSlots.push(
+        { x: Math.round(w * 0.17), y: Math.round(h * 0.55) },
+        { x: Math.round(w * 0.50), y: Math.round(h * 0.55) },
+        { x: Math.round(w * 0.83), y: Math.round(h * 0.55) },
+      );
+      await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
+      await sleepOrAbort(serial, 350 + Math.round(Math.random() * 300));
+    }
+
+    const clickChance = rollRange(browsing.clickPostPctMin, browsing.clickPostPctMax) / 100;
+    if (!(clickChance > 0 && Math.random() < clickChance)) {
+      onLog?.("Inject Browsing: click-post roll missed — not opening a post");
+      return;
+    }
+
+    const slot = seenPostSlots[Math.floor(Math.random() * seenPostSlots.length)];
+    onLog?.("Inject Browsing: opening a scrolled post");
+    await android.tap(serial, slot.x, slot.y);
+    await sleepOrAbort(serial, 1200);
+
+    // Confirm a post actually opened (has a Like button) rather than
+    // assuming the tap landed on a real thumbnail — profile grids can have
+    // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
+    const icons = await android.findFeedActionIcons(serial).catch(() => null);
+    if (!icons) {
+      onLog?.("Inject Browsing: no post opened here (empty grid cell) — returning to profile");
+      return;
+    }
+
+    const likeChance = rollRange(browsing.likePctMin, browsing.likePctMax) / 100;
+    if (likeChance > 0 && Math.random() < likeChance) {
+      try {
+        await android.tap(serial, icons.like.x, icons.like.y);
+        onLog?.("Inject Browsing: liked the post");
+        await sleepOrAbort(serial, 400);
+      } catch { /* best effort */ }
+    }
+
+    const shareFeedChance = rollRange(browsing.shareFeedPctMin, browsing.shareFeedPctMax) / 100;
+    if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
+      if (!icons.shareFeed) {
+        onLog?.("Inject Browsing: share-to-feed icon not found on this post — skipping");
+      } else {
+        try {
+          await android.tap(serial, icons.shareFeed.x, icons.shareFeed.y);
+          await sleepOrAbort(serial, 1000);
+          const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+          if (repostBtn) {
+            await android.tap(serial, repostBtn.x, repostBtn.y);
+            onLog?.("Inject Browsing: reposted the post");
+            await sleepOrAbort(serial, 800);
+            const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
+            if (closeBtn) { await android.tap(serial, closeBtn.x, closeBtn.y); await sleepOrAbort(serial, 400); }
+          } else {
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 400);
+          }
+        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
+      }
+    }
+
+    const shareDmChance = rollRange(browsing.shareDmPctMin, browsing.shareDmPctMax) / 100;
+    if (shareDmChance > 0 && Math.random() < shareDmChance) {
+      if (!icons.shareDm) {
+        onLog?.("Inject Browsing: share-to-DM icon not found on this post — skipping");
+      } else {
+        try {
+          await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+          await sleepOrAbort(serial, 1200);
+          await tapRandomShareSheetRecipient(serial, w, h);
+          await sleepOrAbort(serial, 1500);
+          const sent = await sendShareSheet(serial, w, h);
+          if (sent) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
+          else { await android.pressBack(serial); await sleepOrAbort(serial, 400); }
+        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
+      }
+    }
+
+    // Back out of the opened post to the profile grid before continuing.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 500);
+  }
+
   async function runFollowUsersStep(
     serial: string,
     params: {
@@ -1782,9 +1925,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sources: { type: string; value: string }[];
       onLog?: (msg: string) => void;
       recordFollow?: (username: string) => void;
+      browsing?: InjectBrowsingParams;
     },
   ): Promise<number> {
-    const { usersMin, usersMax, sources, onLog, recordFollow } = params;
+    const { usersMin, usersMax, sources, onLog, recordFollow, browsing } = params;
 
     if (!sources.length) {
       onLog?.("Follow: no target sources configured — skipping");
@@ -1878,6 +2022,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         await sleepOrAbort(serial, 1500);
 
+        // Inject Browsing — rolled fresh for this user; browses the
+        // profile's grid (scroll/open/like/repost/share-DM) BEFORE the
+        // Follow tap when it rolls true, so the follow doesn't always look
+        // like an instant drive-by.
+        if (browsing) {
+          await runProfileBrowsingForUser(serial, browsing, onLog).catch((e: any) => {
+            if (e?.message === "cycle-aborted") throw e;
+            onLog?.(`Inject Browsing: error — ${e?.message}`);
+          });
+        }
+
         // Tap Follow on the profile page
         const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
         if (didFollow) {
@@ -1961,6 +2116,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
         followEnabled, followUsersMin, followUsersMax, followSources,
+        injectBrowsingEnabled,
+        injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
+        injectBrowsingFeedChanceMin, injectBrowsingFeedChanceMax,
+        injectBrowsingFeedMin, injectBrowsingFeedMax,
+        injectBrowsingClickPostPctMin, injectBrowsingClickPostPctMax,
+        injectBrowsingLikePctMin, injectBrowsingLikePctMax,
+        injectBrowsingShareFeedPctMin, injectBrowsingShareFeedPctMax,
+        injectBrowsingShareDmPctMin, injectBrowsingShareDmPctMax,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -2105,6 +2268,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             sources: followSources,
             onLog: (msg) => tLog(`  ${msg}`),
             recordFollow: (username) => recordMobileFollow(serial, username, "hikerapi"),
+            browsing: injectBrowsingEnabled ? {
+              beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
+              feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,
+              feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
+              clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
+              likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
+              shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
+              shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+            } : undefined,
           });
           followedCount = followCount;
           steps.push(`follow(${followCount} followed)`);

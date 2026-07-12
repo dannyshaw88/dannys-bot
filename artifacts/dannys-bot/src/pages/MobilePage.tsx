@@ -948,25 +948,21 @@ interface AutomationSettingsData {
   followUsersMin: number;
   followUsersMax: number;
   followSources: { type: string; value: string }[];
-  // Inject Browsing (settings parity with desktop Follow Tool; stored but
-  // not yet wired into ADB mobile automation actions).
-  injectSearchEnabled: boolean;
-  injectSearchMin: number; injectSearchMax: number;
-  injectSuggestedEnabled: boolean;
-  injectSuggestedMin: number; injectSuggestedMax: number;
-  injectProfileBrowsingEnabled: boolean;
-  injectProfileBrowsingMin: number; injectProfileBrowsingMax: number;
-  injectProfileBrowsingBeforeFollow: boolean;
-  injectProfileBrowsingBeforeFollowPctMin: number; injectProfileBrowsingBeforeFollowPctMax: number;
-  injectProfileBrowsingFeedChanceMin: number; injectProfileBrowsingFeedChanceMax: number;
-  injectProfileBrowsingFeedMin: number; injectProfileBrowsingFeedMax: number;
-  injectProfileBrowsingClickPostMin: number; injectProfileBrowsingClickPostMax: number;
-  injectProfileBrowsingFeedOrderMin: number; injectProfileBrowsingFeedOrderMax: number;
-  injectProfileBrowsingLikePctMin: number; injectProfileBrowsingLikePctMax: number;
-  injectProfileBrowsingShareToFeedPctMin: number; injectProfileBrowsingShareToFeedPctMax: number;
-  injectProfileBrowsingShareToFeedPctOrderMin: number; injectProfileBrowsingShareToFeedPctOrderMax: number;
-  injectProfileBrowsingShareToDmPctMin: number; injectProfileBrowsingShareToDmPctMax: number;
-  injectProfileBrowsingShareToDmPctOrderMin: number; injectProfileBrowsingShareToDmPctOrderMax: number;
+  // Inject Browsing — per-user profile-browsing behaviour woven into the
+  // Follow Users flow (12 Jul 2026 rework). No per-item toggles: search
+  // browsing is mandatory, "Get Suggested Users" was removed, and the old
+  // "Inject Profile Browsing" toggle was a duplicate of this whole
+  // section — injectBrowsingEnabled alone gates everything below, and the
+  // panel is always visible (not a collapsible dialog) since it's core to
+  // how following behaves, not an optional extra.
+  injectBrowsingEnabled: boolean;
+  injectBrowsingBeforeFollowPctMin: number; injectBrowsingBeforeFollowPctMax: number;
+  injectBrowsingFeedChanceMin: number; injectBrowsingFeedChanceMax: number;
+  injectBrowsingFeedMin: number; injectBrowsingFeedMax: number;
+  injectBrowsingClickPostPctMin: number; injectBrowsingClickPostPctMax: number;
+  injectBrowsingLikePctMin: number; injectBrowsingLikePctMax: number;
+  injectBrowsingShareFeedPctMin: number; injectBrowsingShareFeedPctMax: number;
+  injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -984,20 +980,14 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
   followSources: [],
-  injectSearchEnabled: false, injectSearchMin: 1, injectSearchMax: 1,
-  injectSuggestedEnabled: false, injectSuggestedMin: 1, injectSuggestedMax: 1,
-  injectProfileBrowsingEnabled: false, injectProfileBrowsingMin: 1, injectProfileBrowsingMax: 1,
-  injectProfileBrowsingBeforeFollow: false,
-  injectProfileBrowsingBeforeFollowPctMin: 0, injectProfileBrowsingBeforeFollowPctMax: 0,
-  injectProfileBrowsingFeedChanceMin: 100, injectProfileBrowsingFeedChanceMax: 100,
-  injectProfileBrowsingFeedMin: 3, injectProfileBrowsingFeedMax: 6,
-  injectProfileBrowsingClickPostMin: 0, injectProfileBrowsingClickPostMax: 0,
-  injectProfileBrowsingFeedOrderMin: 0, injectProfileBrowsingFeedOrderMax: 0,
-  injectProfileBrowsingLikePctMin: 0, injectProfileBrowsingLikePctMax: 0,
-  injectProfileBrowsingShareToFeedPctMin: 0, injectProfileBrowsingShareToFeedPctMax: 0,
-  injectProfileBrowsingShareToFeedPctOrderMin: 0, injectProfileBrowsingShareToFeedPctOrderMax: 0,
-  injectProfileBrowsingShareToDmPctMin: 0, injectProfileBrowsingShareToDmPctMax: 0,
-  injectProfileBrowsingShareToDmPctOrderMin: 0, injectProfileBrowsingShareToDmPctOrderMax: 0,
+  injectBrowsingEnabled: false,
+  injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
+  injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
+  injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
+  injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
+  injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
+  injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
+  injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1153,33 +1143,21 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
             followSources: s.followSources,
-            injectSearchEnabled: s.injectSearchEnabled,
-            injectSearchMin: s.injectSearchMin, injectSearchMax: s.injectSearchMax,
-            injectSuggestedEnabled: s.injectSuggestedEnabled,
-            injectSuggestedMin: s.injectSuggestedMin, injectSuggestedMax: s.injectSuggestedMax,
-            injectProfileBrowsingEnabled: s.injectProfileBrowsingEnabled,
-            injectProfileBrowsingMin: s.injectProfileBrowsingMin, injectProfileBrowsingMax: s.injectProfileBrowsingMax,
-            injectProfileBrowsingBeforeFollow: s.injectProfileBrowsingBeforeFollow,
-            injectProfileBrowsingBeforeFollowPctMin: s.injectProfileBrowsingBeforeFollowPctMin,
-            injectProfileBrowsingBeforeFollowPctMax: s.injectProfileBrowsingBeforeFollowPctMax,
-            injectProfileBrowsingFeedChanceMin: s.injectProfileBrowsingFeedChanceMin,
-            injectProfileBrowsingFeedChanceMax: s.injectProfileBrowsingFeedChanceMax,
-            injectProfileBrowsingFeedMin: s.injectProfileBrowsingFeedMin,
-            injectProfileBrowsingFeedMax: s.injectProfileBrowsingFeedMax,
-            injectProfileBrowsingClickPostMin: s.injectProfileBrowsingClickPostMin,
-            injectProfileBrowsingClickPostMax: s.injectProfileBrowsingClickPostMax,
-            injectProfileBrowsingFeedOrderMin: s.injectProfileBrowsingFeedOrderMin,
-            injectProfileBrowsingFeedOrderMax: s.injectProfileBrowsingFeedOrderMax,
-            injectProfileBrowsingLikePctMin: s.injectProfileBrowsingLikePctMin,
-            injectProfileBrowsingLikePctMax: s.injectProfileBrowsingLikePctMax,
-            injectProfileBrowsingShareToFeedPctMin: s.injectProfileBrowsingShareToFeedPctMin,
-            injectProfileBrowsingShareToFeedPctMax: s.injectProfileBrowsingShareToFeedPctMax,
-            injectProfileBrowsingShareToFeedPctOrderMin: s.injectProfileBrowsingShareToFeedPctOrderMin,
-            injectProfileBrowsingShareToFeedPctOrderMax: s.injectProfileBrowsingShareToFeedPctOrderMax,
-            injectProfileBrowsingShareToDmPctMin: s.injectProfileBrowsingShareToDmPctMin,
-            injectProfileBrowsingShareToDmPctMax: s.injectProfileBrowsingShareToDmPctMax,
-            injectProfileBrowsingShareToDmPctOrderMin: s.injectProfileBrowsingShareToDmPctOrderMin,
-            injectProfileBrowsingShareToDmPctOrderMax: s.injectProfileBrowsingShareToDmPctOrderMax,
+            injectBrowsingEnabled: s.injectBrowsingEnabled,
+            injectBrowsingBeforeFollowPctMin: s.injectBrowsingBeforeFollowPctMin,
+            injectBrowsingBeforeFollowPctMax: s.injectBrowsingBeforeFollowPctMax,
+            injectBrowsingFeedChanceMin: s.injectBrowsingFeedChanceMin,
+            injectBrowsingFeedChanceMax: s.injectBrowsingFeedChanceMax,
+            injectBrowsingFeedMin: s.injectBrowsingFeedMin,
+            injectBrowsingFeedMax: s.injectBrowsingFeedMax,
+            injectBrowsingClickPostPctMin: s.injectBrowsingClickPostPctMin,
+            injectBrowsingClickPostPctMax: s.injectBrowsingClickPostPctMax,
+            injectBrowsingLikePctMin: s.injectBrowsingLikePctMin,
+            injectBrowsingLikePctMax: s.injectBrowsingLikePctMax,
+            injectBrowsingShareFeedPctMin: s.injectBrowsingShareFeedPctMin,
+            injectBrowsingShareFeedPctMax: s.injectBrowsingShareFeedPctMax,
+            injectBrowsingShareDmPctMin: s.injectBrowsingShareDmPctMin,
+            injectBrowsingShareDmPctMax: s.injectBrowsingShareDmPctMax,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1268,7 +1246,6 @@ function AutomationSettingsPanel({
   nextRunAt: number | null;
 }) {
   // Follow Users UI local state — hooks must come before any conditional return.
-  const [showBrowsingDialog, setShowBrowsingDialog] = useState(false);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
@@ -1637,121 +1614,50 @@ function AutomationSettingsPanel({
           </div>
         </div>
 
-        {/* ── Inject Browsing ───────────────────────────────── */}
+        {/* ── Inject Browsing ─────────────────────────────────
+             Always visible, never collapsible — this drives real
+             per-user behaviour in the follow flow, not an optional extra.
+             No per-item toggles: search-browsing is mandatory (removed),
+             "Get Suggested Users" was removed, and the old separate
+             "Inject Profile Browsing" toggle was a duplicate of this
+             whole section — injectBrowsingEnabled alone gates everything
+             below. All 7 roll settings fit on two rows (4 + 3). */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              id="inject-search-enabled"
-              checked={settings.injectSearchEnabled}
-              onChange={e => setSettings(s => ({ ...s, injectSearchEnabled: e.target.checked }))}
+              id="inject-browsing-enabled"
+              checked={settings.injectBrowsingEnabled}
+              onChange={e => setSettings(s => ({ ...s, injectBrowsingEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="inject-search-enabled" className="text-sm text-muted-foreground cursor-pointer select-none">Inject Browsing</label>
-            <Button
-              variant="outline" size="sm"
-              className="h-7 text-xs px-3 ml-auto"
-              onClick={() => setShowBrowsingDialog(true)}
-            >Open</Button>
+            <label htmlFor="inject-browsing-enabled" className="text-sm text-muted-foreground cursor-pointer select-none">Inject Browsing</label>
           </div>
-          {settings.injectSearchEnabled && (
-            <div className="pl-6 flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">Search:</span>
-              <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs"
-                value={settings.injectSearchMin}
-                onChange={e => setSettings(s => ({ ...s, injectSearchMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-xs text-muted-foreground">–</span>
-              <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs"
-                value={settings.injectSearchMax}
-                onChange={e => setSettings(s => ({ ...s, injectSearchMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
+          <div className="pl-6 grid grid-cols-4 gap-x-3 gap-y-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1 flex-wrap">Browse before follow
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingBeforeFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
             </div>
-          )}
+            <div className="flex items-center gap-1 flex-wrap">Feed chance
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">Feed posts
+              <Input type="number" min={1} max={50} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={1} max={50} className="w-12 text-center text-xs" value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">Click post
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingClickPostPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingClickPostPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">Like %
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingLikePctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">Share feed %
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingShareFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingShareFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">Share DM %
+              <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+            </div>
+          </div>
         </div>
-
-        {/* ── Inject Browsing dialog ────────────────────────── */}
-        {showBrowsingDialog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowBrowsingDialog(false)}>
-            <div className="bg-card border border-border rounded-xl p-6 w-[480px] max-h-[80vh] overflow-y-auto space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-foreground">Inject Browsing Settings</h3>
-                <button className="text-muted-foreground hover:text-foreground" onClick={() => setShowBrowsingDialog(false)}>✕</button>
-              </div>
-              <div className="space-y-4 text-sm">
-                {/* Search Browsing */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" id="inj-search" checked={settings.injectSearchEnabled}
-                      onChange={e => setSettings(s => ({ ...s, injectSearchEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
-                    <label htmlFor="inj-search" className="text-muted-foreground cursor-pointer">Inject Search Browsing</label>
-                  </div>
-                  <div className="pl-6 flex items-center gap-2">
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSearchMin}
-                      onChange={e => setSettings(s => ({ ...s, injectSearchMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-muted-foreground text-xs">–</span>
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSearchMax}
-                      onChange={e => setSettings(s => ({ ...s, injectSearchMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-xs text-muted-foreground">sessions</span>
-                  </div>
-                </div>
-                {/* Suggested Browsing */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" id="inj-sug" checked={settings.injectSuggestedEnabled}
-                      onChange={e => setSettings(s => ({ ...s, injectSuggestedEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
-                    <label htmlFor="inj-sug" className="text-muted-foreground cursor-pointer">Inject Suggested Browsing</label>
-                  </div>
-                  <div className="pl-6 flex items-center gap-2">
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSuggestedMin}
-                      onChange={e => setSettings(s => ({ ...s, injectSuggestedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-muted-foreground text-xs">–</span>
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectSuggestedMax}
-                      onChange={e => setSettings(s => ({ ...s, injectSuggestedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-xs text-muted-foreground">sessions</span>
-                  </div>
-                </div>
-                {/* Profile Browsing */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" id="inj-profile" checked={settings.injectProfileBrowsingEnabled}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingEnabled: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
-                    <label htmlFor="inj-profile" className="text-muted-foreground cursor-pointer">Inject Profile Browsing</label>
-                  </div>
-                  <div className="pl-6 flex items-center gap-2">
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingMin}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-muted-foreground text-xs">–</span>
-                    <Input type="number" min={0} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingMax}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-xs text-muted-foreground">sessions</span>
-                  </div>
-                  <div className="pl-6 flex items-center gap-2">
-                    <input type="checkbox" id="inj-profile-before" checked={settings.injectProfileBrowsingBeforeFollow}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollow: e.target.checked }))} disabled={loading} className="w-4 h-4 accent-primary" />
-                    <label htmlFor="inj-profile-before" className="text-xs text-muted-foreground cursor-pointer">Browse profile before follow</label>
-                    <Input type="number" min={0} max={100} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingBeforeFollowPctMin}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-xs text-muted-foreground">–</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className="w-14 text-center text-xs" value={settings.injectProfileBrowsingBeforeFollowPctMax}
-                      onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                    <span className="text-xs text-muted-foreground">%</span>
-                  </div>
-                  <div className="pl-6 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">Feed chance <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />%</div>
-                    <div className="flex items-center gap-1">Feed posts <Input type="number" min={1} max={50} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={1} max={50} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                    <div className="flex items-center gap-1">Click post <Input type="number" min={0} max={20} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingClickPostMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingClickPostMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={20} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingClickPostMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingClickPostMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                    <div className="flex items-center gap-1">Feed order <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingFeedOrderMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedOrderMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingFeedOrderMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingFeedOrderMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                    <div className="flex items-center gap-1">Like % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingLikePctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingLikePctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                    <div className="flex items-center gap-1">Share feed % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingShareToFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingShareToFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                    <div className="flex items-center gap-1">Share DM % <Input type="number" min={0} max={100} className="w-12 text-center text-xs ml-1" value={settings.injectProfileBrowsingShareToDmPctMin} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />–<Input type="number" min={0} max={100} className="w-12 text-center text-xs" value={settings.injectProfileBrowsingShareToDmPctMax} onChange={e => setSettings(s => ({ ...s, injectProfileBrowsingShareToDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} /></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
         <div className="space-y-2">
