@@ -1380,11 +1380,19 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   let shareFeed: { x: number; y: number } | null = null;
   let shareDm: { x: number; y: number } | null = null;
 
-  if (rowNodes.length === 3) {
-    // All three possible icons present — order forced by elimination.
-    comment = pos(rowNodes[0]);
-    shareFeed = pos(rowNodes[1]);
-    shareDm = pos(rowNodes[2]);
+  if (rowNodes.length >= 3) {
+    // Instagram never reorders Comment → Repost → Send, only omits disabled
+    // ones. When 3 or more nodes are found, the left-most three are always
+    // [Comment, Repost, Send] in that order — any additional nodes to the
+    // right (e.g. the Bookmark/Save icon that slipped past the saveCutoffX
+    // heuristic when the screen-width query returned a wrong default) are
+    // discarded. Slicing to exactly 3 is safer than relying solely on the
+    // saveCutoffX percentage, which only works correctly when getScreenSize
+    // returns the real device width.
+    const [c, sf, sd] = rowNodes;
+    comment  = pos(c);
+    shareFeed = pos(sf);
+    shareDm   = pos(sd);
   } else {
     const commentLabeled = rowNodes.find(n => /comment/i.test(n.cd));
     if (commentLabeled) {
@@ -1394,12 +1402,11 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
         shareFeed = pos(others[0]);
         shareDm = pos(others[1]);
       }
-      // others.length is 0 or 1 here: ambiguous or both disabled — leave
-      // shareFeed/shareDm null rather than guess which one a lone icon is.
+      // others.length is 0 or 1: ambiguous (one of Repost/Send is disabled) —
+      // leave shareFeed/shareDm null rather than guess which one it is.
     }
-    // rowNodes.length is 0, 1, or 2 with no Comment label found: can't
-    // safely tell which action(s) these icon(s) actually are — everything
-    // stays null (skip comment identification and both share actions).
+    // rowNodes.length is 0, 1, or 2 with no Comment label: can't safely
+    // identify the remaining icons by position alone — leave all null.
   }
 
   return { like, comment, shareFeed, shareDm };

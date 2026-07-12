@@ -1263,6 +1263,14 @@ function AutomationSettingsPanel({
     } catch {} finally { setLoadingFollowed(false); }
   }, [phone?.serial]);
 
+  // Auto-refresh the followed list every 5 s while the panel is open so
+  // users followed during a running cycle appear without manual re-toggle.
+  React.useEffect(() => {
+    if (!showFollowedUsers) return;
+    const id = setInterval(loadFollowedUsers, 5000);
+    return () => clearInterval(id);
+  }, [showFollowedUsers, loadFollowedUsers]);
+
   if (!phone) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
@@ -1640,11 +1648,11 @@ function AutomationSettingsPanel({
             <label htmlFor="inject-browsing-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Inject Browsing</label>
           </div>
 
-          {/* Row 2: Browse before follow | [Feed chance  Feed posts] — Feed
-               chance and Feed posts sit right next to each other (gap-2)
-               as a paired group, matching the "few pixels apart" style of
-               the stories section above. Browse before follow has a larger
-               gap (gap-6) to visually separate it as the gate condition. */}
+          {/* Row 2: Browse before follow / Feed chance / Feed posts / Click posts %
+               All four fields share the same gap-6 so spacing is identical
+               between every adjacent pair. With flex-wrap, the next row
+               (Like / Share feed / Share to DM) starts at the left edge,
+               placing Like % directly below Browse before follow. */}
           <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
@@ -1654,28 +1662,22 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Feed chance %</Label>
-                <div className="flex items-center gap-2">
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Feed posts</Label>
-                <div className="flex items-center gap-2">
-                  <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Feed chance %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-          </div>
-
-          {/* Row 3: Click posts / Like / Share feed / Share to DM */}
-          <div className="grid grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Feed posts</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Click posts %</Label>
               <div className="flex items-center gap-2">
@@ -1684,6 +1686,11 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
+          </div>
+
+          {/* Row 3: Like / Share feed / Share to DM — wraps naturally below row 2,
+               with Like % landing directly below Browse before follow. */}
+          <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Like %</Label>
               <div className="flex items-center gap-2">

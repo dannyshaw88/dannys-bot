@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.498] — 2026-07-12
+
+### Fix: Share-to-Feed / Share-via-DM still not found even after v1.1.497 saveCutoffX fix
+
+**Root cause (complete)**: `findFeedActionIcons` only entered the "all icons known" branch when `rowNodes.length === 3`. When 4 nodes were collected (bookmark slipping past the `saveCutoffX` heuristic due to `getScreenSize` returning a wrong default, or any device where the bookmark's X sits below the 80%-width threshold), the function fell to the `else` branch. That branch looked for a Comment-labeled node; if Comment had no content-desc it also found nothing → `shareFeed` and `shareDm` stayed null for every post regardless of what was visibly on screen.
+
+**Fix**: the branch now triggers for `rowNodes.length >= 3`. Instagram never reorders Comment → Repost → Send — it only omits disabled ones — so the leftmost three nodes are always exactly [Comment, Repost, Send] in that order. Any nodes to the right of the third (bookmark, or any future extra icon) are discarded. This is independent of screen width or `getScreenSize` accuracy, so it works correctly even when the width query falls back to a wrong default.
+
+### Fix: Followed Users tab not tracking users followed during a running cycle
+
+The list only updated when the "Followed" toggle button was manually clicked open. Any users followed while the tab was already open — or before the user opened it that session — were never visible without closing and re-opening the panel. A 5-second polling interval now auto-refreshes the list from the server whenever the panel is open, so newly followed users appear within a few seconds without any user interaction.
+
+### UI: Inject Browsing layout — equal spacing, Click Posts % on row 2, Like % below Browse Before Follow
+
+Three changes to the Inject Browsing settings panel:
+
+1. **Equal spacing everywhere**: the inner nested flex container that grouped Feed Chance and Feed Posts with a narrower gap has been removed. All four items on row 2 (Browse Before Follow / Feed Chance / Feed Posts / Click Posts %) now share the same `gap-6` spacing as the stories section, so every adjacent pair has identical separation.
+2. **Click Posts % moved to row 2**: was previously the first item on the 4-column row 3. Now sits alongside Browse Before Follow, Feed Chance, and Feed Posts on the same flex row.
+3. **Like % falls directly below Browse Before Follow**: with Click Posts % moved up, row 3 now contains only Like % / Share Feed % / Share to DM %. Because the flex rows share the same left-edge alignment, Like % sits directly below Browse Before Follow as requested.
+
+---
+
 ## [1.1.497] — 2026-07-12
 
 ### Fix: Share to Feed / Share via DM icons never found in Inject Browsing
