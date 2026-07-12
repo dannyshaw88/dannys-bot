@@ -1270,6 +1270,7 @@ function AutomationSettingsPanel({
   // Follow Users UI local state — hooks must come before any conditional return.
   const [showBrowsingDialog, setShowBrowsingDialog] = useState(false);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
@@ -1596,21 +1597,16 @@ function AutomationSettingsPanel({
         <div className="border-t border-border" />
 
         {/* ── Follow Users header ─────────────────────────────── */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="follow-enabled"
-              checked={settings.followEnabled}
-              onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
-              disabled={loading}
-              className="w-4 h-4 accent-primary cursor-pointer"
-            />
-            <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
-          </div>
-          <p className="text-xs text-muted-foreground pl-6">
-            After stories, navigates to Instagram Search and follows users sourced from HikerAPI (hashtags or followers of an account). Requires a HikerAPI token in Settings → Global.
-          </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="follow-enabled"
+            checked={settings.followEnabled}
+            onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
+            disabled={loading}
+            className="w-4 h-4 accent-primary cursor-pointer"
+          />
+          <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
         </div>
 
         {/* ── Users to follow per cycle ─────────────────────── */}
@@ -1745,74 +1741,88 @@ function AutomationSettingsPanel({
           </div>
         )}
 
-        {/* ── Target Sources ────────────────────────────────── */}
+        {/* ── Target Sources (collapsible) ─────────────────── */}
         <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Target Sources</Label>
-          {settings.followSources.length > 0 ? (
-            <div className="space-y-1">
-              {settings.followSources.map((src, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
-                    {src.type === 'hashtag' ? '#' : '@'}
-                  </span>
-                  <span className="flex-1 text-foreground truncate">{src.value}</span>
-                  <button
-                    onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
-                    disabled={loading}
-                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                  >✕</button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">No sources added yet. Add a hashtag or account below.</p>
-          )}
-          {/* Add new source */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={newFollowSourceType}
-              onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
-              disabled={loading}
-              className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
-            >
-              <option value="hashtag">Hashtag</option>
-              <option value="target_followers">Followers of Account</option>
-            </select>
-            <Input
-              className="flex-1 min-w-0 text-xs h-8"
-              placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
-              value={newFollowSourceValue}
-              onChange={e => setNewFollowSourceValue(e.target.value)}
-              disabled={loading}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && newFollowSourceValue.trim()) {
-                  const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
-                  if (val) {
-                    setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
-                    setNewFollowSourceValue('');
-                  }
-                }
-              }}
-            />
+          <div className="flex items-center gap-3">
+            <Label className="text-sm text-muted-foreground">
+              Target Sources{settings.followSources.length > 0 ? ` (${settings.followSources.length})` : ''}
+            </Label>
             <Button
-              variant="outline" size="sm" className="h-8 text-xs shrink-0"
-              disabled={loading || !newFollowSourceValue.trim()}
-              onClick={() => {
-                const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
-                if (val) {
-                  setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
-                  setNewFollowSourceValue('');
-                }
-              }}
-            >Add</Button>
-            {settings.followSources.length > 0 && (
-              <Button
-                variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                disabled={loading}
-                onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
-              >Clear all</Button>
-            )}
+              variant="outline" size="sm"
+              className="h-7 text-xs px-3 ml-auto"
+              onClick={() => setShowSources(v => !v)}
+            >{showSources ? 'Hide' : 'Sources'}</Button>
           </div>
+          {showSources && (
+            <div className="border border-border rounded-lg p-3 space-y-2">
+              {/* Existing sources list */}
+              {settings.followSources.length > 0 ? (
+                <div className="space-y-1">
+                  {settings.followSources.map((src, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
+                        {src.type === 'hashtag' ? '#' : '@'}
+                      </span>
+                      <span className="flex-1 text-foreground truncate">{src.value}</span>
+                      <button
+                        onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
+                        disabled={loading}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No sources yet.</p>
+              )}
+              {/* Add new source */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={newFollowSourceType}
+                  onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
+                  disabled={loading}
+                  className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                >
+                  <option value="hashtag">Hashtag</option>
+                  <option value="target_followers">Followers of Account</option>
+                </select>
+                <Input
+                  className="flex-1 min-w-0 text-xs h-8"
+                  placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
+                  value={newFollowSourceValue}
+                  onChange={e => setNewFollowSourceValue(e.target.value)}
+                  disabled={loading}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newFollowSourceValue.trim()) {
+                      const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                      if (val) {
+                        setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                        setNewFollowSourceValue('');
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  variant="outline" size="sm" className="h-8 text-xs shrink-0"
+                  disabled={loading || !newFollowSourceValue.trim()}
+                  onClick={() => {
+                    const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                    if (val) {
+                      setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                      setNewFollowSourceValue('');
+                    }
+                  }}
+                >Add</Button>
+                {settings.followSources.length > 0 && (
+                  <Button
+                    variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                    disabled={loading}
+                    onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
+                  >Clear all</Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Followed Users ───────────────────────────────── */}

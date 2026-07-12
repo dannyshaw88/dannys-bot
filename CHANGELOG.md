@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.491] — 2026-07-12
+
+### Fix: Follow Users search-bar tap misfired below the field + UI cleanup (description removed, Target Sources collapsible)
+
+Three follow-up fixes after the v1.1.490 Follow Users rollout:
+
+**Backend — search bar tap fix (root cause: tap was landing below the search field)**
+
+`findInstagramSearchBar` had two problems that combined to cause the "dragged underneath the search field / screen went white" failure:
+
+1. **30% height limit was too loose.** The Explore page renders a grid of photos below the search bar. Any element in the top 30% of a tall screen could land well below the actual bar. Tightened to 15%: the Instagram search bar is always in the topmost ~80–100 px, nothing else sits there.
+2. **`_findElem(xml, "Search", "Search Instagram")` fallback was unconstrained.** It could match a section header, explore-grid label, or any other element with the word "Search" anywhere on screen. Replaced with an explicit `bounds`-checked loop that only accepts elements whose y-centre is within the 15% limit.
+3. Added retry loop (up to 3 attempts with 800 ms gaps) so the Explore page has time to finish rendering before the dump is taken.
+4. Also handles the pre-tap state correctly: on the Explore page the search bar is a clickable `View`/`FrameLayout` (not an `EditText`) until tapped for the first time — the new logic accepts any clickable "Search" element in the top 15%, not just `EditText` nodes.
+
+**Backend — `typeViaOnscreenKeyboard` keyboard-open guard**
+
+Added a startup check: if the initial `refreshKeyMap("letters")` returns fewer than 15 keys (a real soft-keyboard has ≥ 20), the function now waits 1.2 s and retries, up to 2 times. If the keyboard still isn't there after retries, it logs a clear message and returns early instead of proceeding with a broken/empty key map. This was the cause of the `[keyboard] letters: 0 keys mapped` / `@ not found` log entries — the keyboard hadn't appeared yet when the first dump ran.
+
+**Backend — longer wait after bar tap**
+
+Increased the post-tap sleep from 600 ms to 1 500 ms at the call site in `runFollowUsersStep`. The keyboard needs time to animate up, especially on slower/older devices.
+
+**Frontend — Follow Users UI cleanup**
+
+- Removed the description paragraph ("After stories, navigates to Instagram Search…") from the Follow Users section header — not needed, clutters the panel.
+- **Target Sources** is now a collapsible card: only a `Sources (N)` button is shown by default; clicking it reveals the source list and add controls (same UX pattern as other expandable sections in the panel). The card content was always visible before; now it's hidden until clicked.
+
+---
+
 ## [1.1.490] — 2026-07-12
 
 ### Feature: Follow Users overhaul — HikerAPI-based following + keyboard coordinate fix + new Target Sources & Inject Browsing UI

@@ -2527,29 +2527,58 @@ export async function findInstagramSearchTab(serial: string): Promise<{ x: numbe
 /**
  * Find the Instagram search input bar (after tapping the Search tab).
  * Returns the tap coordinates or null if not found.
+ *
+ * Fixed: the old 30%-height limit and the unconstrained `_findElem` fallback
+ * could match elements deep in the Explore grid (causing a tap below the bar
+ * that looked like a swipe/pull-to-refresh).  Now strictly constrained to the
+ * top 15 % of the screen with retries so the Explore page has time to settle.
  */
 export async function findInstagramSearchBar(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial);
-  if (!xml) return null;
-  const byId = _findByResId(xml,
-    ":id/action_bar_search_edit_text", ":id/search_bar_input",
-    ":id/search_bar", ":id/search_input", ":id/search_field");
-  if (byId) return byId;
-  // EditText in top 30 % of screen is almost certainly the search field
-  const re = /class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
-  const { h } = _getScreenSize(xml);
-  const topLimit = Math.round(h * 0.30);
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    const [, x1, y1, x2, y2] = m;
-    const centerY = (Number(y1) + Number(y2)) / 2;
-    if (centerY > topLimit) continue;
-    const centerX = Math.round((Number(x1) + Number(x2)) / 2);
-    return { x: centerX, y: Math.round(centerY) };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await _sleep(800);
+    const xml = await _uiDump(adb, serial);
+    if (!xml) continue;
+
+    const { h } = _getScreenSize(xml);
+    // The search bar is always in the top 15 % of the screen — nothing else
+    // legitimately lives there with search-like attributes.
+    const topLimit = Math.round(h * 0.15);
+
+    // 1. Known resource IDs — most reliable; trust them regardless of y-pos
+    const byId = _findByResId(xml,
+      ":id/action_bar_search_edit_text", ":id/search_bar_input",
+      ":id/search_bar", ":id/search_input", ":id/search_field",
+      ":id/search_bar_container");
+    if (byId) return byId;
+
+    // 2. Any EditText in the top 15 %
+    const etRe = /class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
+    let m: RegExpExecArray | null;
+    while ((m = etRe.exec(xml)) !== null) {
+      const centerY = (Number(m[2]) + Number(m[4])) / 2;
+      if (centerY > topLimit) continue;
+      return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
+    }
+
+    // 3. Clickable "Search" element strictly in the top 15 %
+    //    (Explore-page pre-tap state — the bar is a View/FrameLayout, not yet an
+    //    EditText, until the user taps it the first time)
+    for (const re2 of [
+      /<node[^>]*\b(?:text|content-desc)="(?:Search|Search Instagram)"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
+      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\b(?:text|content-desc)="(?:Search|Search Instagram)"[^/]*\/>/gi,
+    ]) {
+      while ((m = re2.exec(xml)) !== null) {
+        const centerY = (Number(m[2]) + Number(m[4])) / 2;
+        if (centerY > topLimit) continue;
+        return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
+      }
+    }
+    // attempt loop continues — wait and re-dump
   }
-  return _findElem(xml, "Search", "Search Instagram");
+  return null;
 }
 
 /**
@@ -2651,6 +2680,20 @@ export async function typeViaOnscreenKeyboard(
   };
 
   await refreshKeyMap("letters");
+
+  // Verify the keyboard actually opened — a real soft-keyboard has ≥ 20
+  // mappable keys.  Fewer means the field wasn't focused yet (the bar tap
+  // landed below the field, the Explore page settled late, etc.).
+  // Retry up to 2 times with a 1.2 s pause to let the keyboard animate up.
+  for (let kbRetry = 0; kbRetry < 2 && keyMap.size < 15; kbRetry++) {
+    onLog?.(`[keyboard] only ${keyMap.size} keys — waiting for keyboard… (retry ${kbRetry + 1})`);
+    await _sleep(1200);
+    await refreshKeyMap("letters");
+  }
+  if (keyMap.size < 5) {
+    onLog?.("[keyboard] keyboard did not appear — aborting type");
+    return;
+  }
 
   for (const ch of text) {
     if (ch === "@") {

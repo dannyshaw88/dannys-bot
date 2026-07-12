@@ -1844,11 +1844,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       try {
         onLog?.(`Follow: → @${username}`);
 
-        // Tap the search bar
+        // Tap the search bar — wait longer so the Explore page settles and the
+        // field has time to focus before the keyboard opens.  A 600 ms wait was
+        // too short: on slower devices the bar tap could land below the field
+        // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
+        // before typeViaOnscreenKeyboard started.
         const searchBar = await android.findInstagramSearchBar(serial).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar not found — giving up"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
-        await sleepOrAbort(serial, 600);
+        await sleepOrAbort(serial, 1500);
 
         // Clear any existing text
         await android.keyevent(serial, "KEYCODE_MOVE_END");
