@@ -6,19 +6,58 @@ All notable changes to Equinox are documented here.
 
 ## [1.1.502] — 2026-07-12
 
-### Fix: Share-to-Feed / Share-via-DM — use label lookup instead of row-scan coordinates
+### Fix: Share-to-Feed / Share-via-DM — replaced fragile row-scan with label-based icon lookup
 
-**Root cause of repeated failures**: Every previous fix tried to improve the row-scan in `findFeedActionIcons` — getting the correct X coordinates for the Repost and Send icons by scanning clickable nodes on the same horizontal row as Like. This is fundamentally fragile because phantom nodes (audio disc, recycler neighbours, Reel composites) can shift positional assignments regardless of how many filters are added. The result was that `icons.shareFeed` sometimes held the Comment icon's coordinates, causing the Comment bubble to be tapped instead of Repost.
+**History of the failure (10+ build attempts)**
 
-**Fix**: In `runProfileBrowsingForUser`, the Repost and Send icons are now found by `findButtonByLabel("Repost")` and `findButtonByLabel("Send")` directly — the same label-based lookup already used successfully to find the "Repost" button inside the share sheet and the "Close" button on the confirmation popup. This bypasses the row-scan entirely: if Instagram labels the icon "Repost", the function finds it regardless of what other nodes are on screen, how many icons are present, or whether any phantom elements are in the row. No icon found by label → skip rather than tap the wrong control.
+Every version from v1.1.493 to v1.1.501 tried to fix share icon detection by improving the row-scan in `findFeedActionIcons`. The approach: find the node row containing the Like button, count the 3–4 action icons on that row, then assign Repost and Send by position. Each patch addressed a specific failure mode but the underlying approach was inherently fragile:
 
-### Fix: Followed Users — source shows hashtag/account, not "hikerapi"
+- v1.1.493–495: Fixed Y-coordinate detection for the row, but wrong X positions used.
+- v1.1.496: Switched from `_getScreenSize(xml)` (fallback = 1600 px landscape) to `adb shell wm size` (correct 1080 px portrait) to properly exclude the bookmark icon from the row.
+- v1.1.497: `rowNodes.length >= 3` to tolerate bookmark slipping in as 4th node.
+- v1.1.498: Content-description matching (`Comment`, `Repost`, `Send`) with positional fallback.
+- v1.1.499/500: Filter `android.widget.ImageView` nodes with no content-desc and no digit text (the audio/music disc that appears between Comment and Repost on profile posts with music).
+- v1.1.501: Added full diagnostic logging so every failed tap was explainable in the log.
 
-The source column was hardcoded to `"hikerapi"` for every follow. Now each candidate's discovery source (e.g. `#fitness`, `@targetaccount`) is tracked in a Map during collection and passed to `recordMobileFollow` at the moment the follow is recorded.
+Despite all of these fixes, the share-to-feed and share-via-DM taps continued to tap the wrong target (typically Comment). Root cause post-mortem: the row-scan assigns icons by *position*. Any new phantom node — music disc, sponsored label, Collab indicator, story sticker icon — that appears in the same row and passes all current filters shifts every subsequent assignment by one position. The only permanent fix is to stop relying on position entirely.
 
-### Fix: View Stories from Feed — Share DM % stays on same row
+**The fix (v1.1.502)**
 
-Removed `flex-wrap` from the stories settings row so all four controls (Stories to watch / % to watch / Like % / Share DM %) always render on a single line.
+In `runProfileBrowsingForUser`, the Repost and Send icon lookups now call `findButtonByLabel("Repost")` and `findButtonByLabel("Send")` directly at the moment of action, instead of using coordinates returned by `findFeedActionIcons`. `findButtonByLabel` walks the entire accessibility tree and returns the first node whose `content-desc` or `text` matches the given label (case-insensitive). This is the same function already used to find:
+- The **"Repost"** button inside the share sheet (has worked reliably since it was introduced)
+- The **"Close"** button on the post-repost confirmation popup
+- The **"Direct"** / **"Message"** send button
+
+Since Instagram labels the Repost icon `content-desc="Repost"` on all known post types, this lookup is unambiguous: it cannot return Comment regardless of how many other icons are on screen, what order they appear in, or whether phantom nodes are present. If the label is not found (e.g. on a Reel with a different action bar layout), the action is skipped cleanly rather than tapping a random icon.
+
+`findFeedActionIcons` row-scan is **not removed** — it is still used by the feed-scroll path (`runCheckFeedLoop`), which has not reported the same problem. Only the profile-browsing path (`runProfileBrowsingForUser`) was switched.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser`: replaced `icons.shareFeed` / `icons.shareDm` coordinate taps with `findButtonByLabel("Repost")` / `findButtonByLabel("Send")` direct lookups; retained diagnostic logging from v1.1.501.
+
+---
+
+### Fix: Followed Users tab — source column shows actual hashtag/account instead of "hikerapi"
+
+**Root cause**: `runFollowUsersStep` collected candidate usernames as a flat `string[]`. When a follow was recorded via `recordMobileFollow`, the source parameter was hard-coded to the string `"hikerapi"` at the call site — regardless of whether the user was discovered from a hashtag like `#hiking` or from the followers of a target account like `@someprofile`.
+
+**Fix**: Candidate collection now builds a `Map<string, string>` (`candidateSource`) alongside the flat list. For every username discovered, the map stores the discovery label: `#hashtagname` for hashtag sources, `@accountname` for target-follower sources. The `recordFollow` callback signature is updated from `(username: string) => void` to `(username: string, source: string) => void`, and the source is looked up from `candidateSource` at the moment of recording. The call site in the automation runner passes the real source to `recordMobileFollow` instead of the hard-coded string.
+
+**Result**: The Followed Users tab now shows entries like `#fitness`, `#travel`, or `@competitor` in the Source column, making it easy to evaluate which discovery sources are producing the most follows.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runFollowUsersStep`: `candidates` collection loop now populates `candidateSource` map; `recordFollow` callback signature updated; follow-recording call passes `candidateSource.get(username) ?? "unknown"`.
+
+---
+
+### Fix: View Stories from Feed — Share DM % field stays on the same row as the other story settings
+
+**Root cause**: The four stories settings fields (Stories to watch / % to watch / Like % / Share DM %) were wrapped in `flex items-start gap-6 flex-wrap`. The `flex-wrap` class allowed the container to reflow onto a second line at smaller viewport widths, pushing Share DM % below the other three fields even when there was enough horizontal space for all four.
+
+**Fix**: Removed `flex-wrap` from the container div. All four fields now stay on a single flex row at all viewport sizes relevant to the app.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — stories settings container: `flex-wrap` removed.
 
 ---
 
@@ -26,18 +65,30 @@ Removed `flex-wrap` from the stories settings row so all four controls (Stories 
 
 ### Fix: Followed Users tab persists across server restarts
 
-**Root cause**: The Followed Users list was stored in a plain JavaScript `Map` in server memory — explicitly marked "resets on restart" in the original code. Every time the server was restarted or updated, the entire list was wiped. No data was written to the database or disk.
+**Root cause**: The Followed Users list was stored in a plain JavaScript `Map` declared at module scope in `mobile.ts`. A comment in the original code explicitly noted "resets on restart intentionally." Every server restart — including normal app updates — wiped the entire list. No data was written to disk or the database between sessions.
 
-**Fix**: On first access per device serial, the list is now hydrated from a JSON file on disk (`data/mobile-followed/<serial>.json`). Every new follow is written to that file immediately after being recorded in memory. The data directory is created automatically on startup. Existing entries written before this version will begin accumulating from the next follow onwards.
+**Fix**:
 
-### Improvement: Inject Browsing — detailed diagnostic logging for share actions
+1. On first access for a given device serial, `getMobileFollowedList(serial)` checks for a file at `data/mobile-followed/<serial>.json`. If the file exists, it is parsed and the in-memory Map is populated from it before being returned. If the file does not exist, the Map starts empty (first run behaviour, no error).
+2. `recordMobileFollow(serial, username, source)` writes the updated list to disk immediately after adding the new entry to memory. The `data/mobile-followed/` directory is created automatically with `fs.mkdirSync(..., { recursive: true })` if it does not already exist.
+3. The API endpoint `GET /api/mobile/devices/:serial/followed-users` is unchanged — it calls `getMobileFollowedList` as before; the persistence is transparent to the route handler and the frontend.
 
-Added structured log lines throughout `runProfileBrowsingForUser` so it is now possible to diagnose exactly why share-to-feed or share-via-DM is skipped on any given profile post:
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `getMobileFollowedList`, `recordMobileFollow`: disk read/write logic added; directory auto-creation on startup.
 
-- After `findFeedActionIcons`: logs which of the four icons (Like / Comment / ShareFeed / ShareDM) were found and their coordinates, with a specific note if the function returned null explaining the likely cause (already-liked post showing "Unlike", non-standard Reel/ad action bar).
-- After each chance roll: logs the rolled percentage AND the min/max settings that produced it, so it is immediately obvious whether the action was configured to 0% vs. rolled unlucky vs. had no icon to tap.
-- When an icon is not found despite the chance rolling true: logs a `WARN`-level message naming the most likely filter that excluded the node.
-- The onLog (visible in the UI log tab) now shows the icon-found summary and the skip reason in plain text so the user can see it without reading server logs.
+---
+
+### Improvement: Inject Browsing — full diagnostic logging for share icon detection and chance rolls
+
+Added structured log lines throughout `runProfileBrowsingForUser` so every share-to-feed and share-via-DM decision is fully visible in the UI log tab and server logs:
+
+- **After `findFeedActionIcons`**: logs a one-line summary of all four icons — whether each was found (`✓`) or missing (`✗`), and the coordinates of those that were found. If the function returned null entirely, logs the most likely cause (e.g. post is already liked so "Unlike" appears instead of "Like", or Reel/ad action bar has a non-standard structure).
+- **After each chance roll**: logs both the rolled value and the configured min/max so it is immediately clear whether the action was intentionally disabled (0%), rolled unlucky, or would have fired but had no icon to tap.
+- **When icon missing despite chance roll succeeding**: logs a WARN-level message with the icon name and the most likely filter that caused it to be excluded from the row scan.
+- **All messages surface in the UI log tab** (via `onLog`) in plain language, not just server logs, so the user can diagnose without reading raw server output.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — `runProfileBrowsingForUser`: `onLog` calls and `logger.warn` calls added at every decision branch.
 
 ---
 
