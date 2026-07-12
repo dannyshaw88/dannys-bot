@@ -1511,7 +1511,7 @@ function AutomationSettingsPanel({
           </div>
         </div>
 
-        <div className="flex items-start gap-6 flex-wrap">
+        <div className="flex items-start gap-6">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Stories to watch</Label>
             <div className="flex items-center gap-3">

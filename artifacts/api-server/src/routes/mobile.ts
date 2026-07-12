@@ -1982,18 +1982,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     const shareFeedChance = rollRange(browsing.shareFeedPctMin, browsing.shareFeedPctMax) / 100;
     logger.info(
-      { serial, shareFeedChance: Math.round(shareFeedChance * 100), shareFeedIconFound: !!icons.shareFeed,
+      { serial, shareFeedChance: Math.round(shareFeedChance * 100),
         settingsMin: browsing.shareFeedPctMin, settingsMax: browsing.shareFeedPctMax },
       "[inject-browsing] share-feed chance rolled"
     );
     if (shareFeedChance > 0 && Math.random() < shareFeedChance) {
-      if (!icons.shareFeed) {
-        onLog?.("Inject Browsing: share-to-feed icon NOT found in accessibility tree for this post — skipping (check server logs for icon details)");
-        logger.warn({ serial }, "[inject-browsing] share-feed rolled true but icons.shareFeed is null — audio disc filter or position heuristic excluded the Repost node; dump the accessibility tree for this post to diagnose");
-      } else {
-        try {
-          await android.tap(serial, icons.shareFeed.x, icons.shareFeed.y);
+      try {
+        // Use findButtonByLabel("Repost") to locate the Repost icon directly
+        // by its accessibility label rather than relying on the row-scan
+        // coordinates from findFeedActionIcons. Row-scan has failed repeatedly
+        // because phantom nodes (audio disc, recycler neighbours) shift its
+        // positional assignments. Label lookup is unambiguous: if Instagram
+        // labels the icon "Repost", this finds it regardless of what else is
+        // on screen. No icon found → skip rather than tap the wrong element.
+        const repostIcon = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+        if (!repostIcon) {
+          onLog?.("Inject Browsing: Repost icon not found by label on this post — skipping share-to-feed");
+          logger.warn({ serial }, "[inject-browsing] findButtonByLabel('Repost') returned null — icon may be absent on this post (sharing disabled by poster, or Repost not labeled on this device/version)");
+        } else {
+          await android.tap(serial, repostIcon.x, repostIcon.y);
+          logger.info({ serial, x: repostIcon.x, y: repostIcon.y }, "[inject-browsing] tapped Repost icon (found by label)");
           await sleepOrAbort(serial, 1000);
+          // Sheet is now open — find the "Repost" button inside the sheet.
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
           if (repostBtn) {
             await android.tap(serial, repostBtn.x, repostBtn.y);
@@ -2005,31 +2015,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.pressBack(serial);
             await sleepOrAbort(serial, 400);
           }
-        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
-      }
+        }
+      } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
     }
 
     const shareDmChance = rollRange(browsing.shareDmPctMin, browsing.shareDmPctMax) / 100;
     logger.info(
-      { serial, shareDmChance: Math.round(shareDmChance * 100), shareDmIconFound: !!icons.shareDm,
+      { serial, shareDmChance: Math.round(shareDmChance * 100),
         settingsMin: browsing.shareDmPctMin, settingsMax: browsing.shareDmPctMax },
       "[inject-browsing] share-DM chance rolled"
     );
     if (shareDmChance > 0 && Math.random() < shareDmChance) {
-      if (!icons.shareDm) {
-        onLog?.("Inject Browsing: share-to-DM icon NOT found in accessibility tree for this post — skipping (check server logs for icon details)");
-        logger.warn({ serial }, "[inject-browsing] share-DM rolled true but icons.shareDm is null — Send node not identified; check server logs for icon details");
-      } else {
-        try {
-          await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+      try {
+        // Same label-based approach as share-to-feed above: find the Send/DM
+        // icon directly by its accessibility label. Instagram uses "Send" on
+        // most versions; "Direct" and "Message" are also seen on some builds.
+        const sendIcon =
+          await android.findButtonByLabel(serial, "Send").catch(() => null) ??
+          await android.findButtonByLabel(serial, "Direct").catch(() => null) ??
+          await android.findButtonByLabel(serial, "Message").catch(() => null);
+        if (!sendIcon) {
+          onLog?.("Inject Browsing: Send icon not found by label on this post — skipping share-via-DM");
+          logger.warn({ serial }, "[inject-browsing] findButtonByLabel('Send'/'Direct'/'Message') all returned null — icon may be absent or uses an unlabeled version of Instagram");
+        } else {
+          await android.tap(serial, sendIcon.x, sendIcon.y);
+          logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon (found by label)");
           await sleepOrAbort(serial, 1200);
           await tapRandomShareSheetRecipient(serial, w, h);
           await sleepOrAbort(serial, 1500);
           const sent = await sendShareSheet(serial, w, h);
           if (sent) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
           else { await android.pressBack(serial); await sleepOrAbort(serial, 400); }
-        } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
-      }
+        }
+      } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
     }
 
     // Back out of the opened post to the profile grid before continuing.
@@ -2044,7 +2062,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       usersMax: number;
       sources: { type: string; value: string }[];
       onLog?: (msg: string) => void;
-      recordFollow?: (username: string) => void;
+      recordFollow?: (username: string, source: string) => void;
       browsing?: InjectBrowsingParams;
     },
   ): Promise<number> {
@@ -2070,21 +2088,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.(`Follow: targeting ${targetCount} users from ${sources.length} source(s)`);
 
     const hiker = new HikerApiClient(hikerApiToken);
+    // Track source per username so the Followed Users tab shows the hashtag
+    // or target account the user was discovered from, not "hikerapi".
+    const candidateSource = new Map<string, string>();
     const candidates: string[] = [];
 
     for (const src of sources) {
       if (candidates.length >= targetCount * 3) break;
+      const sourceLabel = src.type === "hashtag"
+        ? `#${src.value.replace(/^#/, "")}`
+        : `@${src.value.replace(/^@/, "")}`;
       try {
         if (src.type === "hashtag") {
           const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
-          candidates.push(...res.users.map(u => u.username));
-          onLog?.(`Follow: #${src.value} → ${res.users.length} users`);
+          for (const u of res.users) {
+            if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+            candidates.push(u.username);
+          }
+          onLog?.(`Follow: ${sourceLabel} → ${res.users.length} users`);
         } else if (src.type === "target_followers") {
           const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
           if (!userInfo?.pk) { onLog?.(`Follow: could not resolve @${src.value} — skipping source`); continue; }
           const followers = await hiker.getFollowers(userInfo.pk, 50);
-          candidates.push(...followers.map(u => u.username));
-          onLog?.(`Follow: @${src.value} followers → ${followers.length} users`);
+          for (const u of followers) {
+            if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+            candidates.push(u.username);
+          }
+          onLog?.(`Follow: ${sourceLabel} followers → ${followers.length} users`);
         }
       } catch (e: any) {
         onLog?.(`Follow: HikerAPI error for source "${src.value}": ${e?.message}`);
@@ -2157,7 +2187,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
         if (didFollow) {
           followed++;
-          recordFollow?.(username);
+          recordFollow?.(username, candidateSource.get(username) ?? "unknown");
           onLog?.(`Follow: ✓ followed @${username} (${followed}/${targets.length})`);
           await sleepOrAbort(serial, 1000 + Math.round(Math.random() * 1500));
         } else {
@@ -2387,7 +2417,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             usersMax: followUsersMax,
             sources: followSources,
             onLog: (msg) => tLog(`  ${msg}`),
-            recordFollow: (username) => recordMobileFollow(serial, username, "hikerapi"),
+            recordFollow: (username, source) => recordMobileFollow(serial, username, source),
             browsing: injectBrowsingEnabled ? {
               beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
               feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,

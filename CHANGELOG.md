@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.502] — 2026-07-12
+
+### Fix: Share-to-Feed / Share-via-DM — use label lookup instead of row-scan coordinates
+
+**Root cause of repeated failures**: Every previous fix tried to improve the row-scan in `findFeedActionIcons` — getting the correct X coordinates for the Repost and Send icons by scanning clickable nodes on the same horizontal row as Like. This is fundamentally fragile because phantom nodes (audio disc, recycler neighbours, Reel composites) can shift positional assignments regardless of how many filters are added. The result was that `icons.shareFeed` sometimes held the Comment icon's coordinates, causing the Comment bubble to be tapped instead of Repost.
+
+**Fix**: In `runProfileBrowsingForUser`, the Repost and Send icons are now found by `findButtonByLabel("Repost")` and `findButtonByLabel("Send")` directly — the same label-based lookup already used successfully to find the "Repost" button inside the share sheet and the "Close" button on the confirmation popup. This bypasses the row-scan entirely: if Instagram labels the icon "Repost", the function finds it regardless of what other nodes are on screen, how many icons are present, or whether any phantom elements are in the row. No icon found by label → skip rather than tap the wrong control.
+
+### Fix: Followed Users — source shows hashtag/account, not "hikerapi"
+
+The source column was hardcoded to `"hikerapi"` for every follow. Now each candidate's discovery source (e.g. `#fitness`, `@targetaccount`) is tracked in a Map during collection and passed to `recordMobileFollow` at the moment the follow is recorded.
+
+### Fix: View Stories from Feed — Share DM % stays on same row
+
+Removed `flex-wrap` from the stories settings row so all four controls (Stories to watch / % to watch / Like % / Share DM %) always render on a single line.
+
+---
+
 ## [1.1.501] — 2026-07-12
 
 ### Fix: Followed Users tab persists across server restarts
