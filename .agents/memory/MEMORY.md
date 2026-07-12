@@ -3,6 +3,7 @@
 - [tlsRequest CycleTLS header stripping](tls-request-header-fix.md) — tlsRequest must strip Host, Connection, Content-Length before passing to CycleTLS or Instagram returns "something went wrong"
 - [Make a Post fix log](make-a-post-log.md) — chronological history of EB-driven posting flow bugs (clicks, visibility, Escape-key, recycling); read before touching that flow
 - Note (5 Jul 2026): EB IP/DNS leak history, EB throttling/multi-tab IPC history, and image upload fix history were merged back into `replit.md` at the user's request (full detail preferred over a trimmed index). Read those sections directly in `replit.md`, not the old topic files.
+- [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — persistence-time zod schema is separate from execution-time schema; a field missing from the former silently never saves, looks like "settings reset on restart"
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
 - EB Mode-B silent-window fingerprint gap (fixed 6 Jul 2026) — full diagnosis/fix/rule lives in `replit.md` under "EB Mode-B Silent-Window Fingerprint Gap"; bulk-action temp windows lacked fingerprint spoof, likely ban cause
 - Mobile UA + stale desktop GPU fingerprint = instant ban (fixed v1.1.383, 7 Jul 2026) — full root cause + enforced rule in `replit.md` under "Mobile UA + Stale Desktop GPU Fingerprint". Changing UA platform class must ALWAYS regenerate ebFingerprint.
