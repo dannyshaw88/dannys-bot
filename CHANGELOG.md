@@ -4,21 +4,53 @@ All notable changes to Equinox are documented here.
 
 ---
 
-## v1.1.510
+## [1.1.510] — 2026-07-12
 
-### Bug fix — Follow: search bar positional fallback
+### Fix: Follow — search bar positional fallback when UIAutomator accessibility tree returns nothing
 
-On this device/Instagram version the Explore page search bar does not appear
-in the UIAutomator accessibility tree (Scan Screen Layout confirms 0 elements
-in the top zone even when the bar is visually present at ~y=85).
-`findInstagramSearchBar` was returning null after 3 failed tree-parse attempts,
-which caused the follow loop to abort with "search bar not found — giving up".
+**Symptom**: After a successful follow of the first user the log would show `Follow: search bar not found — giving up` roughly 29 seconds later (3 retry attempts × ~800 ms sleep + uiDump time each), then close Instagram. On a subsequent cycle the same abort happened at the same point. The follow ran without issue in every prior version — nothing near the search-bar tap had changed in the most recent build.
 
-Fix: after all accessibility-tree attempts fail the function now returns a
-screen-relative positional fallback — centred horizontally, at ~3.8 % of
-screen height (~85 px on a 2226 px screen) — which is where the bar reliably
-sits on the Explore page.  A log line is emitted when the fallback fires so
-it is visible in the Log tab.  The follow step then continues normally.
+**Root cause — confirmed via Scan Screen Layout**:
+
+The "Scan Screen Layout" diagnostic tool was used on the device immediately after the Search tab was tapped and the Explore page settled. Its output shows:
+
+```
+SCREEN LAYOUT SCAN ═══ 1060×2226 px  |  1 elements
+── TOP    (0 – 33%)  (0 elements) ────────────────────────
+── MIDDLE (33 – 67%) (1 elements): FrameLayout ────────────
+     bounds=[0,1][1080,2224]  (no label)
+── BOTTOM (67 – 100%) (0 elements) ───────────────────────
+```
+
+Zero elements in the top zone — the only node the UIAutomator dump exposes for this screen is the root `FrameLayout` covering the full display. On this device + Instagram version combination, the Explore page search bar is rendered in a way that does not expose child nodes to the accessibility tree (possibly a React Native / Jetpack Compose hybrid surface, or an Instagram A/B-test variant that disables accessibility for the Explore header). A manual tap at physical coordinates **(159, 85)** — visible on the phone mirror — opens the search field correctly, confirming the bar is present and tappable; it just does not appear in the tree.
+
+`findInstagramSearchBar` had three detection strategies all of which require a tree entry:
+1. Resource-ID lookup (`action_bar_search_edit_text`, `search_bar`, `search_bar_input`, etc.)
+2. `android.widget.EditText` class match within top 30 % of screen height
+3. Clickable node with `text` or `content-desc` of `"Search"` / `"Search Instagram"` within top 30 %
+
+All three failed every attempt, returning `null` after the retry loop, causing the caller to log `Follow: search bar not found — giving up` and `break` out of the follow loop.
+
+**Fix — positional fallback after exhausted accessibility-tree attempts**:
+
+After all 3 accessibility-tree attempts return nothing, `findInstagramSearchBar` now computes a screen-relative fallback coordinate instead of returning `null`:
+
+- **Y**: `Math.round(screenH × 0.038)` — approximately 85 px on a 2 226 px screen, matching the confirmed on-device position.
+- **X**: `Math.round(screenW / 2)` — horizontally centred.
+
+Screen dimensions come from `getScreenSize(serial)` (`adb shell wm size`) — the same reliable source used since v1.1.504, not the XML-parsed fallback that defaults to a 1 600 × 900 landscape size.
+
+A dedicated log line is emitted when the fallback fires:
+```
+Follow: search bar not in a11y tree — using positional fallback (540, 85)
+```
+This makes it immediately visible in the Log tab so it is always auditable. The follow then continues normally from that tap — typing the username on the on-screen keyboard, finding the user in results, and tapping Follow.
+
+The function's return type is changed from `Promise<{ x: number; y: number } | null>` to `Promise<{ x: number; y: number }>` — it now always resolves to a position (or throws if adb itself is unavailable). The caller's `null`-guard branch (`if (!searchBar) { … break; }`) is updated to handle only the thrown-error case, which is logged as `Follow: search bar lookup threw — giving up`.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findInstagramSearchBar`: added `screenW` from `getScreenSize`; added `onLog?` parameter; positional fallback returned (with log line) after all tree-parse attempts fail; return type changed to non-nullable.
+- `artifacts/api-server/src/routes/mobile.ts` — `runFollowUsersStep`: passes `onLog` to `findInstagramSearchBar`; updated guard comment to reflect thrown-error-only case.
 
 ---
 
@@ -96,6 +128,41 @@ The actual, general-purpose fix kept from that change: `shareFeed` is now only e
 **Root cause**: `runProfileBrowsingForUser` scrolls the profile grid down by a random number of rows to browse posts, then opens/likes/shares a post and presses Back to return to the grid — but it never scrolled back up. `tapFollowButtonOnProfilePage` reads whatever is currently in the accessibility tree; with the header scrolled off the top of the screen, the Follow button genuinely isn't rendered, so it always reported "not found" regardless of follow state.
 
 **Fix**: `runProfileBrowsingForUser` now scrolls the profile grid back to the top (undoing exactly the number of rows it scrolled down) before returning, so the header and Follow button are back on screen by the time `runFollowUsersStep` taps Follow.
+
+---
+
+## [1.1.504] — 2026-07-12
+
+### Fix: Settings sections now collapse when their tickbox is unticked
+
+**What changed**: Every section in the Human Session Tool that has an enable tickbox (View Feed, View Stories from Feed, Follow Users, Inject Browsing) now hides its settings rows when the tickbox is off — matching the behaviour already introduced for Random Jitter in v1.1.503. Previously only Random Jitter collapsed; the other four sections always showed all their fields regardless of whether the feature was enabled, making the UI cluttered and potentially confusing (e.g. "Delay between actions" visible even when View Feed was off).
+
+- **View Feed** — unticking hides the scroll-count + delay row and the Like %/Share to Feed %/Share via DM % row.
+- **View Stories from Feed** — unticking hides all four settings rows (slides to watch, % of slide to watch, Like %, Share DM %).
+- **Follow Users** — unticking hides the "Users to follow per operation" min/max row.
+- **Inject Browsing** — unticking hides the two numeric-field rows (feed-chance/feed-posts/click-post/like/share-feed/share-DM percentages); the tickbox row itself stays visible so it can be re-enabled.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — all four feature-flag conditional wrappers added around the relevant settings rows.
+
+---
+
+### Fix: Follow — search bar not found on cold-launch cycles (only Follow enabled, no prior feed scroll)
+
+**Symptom**: When the cycle was configured with only Follow Users ticked (View Feed and View Stories both off), the follow loop consistently aborted with `Follow: search bar not found — giving up` every run. With any other feature enabled first the search bar was reliably found.
+
+**Root cause 1 — insufficient wait**: After tapping the Search tab, the code waited 1 500 ms for the Explore page to render before scanning the accessibility tree. On a cold-launch cycle (no prior feed/story navigation to warm up Instagram's render pipeline) that wasn't enough — the Explore grid would appear but the search bar's accessibility node hadn't been committed to the tree by the time the scan ran. With feed or story enabled first, the extra navigation gave the app more time, masking the timing issue.
+
+**Root cause 2 — wrong screen-height fallback**: `findInstagramSearchBar` was computing `topLimit` (the Y-coordinate ceiling for the search-bar scan) using `_getScreenSize(xml)`, which parses the root XML element for its `bounds` attribute. When that attribute is absent (MIUI/Xiaomi devices frequently omit it), `_getScreenSize` falls back to `1600 × 900` — a landscape desktop default. On a portrait phone with a 2 400 px tall screen, this gives `topLimit = Math.round(900 × 0.20) = 180 px`, which is below the actual search bar position (~200–260 px from top on this device), causing it to be rejected on every scan attempt.
+
+**Fixes**:
+- Explore page settle wait raised **1 500 ms → 2 500 ms** after the Search tab tap.
+- `findInstagramSearchBar` now queries screen dimensions via `adb shell wm size` (`getScreenSize(serial)`) instead of parsing them from the XML dump. This returns the correct 1 080 × 2 400 (portrait phone) rather than the 1 600 × 900 landscape fallback.
+- `topLimit` raised from **20 % → 30 %** of screen height (480 px → 720 px on a 2 400 px device) to accommodate Xiaomi MIUI builds that add a larger top chrome (status bar + category pill row) above the search bar, pushing it past the previous ceiling.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findInstagramSearchBar`: screen size now from `getScreenSize(serial)` (`adb shell wm size`); `topLimit` raised to 30 %.
+- `artifacts/api-server/src/routes/mobile.ts` — `runFollowUsersStep`: Explore page settle wait raised to 2 500 ms.
 
 ---
 
