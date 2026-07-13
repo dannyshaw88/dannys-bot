@@ -114,7 +114,13 @@ type InspectNode = {
   bounds: string; boundsRaw: [number,number,number,number];
   center: { x: number; y: number }; clickable: boolean; area: number;
 };
-type InspectResult = { ok: boolean; nodes: InspectNode[]; screenW: number; screenH: number; tappedAt: { x: number; y: number }; error?: string };
+type InspectResult = {
+  ok: boolean; nodes: InspectNode[]; screenW: number; screenH: number;
+  tappedAt: { x: number; y: number }; error?: string;
+  // Client-only: CSS-pixel position of the click relative to the canvas
+  // container top-left, used to render the crosshair dot on the mirror.
+  _cssX?: number; _cssY?: number;
+};
 
 const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -559,7 +565,24 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // Works exactly like Chrome DevTools F12: click anything on the mirror,
       // get back every accessibility node whose bounds contain that point.
       if (inspectModeRef.current) {
-        addLog(`🔍 Inspecting (${drag.startX}, ${drag.startY})…`);
+        // Compute where the click sits in CSS pixels relative to the canvas
+        // container so PhoneSlot can draw a crosshair at the exact spot,
+        // letting the user confirm the coordinate mapping is right.
+        let _cssX: number | undefined, _cssY: number | undefined;
+        const canvas = canvasRef.current;
+        const ps = phoneSizeRef.current;
+        if (canvas && ps) {
+          const rect = canvas.getBoundingClientRect();
+          const { w: phoneW, h: phoneH } = ps;
+          const boxRatio = rect.width / rect.height;
+          const phoneRatio = phoneW / phoneH;
+          let dispW = rect.width, dispH = rect.height, offsetX = 0, offsetY = 0;
+          if (boxRatio > phoneRatio) { dispH = rect.height; dispW = dispH * phoneRatio; offsetX = (rect.width - dispW) / 2; }
+          else                       { dispW = rect.width;  dispH = dispW / phoneRatio; offsetY = (rect.height - dispH) / 2; }
+          _cssX = ((drag.startX / phoneW) * dispW) + offsetX;
+          _cssY = ((drag.startY / phoneH) * dispH) + offsetY;
+        }
+        addLog(`🔍 Inspecting phone (${drag.startX}, ${drag.startY})…`);
         try {
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/inspect-node`, {
             method: "POST",
@@ -567,10 +590,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             body: JSON.stringify({ x: drag.startX, y: drag.startY }),
           });
           const body: InspectResult = await r.json();
-          onInspectResultRef.current?.(body);
-          if (!body.ok) {
-            addLog(`🔍 Inspect failed — ${body.error ?? "unknown"}`);
-          }
+          onInspectResultRef.current?.({ ...body, _cssX, _cssY });
+          if (!body.ok) addLog(`🔍 Inspect failed — ${body.error ?? "unknown"}`);
         } catch (err: any) {
           addLog(`🔍 Inspect error — ${err?.message ?? "network error"}`);
         }
@@ -857,45 +878,88 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
           </div>
         )}
 
-        {/* Inspect result overlay */}
-        {inspectResult && inspectMode && (
-          <div className="absolute inset-x-1 bottom-1 z-30 bg-zinc-900/97 border border-yellow-400/30 rounded-xl shadow-2xl text-[9px] font-mono max-h-[65%] flex flex-col">
-            {/* Toolbar */}
-            <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/8 shrink-0">
-              <span className="text-yellow-300 font-bold text-[8px]">
-                🔍 ({inspectResult.tappedAt?.x},{inspectResult.tappedAt?.y}) — {inspectResult.nodes.length} node{inspectResult.nodes.length !== 1 ? "s" : ""}
-              </span>
-              <div className="flex gap-1">
-                <button onClick={copyInspectResult} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">📋 Copy</button>
-                <button onClick={() => setInspectResult(null)} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">✕</button>
-              </div>
+        {/* Crosshair dot — shows exactly where the click registered on the phone */}
+        {inspectMode && inspectResult && inspectResult._cssX != null && inspectResult._cssY != null && (
+          <div
+            className="absolute z-40 pointer-events-none"
+            style={{ left: inspectResult._cssX, top: inspectResult._cssY, transform: "translate(-50%,-50%)" }}
+          >
+            <div className="w-4 h-4 rounded-full border-2 border-yellow-400 bg-yellow-400/20 shadow-lg shadow-yellow-400/50" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-px h-4 bg-yellow-400" />
             </div>
-            {/* Node list — most specific first */}
-            <div className="overflow-y-auto flex-1 p-1.5 space-y-1">
-              {inspectResult.nodes.length === 0 && (
-                <p className="text-white/30 text-center py-2">No elements found at this point</p>
-              )}
-              {inspectResult.nodes.map((n, i) => (
-                <div key={i} className={`rounded-lg p-1.5 border ${i === 0 ? "border-yellow-400/40 bg-yellow-400/5" : "border-white/6 bg-white/2"}`}>
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className={`text-[8px] font-bold ${n.clickable ? "text-green-400" : "text-white/30"}`}>{n.clickable ? "● TAP" : "○ VIEW"}</span>
-                    <span className="text-white/60 font-semibold">{n.cls}</span>
-                    {i === 0 && <span className="text-[7px] text-yellow-300 ml-auto">innermost</span>}
-                  </div>
-                  <div className="text-white/40 leading-relaxed">
-                    <div>center=<span className="text-cyan-400">({n.center.x},{n.center.y})</span>  bounds=<span className="text-white/60">{n.bounds}</span></div>
-                    {n.resourceId  && <div>id=<span className="text-orange-300">"{n.resourceId}"</span></div>}
-                    {n.contentDesc && <div>desc=<span className="text-lime-300">"{n.contentDesc}"</span></div>}
-                    {n.text        && <div>text=<span className="text-sky-300">"{n.text}"</span></div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-2 py-1 border-t border-white/6 shrink-0">
-              <span className="text-[7px] text-white/20">● = tappable  ○ = container/label  |  innermost (most specific) element at top</span>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-4 h-px bg-yellow-400" />
             </div>
           </div>
         )}
+
+        {/* Inspect result overlay */}
+        {inspectResult && inspectMode && (() => {
+          const screenArea = (inspectResult.screenW || 1) * (inspectResult.screenH || 1);
+          // Show the 5 most-specific (smallest-area) nodes; the rest are just wrapping containers
+          const TOP_N = 5;
+          const shown = inspectResult.nodes.slice(0, TOP_N);
+          const hidden = inspectResult.nodes.length - shown.length;
+          // Warn if no node is "specific" — smallest found still covers > 8% of screen
+          const smallestArea = inspectResult.nodes[0]?.area ?? Infinity;
+          const noSpecific = inspectResult.nodes.length > 0 && smallestArea > screenArea * 0.08;
+          return (
+            <div className="absolute inset-x-1 bottom-1 z-30 bg-zinc-900/97 border border-yellow-400/30 rounded-xl shadow-2xl text-[9px] font-mono max-h-[65%] flex flex-col">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/8 shrink-0">
+                <span className="text-yellow-300 font-bold text-[8px]">
+                  🔍 phone ({inspectResult.tappedAt?.x},{inspectResult.tappedAt?.y})
+                  <span className="text-white/30 font-normal"> on {inspectResult.screenW}×{inspectResult.screenH}</span>
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={copyInspectResult} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">📋 Copy</button>
+                  <button onClick={() => setInspectResult(null)} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">✕</button>
+                </div>
+              </div>
+
+              {/* "No specific element" warning */}
+              {noSpecific && (
+                <div className="px-2 py-1.5 bg-orange-900/30 border-b border-orange-500/20 text-[8px] text-orange-300 shrink-0">
+                  ⚠ No specific element found — the smallest node here covers{" "}
+                  {Math.round((smallestArea / screenArea) * 100)}% of the screen.
+                  Gallery/grid tiles are often rendered without accessibility data and won't appear here.
+                  Try clicking a button, label, or icon instead.
+                </div>
+              )}
+
+              {/* Empty state */}
+              {inspectResult.nodes.length === 0 && (
+                <p className="text-white/30 text-center py-3">No elements found at this point</p>
+              )}
+
+              {/* Node list — top 5 most specific */}
+              <div className="overflow-y-auto flex-1 p-1.5 space-y-1">
+                {shown.map((n, i) => (
+                  <div key={i} className={`rounded-lg p-1.5 border ${i === 0 ? "border-yellow-400/40 bg-yellow-400/5" : "border-white/6 bg-white/2"}`}>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className={`text-[8px] font-bold ${n.clickable ? "text-green-400" : "text-white/30"}`}>{n.clickable ? "● TAP" : "○ VIEW"}</span>
+                      <span className="text-white/70 font-semibold">{n.cls}</span>
+                      {i === 0 && <span className="text-[7px] text-yellow-300 ml-auto">innermost</span>}
+                    </div>
+                    <div className="text-white/40 leading-relaxed">
+                      <div>center=<span className="text-cyan-400">({n.center.x},{n.center.y})</span>  bounds=<span className="text-white/60">{n.bounds}</span></div>
+                      {n.resourceId  && <div>id=<span className="text-orange-300">"{n.resourceId}"</span></div>}
+                      {n.contentDesc && <div>desc=<span className="text-lime-300">"{n.contentDesc}"</span></div>}
+                      {n.text        && <div>text=<span className="text-sky-300">"{n.text}"</span></div>}
+                    </div>
+                  </div>
+                ))}
+                {hidden > 0 && (
+                  <p className="text-[7px] text-white/20 text-center py-0.5">+{hidden} larger wrapper containers (use 📋 Copy to see all)</p>
+                )}
+              </div>
+              <div className="px-2 py-1 border-t border-white/6 shrink-0">
+                <span className="text-[7px] text-white/20">● tappable  ○ view-only  |  most specific (innermost) at top  |  yellow dot = where you clicked</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Nav bar */}
