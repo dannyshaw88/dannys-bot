@@ -2255,6 +2255,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Make a Post: compose \"+\" icon not found — skipping (selector likely needs real-device tuning)");
       return { posted: false };
     }
+    onLog?.("Make a Post: tapping the \"+\" compose icon…");
     await android.tap(serial, composeBtn.x, composeBtn.y);
     await sleepOrAbort(serial, 1800);
 
@@ -2268,13 +2269,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // whichever mode (Story/Reel/Post) was last used — NOT necessarily the
     // feed-post gallery. If it lands on Story/Reel mode there is a "POST"
     // mode tab to switch into the feed-post picker; tap it when present.
-    // (When we're already on the Post picker this tab isn't there, so this
-    // is a no-op in that case.)
-    const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
-      ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
-    if (postTab) {
-      await android.tap(serial, postTab.x, postTab.y);
-      await sleepOrAbort(serial, 1200);
+    //
+    // IMPORTANT: the "POST" tab label is part of the ALWAYS-VISIBLE
+    // Post/Story/Reel/Live mode bar at the bottom of the sheet — it never
+    // disappears just because Post is already the active mode, it's simply
+    // highlighted differently. So checking "does POST exist" is not a
+    // reliable signal for "do we need to switch mode" and blindly tapping
+    // it every single time risks reopening/resetting the picker even when
+    // we're already on the right screen. Check for "Next" FIRST — if it's
+    // already visible we're already on the photo-select screen and must
+    // NOT touch the mode tab at all.
+    onLog?.("Make a Post: checking whether the composer is on the Post picker…");
+    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (!nextBtn1) {
+      onLog?.("Make a Post: not on Post mode yet — looking for the POST tab…");
+      const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
+        ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
+      if (postTab) {
+        onLog?.("Make a Post: tapping POST tab…");
+        await android.tap(serial, postTab.x, postTab.y);
+        await sleepOrAbort(serial, 1200);
+      } else {
+        onLog?.("Make a Post: POST tab not found either — composer may not have opened");
+      }
+      nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     }
 
     // Instagram's media grid already auto-selects the most recent photo as
@@ -2289,15 +2307,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // just pushed the file we want to post and it is therefore the newest
     // item in the gallery, no tap is needed at all: the default selection
     // already matches our target. Go straight to "Next".
-    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (!nextBtn1) {
       onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
     }
+    onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
     await sleepOrAbort(serial, 1500);
+
+    // Confirm the tap actually advanced the screen — "Next" on the
+    // photo-select step should disappear once the filter/crop screen loads.
+    // If it's still sitting at the exact same coordinates, the tap was
+    // swallowed (wrong element matched, or the sheet reset underneath us)
+    // and retrying blind would only repeat the same failure.
+    const stillOnPicker = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (stillOnPicker && Math.abs(stillOnPicker.x - nextBtn1.x) < 5 && Math.abs(stillOnPicker.y - nextBtn1.y) < 5) {
+      onLog?.("Make a Post: tapped \"Next\" but the picker screen did not advance — aborting this attempt");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
 
     // Filter screen → Next.
     const nextBtn2 = await android.findButtonByLabel(serial, "Next").catch(() => null);
