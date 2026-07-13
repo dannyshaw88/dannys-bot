@@ -78,6 +78,28 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.534",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Added",
+        text: "Screen layout dump is back in the Make a Post flow — fires once, immediately after the \"+\" tap, before anything else runs. Shows exactly what Instagram opened so the thumbnail selection can be fixed from real data.",
+        technical: [
+          "Placed as the very first call after the 1800ms post-tap sleep, before dismissInstagramInterstitials and before the POST-tab check — ensures the dump captures the freshest possible screen state.",
+          "Only one dump fires in the entire flow; multiple dumps compound into 10+ s of delay which causes pickers to close or change state (root cause of the v1.1.531/1.1.532 story-creator regression).",
+        ],
+      },
+      {
+        category: "Added",
+        text: "New logScreenLayout() helper in the mobile automation engine — a single reusable function any future mobile flow can call to dump what's on screen at a critical moment, with consistent logging and built-in error handling. Prevents copy-paste of raw dump boilerplate across flows.",
+        technical: [
+          "Signature: logScreenLayout(serial, label, onLog) — drop-in one-liner.",
+          "Documented rule: call at most once per critical moment, as the very first thing after a sleep, never in a loop.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.533",
     date: "13 Jul 2026",
     items: [

@@ -2283,6 +2283,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, composeBtn.x, composeBtn.y);
     await sleepOrAbort(serial, 1800);
 
+    // One-shot layout dump — fires immediately after the "+" tap sleep,
+    // before any other UIAutomator call, to capture exactly what opened.
+    // This is the only dump in this flow; additional dumps compound delays
+    // and can cause time-sensitive screens (the picker) to change state.
+    await android.logScreenLayout(serial, "Make a Post: after '+' tap", onLog);
+
     // Auto-clear any interstitial ("Turn on notifications?", a stray "Not now"
     // confirmation, etc.) that can appear right after opening the composer —
     // left alone it silently sits on top of the picker and every later

@@ -2321,6 +2321,37 @@ export async function dumpAllNodes(serial: string): Promise<string[]> {
 }
 
 /**
+ * Drop-in screen dump for any mobile automation flow.
+ *
+ * Usage — one line anywhere you need to see what's on screen:
+ *
+ *   await logScreenLayout(serial, "Make a Post: after '+' tap", onLog);
+ *
+ * Rules:
+ *   • Call it AT MOST ONCE per critical moment — each call takes ~3 s.
+ *   • Place it as the VERY FIRST thing after a sleep, before any other
+ *     UIAutomator call, so the screen state is as fresh as possible.
+ *   • Never call it in a loop or more than once in rapid succession — the
+ *     cumulative delay will close time-sensitive screens.
+ *   • It never throws — failures are logged inline, never propagated.
+ */
+export async function logScreenLayout(
+  serial: string,
+  label: string,
+  onLog: ((msg: string) => void) | undefined,
+): Promise<void> {
+  onLog?.(`[screen-dump] ${label} — starting…`);
+  try {
+    const lines = await dumpAllNodes(serial);
+    onLog?.(`[screen-dump] ${label} — ${lines.length} node(s):`);
+    lines.forEach(l => onLog?.(`  ${l}`));
+  } catch (e: any) {
+    onLog?.(`[screen-dump] ${label} — ERROR: ${e?.message ?? e}`);
+  }
+  onLog?.(`[screen-dump] ${label} — end`);
+}
+
+/**
  * Positional fallback for the blue "Next" control on Instagram's very first
  * New Post screen (the photo-select/Recents grid).
  *
