@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
+import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 
 declare const __API_PORT__: string;
 
@@ -978,6 +979,31 @@ interface AutomationSettingsData {
   viewStoriesActivatePctMin: number; viewStoriesActivatePctMax: number;
   followActivatePctMin: number; followActivatePctMax: number;
   randomJitterActivatePctMin: number; randomJitterActivatePctMax: number;
+  // Make a Post — ported over from the old browser-automation "Make a Post"
+  // tool (HumanSessionPanel's repost* settings) at the user's request
+  // (13 Jul 2026). Config/persistence only for now — there is no mobile
+  // automation-cycle logic yet that reads these to actually post from the
+  // phone (no gallery picker / IG composer automation exists).
+  makePostEnabled: boolean;
+  makePostOrderPctMin: number; makePostOrderPctMax: number;
+  makePostSkipPctMin: number; makePostSkipPctMax: number;
+  makePostPerSessionMin: number; makePostPerSessionMax: number;
+  makePostSourceUsername: string;
+  makePostDisableUsernameSource: boolean;
+  makePostAlterationLevel: "small" | "medium" | "high";
+  makePostUseHikerApi: boolean;
+  makePostDisableAtPostCount: number;
+  makePostDisableWhenExhausted: boolean;
+  makePostLocalFolderEnabled: boolean;
+  makePostLocalFolderPath: string;
+  makePostLocalFolderNoRepeat: boolean;
+  makePostLocalFolderRandom: boolean;
+  makePostLocalFolderDeleteAfterUpload: boolean;
+  makePostUseChatGpt: boolean;
+  makePostMakeUnique: boolean;
+  makePostDisableComments: boolean;
+  makePostCaptionText: string;
+  makePostImageSettings: ImageFilterSettings;
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -1013,6 +1039,32 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
   followActivatePctMin: 100, followActivatePctMax: 100,
   randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
+  makePostEnabled: false,
+  makePostOrderPctMin: 0, makePostOrderPctMax: 0,
+  makePostSkipPctMin: 0, makePostSkipPctMax: 0,
+  makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+  makePostSourceUsername: "",
+  makePostDisableUsernameSource: false,
+  makePostAlterationLevel: "small",
+  makePostUseHikerApi: false,
+  makePostDisableAtPostCount: 0,
+  makePostDisableWhenExhausted: true,
+  makePostLocalFolderEnabled: false,
+  makePostLocalFolderPath: "",
+  makePostLocalFolderNoRepeat: false,
+  makePostLocalFolderRandom: false,
+  makePostLocalFolderDeleteAfterUpload: true,
+  makePostUseChatGpt: false,
+  makePostMakeUnique: false,
+  makePostDisableComments: false,
+  makePostCaptionText: "",
+  makePostImageSettings: {
+    contrast: { enabled: true, min: 5, max: 250 },
+    brightness: { enabled: true, min: 5, max: 250 },
+    noise: { enabled: true, min: 5, max: 15 },
+    sharpen: { enabled: true, min: 1.0, max: 2.0 },
+    pixelate: { enabled: true, min: 0.9, max: 2.1 },
+  },
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -1194,6 +1246,29 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             checkNotificationsClickPctMax: s.checkNotificationsClickPctMax,
             visitProfilePctMin: s.visitProfilePctMin,
             visitProfilePctMax: s.visitProfilePctMax,
+            makePostEnabled: s.makePostEnabled,
+            makePostOrderPctMin: s.makePostOrderPctMin,
+            makePostOrderPctMax: s.makePostOrderPctMax,
+            makePostSkipPctMin: s.makePostSkipPctMin,
+            makePostSkipPctMax: s.makePostSkipPctMax,
+            makePostPerSessionMin: s.makePostPerSessionMin,
+            makePostPerSessionMax: s.makePostPerSessionMax,
+            makePostSourceUsername: s.makePostSourceUsername,
+            makePostDisableUsernameSource: s.makePostDisableUsernameSource,
+            makePostAlterationLevel: s.makePostAlterationLevel,
+            makePostUseHikerApi: s.makePostUseHikerApi,
+            makePostDisableAtPostCount: s.makePostDisableAtPostCount,
+            makePostDisableWhenExhausted: s.makePostDisableWhenExhausted,
+            makePostLocalFolderEnabled: s.makePostLocalFolderEnabled,
+            makePostLocalFolderPath: s.makePostLocalFolderPath,
+            makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
+            makePostLocalFolderRandom: s.makePostLocalFolderRandom,
+            makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
+            makePostUseChatGpt: s.makePostUseChatGpt,
+            makePostMakeUnique: s.makePostMakeUnique,
+            makePostDisableComments: s.makePostDisableComments,
+            makePostCaptionText: s.makePostCaptionText,
+            makePostImageSettings: s.makePostImageSettings,
           }),
         });
         const body = await r.json().catch(() => null);
@@ -1288,6 +1363,8 @@ function AutomationSettingsPanel({
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
   const [loadingFollowed, setLoadingFollowed] = useState(false);
+  // Make a Post UI local state
+  const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
 
   const loadFollowedUsers = React.useCallback(async () => {
     if (!phone?.serial) return;
@@ -1918,6 +1995,246 @@ function AutomationSettingsPanel({
             </div>
           )}
         </div>
+
+        {/* ── Make a Post — ported from the old browser-automation tool's
+             "Make a Post" settings (13 Jul 2026). Config/persistence only:
+             there is no phone gallery-picker / IG composer automation wired
+             up yet, this just saves the settings for when that's built. ─ */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="make-a-post-enabled"
+              checked={settings.makePostEnabled}
+              onChange={e => setSettings(s => ({ ...s, makePostEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="make-a-post-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
+          </div>
+
+          {settings.makePostEnabled && (
+            <div className="pl-1 space-y-4">
+              {/* Order % / Skip Chance % / Posts per session */}
+              <div className="flex items-start gap-8 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Order %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostOrderPctMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostOrderPctMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostOrderPctMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostOrderPctMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Skip Chance %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostSkipPctMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostSkipPctMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostSkipPctMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostSkipPctMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Posts per session</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostPerSessionMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostPerSessionMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostPerSessionMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostPerSessionMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Source: Instagram Account */}
+              <div className="border border-border/60 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="make-a-post-username-source-enabled"
+                    checked={!settings.makePostDisableUsernameSource}
+                    onChange={e => setSettings(s => ({ ...s, makePostDisableUsernameSource: !e.target.checked }))}
+                    disabled={loading}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor="make-a-post-username-source-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
+                    INSTAGRAM ACCOUNT
+                  </label>
+                </div>
+                {!settings.makePostDisableUsernameSource && (
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
+                      <Input type="text" placeholder="username" className="h-8 text-xs max-w-[220px]"
+                        value={settings.makePostSourceUsername}
+                        onChange={e => setSettings(s => ({ ...s, makePostSourceUsername: e.target.value.replace(/^@/, '') }))}
+                        disabled={loading} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Alteration level</Label>
+                      <div className="flex gap-1">
+                        {(["small", "medium", "high"] as const).map(lvl => (
+                          <button key={lvl} type="button" disabled={loading}
+                            onClick={() => setSettings(s => ({ ...s, makePostAlterationLevel: lvl }))}
+                            className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
+                              settings.makePostAlterationLevel === lvl
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                            }`}
+                          >{lvl}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Image settings</Label>
+                      <button type="button" disabled={loading}
+                        onClick={() => setMakePostImageSettingsOpen(true)}
+                        className="h-8 px-3 text-xs rounded border transition-colors bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                      >Configure</button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
+                      <Input type="number" min={0} maxLength={5} className="w-20 h-8 text-xs text-center"
+                        value={settings.makePostDisableAtPostCount}
+                        onChange={e => setSettings(s => ({ ...s, makePostDisableAtPostCount: clamp4(Number(e.target.value)) }))}
+                        disabled={loading} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="make-a-post-hiker-api"
+                        checked={settings.makePostUseHikerApi}
+                        onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-hiker-api" className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="make-a-post-disable-exhausted"
+                        checked={settings.makePostDisableWhenExhausted}
+                        onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-disable-exhausted" className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Source: Local Folder */}
+              <div className="border border-border/60 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="make-a-post-local-folder-enabled"
+                    checked={settings.makePostLocalFolderEnabled}
+                    onChange={e => setSettings(s => ({ ...s, makePostLocalFolderEnabled: e.target.checked }))}
+                    disabled={loading}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                  <label htmlFor="make-a-post-local-folder-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none">Source: Local Folder</label>
+                </div>
+                {settings.makePostLocalFolderEnabled && (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input type="text" placeholder="/path/to/images" className="h-8 text-xs font-mono w-[280px]"
+                        value={settings.makePostLocalFolderPath}
+                        onChange={e => setSettings(s => ({ ...s, makePostLocalFolderPath: e.target.value }))}
+                        disabled={loading} />
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="make-a-post-local-no-repeat"
+                          checked={settings.makePostLocalFolderNoRepeat}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderNoRepeat: e.target.checked }))}
+                          disabled={loading}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor="make-a-post-local-no-repeat" className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="make-a-post-local-random"
+                          checked={settings.makePostLocalFolderRandom}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderRandom: e.target.checked }))}
+                          disabled={loading}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor="make-a-post-local-random" className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="make-a-post-local-delete-after"
+                          checked={settings.makePostLocalFolderDeleteAfterUpload}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
+                          disabled={loading}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor="make-a-post-local-delete-after" className="text-xs text-muted-foreground cursor-pointer select-none">Delete after upload</label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Caption */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <input type="checkbox" id="make-a-post-use-chatgpt"
+                        checked={settings.makePostUseChatGpt}
+                        onChange={e => setSettings(s => ({ ...s, makePostUseChatGpt: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-use-chatgpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input type="checkbox" id="make-a-post-make-unique"
+                        checked={settings.makePostMakeUnique}
+                        onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input type="checkbox" id="make-a-post-disable-comments"
+                        checked={settings.makePostDisableComments}
+                        onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-disable-comments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">
+                  Supports multi-level spin syntax, e.g. {"{hello|hi|hey}"}. Leave blank to use the original post's caption.
+                </p>
+                <textarea
+                  className="w-full text-xs font-mono resize-none h-[72px] leading-relaxed rounded-md border border-input bg-transparent px-3 py-2"
+                  rows={3}
+                  value={settings.makePostCaptionText}
+                  onChange={e => setSettings(s => ({ ...s, makePostCaptionText: e.target.value }))}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <ImageSettingsDialog
+          open={makePostImageSettingsOpen}
+          onClose={() => setMakePostImageSettingsOpen(false)}
+          settings={settings.makePostImageSettings}
+          alterationLevel={settings.makePostAlterationLevel}
+          onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
+        />
 
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
         <div className="space-y-2">

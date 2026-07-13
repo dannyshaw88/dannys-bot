@@ -139,6 +139,40 @@ type AutomationSettings = {
   followActivatePctMax?: number;
   randomJitterActivatePctMin?: number;
   randomJitterActivatePctMax?: number;
+  // Make a Post — settings ported over from the old browser-automation
+  // "Make a Post" tool (HumanSessionPanel's repost* fields) at the user's
+  // request (13 Jul 2026). Config/persistence only for now: there is no
+  // mobile automation-cycle logic yet that reads these to actually drive a
+  // gallery-picker → caption → share flow on the phone.
+  makePostEnabled?: boolean;
+  makePostOrderPctMin?: number;
+  makePostOrderPctMax?: number;
+  makePostSkipPctMin?: number;
+  makePostSkipPctMax?: number;
+  makePostPerSessionMin?: number;
+  makePostPerSessionMax?: number;
+  makePostSourceUsername?: string;
+  makePostDisableUsernameSource?: boolean;
+  makePostAlterationLevel?: "small" | "medium" | "high";
+  makePostUseHikerApi?: boolean;
+  makePostDisableAtPostCount?: number;
+  makePostDisableWhenExhausted?: boolean;
+  makePostLocalFolderEnabled?: boolean;
+  makePostLocalFolderPath?: string;
+  makePostLocalFolderNoRepeat?: boolean;
+  makePostLocalFolderRandom?: boolean;
+  makePostLocalFolderDeleteAfterUpload?: boolean;
+  makePostUseChatGpt?: boolean;
+  makePostMakeUnique?: boolean;
+  makePostDisableComments?: boolean;
+  makePostCaptionText?: string;
+  makePostImageSettings?: {
+    contrast: { enabled: boolean; min: number; max: number };
+    brightness: { enabled: boolean; min: number; max: number };
+    noise: { enabled: boolean; min: number; max: number };
+    sharpen: { enabled: boolean; min: number; max: number };
+    pixelate: { enabled: boolean; min: number; max: number };
+  };
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -890,6 +924,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followActivatePctMax: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
+    // ── Make a Post — ported from the old browser-automation tool's
+    // repost* settings (13 Jul 2026). Config/persistence only; no
+    // automation-cycle logic reads these yet.
+    makePostEnabled: z.boolean().default(false),
+    makePostOrderPctMin: z.number().min(0).max(100).default(0),
+    makePostOrderPctMax: z.number().min(0).max(100).default(0),
+    makePostSkipPctMin: z.number().min(0).max(100).default(0),
+    makePostSkipPctMax: z.number().min(0).max(100).default(0),
+    makePostPerSessionMin: z.number().min(1).max(20).default(1),
+    makePostPerSessionMax: z.number().min(1).max(20).default(1),
+    makePostSourceUsername: z.string().default(""),
+    makePostDisableUsernameSource: z.boolean().default(false),
+    makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
+    makePostUseHikerApi: z.boolean().default(false),
+    makePostDisableAtPostCount: z.number().min(0).default(0),
+    makePostDisableWhenExhausted: z.boolean().default(true),
+    makePostLocalFolderEnabled: z.boolean().default(false),
+    makePostLocalFolderPath: z.string().default(""),
+    makePostLocalFolderNoRepeat: z.boolean().default(false),
+    makePostLocalFolderRandom: z.boolean().default(false),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
+    makePostUseChatGpt: z.boolean().default(false),
+    makePostMakeUnique: z.boolean().default(false),
+    makePostDisableComments: z.boolean().default(false),
+    makePostCaptionText: z.string().default(""),
+    makePostImageSettings: z.object({
+      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+    }).default({
+      contrast: { enabled: true, min: 5, max: 250 },
+      brightness: { enabled: true, min: 5, max: 250 },
+      noise: { enabled: true, min: 5, max: 15 },
+      sharpen: { enabled: true, min: 1.0, max: 2.0 },
+      pixelate: { enabled: true, min: 0.9, max: 2.1 },
+    }),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
@@ -924,6 +996,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
       followActivatePctMin: 100, followActivatePctMax: 100,
       randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
+      makePostEnabled: false,
+      makePostOrderPctMin: 0, makePostOrderPctMax: 0,
+      makePostSkipPctMin: 0, makePostSkipPctMax: 0,
+      makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+      makePostSourceUsername: "", makePostDisableUsernameSource: false,
+      makePostAlterationLevel: "small", makePostUseHikerApi: false,
+      makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
+      makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
+      makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
+      makePostLocalFolderDeleteAfterUpload: true,
+      makePostUseChatGpt: false, makePostMakeUnique: false, makePostDisableComments: false,
+      makePostCaptionText: "",
+      makePostImageSettings: {
+        contrast: { enabled: true, min: 5, max: 250 },
+        brightness: { enabled: true, min: 5, max: 250 },
+        noise: { enabled: true, min: 5, max: 15 },
+        sharpen: { enabled: true, min: 1.0, max: 2.0 },
+        pixelate: { enabled: true, min: 0.9, max: 2.1 },
+      },
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
