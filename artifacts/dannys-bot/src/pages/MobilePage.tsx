@@ -109,7 +109,14 @@ const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in w
 
 type LiveCanvasHandle = { clearToBlack: () => void };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions }, ref) {
+type InspectNode = {
+  cls: string; resourceId: string; contentDesc: string; text: string;
+  bounds: string; boundsRaw: [number,number,number,number];
+  center: { x: number; y: number }; clickable: boolean; area: number;
+};
+type InspectResult = { ok: boolean; nodes: InspectNode[]; screenW: number; screenH: number; tappedAt: { x: number; y: number }; error?: string };
+
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -124,6 +131,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const demuxerRef   = useRef<AnnexBDemuxer | null>(null);
   const decoderRef   = useRef<VideoDecoder | null>(null);
   const configuredRef = useRef(false);
+  // Kept in a ref (not state) so the pointer-event handlers always see the
+  // latest value without needing to be recreated on every toggle.
+  const inspectModeRef = useRef(false);
+  useEffect(() => { inspectModeRef.current = !!inspectMode; }, [inspectMode]);
+  const onInspectResultRef = useRef(onInspectResult);
+  useEffect(() => { onInspectResultRef.current = onInspectResult; }, [onInspectResult]);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -542,6 +555,28 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     const durationMs = Math.max(1, Date.now() - drag.startedAt);
 
     if (clientDist < DRAG_THRESHOLD_PX) {
+      // ── Inspect mode — identify element at this point instead of tapping ──
+      // Works exactly like Chrome DevTools F12: click anything on the mirror,
+      // get back every accessibility node whose bounds contain that point.
+      if (inspectModeRef.current) {
+        addLog(`🔍 Inspecting (${drag.startX}, ${drag.startY})…`);
+        try {
+          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/inspect-node`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x: drag.startX, y: drag.startY }),
+          });
+          const body: InspectResult = await r.json();
+          onInspectResultRef.current?.(body);
+          if (!body.ok) {
+            addLog(`🔍 Inspect failed — ${body.error ?? "unknown"}`);
+          }
+        } catch (err: any) {
+          addLog(`🔍 Inspect error — ${err?.message ?? "network error"}`);
+        }
+        return;
+      }
+
       // Short/no movement — treat as a tap at the press point (matches the
       // previous click-to-tap behavior exactly). A lone tap is held for
       // DOUBLE_TAP_MS instead of firing right away: if a second tap lands
@@ -676,7 +711,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           width:        "100%",
           height:       "100%",
           objectFit:    "contain",
-          cursor:       clickable ? "pointer" : "default",
+          cursor:       inspectMode ? "crosshair" : clickable ? "pointer" : "default",
           pointerEvents: clickable ? "auto" : "none",
           zIndex:       5,
         }}
@@ -713,6 +748,10 @@ function EmptyShell({ idx }: { idx: number }) {
 
 function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void }) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
+  const [inspectMode,   setInspectMode]   = useState(false);
+  const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
+  const [inspecting,    setInspecting]    = useState(false);
+
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
@@ -721,6 +760,25 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
   const isUnauthorized = phone?.state === "unauthorized";
   const isOffline      = phone?.state === "offline";
   const isEmpty        = !phone;
+
+  const handleInspectResult = useCallback(async (r: InspectResult) => {
+    setInspecting(false);
+    setInspectResult(r);
+  }, []);
+
+  // Log a line while the inspect fetch is in flight so the user knows it's working
+  const handleInspectStart = useCallback(() => { setInspecting(true); setInspectResult(null); }, []);
+
+  const copyInspectResult = async () => {
+    if (!inspectResult) return;
+    const lines = [
+      `── INSPECT @ (${inspectResult.tappedAt?.x}, ${inspectResult.tappedAt?.y}) — ${inspectResult.screenW}×${inspectResult.screenH} ──`,
+      ...inspectResult.nodes.map((n, i) =>
+        `[${i}] ${n.clickable ? "●" : "○"} ${n.cls}  bounds=${n.bounds}  center=(${n.center.x},${n.center.y})\n    id="${n.resourceId}"  desc="${n.contentDesc}"  text="${n.text}"`
+      ),
+    ];
+    try { await navigator.clipboard.writeText(lines.join("\n")); } catch { /* ignore */ }
+  };
 
   return (
     <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl w-full h-full">
@@ -734,22 +792,30 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
             <span className="text-[9px] text-white/25 shrink-0">A{phone.androidVersion}</span>
           )}
         </div>
-        {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
-        {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
-        {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
-        {isEmpty        && <span className="text-[9px] font-mono text-white/15 shrink-0">empty</span>}
+        <div className="flex items-center gap-2">
+          {isReady && phone && live && (
+            <button
+              onClick={() => { setInspectMode(m => !m); setInspectResult(null); }}
+              title={inspectMode ? "Exit inspect mode — clicks will tap the phone again" : "Inspect mode — click any element on screen to identify it (like Chrome F12)"}
+              className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
+                inspectMode
+                  ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                  : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
+              }`}
+            >
+              {inspectMode ? "🔍 Inspecting" : "🔍 Inspect"}
+            </button>
+          )}
+          {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
+          {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
+          {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
+          {isEmpty        && <span className="text-[9px] font-mono text-white/15 shrink-0">empty</span>}
+        </div>
       </div>
 
-      {/* Screen area — fills whatever height is left in the card. Using
-          flex-1/min-h-0 here (instead of a fixed aspect-ratio) means the
-          card's real, computed pixel height always matches its parent, so
-          nested percentage heights below (the canvas) never collapse to 0 —
-          which is what made the old layout both overflow the viewport and
-          silently stop registering clicks. The canvas itself preserves the
-          real phone aspect ratio via object-fit: contain. */}
+      {/* Screen area */}
       <div className="relative bg-zinc-900 flex-1 min-h-0">
         {isEmpty && <EmptyShell idx={idx} />}
-
         {isUnauthorized && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
@@ -765,15 +831,69 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
           </div>
         )}
 
-        {/* Live stream only mounts once explicitly turned on — either by the
-            automation toggle or by pressing the Power button below. Merely
-            opening the Mobile tab / having a phone plugged in must never by
-            itself wake the device or start pulling frames. */}
-        {isReady && phone && live && <LiveCanvas ref={liveCanvasRef} serial={phone.serial} onLog={onLog} onDimensions={onDimensions} />}
+        {isReady && phone && live && (
+          <LiveCanvas
+            ref={liveCanvasRef}
+            serial={phone.serial}
+            onLog={onLog}
+            onDimensions={onDimensions}
+            inspectMode={inspectMode}
+            onInspectResult={handleInspectResult}
+          />
+        )}
         {isReady && phone && !live && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
             <Power className="w-5 h-5 text-white/25" />
             <p className="text-[10px] text-white/40 leading-relaxed">Press Power to view this phone's screen</p>
+          </div>
+        )}
+
+        {/* Inspect mode banner */}
+        {inspectMode && !inspectResult && (
+          <div className="absolute bottom-2 inset-x-2 flex items-center justify-center pointer-events-none z-20">
+            <span className="bg-yellow-400/90 text-black text-[9px] font-bold px-2 py-1 rounded-full shadow">
+              {inspecting ? "Scanning…" : "Click any element to inspect it"}
+            </span>
+          </div>
+        )}
+
+        {/* Inspect result overlay */}
+        {inspectResult && inspectMode && (
+          <div className="absolute inset-x-1 bottom-1 z-30 bg-zinc-900/97 border border-yellow-400/30 rounded-xl shadow-2xl text-[9px] font-mono max-h-[65%] flex flex-col">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/8 shrink-0">
+              <span className="text-yellow-300 font-bold text-[8px]">
+                🔍 ({inspectResult.tappedAt?.x},{inspectResult.tappedAt?.y}) — {inspectResult.nodes.length} node{inspectResult.nodes.length !== 1 ? "s" : ""}
+              </span>
+              <div className="flex gap-1">
+                <button onClick={copyInspectResult} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">📋 Copy</button>
+                <button onClick={() => setInspectResult(null)} className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">✕</button>
+              </div>
+            </div>
+            {/* Node list — most specific first */}
+            <div className="overflow-y-auto flex-1 p-1.5 space-y-1">
+              {inspectResult.nodes.length === 0 && (
+                <p className="text-white/30 text-center py-2">No elements found at this point</p>
+              )}
+              {inspectResult.nodes.map((n, i) => (
+                <div key={i} className={`rounded-lg p-1.5 border ${i === 0 ? "border-yellow-400/40 bg-yellow-400/5" : "border-white/6 bg-white/2"}`}>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className={`text-[8px] font-bold ${n.clickable ? "text-green-400" : "text-white/30"}`}>{n.clickable ? "● TAP" : "○ VIEW"}</span>
+                    <span className="text-white/60 font-semibold">{n.cls}</span>
+                    {i === 0 && <span className="text-[7px] text-yellow-300 ml-auto">innermost</span>}
+                  </div>
+                  <div className="text-white/40 leading-relaxed">
+                    <div>center=<span className="text-cyan-400">({n.center.x},{n.center.y})</span>  bounds=<span className="text-white/60">{n.bounds}</span></div>
+                    {n.resourceId  && <div>id=<span className="text-orange-300">"{n.resourceId}"</span></div>}
+                    {n.contentDesc && <div>desc=<span className="text-lime-300">"{n.contentDesc}"</span></div>}
+                    {n.text        && <div>text=<span className="text-sky-300">"{n.text}"</span></div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-2 py-1 border-t border-white/6 shrink-0">
+              <span className="text-[7px] text-white/20">● = tappable  ○ = container/label  |  innermost (most specific) element at top</span>
+            </div>
           </div>
         )}
       </div>
@@ -785,9 +905,6 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187, "Recent", onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          {/* Power both sends the real hardware keyevent AND is the one
-              explicit user action allowed to turn the live view on — never
-              triggered automatically by mounting/visiting this tab. */}
           <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
           <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />

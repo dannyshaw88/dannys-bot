@@ -4,6 +4,45 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.538] — 2026-07-13
+
+### Feature: Element Inspector — click any element on the phone screen to identify it instantly
+
+**The problem it solves:**
+
+Every time Make a Post (or any other mobile tool) breaks, diagnosing it required guessing coordinates, adding dump code, rebuilding, running, copy-pasting 500 lines of log, sending them, waiting for analysis, and repeating — a cycle that has cost hours per bug. There was no way to just point at something and know what it was.
+
+**What's new — 🔍 Inspect button:**
+
+A new **🔍 Inspect** toggle appears in the top-right of the phone mirror panel whenever the live stream is on. When active:
+
+- The cursor changes to a crosshair.
+- Clicking anywhere on the phone mirror **does not send a tap to the device** — instead it queries the accessibility tree for every element whose bounds contain that point.
+- Results appear instantly as an overlay panel on the mirror, showing (for each matching node, innermost/most-specific first):
+  - **Class** (e.g. `ImageView`, `TextView`, `FrameLayout`)
+  - **Resource ID** (e.g. `action_bar_add_button`)
+  - **Content description** (e.g. `"New post"`, `"Add"`, `"Direct"`)
+  - **Text** (visible label, if any)
+  - **Pixel bounds** and **centre coordinate** — ready to paste directly into code
+  - **Tappable** indicator (green ● vs grey ○)
+- A **📋 Copy** button in the overlay copies all node data as clean text.
+- Click **✕** to dismiss and click another element.
+- Click **🔍 Inspecting** again to exit inspect mode and return to normal tap behaviour.
+
+**Backend:**
+
+New endpoint `POST /api/mobile/devices/:serial/inspect-node` — takes `{x, y}` in device coordinates, runs a UIAutomator dump, returns all nodes containing that point sorted smallest-area-first (innermost element first). Same dump mechanism as Capture Screen, but filtered and returned as structured JSON rather than formatted text.
+
+**How to use it for Make a Post debugging:**
+
+1. Open the phone mirror, power on the screen, navigate to the Instagram home feed.
+2. Press **🔍 Inspect** to enter inspect mode.
+3. Click on the compose "+" icon (or whatever element you want to identify).
+4. The overlay shows exactly: what class it is, what its `content-desc` is, its exact pixel bounds.
+5. Press 📋 Copy and paste it — that's everything needed to fix the finder in one click, no guessing.
+
+---
+
 ## [1.1.537] — 2026-07-13
 
 ### Fix: Make a Post (mobile) — compose "+" finder was landing on the DM icon, not the compose button

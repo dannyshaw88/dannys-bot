@@ -3884,6 +3884,63 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Element Inspector ─────────────────────────────────────────────────────
+  // Like Chrome DevTools F12 — click a point on the phone mirror and get back
+  // every accessibility node whose bounds contain that point, sorted from most
+  // specific (smallest area, innermost element) to least (full-screen root).
+  // The frontend uses this in "Inspect mode" so the user can hover/click any
+  // element on-screen and immediately see its label, resource-id, and exact
+  // pixel bounds without any guesswork.
+  const inspectNodeSchema = z.object({ x: z.number(), y: z.number() });
+  app.post("/api/mobile/devices/:serial/inspect-node", async (req: Request, res: Response) => {
+    try {
+      const { x, y } = inspectNodeSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const xml = await android.dumpUi(serial);
+      if (!xml || xml.length < 200) {
+        res.json({ ok: false, nodes: [], error: "Empty dump — is the phone awake and unlocked?" });
+        return;
+      }
+      const rootM = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+      const W = rootM ? parseInt(rootM[1]) : 0;
+      const H = rootM ? parseInt(rootM[2]) : 0;
+
+      interface InspectNode {
+        cls: string; resourceId: string; contentDesc: string; text: string;
+        bounds: string; boundsRaw: [number,number,number,number];
+        center: { x: number; y: number }; clickable: boolean; area: number;
+      }
+      const hits: InspectNode[] = [];
+      const nodeRe = /<node\s([^/\n>]+)\s*\/>/g;
+      let m: RegExpExecArray | null;
+      while ((m = nodeRe.exec(xml)) !== null) {
+        const attrs = m[1];
+        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bm) continue;
+        const [x1, y1, x2, y2] = [bm[1], bm[2], bm[3], bm[4]].map(Number);
+        // Must contain the tapped point
+        if (x < x1 || x > x2 || y < y1 || y > y2) continue;
+        // Skip zero-size containers
+        if (x2 - x1 < 2 || y2 - y1 < 2) continue;
+        const get = (attr: string) => { const a = attrs.match(new RegExp(`${attr}="([^"]*)"`)); return a ? a[1] : ""; };
+        hits.push({
+          cls:         get("class").replace(/^.*\./, ""),
+          resourceId:  get("resource-id").replace(/^[^/]+\//, ""),
+          contentDesc: get("content-desc"),
+          text:        get("text"),
+          bounds:      `[${x1},${y1}][${x2},${y2}]`,
+          boundsRaw:   [x1, y1, x2, y2],
+          center:      { x: Math.round((x1+x2)/2), y: Math.round((y1+y2)/2) },
+          clickable:   get("clickable") === "true",
+          area:        (x2-x1) * (y2-y1),
+        });
+      }
+      // Smallest area first = most specific (innermost) element at the top
+      hits.sort((a, b) => a.area - b.area);
+      res.json({ ok: true, nodes: hits, screenW: W, screenH: H, tappedAt: { x, y } });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   const swipeSchema = z.object({
     x1: z.number(),
     y1: z.number(),
