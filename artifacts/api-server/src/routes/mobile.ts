@@ -2288,14 +2288,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // the dump captures the real screen state right after the compose button tap,
     // not a later screen after navigation has changed what's visible.
     onLog?.("Make a Post: [DUMP A] starting layout dump…");
+    let dumpAWasBlank = false;
     try {
       const dumpLines = await android.dumpAllNodes(serial);
       onLog?.(`Make a Post: [DUMP A] ${dumpLines.length} node(s) found`);
       dumpLines.forEach(l => onLog?.(`  ${l}`));
+      // If the dump returned nothing interactive, the screen is still in a
+      // transition animation — wait an extra 2 s and let it settle before
+      // checking for the POST tab / story guard below.
+      if (dumpLines.length <= 1 && dumpLines[0]?.includes("no labelled/interactive nodes")) {
+        dumpAWasBlank = true;
+        onLog?.("Make a Post: [DUMP A] screen blank/transitioning — waiting 2 s more for render…");
+      }
     } catch (dumpErr: any) {
       onLog?.(`Make a Post: [DUMP A] ERROR — ${dumpErr?.message ?? dumpErr}`);
+      dumpAWasBlank = true;
     }
     onLog?.("Make a Post: [DUMP A] end");
+    if (dumpAWasBlank) await sleepOrAbort(serial, 2000);
 
     // Auto-clear any interstitial ("Turn on notifications?", a stray "Not now"
     // confirmation, etc.) that can appear right after opening the composer —
@@ -2324,6 +2334,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Make a Post: no POST tab found — waiting 800 ms…");
       await sleepOrAbort(serial, 800);
       onLog?.("Make a Post: 800 ms wait done");
+    }
+
+    // ── Story-creator guard ───────────────────────────────────────────────────
+    // If the "+" that was tapped was Instagram's story add button (not the post
+    // compose button), the Story Creator opens instead of the post picker.
+    // Characteristic signals: "Your story" / "Close Friends" share buttons at
+    // the bottom, or the story-editor overflow_button in the right toolbar.
+    // Bail immediately — tapping a "thumbnail" inside the story creator selects
+    // a photo for a story post, which is the wrong workflow entirely.
+    const onStoryCreator = await android.isOnStoryCreator(serial).catch(() => false);
+    if (onStoryCreator) {
+      onLog?.("Make a Post: story creator opened instead of post picker — findComposeButton hit the story \"+\" button. Pressing Back and aborting.");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
     }
 
     // The photo is visible in the grid but NOT yet selected (highlighted

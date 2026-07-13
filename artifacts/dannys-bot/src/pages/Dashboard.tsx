@@ -78,6 +78,34 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.532",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post was opening the Instagram Story creator instead of the post picker — the compose icon finder was matching the \"Your story\" add button (which has the label \"Add\") instead of the real compose \"+\" button in the top-right of the header bar.",
+        technical: [
+          "Root cause 1: _findElem searched for 'Add' as a content-desc label. Instagram's story add button in the stories tray carries exactly this label and sits earlier in the accessibility tree than the compose '+', so it was always found first.",
+          "Fix: removed 'Add' from the label search list in findComposeButton. Only 'New post', 'Create', 'New Post' are searched now — none of those match the story button.",
+          "Root cause 2: the positional fallback was scanning the TOP-LEFT corner of the header (x < 20%) when Instagram's compose '+' actually lives in the TOP-RIGHT (x > 60%), next to the DM/notification icons.",
+          "Fix: positional fallback now scans x > 60% of screen width, top 8% height, and picks the rightmost clickable node found there.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Even when the wrong composer opened, the flow would blindly fire a positional thumbnail tap inside the story creator (selecting a photo for a story instead of a post). A new guard now detects the story creator screen immediately after the compose button is tapped and aborts cleanly before any damage is done.",
+        technical: [
+          "New isOnStoryCreator() function in androidManager.ts checks for 'Your story' text, 'Close Friends' text, or overflow_button resource-id — labels that are unique to the story creator and never appear on the post picker.",
+          "Guard runs right after the POST-tab check in runMakePostStep. If the story creator is detected, it presses Back and returns posted:false immediately.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "When the \"DUMP A\" screen capture ran immediately after tapping \"+\", the screen was still mid-transition (blank), so everything downstream ran against a screen it could not see. The flow now detects a blank dump and waits an extra 2 seconds for the target screen to fully render before continuing.",
+      },
+    ],
+  },
+  {
     version: "1.1.531",
     date: "13 Jul 2026",
     items: [

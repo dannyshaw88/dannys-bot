@@ -2064,18 +2064,23 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  const byLabel = _findElem(xml, "New post", "Create", "Add", "New Post");
+  // NOTE: "Add" is intentionally excluded — the "Your story" add button in the
+  // stories tray also carries cd="Add" and will be found first (it sits above
+  // the compose button in the tree), opening the Story Creator instead of the
+  // post/reel/story type-selector sheet.
+  const byLabel = _findElem(xml, "New post", "Create", "New Post");
   if (byLabel) return byLabel;
   const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
   if (byResId) return byResId;
 
-  // Positional fallback: leftmost clickable node in the top header band.
-  // The "+" compose icon on the Instagram home feed sits in the top-left
-  // corner of the header bar (confirmed on real device — this is the correct
-  // button; it opens the multi-type compose sheet with POST/REEL/STORY tabs).
+  // Positional fallback: Instagram's compose "+" sits in the TOP-RIGHT area of
+  // the home-feed header bar (alongside the DM/notification icons), NOT the
+  // top-left. The top-left usually holds the Instagram logo or the Stories
+  // camera shortcut. Look for the rightmost small clickable node in the top
+  // header band (top 8% of screen, right 40% of screen).
   const { w, h } = getScreenSize(serial);
   const maxY = Math.round(h * 0.08);
-  const maxX = Math.round(w * 0.20);
+  const minX = Math.round(w * 0.60); // right 40%
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let best: { x: number; y: number } | null = null;
   let m: RegExpExecArray | null;
@@ -2086,10 +2091,37 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
-    if (c.y > maxY || c.x > maxX) continue;
-    if (!best || c.x < best.x) best = c;
+    if (c.y > maxY || c.x < minX) continue;
+    if (!best || c.x > best.x) best = c; // rightmost = compose "+"
   }
   return best;
+}
+
+/**
+ * Returns true if the current screen is Instagram's Story Creator (the
+ * camera/media-select interface that opens when the story "+" add button is
+ * tapped), as opposed to the post/feed compose picker.
+ *
+ * Used as a guard in the Make-a-Post flow to bail early when
+ * findComposeButton mistakenly taps the story "+" instead of the post "+".
+ *
+ * Detects by looking for labels that are unique to the story creator and
+ * never appear on the post picker:
+ *   • "Your story" / "Close Friends" — the share-destination buttons at the
+ *     bottom of the story creator
+ *   • resource-id overflow_button — the "Show more tools" button in the
+ *     story creator's right-side toolbar (Text / Stickers / Music / Effects)
+ */
+export async function isOnStoryCreator(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  return (
+    /text="Your story"/.test(xml) ||
+    /text="Close Friends"/.test(xml) ||
+    /:id\/overflow_button"/.test(xml)
+  );
 }
 
 /**
