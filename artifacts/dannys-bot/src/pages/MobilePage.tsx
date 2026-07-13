@@ -981,10 +981,12 @@ interface AutomationSettingsData {
   randomJitterActivatePctMin: number; randomJitterActivatePctMax: number;
   // Make a Post — ported over from the old browser-automation "Make a Post"
   // tool (HumanSessionPanel's repost* settings) at the user's request
-  // (13 Jul 2026). Config/persistence only for now — there is no mobile
-  // automation-cycle logic yet that reads these to actually post from the
-  // phone (no gallery picker / IG composer automation exists).
+  // (13 Jul 2026). Wired into the mobile automation-cycle (13 Jul 2026): when
+  // gated on by makePostEnabled + this Activate Percentage roll, the cycle
+  // taps Instagram's "+" compose icon and posts a photo pulled from the
+  // configured local folder.
   makePostEnabled: boolean;
+  makePostActivatePctMin: number; makePostActivatePctMax: number;
   makePostOrderPctMin: number; makePostOrderPctMax: number;
   makePostSkipPctMin: number; makePostSkipPctMax: number;
   makePostPerSessionMin: number; makePostPerSessionMax: number;
@@ -1040,6 +1042,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followActivatePctMin: 100, followActivatePctMax: 100,
   randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
   makePostEnabled: false,
+  makePostActivatePctMin: 100, makePostActivatePctMax: 100,
   makePostOrderPctMin: 0, makePostOrderPctMax: 0,
   makePostSkipPctMin: 0, makePostSkipPctMax: 0,
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
@@ -1247,6 +1250,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             visitProfilePctMin: s.visitProfilePctMin,
             visitProfilePctMax: s.visitProfilePctMax,
             makePostEnabled: s.makePostEnabled,
+            makePostActivatePctMin: s.makePostActivatePctMin,
+            makePostActivatePctMax: s.makePostActivatePctMax,
             makePostOrderPctMin: s.makePostOrderPctMin,
             makePostOrderPctMax: s.makePostOrderPctMax,
             makePostSkipPctMin: s.makePostSkipPctMin,
@@ -2017,8 +2022,22 @@ function AutomationSettingsPanel({
 
           {settings.makePostEnabled && (
             <div className="pl-1 space-y-4">
-              {/* Order % / Skip Chance % / Posts per session */}
+              {/* Activate Percentage / Order % / Skip Chance % / Posts per session */}
               <div className="flex items-start gap-8 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Activate Percentage</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostActivatePctMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostActivatePctMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Order %</Label>
                   <div className="flex items-center gap-2">

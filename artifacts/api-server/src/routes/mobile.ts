@@ -3,6 +3,7 @@ import { spawnSync, spawn, execFile } from "child_process";
 import { promisify } from "util";
 import { z } from "zod/v4";
 import fs from "fs";
+import fsPromises from "fs/promises";
 import path from "path";
 import * as http from "http";
 import * as os from "os";
@@ -145,6 +146,8 @@ type AutomationSettings = {
   // mobile automation-cycle logic yet that reads these to actually drive a
   // gallery-picker → caption → share flow on the phone.
   makePostEnabled?: boolean;
+  makePostActivatePctMin?: number;
+  makePostActivatePctMax?: number;
   makePostOrderPctMin?: number;
   makePostOrderPctMax?: number;
   makePostSkipPctMin?: number;
@@ -928,6 +931,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // repost* settings (13 Jul 2026). Config/persistence only; no
     // automation-cycle logic reads these yet.
     makePostEnabled: z.boolean().default(false),
+    makePostActivatePctMin: z.number().min(0).max(100).default(100),
+    makePostActivatePctMax: z.number().min(0).max(100).default(100),
     makePostOrderPctMin: z.number().min(0).max(100).default(0),
     makePostOrderPctMax: z.number().min(0).max(100).default(0),
     makePostSkipPctMin: z.number().min(0).max(100).default(0),
@@ -997,6 +1002,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       followActivatePctMin: 100, followActivatePctMax: 100,
       randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
       makePostEnabled: false,
+      makePostActivatePctMin: 100, makePostActivatePctMax: 100,
       makePostOrderPctMin: 0, makePostOrderPctMax: 0,
       makePostSkipPctMin: 0, makePostSkipPctMax: 0,
       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
@@ -2070,6 +2076,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followActivatePctMax: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
+    // ── Make a Post — wired into the automation cycle (13 Jul 2026). Only
+    // the local-folder image source is implemented for the on-device flow
+    // (per user preference over the HikerAPI-scrape-from-another-user path);
+    // the other makePost* fields (order/skip %, source username, ChatGPT,
+    // image alterations) remain persisted via automationSchema above but are
+    // not yet read here.
+    makePostEnabled: z.boolean().default(false),
+    makePostActivatePctMin: z.number().min(0).max(100).default(100),
+    makePostActivatePctMax: z.number().min(0).max(100).default(100),
+    makePostPerSessionMin: z.number().min(1).max(20).default(1),
+    makePostPerSessionMax: z.number().min(1).max(20).default(1),
+    makePostLocalFolderEnabled: z.boolean().default(false),
+    makePostLocalFolderPath: z.string().default(""),
+    makePostLocalFolderNoRepeat: z.boolean().default(false),
+    makePostLocalFolderRandom: z.boolean().default(false),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
+    makePostDisableComments: z.boolean().default(false),
+    makePostCaptionText: z.string().default(""),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -2129,6 +2153,199 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Persist to disk so data survives server restarts.
     try { fs.writeFileSync(_followedFilePath(serial), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
   };
+
+  // ── Make a Post — local-folder file picker ──────────────────────────────
+  // Per-serial persistent record of which local-folder files have already
+  // been posted, so "Do not repeat images" survives server restarts —
+  // mirrors the mobileFollowedUsers/FOLLOWED_DIR pattern above exactly.
+  const mobilePostedLocalFiles = new Map<string, string[]>();
+  const POSTED_DIR = process.env.EQUINOX_DATA_DIR
+    ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-local")
+    : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-local");
+  try { fs.mkdirSync(POSTED_DIR, { recursive: true }); } catch { /* already exists */ }
+  const _postedFilePath = (serial: string) =>
+    path.join(POSTED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
+  const getPostedLocalFiles = (serial: string): string[] => {
+    if (!mobilePostedLocalFiles.has(serial)) {
+      try {
+        const raw = fs.readFileSync(_postedFilePath(serial), "utf8");
+        mobilePostedLocalFiles.set(serial, JSON.parse(raw) as string[]);
+      } catch {
+        mobilePostedLocalFiles.set(serial, []);
+      }
+    }
+    return mobilePostedLocalFiles.get(serial)!;
+  };
+  const recordPostedLocalFile = (serial: string, fileName: string) => {
+    const list = getPostedLocalFiles(serial);
+    list.unshift(fileName);
+    try { fs.writeFileSync(_postedFilePath(serial), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch { /* best effort */ }
+  };
+
+  const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+  /**
+   * Picks the next image to post from `folderPath` per the user's Local
+   * Folder settings (random vs. alphabetical order, no-repeat). Returns
+   * null (with a log line) if the folder is empty/unreadable or every file
+   * has already been posted — callers must treat that as "nothing to post",
+   * not an error.
+   */
+  async function pickLocalFolderImage(serial: string, opts: {
+    folderPath: string; random: boolean; noRepeat: boolean; onLog?: (msg: string) => void;
+  }): Promise<string | null> {
+    const { folderPath, random, noRepeat, onLog } = opts;
+    let entries: string[];
+    try {
+      entries = await fsPromises.readdir(folderPath);
+    } catch (e: any) {
+      onLog?.(`Make a Post: could not read local folder "${folderPath}" — ${e?.message ?? "unknown error"}`);
+      return null;
+    }
+    let images = entries.filter(f => IMAGE_EXTS.has(path.extname(f).toLowerCase()));
+    if (images.length === 0) {
+      onLog?.(`Make a Post: no image files found in "${folderPath}"`);
+      return null;
+    }
+    if (noRepeat) {
+      const posted = new Set(getPostedLocalFiles(serial));
+      const filtered = images.filter(f => !posted.has(f));
+      if (filtered.length === 0) {
+        onLog?.("Make a Post: all local-folder images already posted (Do not repeat is ON)");
+        return null;
+      }
+      images = filtered;
+    }
+    const ordered = random ? [...images].sort(() => Math.random() - 0.5) : [...images].sort((a, b) => a.localeCompare(b));
+    return ordered[0];
+  }
+
+  /**
+   * Runs one "Make a Post" attempt: pushes a local-folder image to the
+   * device, taps the "+" compose icon, walks the create-post flow (select
+   * photo → Next → Next → caption → Share). Every UI-dependent step
+   * verifies the expected control is actually present before tapping it
+   * (findButtonByLabel/findComposeButton return null rather than a guessed
+   * coordinate) and aborts the attempt with a log line instead of firing a
+   * blind tap — this flow has never been exercised against a real device,
+   * so failing loudly here is much safer than silently mis-tapping.
+   */
+  async function runMakePostStep(serial: string, opts: {
+    localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
+    deleteAfterUpload: boolean; captionText: string; disableComments: boolean;
+    onLog?: (msg: string) => void;
+  }): Promise<{ posted: boolean; fileName?: string }> {
+    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, disableComments, onLog } = opts;
+
+    const fileName = await pickLocalFolderImage(serial, {
+      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
+    });
+    if (!fileName) return { posted: false };
+    const localFilePath = path.join(localFolderPath, fileName);
+
+    onLog?.(`Make a Post: pushing "${fileName}" to device…`);
+    let devicePath: string;
+    try {
+      devicePath = await android.pushFileToDevice(serial, localFilePath, fileName);
+    } catch (e: any) {
+      onLog?.(`Make a Post: adb push failed — ${e?.message ?? "unknown error"}`);
+      return { posted: false };
+    }
+    onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified`);
+    await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
+
+    onLog?.("Make a Post: looking for the \"+\" compose icon…");
+    const composeBtn = await android.findComposeButton(serial).catch(() => null);
+    if (!composeBtn) {
+      onLog?.("Make a Post: compose \"+\" icon not found — skipping (selector likely needs real-device tuning)");
+      return { posted: false };
+    }
+    await android.tap(serial, composeBtn.x, composeBtn.y);
+    await sleepOrAbort(serial, 1800);
+
+    // The just-pushed file should be the most recent (top-left) thumbnail in
+    // the media grid, but there's no existing selector for it — this is a
+    // best-effort tap on the first grid item, gated on first confirming a
+    // "Next" control exists (i.e. we're actually on a picker/selection
+    // screen, not still on the feed from a missed compose tap).
+    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (!nextBtn1) {
+      onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");
+      await android.pressBack(serial);
+      return { posted: false };
+    }
+    const { w, h } = getScreenSize(serial);
+    // First grid cell in Instagram's media picker sits just under the header/toolbar.
+    await android.tap(serial, Math.round(w * 0.17), Math.round(h * 0.22));
+    await sleepOrAbort(serial, 700);
+    await android.tap(serial, nextBtn1.x, nextBtn1.y);
+    await sleepOrAbort(serial, 1500);
+
+    // Filter screen → Next.
+    const nextBtn2 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (nextBtn2) {
+      await android.tap(serial, nextBtn2.x, nextBtn2.y);
+      await sleepOrAbort(serial, 1500);
+    }
+
+    // Edit/adjustments screen → Next (only present on some builds).
+    const nextBtn3 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (nextBtn3) {
+      await android.tap(serial, nextBtn3.x, nextBtn3.y);
+      await sleepOrAbort(serial, 1500);
+    }
+
+    // Caption screen — verify we're actually there before typing/sharing.
+    const shareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null);
+    if (!shareBtn) {
+      onLog?.("Make a Post: caption/share screen not confirmed (no \"Share\" control found) — aborting this attempt");
+      return { posted: false };
+    }
+    const caption = captionText.trim();
+    if (caption) {
+      const captionField = await android.findButtonByLabel(serial, "Write a caption").catch(() => null);
+      if (captionField) {
+        await android.tap(serial, captionField.x, captionField.y);
+        await sleepOrAbort(serial, 500);
+        await android.inputText(serial, caption);
+        await sleepOrAbort(serial, 400);
+        await android.pressBack(serial); // dismiss keyboard, don't navigate away from this screen
+        await sleepOrAbort(serial, 400);
+      } else {
+        onLog?.("Make a Post: caption field not found — posting without a caption");
+      }
+    }
+
+    if (disableComments) {
+      const advanced = await android.findButtonByLabel(serial, "Advanced settings").catch(() => null);
+      if (advanced) {
+        await android.tap(serial, advanced.x, advanced.y);
+        await sleepOrAbort(serial, 1000);
+        const turnOffComments = await android.findButtonByLabel(serial, "Turn off commenting").catch(() => null);
+        if (turnOffComments) {
+          await android.tap(serial, turnOffComments.x, turnOffComments.y);
+          await sleepOrAbort(serial, 400);
+        }
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 800);
+      } else {
+        onLog?.("Make a Post: \"Advanced settings\" not found — could not disable comments for this post");
+      }
+    }
+
+    // Re-find Share (screen may have re-rendered after the caption/advanced steps).
+    const finalShareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null) ?? shareBtn;
+    onLog?.("Make a Post: tapping Share…");
+    await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
+    await sleepOrAbort(serial, 3000); // sharing/upload can take a few seconds
+
+    recordPostedLocalFile(serial, fileName);
+    if (deleteAfterUpload) {
+      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
+    }
+    onLog?.(`Make a Post: ✓ posted "${fileName}"`);
+    return { posted: true, fileName };
+  }
 
   // ── Random Jitter helpers ─────────────────────────────────────────────────
 
@@ -2736,6 +2953,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
         followActivatePctMin, followActivatePctMax,
         randomJitterActivatePctMin, randomJitterActivatePctMax,
+        makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
+        makePostPerSessionMin, makePostPerSessionMax,
+        makePostLocalFolderEnabled, makePostLocalFolderPath,
+        makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
+        makePostDisableComments, makePostCaptionText,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -2911,6 +3133,47 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         steps.push("follow(skipped — Activate Percentage roll missed this execution)");
         tLog("▶ Follow Users Activate Percentage roll missed — skipping follow step this execution");
+      }
+
+      // 4b-ii. Make a Post — pushes a local-folder image to the device, taps
+      // Instagram's "+" compose icon, and walks the create-post flow. Runs
+      // after Follow, before Random Jitter. Only the local-folder image
+      // source is wired up on-device (per user preference over the
+      // HikerAPI-scrape-from-another-user alternative already used by
+      // Follow Users above).
+      if (makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax)) {
+        if (!makePostLocalFolderEnabled || !makePostLocalFolderPath) {
+          steps.push("make-a-post(skipped — Local Folder source not configured)");
+          tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
+        } else {
+          const postCount = rollRange(makePostPerSessionMin, makePostPerSessionMax);
+          tLog(`▶ Make a Post — attempting ${postCount} post(s) from local folder…`);
+          let posted = 0;
+          for (let i = 0; i < postCount; i++) {
+            try {
+              const result = await runMakePostStep(serial, {
+                localFolderPath: makePostLocalFolderPath,
+                localFolderRandom: makePostLocalFolderRandom,
+                localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                captionText: makePostCaptionText,
+                disableComments: makePostDisableComments,
+                onLog: (msg) => tLog(`  ${msg}`),
+              });
+              if (result.posted) posted++;
+              else break; // no image available / a UI step aborted — don't keep retrying blind
+            } catch (e: any) {
+              if (e?.message === "cycle-aborted") throw e;
+              tLog(`▶ Make a Post attempt error — ${e?.message}`);
+              break;
+            }
+          }
+          steps.push(`make-a-post(${posted}/${postCount} posted)`);
+          tLog(`▶ Make a Post done — ${posted}/${postCount} posted`);
+        }
+      } else if (makePostEnabled) {
+        steps.push("make-a-post(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ Make a Post Activate Percentage roll missed — skipping this execution");
       }
 
       // 4c. Random Jitter — human-like interstitial actions run after the main

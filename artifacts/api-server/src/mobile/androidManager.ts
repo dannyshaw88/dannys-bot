@@ -2041,6 +2041,85 @@ export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
   return MARKERS.some(m => xml.includes(m));
 }
 
+/**
+ * Find Instagram's top-left "+" compose icon on the home feed (opens the
+ * create-post sheet). No existing selector in this codebase targets it —
+ * unlike Home/Follow/etc. this is a NEW, unverified finder written blind
+ * (no ADB device attached in this sandbox); it will likely need real-device
+ * correction. Two strategies, tried in order:
+ *  1. content-desc / resource-id guesses ("New post" is the current
+ *     Instagram accessibility label for this icon on most builds).
+ *  2. Positional fallback: the leftmost clickable node inside the top
+ *     header band (y < 8% of screen height, x < 20% of screen width) —
+ *     mirrors the band-based heuristics used by findFeedActionIcons/
+ *     findHomeTab elsewhere in this file rather than a single hardcoded
+ *     coordinate, so it has a chance of surviving small layout shifts.
+ */
+export async function findComposeButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+
+  const byLabel = _findElem(xml, "New post", "Create", "Add", "New Post");
+  if (byLabel) return byLabel;
+  const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
+  if (byResId) return byResId;
+
+  // Positional fallback: leftmost clickable node in the top header band.
+  const { w, h } = getScreenSize(serial);
+  const maxY = Math.round(h * 0.08);
+  const maxX = Math.round(w * 0.20);
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let best: { x: number; y: number } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (c.y > maxY || c.x > maxX) continue;
+    if (!best || c.x < best.x) best = c;
+  }
+  return best;
+}
+
+/**
+ * Pushes a local file (server-side path — same machine as the phone in the
+ * real packaged app, per repl-setup) onto the device's DCIM/Camera folder,
+ * then triggers a media-scanner broadcast so it immediately shows up in
+ * Instagram's post-composer gallery/picker without a reboot.
+ *
+ * Returns the on-device path so the caller can log it / clean it up later.
+ */
+export async function pushFileToDevice(serial: string, localPath: string, fileName: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const safeName = fileName.replace(/[^a-zA-Z0-9_.\-]/g, "_");
+  const devicePath = `/sdcard/DCIM/Camera/equinox_${Date.now()}_${safeName}`;
+  await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
+  await scanMediaFile(serial, devicePath);
+  return devicePath;
+}
+
+/**
+ * Tells Android's media scanner about a newly-pushed file so it appears in
+ * the gallery/media-picker immediately. `adb push` alone only writes bytes
+ * to the filesystem — apps that read via MediaStore (Instagram's composer
+ * included) won't see the file until the scanner indexes it.
+ */
+export async function scanMediaFile(serial: string, devicePath: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await runAdb(adb, [
+    "-s", serial, "shell", "am", "broadcast",
+    "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+    "-d", `file://${devicePath}`,
+  ], 6000);
+}
+
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
