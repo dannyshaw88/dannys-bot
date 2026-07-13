@@ -4,11 +4,15 @@ An Instagram automation platform for managing multiple accounts with tools for f
 
 ## Run & Operate
 
-1. `PORT=8082 pnpm --filter @workspace/api-server run dev` — run the API server (port 8082)
-2. `PORT=5000 API_PORT=8082 pnpm --filter @workspace/dannys-bot run dev` — run the frontend (port 5000)
+The project is now registered as Replit artifacts (API Server, Danny's Bot, Canvas). Each artifact owns its own platform-managed workflow generated from its `.replit-artifact/artifact.toml` — restart those exact workflows (e.g. `artifacts/api-server: API Server`, `artifacts/dannys-bot: web`) rather than hand-configuring replacement workflows.
+
+1. `pnpm --filter @workspace/api-server run dev` — API server (port 8082), started by the `artifacts/api-server: API Server` workflow
+2. `pnpm --filter @workspace/dannys-bot run dev` — frontend (Vite dev server, port 22393 internally; the platform's artifact router serves it), started by the `artifacts/dannys-bot: web` workflow
 3. `pnpm run typecheck` — full typecheck across all packages (separate from `build`)
 4. `pnpm run build` — server + client build only (does not run typecheck)
 5. `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
+
+**Duplicate-engine note (13 Jul 2026):** on re-import, Replit auto-registered artifacts and their own managed workflows for `api-server` and `dannys-bot` alongside the old hand-configured `API Server`/`Frontend` workflows — running both would have started the stateful automation engine (and the port-8082 API server) twice. The old hand-configured workflows were removed; only the artifact-managed workflows should exist for these two services. The engine also has its own single-instance file lock (`[engine] Automation engine started (single-instance lock acquired...)` in server logs) as a second line of defense — see `.agents/memory/artifact-duplicate-engine-hazard.md`.
 
 ## Stack
 
