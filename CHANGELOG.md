@@ -4,6 +4,31 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.520] — 2026-07-13
+
+### Feature: "Make a Post" — Activate Percentage gate + on-device posting from a local folder
+
+"Make a Post" now actually runs from the mobile automation cycle instead of being config-only:
+
+- **Activate Percentage** — `makePostActivatePctMin` / `makePostActivatePctMax` (default 100/100), same per-execution chance-gate pattern as View Feed / View Stories / Follow Users / Random Jitter. Rolled once per automation-cycle execution, on top of the existing `makePostEnabled` master checkbox.
+- **On-device posting from the Local Folder source** — when gated on, the cycle now:
+  1. Picks the next image from `makePostLocalFolderPath` (respecting "Don't repeat images" and "Pick randomly" — a per-serial posted-file list persists to disk the same way the Follow Users followed-list does, so "no repeat" survives a restart).
+  2. `adb push`es it into the device's `DCIM/Camera` folder and fires a `MEDIA_SCANNER_SCAN_FILE` broadcast so it shows up in Instagram's picker immediately.
+  3. Taps Instagram's top-left "+" compose icon (new `findComposeButton` finder: content-desc/resource-id guesses first, positional top-left-band fallback second).
+  4. Steps through the create-post flow (select photo → Next → Next → Next → caption → optional "turn off commenting" via Advanced settings → Share), verifying each expected control (`Next`/`Share`/caption field) is actually on screen before tapping it rather than firing a blind coordinate tap.
+  5. Deletes the local file after upload if "Delete after upload" is on.
+
+This only wires up the **local-folder image source** (per explicit user preference over the HikerAPI-scrape-from-another-user alternative); the other Make a Post settings (source-username scraping, ChatGPT captions, image alteration/make-unique) remain persisted but not yet read by the on-device flow.
+
+**Caveat:** every new UI-tap step (`findComposeButton`, the media-grid thumbnail tap, the create-post flow) was written without a live device attached — it will likely need real-device correction from Log-panel output, same as every other mobile tool in this codebase was hardened.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — new `findComposeButton`, `pushFileToDevice`, `scanMediaFile`
+- `artifacts/api-server/src/routes/mobile.ts` — `makePostActivatePctMin/Max` in `AutomationSettings` type + both zod schemas + defaults; new `pickLocalFolderImage`, `runMakePostStep`, per-serial posted-file persistence; wired into `/automation-cycle` after Follow Users
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `makePostActivatePctMin/Max` in type/defaults/UI/cycle payload
+
+---
+
 ## [1.1.519] — 2026-07-12
 
 ### Feature: "Activate Percentage" — per-execution chance gate for View Feed, View Stories from Feed, Follow Users, and Random Jitter
