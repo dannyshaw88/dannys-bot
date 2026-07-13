@@ -1378,7 +1378,7 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   // audio disc appears immediately after Comment (close in x), while Repost and
   // Send are one and two icon-gaps further right.
   const unlabeledImgViews: RowNode[] = [];
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
@@ -1946,7 +1946,7 @@ export async function findShareSheetRecipients(serial: string): Promise<{ x: num
   const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
 
   const results: { x: number; y: number }[] = [];
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
 
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -1992,7 +1992,7 @@ export async function getContentDescNear(serial: string, x: number, y: number, t
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let best: { cd: string; dist: number } | null = null;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -2089,7 +2089,7 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   const { w, h } = getScreenSize(serial);
   const maxY = Math.round(h * 0.15);
   const minX = Math.round(w * 0.50);
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let best: { x: number; y: number } | null = null;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -2162,7 +2162,7 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   const minY = Math.round(h * 0.30);
   const maxY = Math.round(h * 0.58);
   const maxX = Math.round(w * 0.22);
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let best: { x: number; y: number } | null = null;
   let bestArea = Infinity;
   let m: RegExpExecArray | null;
@@ -2229,7 +2229,7 @@ export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: nu
   // down to just above the bottom nav/caption bar.
   const minY = Math.round(h * 0.58);
   const maxY = Math.round(h * 0.97);
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   const candidates: { x: number; y: number; y1: number; isCamera: boolean; clickable: boolean }[] = [];
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -2315,7 +2315,7 @@ export async function dumpAllNodes(serial: string): Promise<string[]> {
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return ["[dumpAllNodes] uiDump returned empty"];
   const lines: string[] = [];
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
@@ -3252,7 +3252,7 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   // silently matched nothing on this device.
   const rightMax = Math.round(w * 0.25);
   const candidates: { x: number; y: number }[] = [];
-  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
