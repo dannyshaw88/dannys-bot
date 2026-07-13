@@ -4,6 +4,99 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.537] — 2026-07-13
+
+### Fix: Make a Post (mobile) — compose "+" finder was landing on the DM icon, not the compose button
+
+**Root cause (introduced by v1.1.536):**
+
+v1.1.536's positional fallback for `findComposeButton` scanned the top-right header area and picked the **rightmost** clickable node. Instagram's header runs left→right as `[compose +][notifications ❤][DM ✈]` — so "rightmost" always selected the DM icon, not the compose "+", causing `findComposeButton` to return the wrong target entirely. On top of that, the `y < 8%` band was too tight for the Xiaomi/MIUI header layout, so even with the correct logic the search zone excluded the actual header row.
+
+The combined result: after removing `"Add"` from the label list (correct) and applying the broken positional fallback (wrong direction + too-tight band), `findComposeButton` returned null and the log showed `compose "+" icon not found — skipping` every run.
+
+**Fixes:**
+
+- **Direction corrected:** positional scan now picks the **leftmost** node in the right cluster (`x > 50%`). The compose "+" is always the leftmost of the three right-side header icons; DM is always rightmost. Picking leftmost is the only correct heuristic here.
+- **y-band widened:** `y < 8%` → `y < 15%` so the header icons are actually inside the search zone on MIUI and similar skins that push the action bar lower than stock Android.
+- **`clickable="true"` filter removed:** on some MIUI builds the individual icon `ImageView` nodes are not marked clickable in the accessibility tree even though they respond to taps normally; only their parent `FrameLayout` is. Removing the filter lets the coordinate scan find the icon regardless of how the attribute is set, while the story-picker guard (below) still catches any wrong-screen outcome.
+- **Story-picker guard retained:** `isOnStoryCreator()` check (introduced in v1.1.536) remains in place — if the tap still opens the story creator instead of the post picker, Back is pressed and the attempt aborts cleanly rather than firing blind taps into the wrong screen.
+
+---
+
+## [1.1.536] — 2026-07-13
+
+### Fix: Make a Post (mobile) — story tray "Add" button matched instead of compose "+"; story-picker guard restored
+
+**Root cause (confirmed by layout dumps from v1.1.529–v1.1.535):**
+
+Instagram's stories tray (the row of story circles at the top of the home feed) contains a "+" button for adding to your own story. This button carries `content-desc="Add"` in the accessibility tree and appears **before** the real compose "+" in tree order. The label `"Add"` was in `findComposeButton`'s search list, so it was found first — every single automated run opened the story composer ("Add to story" picker), never the feed-post composer.
+
+Before the diagnostic dumps were added, the story-picker guard (present in earlier builds) silently caught this, pressed Back, and the run logged `0/1 posted`. Once the dumps were introduced and the guard was temporarily removed, runs began advancing into the story editor via the positional "Next" fallback — which is what the user saw as the second screenshot in the v1.1.535 report.
+
+**Fixes:**
+
+- **`"Add"` removed from `findComposeButton` label search** — confirmed on real device (Xiaomi, Jul 2026): Instagram's actual compose "+" does not use `"Add"` as its accessibility label. Only `"New post"`, `"Create"`, and `"New Post"` are kept.
+- **Positional fallback direction corrected** — the fallback now scans the **right side of the header** (`x > 60%, y < 8%`) and picks the rightmost node. (Note: this direction was subsequently corrected again in v1.1.537 — see above.)
+- **Story-picker guard restored** — after every compose-button tap, `isOnStoryCreator()` checks the accessibility tree for labels unique to the story creator (`"Your story"`, `"Close Friends"`, `overflow_button` resource-id). If any are found, Back is pressed and the attempt aborts before touching the thumbnail or Next button.
+
+---
+
+## [1.1.535] — 2026-07-13
+
+### Fix + Feature: Make a Post dump timing; replace Scan Screen Layout with Capture Screen
+
+**Make a Post — dump timing fix:**
+- Increased the post-compose-tap sleep from 1 800 ms → **3 500 ms** so the layout dump fires against a fully rendered picker screen. At 1 800 ms the screen was still mid-transition and the dump returned blank nodes, making all subsequent coordinate lookups useless.
+- The dump now reliably captures real picker node bounds (thumbnails, Next button, expand toggle) on the first run.
+
+**Log panel — Capture Screen replaces Scan Screen Layout:**
+- Removed the old "Scan Screen Layout" button which required manual log-paste workflows and produced the same truncated output every time.
+- Added a **📱 Capture Screen** button that fires a full UIAutomator dump immediately against whatever screen is currently showing.
+- On capture: a second inline row appears with **📋 Copy Capture** (copies just the layout block, not the full log) and **⬇️ Save** (downloads as a timestamped `.txt` file). Dismiss with ✕ when done.
+- This means: when anything breaks mid-flow, hit Capture Screen on the exact screen that's open and send the resulting file — no more copy-pasting 500 lines of log.
+
+---
+
+## [1.1.534] — 2026-07-13
+
+### Diagnostic: Make a Post — extend dump timeout; capture blank-screen evidence
+
+- Extended the post-tap wait from 800 ms → 1 800 ms before firing DUMP A to confirm whether a longer delay resolves the blank-node issue reported on v1.1.533.
+- Added explicit "0 node(s) found" log line when the dump returns an empty tree so the difference between "dump ran but screen was blank" and "dump threw an error" is unambiguous in the log.
+- Added a log line immediately before and after `sleepOrAbort` in the POST-tab branch to confirm the sleep is completing (not being interrupted by a cycle-abort signal).
+
+---
+
+## [1.1.533] — 2026-07-13
+
+### Diagnostic: Make a Post — confirm DUMP A fires; catch silent throws
+
+- Added a `try/catch` wrapper around the entire `dumpAllNodes()` call so any internal throw logs the actual error message (e.g. `adb shell` spawn failure, XML parse error) instead of silently killing the function and leaving no trace in the log.
+- Added a "starting layout dump…" log line **before** `dumpAllNodes()` runs, so it is possible to distinguish "the function was never called" from "it was called but threw immediately."
+- Added explicit log lines bracketing `sleepOrAbort(serial, 2000)` (the POST-tab wait) so the log shows whether that call is returning normally or throwing a cycle-abort.
+
+---
+
+## [1.1.532] — 2026-07-13
+
+### Diagnostic: Make a Post — layout dump after POST tab tap (DUMP A attempt 2)
+
+- Repositioned DUMP A to fire **after** both the POST tab tap and its 2 s grid-load wait, rather than immediately after the tap. Earlier placement meant the dump ran during the opening animation when the accessibility tree was still unpopulated.
+- Added the `logScreenLayout` helper call for DUMP A so the full node list appears in the Log panel rather than server-side only.
+- Analysis from this build confirmed the real root cause: `findComposeButton` was consistently opening the story composer ("Add to story") via the `"Add"` label match — the story picker appeared in every dump, never the post picker. This diagnosis drove the fixes in v1.1.536.
+
+---
+
+## [1.1.531] — 2026-07-13
+
+### Diagnostic: Make a Post — first layout dump after compose tap (DUMP A)
+
+- Added DUMP A: a `dumpAllNodes()` call immediately after the compose-button tap and its animation wait, logging every accessibility node with real pixel bounds to the Log panel.
+- Goal: capture exactly what screen opens after tapping "+" — post picker, story picker, or something else — and get real coordinates for thumbnail, Next button, and expand toggle without guessing.
+- Dump output is prefixed `[DUMP A]` so it is easy to find in a long log. Each node line shows: class, bounds, text, content-desc, resource-id, clickable.
+
+---
+
 ## [1.1.530] — 2026-07-13
 
 ### Diagnostic: pin down exactly which line stops executing in Make a Post
