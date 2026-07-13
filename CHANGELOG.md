@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.544] — 2026-07-13
+
+### Fix: Make a Post (mobile) — compose "+" is at the TOP-LEFT of the header, confirmed on-device
+
+**Second regression in the same day:**
+
+v1.1.543's fallback (bottom-nav "New post" tab, x≈50%/y≈94%) was itself wrong for this device: its bottom nav is `home / reels / shop / search / profile` — there is no create tab at all. Tapping the centre of that row landed on an unrelated middle tab and opened Direct/Messages instead of the composer.
+
+**Ground truth, this time verified by direct visual inspection of the live device** (Xiaomi 23076RN8DY, account `lisaberry2001`/`upgrds`, 13 Jul 2026): the real compose "+" is a single icon at the **top-left of the header bar**, immediately left of the "Instagram" wordmark — not a top-right cluster, not a bottom-nav tab.
+
+**Fix:**
+
+- New `findComposeTopLeftHeaderIcon()`: scans only the header bar itself (`y < 7%` of screen height, `x < 25%` of width), picking the leftmost icon-sized node. The tight `y` bound is deliberate — it structurally excludes the stories-tray "Add" circle (`y ≈ 9–15%`), which is the element an earlier attempt (v1.1.526) mistakenly matched when searching "top-left" without a y-bound. That was a different row entirely.
+- `findComposeButton` now tries label/resource-id matches first (unchanged), then falls back to this top-left position.
+- The post-tap Notifications/Direct safety-net guard now retries via a fresh dump + this same top-left position, instead of the bottom-nav position.
+
+**Status:** shipped, awaiting real-device confirmation. If this is still wrong, the fastest path forward is a screenshot of the 🔍 Inspect overlay with the real "+" icon clicked directly — exact resource-id/content-desc/bounds, no more positional guessing.
+
+---
+
 ## [1.1.543] — 2026-07-13
 
 ### Fix: Make a Post (mobile) — "+" tap was opening Notifications instead of the composer

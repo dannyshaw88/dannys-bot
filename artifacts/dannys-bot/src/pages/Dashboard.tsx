@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.544",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post (mobile/ADB): compose \"+\" is now found at the TOP-LEFT of the header bar (next to the \"Instagram\" wordmark), confirmed by directly inspecting the live device — not the top-right cluster or bottom-nav guesses used by the last two attempts, both of which were confirmed wrong on this exact device.",
+        technical: [
+          "v1.1.543's bottom-nav-centre fallback was itself wrong: this device's bottom nav is home/reels/shop/search/profile with no create tab, so tapping x\u224850% landed on an unrelated middle tab and opened Direct/Messages.",
+          "New findComposeTopLeftHeaderIcon() scans only y < 7% of screen height (the header bar itself), which structurally excludes the stories-tray \"Add\" circle (y \u2248 9\u201315%) that caused the original top-left mistake back in v1.1.526 \u2014 that was a different element in a different row.",
+          "The post-tap Notifications/Direct safety-net guard now retries via this same top-left position (with a fresh UI dump) instead of the bottom-nav position.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.543",
     date: "13 Jul 2026",
     items: [

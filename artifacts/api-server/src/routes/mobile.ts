@@ -2294,25 +2294,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.logScreenLayout(serial, "Make a Post: after '+' tap", onLog);
 
     // ── Wrong-header-icon guard ───────────────────────────────────────────────
-    // Confirmed real-device regression (13 Jul 2026): a blind top-header
-    // positional scan in findComposeButton previously mismatched the
-    // Notifications (heart) icon instead of compose "+", landing on the
-    // full-screen Notifications page every run. findComposeButton no longer
-    // does that blind scan, but this check stays as a safety net — if a
-    // label/resource-id match ever points at Notifications or Direct again,
-    // recover by backing out and retrying once via the known-good bottom-nav
-    // "New post" tab position instead of silently continuing on the wrong
-    // screen (which previously wasted the whole flow before failing later).
+    // Confirmed real-device regressions (13 Jul 2026): two different blind
+    // positional fallbacks in findComposeButton have each mismatched a
+    // different wrong screen — a top-right header scan hit Notifications,
+    // and a bottom-nav-centre guess hit Direct/Messages (this device's
+    // bottom nav has no create tab at all). findComposeButton now uses the
+    // user-confirmed top-left header icon position, but this check stays as
+    // a safety net: if a label/resource-id match ever points at
+    // Notifications or Direct again, recover by backing out and retrying
+    // once via that same confirmed top-left position instead of silently
+    // continuing on the wrong screen.
     if (await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)) {
-      onLog?.("Make a Post: \"+\" tap opened Notifications/Direct instead of the composer — wrong icon tapped. Backing out and retrying via the bottom-nav \"New post\" tab…");
+      onLog?.("Make a Post: \"+\" tap opened Notifications/Direct instead of the composer — wrong icon tapped. Backing out and retrying via the top-left header icon…");
       await android.pressBack(serial);
       await sleepOrAbort(serial, 800);
-      const retryBtn = android.postComposeCentreNavFallback(serial);
-      await android.tap(serial, retryBtn.x, retryBtn.y);
-      await sleepOrAbort(serial, 3500);
-      await android.logScreenLayout(serial, "Make a Post: after bottom-nav retry tap", onLog);
-      if (await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)) {
-        onLog?.("Make a Post: retry also landed on Notifications/Direct — aborting this attempt.");
+      const retryXml = await android.dumpUi(serial).catch(() => "");
+      const retryBtn = retryXml ? android.findComposeTopLeftHeaderIcon(serial, retryXml) : null;
+      if (retryBtn) {
+        await android.tap(serial, retryBtn.x, retryBtn.y);
+        await sleepOrAbort(serial, 3500);
+        await android.logScreenLayout(serial, "Make a Post: after top-left-icon retry tap", onLog);
+      } else {
+        onLog?.("Make a Post: retry scan found no top-left header icon either — aborting this attempt.");
+      }
+      if (!retryBtn || await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)) {
+        onLog?.("Make a Post: retry also failed to reach the composer — aborting this attempt.");
         await android.pressBack(serial);
         await android.removeDeviceFile(serial, devicePath).catch(() => {});
         return { posted: false };

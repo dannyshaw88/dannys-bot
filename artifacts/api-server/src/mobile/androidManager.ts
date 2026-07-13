@@ -2055,15 +2055,23 @@ export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
  *  2. Positional fallback: the bottom-nav "New post" tab, dead-centre of the
  *     bottom navigation bar (x≈50%, y≈94%).
  *
- * IMPORTANT — do NOT reintroduce a blind top-header-cluster positional scan
- * (searching the top-right band and picking "the leftmost icon"). That
- * approach was tried in v1.1.536–542 and CONFIRMED WRONG on real device
- * (Xiaomi, 1080×2226, 13 Jul 2026): with no compose icon actually present in
- * that header band on this build, the scan's "leftmost node" match was the
- * Notifications (heart) icon, and every Make-a-Post run silently opened the
- * full-screen Notifications page instead of the composer. The bottom-nav
- * position (below) was the last approach confirmed correct via screenshot
- * (v1.1.527) — prefer it over any new blind positional guess in the header.
+ * IMPORTANT — the compose icon's real position on this account/device
+ * (Xiaomi 23076RN8DY, IG account "lisaberry2001"/"upgrds", 13 Jul 2026) is
+ * confirmed BY THE USER, looking at the live phone mirror, to be a single
+ * icon at the TOP-LEFT of the header bar, immediately left of the
+ * "Instagram" wordmark — NOT the top-right icon cluster, and NOT a
+ * bottom-nav tab (this build's bottom nav is home / reels / shop / search /
+ * profile with no create tab at all). Both of those were tried and
+ * CONFIRMED WRONG:
+ *   - v1.1.536–542: blind top-RIGHT-cluster scan → hit the Notifications icon.
+ *   - v1.1.543: bottom-nav-centre fallback → hit Direct/Messages instead
+ *     (this device's bottom nav has no create tab; x≈50% landed on an
+ *     unrelated middle tab).
+ * Do not reintroduce either of those as the positional fallback. The
+ * top-left search below is scoped to the header bar ONLY (y < 7% of screen
+ * height) specifically so it can never match the stories-tray "Add" circle
+ * (content-desc="Add", y ≈ 9–15%) that caused the ORIGINAL top-left mistake
+ * back in v1.1.526 — that bug was the stories tray, not this header icon.
  */
 export async function findComposeButton(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -2085,10 +2093,42 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   );
   if (byResId) return byResId;
 
-  // Positional fallback: bottom-nav "New post" tab, dead-centre of the tab
-  // bar. Confirmed correct via real-device screenshot in v1.1.527 — see the
-  // warning above about why the top-header band must not be used here.
-  return postComposeCentreNavFallback(serial);
+  return findComposeTopLeftHeaderIcon(serial, xml);
+}
+
+/**
+ * Positional fallback confirmed correct by the user visually inspecting the
+ * live phone mirror (13 Jul 2026): the compose "+" sits at the TOP-LEFT of
+ * the header bar, left of the "Instagram" wordmark.
+ *
+ * Scoped tightly to y < 7% of screen height so it can only ever match the
+ * header bar itself, never the stories tray below it (tray avatars start
+ * around y ≈ 9–15% and include the "Add" story circle — see the warning on
+ * findComposeButton above for why that distinction matters).
+ */
+export function findComposeTopLeftHeaderIcon(serial: string, xml: string): { x: number; y: number } | null {
+  const { w, h } = getScreenSize(serial);
+  const maxY = Math.round(h * 0.07);
+  const maxX = Math.round(w * 0.25);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let best: { x: number; y: number } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const bw = x2 - x1, bh = y2 - y1;
+    // Icon-sized only — rejects the full-width "Instagram" wordmark TextView
+    // and any large layout containers.
+    if (bw > w * 0.18 || bh > h * 0.10 || bw === 0 || bh === 0) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (c.y > maxY || c.x > maxX) continue;
+    // Leftmost/topmost icon-sized node in the header band.
+    if (!best || c.x < best.x) best = c;
+  }
+  return best;
 }
 
 /**
