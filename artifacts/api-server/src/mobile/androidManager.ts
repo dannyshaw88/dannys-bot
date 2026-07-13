@@ -2096,6 +2096,14 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
     const attrs = m[1];
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const bw = x2 - x1, bh = y2 - y1;
+    // Must be icon-sized — rejects story-tray RecyclerView containers and other
+    // large wrappers that became visible after the opening-tag regex fix but
+    // have a center-x LESS than the compose "+" (which made them get picked as
+    // "leftmost" before this guard was added).
+    // Compose "+" on a 1080-wide device is roughly 50–130px wide and 50–110px tall.
+    if (bw > w * 0.18 || bh > h * 0.10) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
     if (c.y > maxY || c.x < minX) continue;
