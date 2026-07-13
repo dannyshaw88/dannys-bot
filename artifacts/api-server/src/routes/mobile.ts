@@ -2281,7 +2281,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     onLog?.("Make a Post: tapping the \"+\" compose icon…");
     await android.tap(serial, composeBtn.x, composeBtn.y);
-    await sleepOrAbort(serial, 1800);
+    // 3.5 s — Instagram's compose picker takes >1.8 s to finish its opening
+    // animation on this device; a shorter sleep means the layout dump (and
+    // every subsequent UIAutomator call) runs against a blank transitioning
+    // screen instead of the real picker UI.
+    await sleepOrAbort(serial, 3500);
 
     // One-shot layout dump — fires immediately after the "+" tap sleep,
     // before any other UIAutomator call, to capture exactly what opened.

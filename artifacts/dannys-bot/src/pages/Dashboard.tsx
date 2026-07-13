@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.535",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post: increased the post-compose sleep from 1.8 s to 3.5 s so Instagram's picker animation finishes before the layout dump and tab checks run. The previous value caused every UIAutomator call to read a blank transitioning screen.",
+      },
+      {
+        category: "Improved",
+        text: "Log panel: \"Scan Screen Layout\" replaced with \"📱 Capture Screen\". After a capture, a second row appears with \"📋 Copy Capture\" and \"⬇️ Save\" buttons so you can send just the layout data without copying the whole log. The capture is stored until you dismiss it or take a new one.",
+      },
+    ],
+  },
+  {
     version: "1.1.534",
     date: "13 Jul 2026",
     items: [

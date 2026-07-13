@@ -2650,62 +2650,124 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
-  onScanTray?: () => Promise<void>;
+  /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
+  onScanTray?: () => Promise<string[]>;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [scanning, setScanning] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [scanning,       setScanning]       = React.useState(false);
+  const [copied,         setCopied]         = React.useState(false);
+  const [copiedCapture,  setCopiedCapture]  = React.useState(false);
+  const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  const writeToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+  };
 
   const handleScan = async () => {
     if (!onScanTray) return;
     setScanning(true);
-    try { await onScanTray(); } finally { setScanning(false); }
+    try {
+      const captured = await onScanTray();
+      if (captured.length > 0) setLastCapture(captured);
+    } finally { setScanning(false); }
   };
 
-  const handleCopy = async () => {
-    const text = lines.join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // Clipboard API unavailable/blocked — fall back to a hidden textarea + execCommand.
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); } catch { /* give up silently */ }
-      document.body.removeChild(ta);
-    }
+  const handleCopyLog = async () => {
+    await writeToClipboard(lines.join("\n"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleCopyCapture = async () => {
+    if (!lastCapture) return;
+    await writeToClipboard(lastCapture.join("\n"));
+    setCopiedCapture(true);
+    setTimeout(() => setCopiedCapture(false), 1500);
+  };
+
+  const handleSaveCapture = () => {
+    if (!lastCapture) return;
+    const blob = new Blob([lastCapture.join("\n")], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `screen-capture-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-full flex flex-col p-6">
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <h2 className="text-lg font-bold text-foreground">Log</h2>
-        <div className="flex items-center gap-2">
-          {serial && (
+      <div className="flex flex-col gap-2 mb-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Log</h2>
+          <div className="flex items-center gap-2">
+            {serial && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleScan}
+                disabled={scanning}
+                title="Captures every element on screen with pixel coords and screen %. Use Copy Capture or Save to send just the layout — no log noise."
+              >
+                {scanning ? "Scanning…" : "📱 Capture Screen"}
+              </Button>
+            )}
+            <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
+              {copied ? "Copied!" : "📄 Copy Log"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
+              Clear
+            </Button>
+          </div>
+        </div>
+
+        {/* Capture action row — only visible after a capture has been taken */}
+        {lastCapture && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs text-muted-foreground">Last capture ready →</span>
             <Button
               type="button"
               variant="secondary"
-              onClick={handleScan}
-              disabled={scanning}
-              title="Shows every element on screen with pixel coords and screen %. Paste the Log output to your developer before implementing any tap/swipe."
+              onClick={handleCopyCapture}
+              className="text-xs h-7 px-2"
             >
-              {scanning ? "Scanning…" : "📋 Scan Screen Layout"}
+              {copiedCapture ? "Copied!" : "📋 Copy Capture"}
             </Button>
-          )}
-          <Button type="button" variant="secondary" onClick={handleCopy} disabled={lines.length === 0}>
-            {copied ? "Copied!" : "📄 Copy"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
-            Clear
-          </Button>
-        </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSaveCapture}
+              className="text-xs h-7 px-2"
+              title="Downloads the capture as a .txt file"
+            >
+              ⬇️ Save
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLastCapture(null)}
+              className="text-xs h-7 px-2 text-muted-foreground"
+            >
+              ✕
+            </Button>
+          </div>
+        )}
       </div>
+
       <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed text-green-400/90">
         {lines.length === 0
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
@@ -2931,13 +2993,14 @@ export function MobilePage() {
                     onClear={() => setLogLines([])}
                     serial={activeSerial}
                     onScanTray={activeSerial ? async () => {
-                      addLog("── Scanning screen layout… ──");
+                      addLog("── Capturing screen layout… ──");
                       try {
                         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/screen-layout-scan`);
                         const body = await r.json();
-                        if (!r.ok) { addLog(`Scan failed: ${body?.error ?? r.status}`); return; }
+                        if (!r.ok) { addLog(`Capture failed: ${body?.error ?? r.status}`); return []; }
                         for (const line of (body.lines as string[])) addLog(line);
-                      } catch (e: any) { addLog(`Scan error: ${e?.message ?? "network error"}`); }
+                        return body.lines as string[];
+                      } catch (e: any) { addLog(`Capture error: ${e?.message ?? "network error"}`); return []; }
                     } : undefined}
                   />
                 )}
