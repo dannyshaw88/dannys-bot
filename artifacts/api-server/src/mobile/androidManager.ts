@@ -2075,25 +2075,33 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   if (byResId) return byResId;
 
   // Positional fallback: Instagram's compose "+" lives in the TOP-RIGHT of
-  // the home-feed header bar (alongside the DM/notification icons) — NOT the
-  // top-left, which is occupied by the Instagram logo/wordmark.
-  // Scan for the rightmost clickable node in the top 8% of the screen that
-  // sits in the right 40% of the screen width.
+  // the home-feed header bar, alongside the notifications and DM icons.
+  // Header icon order (left → right): [compose +] [notifications ❤] [DM ✈]
+  // We want the LEFTMOST node in the right cluster — that is compose "+".
+  // (The rightmost is DM; picking rightmost is the wrong approach here.)
+  //
+  // Search band: top 15% of screen height, right 50% of screen width.
+  // y < 8% was too tight and missed the header on some Xiaomi layouts.
+  // clickable="true" is intentionally not required — on some Android/MIUI
+  // builds the individual icon ImageView nodes are not marked clickable even
+  // though they respond to tap; only the parent FrameLayout is. We pick
+  // by centre-coordinate and let the tap land on the correct icon.
   const { w, h } = getScreenSize(serial);
-  const maxY = Math.round(h * 0.08);
-  const minX = Math.round(w * 0.60);
+  const maxY = Math.round(h * 0.15);
+  const minX = Math.round(w * 0.50);
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let best: { x: number; y: number } | null = null;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
     if (c.y > maxY || c.x < minX) continue;
-    if (!best || c.x > best.x) best = c; // rightmost = compose "+"
+    // Pick the LEFTMOST node in the right cluster — that's compose "+".
+    // DM (rightmost) and notifications (middle) are further right.
+    if (!best || c.x < best.x) best = c;
   }
   return best;
 }

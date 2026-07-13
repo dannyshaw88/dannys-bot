@@ -51,6 +51,14 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-13 — Mobile (ADB) path: positional fallback was picking DM icon not compose "+" (v1.1.537)
+- v1.1.536 removed "Add" from label search (correct — it was hitting the story tray) and changed positional fallback to top-right y<8%, x>60%, picking the RIGHTMOST node.
+- Result: findComposeButton returned null entirely — logged "compose '+' icon not found — skipping".
+- Root cause: (1) y < 8% was too tight for the header on this Xiaomi/MIUI layout; (2) picking RIGHTMOST in the right cluster picks the DM icon — Instagram header order left→right is [compose+][notifications❤][DM✈], so the compose "+" is the LEFTMOST of the right-side icons.
+- Fix in v1.1.537: threshold widened to y < 15%, minX reduced to 50%, scan picks LEFTMOST (not rightmost) node in the right cluster. Removed `clickable="true"` requirement (some MIUI icon nodes aren't marked clickable in the a11y tree). Story guard (isOnStoryCreator) remains intact.
+- **Rule**: when picking a button from a cluster of similar icons by position, determine LEFT→RIGHT order first and pick accordingly. "Rightmost in top-right" almost always picks DM, not compose "+".
+- Status: UNCONFIRMED — pushed as v1.1.537. Awaiting real-device confirmation.
+
 ### 2026-07-13 — Mobile (ADB) path: wrong compose button → "Add to Story" + unnecessary thumbnail tap (v1.1.527)
 - Second round of screenshots confirmed the real root causes:
 - Root cause 1 (CONFIRMED via screenshot): `findComposeButton` tapped the top-left "Add to story" camera icon, NOT the bottom-nav "New post" tab. The label "Add" matched "Add to story" and the positional fallback scanned y<8%/x<20% (top-left corner = story camera). Every automated attempt landed on the story composer.
