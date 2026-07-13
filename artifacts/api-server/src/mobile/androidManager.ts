@@ -2163,6 +2163,16 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
  * mentions "camera", and returns the topmost-leftmost survivor — since the
  * grid sorts newest-first and we just pushed the target file, that survivor
  * is our file.
+ *
+ * NOTE (v1.1.526): The function now accepts BOTH clickable and non-clickable
+ * tile-shaped nodes. On some devices/Android versions the RecyclerView
+ * parent handles all touches while individual grid cells have
+ * clickable="false" — requiring clickable="true" caused the scan to return
+ * null even when the thumbnails were clearly visible (confirmed via
+ * real-device screenshot 2026-07-13). Clickable nodes are still preferred
+ * (sorted first); non-clickable tile-sized nodes serve as the fallback.
+ * When even that fails, the caller should use
+ * postGalleryThumbnailPositionalFallback().
  */
 export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -2177,11 +2187,12 @@ export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: nu
   const minY = Math.round(h * 0.58);
   const maxY = Math.round(h * 0.97);
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
-  const candidates: { x: number; y: number; y1: number; isCamera: boolean }[] = [];
+  const candidates: { x: number; y: number; y1: number; isCamera: boolean; clickable: boolean }[] = [];
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
+    // Accept both clickable and non-clickable nodes — some devices expose
+    // the RecyclerView as clickable but mark individual cells as non-clickable.
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
     const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
@@ -2199,14 +2210,40 @@ export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: nu
     const rid = attrs.match(/resource-id="([^"]*)"/);
     const label = `${textM?.[1] || ""} ${cdM?.[1] || ""} ${rid?.[1] || ""}`.toLowerCase();
     const isCamera = label.includes("camera");
-    candidates.push({ x: c.x, y: c.y, y1, isCamera });
+    const clickable = /clickable="true"/.test(attrs);
+    candidates.push({ x: c.x, y: c.y, y1, isCamera, clickable });
   }
   if (!candidates.length) return null;
-  // Sort top-left first (row by y1, then x within a row) so the newest
-  // grid item — not necessarily the first XML node encountered — wins.
-  candidates.sort((a, b) => (Math.abs(a.y1 - b.y1) > 20 ? a.y1 - b.y1 : a.x - b.x));
+  // Sort: clickable nodes first (more reliable), then top-left (newest in
+  // grid) within each clickability tier.
+  candidates.sort((a, b) => {
+    if (a.clickable !== b.clickable) return a.clickable ? -1 : 1;
+    return Math.abs(a.y1 - b.y1) > 20 ? a.y1 - b.y1 : a.x - b.x;
+  });
   const real = candidates.find(c => !c.isCamera);
   return real ? { x: real.x, y: real.y } : null;
+}
+
+/**
+ * Positional fallback for the first non-camera photo thumbnail in Instagram's
+ * Recents grid on the New Post picker screen.
+ *
+ * Used when findFirstGalleryThumbnail() returns null (e.g. the accessibility
+ * tree exposes neither clickable nor non-clickable tile nodes that pass the
+ * size/shape filters). On a typical Instagram layout the Recents grid starts
+ * at ~65% of screen height. The camera tile occupies the first column; the
+ * first PHOTO tile is in the second column. With a 3-4 column grid on a
+ * 1080 px wide device each tile is ~270 px wide, putting the second column
+ * centre at roughly x=38%, y=69%.
+ *
+ * Caller MUST proceed regardless of whether this tap hits a real thumbnail —
+ * it is a best-effort blind coordinate tap. Post-tap behaviour (the picker
+ * preview updating with the selected photo) confirms success.
+ */
+export function postGalleryThumbnailPositionalFallback(serial: string): { x: number; y: number } {
+  const { w, h } = getScreenSize(serial);
+  // Second column centre (x ≈ 38%) in the first tile row (y ≈ 69%).
+  return { x: Math.round(w * 0.38), y: Math.round(h * 0.69) };
 }
 
 /**

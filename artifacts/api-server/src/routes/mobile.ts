@@ -2286,7 +2286,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (postTab) {
       onLog?.("Make a Post: tapping POST tab…");
       await android.tap(serial, postTab.x, postTab.y);
-      await sleepOrAbort(serial, 1200);
+      await sleepOrAbort(serial, 2000); // extra time for the grid to fully populate after mode switch
     }
 
     // NOTE (corrected 2026-07-13, second real-device test): the earlier
@@ -2308,9 +2308,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (thumbnail) {
       onLog?.(`Make a Post: tapping newest thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
       await android.tap(serial, thumbnail.x, thumbnail.y);
-      await sleepOrAbort(serial, 800);
+      await sleepOrAbort(serial, 1500);
     } else {
-      onLog?.("Make a Post: no gallery thumbnail found in the Recents grid — the picker may not have opened, continuing to check anyway");
+      // Accessibility scan returned nothing (neither clickable nor non-clickable
+      // tile-sized nodes found in the grid band). Use a screen-fraction coordinate
+      // for the second grid cell — the first non-camera photo tile.
+      const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
+      onLog?.(`Make a Post: no gallery thumbnail found via accessibility scan — using positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
+      await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
+      await sleepOrAbort(serial, 1500);
     }
 
     // Confirm the compose sheet actually opened before trying to find/tap
@@ -2378,18 +2384,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
 
-    // Filter screen → Next.
+    // Filter/edit screen → Next. Instagram's image editor (audio overlay,
+    // filter strip, ratio controls) shows a labelled "Next" in the app bar —
+    // give it extra time to settle before looking, since the audio-suggestion
+    // overlay animation can delay accessibility-tree population.
     const nextBtn2 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (nextBtn2) {
+      onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
       await android.tap(serial, nextBtn2.x, nextBtn2.y);
-      await sleepOrAbort(serial, 1500);
+      await sleepOrAbort(serial, 2000);
     }
 
     // Edit/adjustments screen → Next (only present on some builds).
     const nextBtn3 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (nextBtn3) {
+      onLog?.(`Make a Post: tapping edit "Next" at (${nextBtn3.x}, ${nextBtn3.y})…`);
       await android.tap(serial, nextBtn3.x, nextBtn3.y);
-      await sleepOrAbort(serial, 1500);
+      await sleepOrAbort(serial, 2000);
     }
 
     // Caption screen — verify we're actually there before typing/sharing.
@@ -2435,12 +2446,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const finalShareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null) ?? shareBtn;
     onLog?.("Make a Post: tapping Share…");
     await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
-    await sleepOrAbort(serial, 3000); // sharing/upload can take a few seconds
 
-    // A one-off "OK" confirmation (e.g. a notifications prompt) can appear
-    // right after sharing and sit on top of the feed indefinitely if left
-    // unhandled — auto-clear it before moving on.
+    // Poll for the caption screen to disappear — the definitive sign the post
+    // was submitted and Instagram is uploading. A blind fixed 3-second wait was
+    // not enough: (a) uploads can take 10–15 s on a slow connection, and (b) a
+    // tap that silently didn't register (e.g. a stale coordinate) is
+    // indistinguishable without actively checking whether Share is still there.
+    //
+    // Strategy: check every 1.5 s for up to ~15 s total. If Share is still
+    // visible after 6 s (4 polls) we assume the first tap was swallowed and
+    // retry it once. If Share never disappears, abort and surface the failure.
+    let shareConfirmed = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await sleepOrAbort(serial, 1500);
+      const shareStillVisible = await android.findButtonByLabel(serial, "Share").catch(() => null);
+      if (!shareStillVisible) {
+        shareConfirmed = true;
+        break;
+      }
+      if (attempt === 3) {
+        // Still on caption screen after ~6 s — retry the Share tap once.
+        onLog?.("Make a Post: Share still visible after 6 s — retrying tap…");
+        const retryShareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null) ?? finalShareBtn;
+        await android.tap(serial, retryShareBtn.x, retryShareBtn.y);
+      }
+    }
+
+    // Dismiss any post-share interstitial ("OK", notifications prompt, etc.)
+    // that can appear right after sharing and sit on top of the feed if left
+    // unhandled.
     await android.dismissInstagramInterstitials(serial).catch(() => null);
+
+    if (!shareConfirmed) {
+      onLog?.("Make a Post: Share button still present after ~15 s — post did not submit. Aborting.");
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
 
     recordPostedLocalFile(serial, fileName);
     if (deleteAfterUpload) {

@@ -4,6 +4,31 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.526] — 2026-07-13
+
+### Fix: "Make a Post" (mobile) — gallery thumbnail never selected + Share tap had no verification
+
+**Two confirmed bugs found via real-device screenshots provided by the user:**
+
+**Bug 1 — Gallery thumbnail scan returned null even though thumbnails were visible (root cause of "no gallery thumbnail found in the Recents grid")**
+
+- Root cause — `findFirstGalleryThumbnail()` required `clickable="true"` on each grid cell node. On this specific device (Xiaomi 2307FPN8BY, Android 14) the RecyclerView parent handles all touch events; individual grid cell nodes have `clickable="false"`. The accessibility scan found zero candidates and returned null — even though the user's screenshot clearly showed the photo thumbnails on screen.
+- Fix 1a — `findFirstGalleryThumbnail()` now accepts **both** clickable and non-clickable tile-shaped nodes. Clickable nodes are prioritised (sorted first), non-clickable tile-shaped nodes serve as fallback. All other filters (size, aspect ratio, camera-label exclusion) are unchanged.
+- Fix 1b — Added `postGalleryThumbnailPositionalFallback()`: when the accessibility scan returns nothing at all, `runMakePostStep` now taps the screen-fraction coordinate for the second grid cell (first non-camera photo tile, x≈38%, y≈69%) instead of silently continuing with no photo selected.
+
+**Bug 2 — Share tap had no success verification; automation reported "posted" unconditionally (root cause of "said posted but didn't post")**
+
+- Root cause — after tapping Share, the code waited a flat 3 seconds then unconditionally returned `{ posted: true }` and logged "posted". If the tap didn't register (stale coordinate, UI not settled) or the upload failed silently, there was no detection — the log said "posted" and no post appeared.
+- Fix — replaced the 3-second blind wait with a **polling verification loop**: checks every 1.5 s for up to ~15 s whether the Share button has disappeared from the accessibility tree. Share disappearing = the caption screen was dismissed = the post was submitted. If Share is still visible after 6 s, the Share tap is retried once. If Share never disappears after ~15 s, the attempt aborts with `{ posted: false }` and a clear log message — no more false "posted" confirmations.
+
+**Additional timing improvements:**
+- POST tab wait increased 1200 ms → 2000 ms (grid needs more time to fully populate after mode switch).
+- Gallery thumbnail tap wait increased 800 ms → 1500 ms.
+- Filter/edit screen "Next" waits increased 1500 ms → 2000 ms each (audio-suggestion overlay animation can delay accessibility-tree population).
+- Added explicit log lines for filter/edit Next taps so a stall on those screens is traceable.
+
+---
+
 ## [1.1.525] — 2026-07-13
 
 ### Fix: "Make a Post" media never highlighted under automation; Windows installer stuck at v1.1.522
