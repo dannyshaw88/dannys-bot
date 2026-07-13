@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.543] — 2026-07-13
+
+### Fix: Make a Post (mobile) — "+" tap was opening Notifications instead of the composer
+
+**Regression:**
+
+v1.1.536–542 replaced the compose-button positional fallback with a blind scan of the top-right header band ("pick the leftmost icon-sized node"). On this real device/Instagram build there is no compose icon in that header band at all — the scan's "leftmost" match was actually the **Notifications** (heart) icon. Every Make a Post run tapped it, landed on the full-screen Notifications page, and failed from there. This was a real regression: v1.1.527 (earlier the same day) had already confirmed via screenshot that this device's true "+" button is a **bottom-navigation tab**, not a header icon — that confirmed fix was silently replaced by the header-scan approach without new evidence it was needed.
+
+**Root cause:**
+
+`findComposeButton`'s positional fallback searched the top 15% of the screen / right 50% of the width and picked whichever icon-sized node had the smallest x-coordinate in that band, assuming header order `[compose +][notifications ❤][DM ✈]`. When no compose icon exists in that band, that logic still confidently returns *something* — in this case, the Notifications icon — with no way to tell the difference between "found compose" and "found the wrong icon."
+
+**Fix:**
+
+- `findComposeButton` no longer performs the blind top-header positional scan. It now checks label and resource-id matches covering **both** possible layouts (top-header icon *and* bottom-nav tab), then falls back directly to the bottom-nav "New post" tab position (`x≈50%`, `y≈94%`) — the last positional fallback confirmed correct against a real-device screenshot.
+- Added a second post-tap screen guard, `isOnNotificationsOrDirectScreen`, alongside the existing story-picker guard. If the "+" tap lands on Notifications or Direct, Make a Post now backs out (Back button) and retries once via the bottom-nav position before giving up, instead of silently continuing on the wrong screen or failing later with a confusing error.
+- Documented in `.agents/memory/make-a-post-log.md`: once a positional fallback has been confirmed correct via a real-device screenshot or log, it must not be replaced by a new blind heuristic without fresh evidence the confirmed one stopped working.
+
+**Status:** shipped, awaiting real-device confirmation from the next Make a Post run.
+
+---
+
 ## [1.1.538] — 2026-07-13
 
 ### Feature: Element Inspector — click any element on the phone screen to identify it instantly
