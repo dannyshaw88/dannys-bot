@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.545",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post (mobile/ADB): the top-left compose \"+\" scan in v1.1.544 tested clean on the real device but still reported \"not found\" — a real-device layout scan showed the true icon's centre sits at ~8.1% of screen height, just past the 7% cutoff that scan used, so it was excluded even though it existed in the accessibility dump.",
+        technical: [
+          "Widened the header band from y < 7% to y < 12% of screen height to include the real icon (bounds [0,104][132,258] on the 1080×2226 test device).",
+          "Also found: the fallback computed its screen width/height from a separate `adb shell wm size` call, which can disagree with the live accessibility dump's own coordinate space when a display-size override is active (same class of bug already fixed for mirror-tap rescaling). Now reads w/h directly from the dump's own root bounds so the percentage thresholds are always in the same space as the bounds being tested.",
+          "Widening the band reopens the risk of matching the stories-tray \"Add\" circle (v1.1.526's original bug) — guarded with two new checks: any candidate labelled \"add\"/\"story\" is excluded outright, and any candidate with 2+ similarly-sized siblings at a similar y (a tray row) is excluded as not being a lone button.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.544",
     date: "13 Jul 2026",
     items: [

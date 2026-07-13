@@ -2101,17 +2101,39 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
  * live phone mirror (13 Jul 2026): the compose "+" sits at the TOP-LEFT of
  * the header bar, left of the "Instagram" wordmark.
  *
- * Scoped tightly to y < 7% of screen height so it can only ever match the
- * header bar itself, never the stories tray below it (tray avatars start
- * around y ≈ 9–15% and include the "Add" story circle — see the warning on
- * findComposeButton above for why that distinction matters).
+ * Two bugs found and fixed here on 13 Jul 2026 after a real-device dump
+ * (`screen-layout-scan`) showed the true header icon at bounds
+ * [0,104][132,258] — centre y ≈ 8.1% of screen height — which the original
+ * y < 7% cutoff rejected outright, explaining the "not found — skipping"
+ * result on the v1.1.544 build even though a plausible candidate existed
+ * in the dump:
+ *   1. Screen dimensions are now read from the dump's OWN root node bounds
+ *      (`bounds="[0,0][W,H]"`), not a separate `adb shell wm size` call.
+ *      `wm size` can report a "Physical size" and an "Override size" that
+ *      differ when a display-size override is active, and the two are NOT
+ *      interchangeable — a mismatch there would silently skew every
+ *      percentage threshold computed against it.
+ *   2. The header band is widened from y < 7% to y < 12% of screen height
+ *      to actually include that real icon.
+ * Widening the band reopens the ORIGINAL v1.1.526 risk of matching the
+ * stories-tray "Add" circle instead (that tray sits around y ≈ 9–15% and
+ * overlaps this range) — two defenses guard against that:
+ *   - Any candidate whose text/content-desc mentions "add" or "story" is
+ *     excluded outright, positional match or not.
+ *   - Any candidate that has 2+ same-sized siblings at a similar y (a
+ *     "row" of icons — how a tray of story avatars looks, but a lone
+ *     header icon never does) is excluded as a likely tray, not a button.
  */
 export function findComposeTopLeftHeaderIcon(serial: string, xml: string): { x: number; y: number } | null {
-  const { w, h } = getScreenSize(serial);
-  const maxY = Math.round(h * 0.07);
+  const rootM = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+  const { w, h } = rootM
+    ? { w: Number(rootM[1]), h: Number(rootM[2]) }
+    : getScreenSize(serial); // fallback only if the dump has no root bounds at all
+  const maxY = Math.round(h * 0.12);
   const maxX = Math.round(w * 0.25);
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let best: { x: number; y: number } | null = null;
+  interface Cand { x: number; y: number; y1: number; bw: number; bh: number }
+  const candidates: Cand[] = [];
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
@@ -2125,8 +2147,26 @@ export function findComposeTopLeftHeaderIcon(serial: string, xml: string): { x: 
     const c = _parseCenter(bm[1]);
     if (!c) continue;
     if (c.y > maxY || c.x > maxX) continue;
-    // Leftmost/topmost icon-sized node in the header band.
-    if (!best || c.x < best.x) best = c;
+    // Exclude anything labelled as the story tray's "Add" circle (or any
+    // other story-related control) regardless of position — a positional
+    // match alone isn't enough evidence once the band is this wide.
+    const get = (attr: string) => { const a = attrs.match(new RegExp(`${attr}="([^"]*)"`, "i")); return a ? a[1] : ""; };
+    const label = `${get("content-desc")} ${get("text")}`.toLowerCase();
+    if (/add|story|stories/.test(label)) continue;
+    candidates.push({ x: c.x, y: c.y, y1, bw, bh });
+  }
+  // Drop any candidate that has 2+ similarly-sized siblings at a similar
+  // y — that pattern is a row of tray icons, not a single header button.
+  const solo = candidates.filter(a => {
+    const siblings = candidates.filter(b =>
+      b !== a && Math.abs(b.y1 - a.y1) < 30 && Math.abs(b.bw - a.bw) < 20 && Math.abs(b.bh - a.bh) < 20,
+    );
+    return siblings.length === 0;
+  });
+  const pool = solo.length > 0 ? solo : candidates;
+  let best: { x: number; y: number } | null = null;
+  for (const c of pool) {
+    if (!best || c.x < best.x) best = { x: c.x, y: c.y };
   }
   return best;
 }

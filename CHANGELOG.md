@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.545] — 2026-07-13
+
+### Fix: Make a Post (mobile) — top-left header icon was excluded by too-tight y cutoff
+
+v1.1.544 correctly moved to the top-left header icon, but the user's real-device test still reported "not found." A screen-layout-scan of the live device (Xiaomi 23076RN8DY, 1080×2226) showed why: the real icon's bounds are `[0,104][132,258]`, centre y ≈ 8.1% of screen height — just past the `y < 7%` cutoff the previous fallback used, so it was silently excluded even though it existed in the dump.
+
+**Also found:** the fallback computed screen width/height via a separate `adb shell wm size` call. `wm size` can report a "Physical size" and an "Override size" that differ when a display-size override is active — the same class of mismatch already documented and fixed elsewhere in this codebase for mirror-tap coordinate rescaling. If that call disagreed with the coordinate space the live accessibility dump itself uses, every percentage threshold computed from it would be silently skewed. Now reads width/height straight from the dump's own root node bounds, guaranteeing both are in the same coordinate space.
+
+**Fix:**
+
+- Widened the header band from `y < 7%` to `y < 12%` of screen height to include the real icon.
+- Because that reopens the risk of matching the stories-tray "Add" circle (the original v1.1.526 bug — that tray sits around y ≈ 9–15%, overlapping this range), added two defenses: exclude any candidate whose text/content-desc mentions "add" or "story", and exclude any candidate with 2+ similarly-sized siblings at a similar y (a row of tray icons looks like that; a lone header button never does).
+
+**Status:** shipped, awaiting real-device confirmation.
+
+**Separately reported, not yet root-caused:** the user also described needing to click ~5px to the left of a target to hit it when manually tapping the phone mirror, in some screen regions but not others. This matches the exact symptom already described in this codebase's `rescaleForDevice` fix (Physical vs. Override display-size mismatch) — that fix is already shipped for `/input/tap`, so if the offset persists on the next test, the next step is confirming what `adb shell wm size` actually reports on this device (Physical size line vs. Override size line) rather than guessing further.
+
+---
+
 ## [1.1.544] — 2026-07-13
 
 ### Fix: Make a Post (mobile) — compose "+" is at the TOP-LEFT of the header, confirmed on-device
