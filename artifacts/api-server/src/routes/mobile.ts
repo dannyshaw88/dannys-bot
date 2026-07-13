@@ -2289,123 +2289,63 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // findButtonByLabel() call comes back empty.
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
-    // Detect if we accidentally landed on "Add to Story" (story composer)
-    // instead of "New post" (feed-post composer). This happens when the
-    // accessibility scan finds the TOP-LEFT camera/story button rather than
-    // the CENTRE bottom-nav "New post" tab. The two screens look identical
-    // until you check the title bar: "Add to story" vs "New post".
-    //
-    // If we're on the wrong screen: press Back, wait for the home feed to
-    // return, then tap the geometric centre of the bottom nav band directly —
-    // that coordinate is always the "New post" tab regardless of accessibility
-    // tree exposure.
-    {
-      const xml = await android.dumpUi(serial).catch(() => "");
-      const onStoryComposer = /Add to story/i.test(xml);
-      if (onStoryComposer) {
-        onLog?.("Make a Post: landed on \"Add to story\" (wrong screen) — pressing Back and retrying via bottom-nav positional tap…");
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 1200);
-        // Direct positional tap — centre bottom-nav slot is always "New post".
-        const centreNav = android.postComposeCentreNavFallback(serial);
-        await android.tap(serial, centreNav.x, centreNav.y);
-        await sleepOrAbort(serial, 1800);
-        await android.dismissInstagramInterstitials(serial).catch(() => null);
-      }
-    }
-
-    // Instagram auto-selects the newest photo the instant "New post" opens
-    // (confirmed via real-device screenshot: user's manual tap shows the
-    // photo already filling the large preview before any thumbnail tap).
-    //
-    // DO NOT tap a thumbnail — the grid's first cell is the "open camera"
-    // shutter tile. Any blind coordinate or accessibility tap here risks
-    // landing on the camera tile (de-selecting the photo) or opening the
-    // camera, both of which break the flow silently.
-    //
-    // If the photo is NOT already selected (expand toggle absent after a
-    // reasonable wait), fall back to tapping the second grid cell once as
-    // a recovery.
-    onLog?.("Make a Post: checking photo is auto-selected in the picker preview…");
-    let photoAutoSelected = !!(await android.findExpandPhotoButton(serial).catch(() => null));
-    if (!photoAutoSelected) {
-      // Give IG one more second — the preview can take a beat to render
-      // after mode switches or slow grid loads.
-      await sleepOrAbort(serial, 1000);
-      photoAutoSelected = !!(await android.findExpandPhotoButton(serial).catch(() => null));
-    }
-    if (!photoAutoSelected) {
-      // Still no expand button — photo not auto-selected. Try tapping the
-      // second grid cell (first non-camera thumbnail) once as recovery.
-      onLog?.("Make a Post: photo not yet auto-selected — tapping first non-camera thumbnail as recovery…");
-      const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
-      if (thumbnail) {
-        onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
-        await android.tap(serial, thumbnail.x, thumbnail.y);
-        await sleepOrAbort(serial, 1500);
-      } else {
-        const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
-        onLog?.(`Make a Post: accessibility scan empty — using positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
-        await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
-        await sleepOrAbort(serial, 1500);
-      }
-    } else {
-      onLog?.("Make a Post: photo auto-selected ✓ — no thumbnail tap needed");
-    }
-
-    // Check whether we're still on the "Add to story" screen after the
-    // recovery above (e.g. both taps missed). If so, give up cleanly.
-    {
-      const xml = await android.dumpUi(serial).catch(() => "");
-      if (/Add to story/i.test(xml)) {
-        onLog?.("Make a Post: still on \"Add to story\" after recovery taps — aborting this attempt");
-        await android.pressBack(serial);
-        await android.removeDeviceFile(serial, devicePath).catch(() => {});
-        return { posted: false };
-      }
-    }
-
-    // POST-mode tab check — handles the case where the bottom-nav "+" opens
-    // a Reel or Story sheet as the last-used mode rather than the feed-post
-    // picker. Tapping the "POST" tab switches to the feed-post gallery.
-    // When we're already on the Post picker this tab is absent, so this is
-    // a no-op in the normal path.
-    onLog?.("Make a Post: checking for POST mode tab (in case IG opened Reel/Story mode)…");
+    // The "+" compose icon opens a sheet with multiple post-type tabs
+    // (POST / REEL / STORY). Tap the POST tab to switch into the feed-post
+    // gallery/picker. When the sheet already opened on POST mode this tab
+    // isn't present, so this is a no-op in that case.
+    onLog?.("Make a Post: checking for POST mode tab…");
     const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
       ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
     if (postTab) {
       onLog?.("Make a Post: tapping POST tab…");
       await android.tap(serial, postTab.x, postTab.y);
-      await sleepOrAbort(serial, 2000); // extra time for the grid to populate after mode switch
+      await sleepOrAbort(serial, 2000); // extra time for the grid to fully populate after mode switch
+    } else {
+      // POST tab not found — already on the photo picker, but give the grid
+      // a moment to finish loading before we scan for thumbnails.
+      await sleepOrAbort(serial, 800);
     }
 
-    // Confirm the compose sheet actually opened before trying to find/tap
-    // "Next" at all — we check for ANY recognizable picker element (the
-    // expand toggle, or a labelled Next) rather than requiring Next's own
-    // accessibility label, since Next itself is frequently not exposed as
-    // a labelled node on this screen (see postNextButtonPositionalFallback).
+    // The photo is visible in the grid but NOT yet selected (highlighted
+    // with a white border) — it must be tapped to select it. Always tap.
+    // Grid layout: cell 0 = camera shutter tile, cell 1+ = photo thumbnails
+    // sorted newest-first. findFirstGalleryThumbnail() skips the camera tile
+    // and accepts both clickable and non-clickable nodes (Xiaomi/Android 14
+    // RecyclerView marks child cells non-clickable; v1.1.526 fix).
+    onLog?.("Make a Post: looking for the newest photo thumbnail in the Recents grid…");
+    const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
+    if (thumbnail) {
+      onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y}) to select it…`);
+      await android.tap(serial, thumbnail.x, thumbnail.y);
+      await sleepOrAbort(serial, 1500);
+    } else {
+      // Accessibility scan returned nothing — use the positional fallback for
+      // the second grid cell (first non-camera photo tile, x≈38%, y≈69%).
+      const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
+      onLog?.(`Make a Post: no thumbnail found via scan — positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
+      await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
+      await sleepOrAbort(serial, 1500);
+    }
+
+    // Confirm the picker is actually open before tapping Next. Check for any
+    // recognizable picker signal: the expand toggle (only visible when a photo
+    // is selected in the preview), or a labelled Next button.
     onLog?.("Make a Post: looking for the \"Next\" button…");
     let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     let nextBtn1IsPositionalGuess = false;
     if (!nextBtn1) {
-      // Root cause (confirmed via real-device "Scan Screen Layout", 2026-07-13):
-      // on this screen the top app bar (X / "New post" / Next) has ZERO
-      // accessibility children — "Next" is rendered but not exposed with a
-      // text/content-desc label, so findButtonByLabel() has nothing to match.
-      // Fall back to a fixed screen-fraction tap and rely on the
-      // post-tap confirmation below to catch a miss instead of hanging.
-      onLog?.("Make a Post: \"Next\" not found in accessibility tree (known — this screen's app bar exposes no labels) — using positional fallback");
+      // On this screen the top app bar (X / "New post" / Next) has zero
+      // accessibility children — "Next" is rendered but not labelled.
+      // Fall back to a fixed screen-fraction coordinate.
+      onLog?.("Make a Post: \"Next\" not found in accessibility tree — using positional fallback");
       nextBtn1 = android.postNextButtonPositionalFallback(serial);
       nextBtn1IsPositionalGuess = true;
     }
-    // Sanity-check the compose sheet is actually open before tapping blind:
-    // require either a labelled Next, the expand toggle, or the POST tab to
-    // have been visible/tappable earlier in this attempt. If we got here
-    // via the positional fallback with no other confirming signal at all
-    // (e.g. compose never opened, we're still on the home feed), a blind
-    // tap could hit something unrelated — bail out instead.
-    if (nextBtn1IsPositionalGuess && !postTab && !photoAutoSelected && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
-      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting this attempt");
+    // Sanity-check: if we're relying entirely on positional guesses with no
+    // confirming signal (no POST tab, no expand toggle, no labelled Next),
+    // the compose sheet likely never opened — bail rather than tap blind.
+    if (nextBtn1IsPositionalGuess && !postTab && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
+      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };

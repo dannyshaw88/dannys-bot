@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.528] — 2026-07-13
+
+### Fix: View Feed — scroll gesture opening comments on portrait posts
+- **Root cause**: scroll swipe started at `y1 = 78%` of screen height (y=998 on a 720×1280 device). A 4:5 portrait post puts its action bar at y≈960–1008 — the comment icon sits right at that y=998 start point. Android registered the touch-down on the comment button and opened comments instead of scrolling.
+- **Fix**: moved swipe start from `y1 = 78%` → `y1 = 88%` (y=1126), safely below the action bar of every post format including the tallest 4:5 portrait, while still leaving a 600px+ drag distance.
+- **Recovery**: after each scroll an accessibility check looks for the "Add a comment" EditText that uniquely identifies the comments sheet. If open, Back is pressed before continuing the scroll loop.
+
+### Fix: Make a Post (mobile) — reverted v1.1.527 compose-button changes; restored thumbnail tap
+- v1.1.527 incorrectly changed `findComposeButton` to target the bottom-centre nav bar and skip the thumbnail tap entirely. Reverted both changes.
+- The top-left "+" **is** the correct compose button — it opens a multi-type sheet (POST / REEL / STORY tabs), not "Add to Story" directly.
+- The photo IS visible in the grid after tapping POST tab, but it must be **tapped to select it** (highlight with white border). The thumbnail tap was never wrong — skipping it was.
+- Restored: `findComposeButton` uses original top-left positional fallback. `runMakePostStep` always taps the thumbnail after POST tab switch. Added an 800 ms grid-load wait when POST tab was not found (already on POST mode).
+
+---
+
 ## [1.1.527] — 2026-07-13
 
 ### Fix: "Make a Post" (mobile) — wrong "+" button tapped + unnecessary thumbnail tap
