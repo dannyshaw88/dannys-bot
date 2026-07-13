@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.531",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post was navigating back to Instagram's home feed immediately after tapping the \"+\" button, before scanning for the media picker — every subsequent step (photo grid scan, thumbnail tap, Next button) was running on the wrong screen entirely.",
+        technical: [
+          "Root cause: dismissInstagramInterstitials() includes 'Cancel' in its dismiss-label list. When '+' opens any compose/picker screen, that screen has a Cancel button in its accessibility tree — the interstitial dismisser tapped it, returning to the home feed before any other code ran.",
+          "Fix 1: removed 'Cancel' and 'OK' from DISMISS_LABELS in androidManager.ts — both are too generic and match legitimate compose-screen buttons. Real notification interstitials (Turn on notifications?, Save login?) only need Not now / Skip / Maybe later / Deny.",
+          "Fix 2: moved DUMP A to fire immediately after the 1800ms post-tap sleep (before dismissInstagramInterstitials and before the POST-tab check), so the dump captures the actual screen the '+' opened, not whatever screen appears after navigation.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.489",
     date: "12 Jul 2026",
     items: [

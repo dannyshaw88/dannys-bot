@@ -89,11 +89,13 @@ jobs:
       - name: Build installer
         working-directory: artifacts/electron
         run: npx electron-builder --win --publish never
+        env:
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: Equinox-Installer
+          name: Equinox-Windows-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
 
@@ -103,4 +105,4 @@ jobs:
         with:
           files: artifacts/electron/release/*.exe
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.UPDATER_TOKEN }}
