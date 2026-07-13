@@ -2277,17 +2277,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1200);
     }
 
-    // The just-pushed file should be the most recent (top-left) thumbnail in
-    // the media grid, but there's no existing selector for it — this is a
-    // best-effort tap on the first grid item. "Next" only appears *after* a
-    // photo has been selected, so the thumbnail tap must happen before we
-    // look for it — checking for "Next" first (the previous behaviour) would
-    // always fail here and abort the attempt without ever selecting an image.
-    const { w, h } = getScreenSize(serial);
-    // First grid cell in Instagram's media picker sits just under the header/toolbar.
-    await android.tap(serial, Math.round(w * 0.17), Math.round(h * 0.22));
-    await sleepOrAbort(serial, 700);
-
+    // Instagram's media grid already auto-selects the most recent photo as
+    // the default (shown large in the preview pane above the grid) the
+    // instant the picker opens — confirmed against manual taps on a real
+    // device (screenshot 2026-07-13): tapping "+" alone highlights the
+    // newest photo without the user ever touching the grid. The grid's
+    // FIRST cell is Instagram's "open camera" shutter tile, not a photo —
+    // an earlier blind coordinate tap here (~17%/22%) was landing on that
+    // camera tile instead of a thumbnail, which is exactly why no image was
+    // ever actually selected and the attempt silently aborted. Since we
+    // just pushed the file we want to post and it is therefore the newest
+    // item in the gallery, no tap is needed at all: the default selection
+    // already matches our target. Go straight to "Next".
     const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (!nextBtn1) {
       onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");

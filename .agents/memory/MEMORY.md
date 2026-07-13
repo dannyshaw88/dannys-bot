@@ -29,3 +29,4 @@
 - Any per-device "slow confirm" call (e.g. findHomeTab after a tray tap) must be swapped for the fast check individually — fixing one call site in a shared helper does not fix sibling call sites that inline their own slow check.
 - [License auth is a single global session, not per-cookie](license-global-session.md) — /api/license/login writes one global "license_session" row; any curl login logs in every browser tab/window against that server.
 - [Make a Post UI: image alteration is source-agnostic](make-a-post-image-alteration-scope.md) — Alteration level + Image settings button live in the shared caption section, not inside the Instagram-account source block, so they apply to local-computer-sourced images too.
+- [Instagram media-picker default selection (real device)](instagram-media-picker-default-selection.md) — IG auto-selects the newest photo on picker open; a blind grid tap was hitting the camera tile (cell 0), not a thumbnail — no tap needed at all.
