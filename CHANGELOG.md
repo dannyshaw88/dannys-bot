@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.521] — 2026-07-13
+
+### UI: "Make a Post" panel cleanup — remove unused fields, clarify source labels, native folder picker, reflow caption section
+
+Pure UI/config restructuring of the Make a Post panel; no automation-cycle behavior changes.
+
+- **Removed Order % / Skip Chance %** — `makePostOrderPctMin/Max` and `makePostSkipPctMin/Max` were persisted but never read by the automation-cycle engine. Deleted entirely from client state (`MobilePage.tsx`), the server `AutomationSettings` type, and both server zod schemas (`artifacts/api-server/src/routes/mobile.ts`), rather than just hiding them in the UI.
+- **Clearer source labels** — "Instagram Account" → "Source: Instagram Account"; "Source: Local Folder" → "Source: My Computer". Both now share the same uppercase/tracking-wide styling.
+- **Native folder picker** — added a "Browse…" button next to the local-folder path field, reusing the existing `window.electronAPI.openFolderDialog()` IPC pattern already used by the Repost tool's Human Session panel, instead of requiring the user to type a Windows path by hand.
+- **Caption section reflow** — Alteration level and the Image settings "Configure" button moved out of the Instagram-Account-only block into the shared caption area (below the caption textarea), so they apply no matter which source produced the image. "Make it unique" / "Disable comments" moved below that row. "Use ChatGPT" now sits directly beside the "Post Caption Text" label.
+
+**Files changed**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — panel layout/state changes described above
+- `artifacts/api-server/src/routes/mobile.ts` — removed `makePostOrderPctMin/Max`, `makePostSkipPctMin/Max` from type, persistence schema, and defaults
+
+---
+
 ## [1.1.520] — 2026-07-13
 
 ### Feature: "Make a Post" — Activate Percentage gate + on-device posting from a local folder
