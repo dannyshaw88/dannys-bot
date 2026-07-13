@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.522] — 2026-07-13
+
+### Fix: "Make a Post" abandoned every real-device attempt; UI enable/disable checkboxes for alteration & image settings
+
+Real-device testing surfaced the actual reason Make a Post pushed an image to the phone but then always aborted without posting:
+
+- **Root cause found and fixed** — tapping Instagram's "+" compose icon opens whichever creation mode (Story/Reel/Post) was last used on the device, not necessarily the feed-post picker. The flow also checked for a "Next" control *before* selecting a photo, which can never be present on the initial screen — so every attempt aborted immediately, leaving the just-pushed image behind. Now: dismiss any interstitial, tap the "POST" mode tab if the sheet landed on Story/Reel, tap the photo thumbnail, and only then look for "Next".
+- **Duplicate images in camera roll fixed** — every aborted attempt pushed a new copy of the source image to `/sdcard/DCIM/Camera` and never removed it, so repeated failures left visible duplicates in the gallery/picker. Aborted attempts now delete the pushed file from the device and re-trigger the media scanner.
+- **Auto-clear "OK" popups** — a stray single-button confirmation dialog (e.g. a notifications prompt) encountered during manual testing is now auto-dismissed by the existing interstitial-scanner, both right after opening the composer and right after tapping Share.
+- **UI: Alteration level / Image settings now have their own enable checkbox** — both stay visible (not hidden) when off; Alteration's Small/Medium/High buttons show fully deselected and disabled while off rather than looking active with no way to tell.
+- **UI: fixed a layout bug where "Image settings" and its Configure button rendered on the same line with almost no gap** — the label was an inline `<label>` element, so Tailwind's `space-y` (which only adds `margin-top`, ignored on inline elements) had no visible effect. Switched to an explicit column layout so the gap always renders.
+- **UI: "Make it unique" and "Disable comments" moved onto the same row as Alteration level / Image settings**, per request.
+
+**Files changed**
+- `artifacts/api-server/src/mobile/androidManager.ts` — added `removeDeviceFile`, added "OK" to the interstitial dismiss-label list
+- `artifacts/api-server/src/routes/mobile.ts` — reordered/fixed the compose flow in `runMakePostStep`, added Story→Post mode-tab handling, cleanup on abort, new `makePostAlterationEnabled`/`makePostImageSettingsEnabled` settings fields
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — new enable checkboxes for Alteration level / Image settings, fixed label/button spacing, row reflow for Make it unique / Disable comments
+
+---
+
 ## [1.1.521] — 2026-07-13
 
 ### UI: "Make a Post" panel cleanup — remove unused fields, clarify source labels, native folder picker, reflow caption section
