@@ -51,6 +51,16 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-13 — Mobile (ADB) path: thumbnail scan always null + Share had no verification (v1.1.526)
+- Context: user provided real-device screenshots of a manual post attempt showing the full picker→editor→caption→share flow working on screen; automated log showed "posted" but no post appeared on the feed.
+- Root cause 1 (thumbnail): `findFirstGalleryThumbnail` required `clickable="true"` on individual grid cells. On Xiaomi 2307FPN8BY (Android 14) the RecyclerView parent owns all touch events; child cells have `clickable="false"`. Scan returned null even with thumbnails clearly visible → no photo was tapped → wrong/no selection.
+- Fix 1a: accept both clickable AND non-clickable tile-shaped nodes; clickable prioritised via sort.
+- Fix 1b: added `postGalleryThumbnailPositionalFallback()` (x=38%, y=69%) used when accessibility scan returns nothing at all.
+- Root cause 2 (Share): after tapping Share, code waited flat 3 s then logged "posted" unconditionally. A tap that didn't register (stale coordinate, UI not settled) looked identical to a successful post.
+- Fix 2: replaced 3-second blind wait with 15-second polling loop checking for Share button disappearance; retries Share tap once at 6 s mark; returns `{ posted: false }` if Share never goes away.
+- Additional: POST tab wait 1200→2000 ms, thumbnail tap wait 800→1500 ms, filter/edit Next waits 1500→2000 ms.
+- Status: UNCONFIRMED — pushed as v1.1.526 + tag `v1.1.526` (triggers installer build). Awaiting real-device confirmation.
+
 ### 2026-07-05 — Pointer-events overlay bypass for Share (v1.1.362)
 - Context: v1.1.361 used the same generic `spFindBtnPos("Share")` that works for Next buttons, but user confirmed in production (screenshots) that the EXACT SAME symptom persisted — the click still opened the "Tag: | Search" box instead of submitting the post.
 - Root cause confirmed: Instagram's caption step renders a transparent `[role="button"]` "Click photo to tag people" hit-target that sits above the Share header button in the DOM stacking order (z-index / stacking context), intercepting coordinate-based CDP `Input.dispatchMouseEvent` clicks aimed at the header even though Share is visually above the overlay. This is specific to the caption step — crop and filter steps have no such overlay, which is why Next clicks have always worked.
