@@ -2299,16 +2299,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (postTab) {
       onLog?.("Make a Post: tapping POST tab…");
       await android.tap(serial, postTab.x, postTab.y);
-      await sleepOrAbort(serial, 2000); // extra time for the grid to fully populate after mode switch
+      onLog?.("Make a Post: POST tab tapped — waiting 2 s for grid to load…");
+      await sleepOrAbort(serial, 2000);
+      onLog?.("Make a Post: 2 s wait done");
     } else {
       // POST tab not found — already on the photo picker, but give the grid
       // a moment to finish loading before we scan for thumbnails.
+      onLog?.("Make a Post: no POST tab found — waiting 800 ms…");
       await sleepOrAbort(serial, 800);
+      onLog?.("Make a Post: 800 ms wait done");
     }
 
     // ── DIAGNOSTIC DUMP A: picker screen right after POST tab / grid load ──
-    onLog?.("Make a Post: [DUMP A] layout after POST tab / grid load —");
-    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
+    onLog?.("Make a Post: [DUMP A] starting layout dump…");
+    try {
+      const dumpLines = await android.dumpAllNodes(serial);
+      onLog?.(`Make a Post: [DUMP A] ${dumpLines.length} node(s) found`);
+      dumpLines.forEach(l => onLog?.(`  ${l}`));
+    } catch (dumpErr: any) {
+      onLog?.(`Make a Post: [DUMP A] ERROR — ${dumpErr?.message ?? dumpErr}`);
+    }
     onLog?.("Make a Post: [DUMP A] end");
 
     // The photo is visible in the grid but NOT yet selected (highlighted

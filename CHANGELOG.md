@@ -4,6 +4,17 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.530] — 2026-07-13
+
+### Diagnostic: pin down exactly which line stops executing in Make a Post
+- Added individual log lines around every statement between "tapping POST tab" and DUMP A so we can see precisely which line is the last one that runs
+- "POST tab tapped — waiting 2 s…" / "2 s wait done" bracket the sleepOrAbort — if "2 s wait done" never appears, sleepOrAbort threw (cycle-aborted)
+- "no POST tab found — waiting 800 ms…" / "800 ms wait done" for the else branch
+- Wrapped dumpAllNodes() in try/catch so any throw inside it logs the actual error message instead of silently killing the function
+- "[DUMP A] X node(s) found" line tells us whether the dump ran but returned empty vs. threw
+
+---
+
 ## [1.1.529] — 2026-07-13
 
 ### Diagnostic: Make a Post — full layout dumps at every critical step
