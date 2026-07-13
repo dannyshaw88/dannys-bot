@@ -148,10 +148,6 @@ type AutomationSettings = {
   makePostEnabled?: boolean;
   makePostActivatePctMin?: number;
   makePostActivatePctMax?: number;
-  makePostOrderPctMin?: number;
-  makePostOrderPctMax?: number;
-  makePostSkipPctMin?: number;
-  makePostSkipPctMax?: number;
   makePostPerSessionMin?: number;
   makePostPerSessionMax?: number;
   makePostSourceUsername?: string;
@@ -933,10 +929,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostEnabled: z.boolean().default(false),
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
-    makePostOrderPctMin: z.number().min(0).max(100).default(0),
-    makePostOrderPctMax: z.number().min(0).max(100).default(0),
-    makePostSkipPctMin: z.number().min(0).max(100).default(0),
-    makePostSkipPctMax: z.number().min(0).max(100).default(0),
     makePostPerSessionMin: z.number().min(1).max(20).default(1),
     makePostPerSessionMax: z.number().min(1).max(20).default(1),
     makePostSourceUsername: z.string().default(""),
@@ -1003,8 +995,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
       makePostEnabled: false,
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
-      makePostOrderPctMin: 0, makePostOrderPctMax: 0,
-      makePostSkipPctMin: 0, makePostSkipPctMax: 0,
       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
       makePostSourceUsername: "", makePostDisableUsernameSource: false,
       makePostAlterationLevel: "small", makePostUseHikerApi: false,
@@ -2079,7 +2069,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // ── Make a Post — wired into the automation cycle (13 Jul 2026). Only
     // the local-folder image source is implemented for the on-device flow
     // (per user preference over the HikerAPI-scrape-from-another-user path);
-    // the other makePost* fields (order/skip %, source username, ChatGPT,
+    // the other makePost* fields (source username, ChatGPT,
     // image alterations) remain persisted via automationSchema above but are
     // not yet read here.
     makePostEnabled: z.boolean().default(false),

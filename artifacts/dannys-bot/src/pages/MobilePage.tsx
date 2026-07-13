@@ -12,6 +12,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
+  FolderOpen,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -987,8 +988,6 @@ interface AutomationSettingsData {
   // configured local folder.
   makePostEnabled: boolean;
   makePostActivatePctMin: number; makePostActivatePctMax: number;
-  makePostOrderPctMin: number; makePostOrderPctMax: number;
-  makePostSkipPctMin: number; makePostSkipPctMax: number;
   makePostPerSessionMin: number; makePostPerSessionMax: number;
   makePostSourceUsername: string;
   makePostDisableUsernameSource: boolean;
@@ -1043,8 +1042,6 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
   makePostEnabled: false,
   makePostActivatePctMin: 100, makePostActivatePctMax: 100,
-  makePostOrderPctMin: 0, makePostOrderPctMax: 0,
-  makePostSkipPctMin: 0, makePostSkipPctMax: 0,
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
   makePostSourceUsername: "",
   makePostDisableUsernameSource: false,
@@ -1252,10 +1249,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostEnabled: s.makePostEnabled,
             makePostActivatePctMin: s.makePostActivatePctMin,
             makePostActivatePctMax: s.makePostActivatePctMax,
-            makePostOrderPctMin: s.makePostOrderPctMin,
-            makePostOrderPctMax: s.makePostOrderPctMax,
-            makePostSkipPctMin: s.makePostSkipPctMin,
-            makePostSkipPctMax: s.makePostSkipPctMax,
             makePostPerSessionMin: s.makePostPerSessionMin,
             makePostPerSessionMax: s.makePostPerSessionMax,
             makePostSourceUsername: s.makePostSourceUsername,
@@ -2039,34 +2032,6 @@ function AutomationSettingsPanel({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Order %</Label>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostOrderPctMin}
-                      onChange={e => setSettings(s => ({ ...s, makePostOrderPctMin: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostOrderPctMax}
-                      onChange={e => setSettings(s => ({ ...s, makePostOrderPctMax: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Skip Chance %</Label>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostSkipPctMin}
-                      onChange={e => setSettings(s => ({ ...s, makePostSkipPctMin: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostSkipPctMax}
-                      onChange={e => setSettings(s => ({ ...s, makePostSkipPctMax: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Posts per session</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
@@ -2094,7 +2059,7 @@ function AutomationSettingsPanel({
                     className="w-3.5 h-3.5 accent-primary cursor-pointer"
                   />
                   <label htmlFor="make-a-post-username-source-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
-                    INSTAGRAM ACCOUNT
+                    SOURCE: INSTAGRAM ACCOUNT
                   </label>
                 </div>
                 {!settings.makePostDisableUsernameSource && (
@@ -2105,28 +2070,6 @@ function AutomationSettingsPanel({
                         value={settings.makePostSourceUsername}
                         onChange={e => setSettings(s => ({ ...s, makePostSourceUsername: e.target.value.replace(/^@/, '') }))}
                         disabled={loading} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Alteration level</Label>
-                      <div className="flex gap-1">
-                        {(["small", "medium", "high"] as const).map(lvl => (
-                          <button key={lvl} type="button" disabled={loading}
-                            onClick={() => setSettings(s => ({ ...s, makePostAlterationLevel: lvl }))}
-                            className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
-                              settings.makePostAlterationLevel === lvl
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                            }`}
-                          >{lvl}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Image settings</Label>
-                      <button type="button" disabled={loading}
-                        onClick={() => setMakePostImageSettingsOpen(true)}
-                        className="h-8 px-3 text-xs rounded border transition-colors bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                      >Configure</button>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
@@ -2163,15 +2106,30 @@ function AutomationSettingsPanel({
                     onChange={e => setSettings(s => ({ ...s, makePostLocalFolderEnabled: e.target.checked }))}
                     disabled={loading}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                  <label htmlFor="make-a-post-local-folder-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none">Source: Local Folder</label>
+                  <label htmlFor="make-a-post-local-folder-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">SOURCE: MY COMPUTER</label>
                 </div>
                 {settings.makePostLocalFolderEnabled && (
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input type="text" placeholder="/path/to/images" className="h-8 text-xs font-mono w-[280px]"
+                      <Input type="text" placeholder="C:\Users\You\Pictures\Posts" className="h-8 text-xs font-mono w-[280px]"
                         value={settings.makePostLocalFolderPath}
                         onChange={e => setSettings(s => ({ ...s, makePostLocalFolderPath: e.target.value }))}
                         disabled={loading} />
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={async () => {
+                          const api = (window as any).electronAPI;
+                          if (!api?.openFolderDialog) return;
+                          const result = await api.openFolderDialog();
+                          if (result?.canceled || !result?.folder) return;
+                          setSettings(s => ({ ...s, makePostLocalFolderPath: result.folder }));
+                        }}
+                        className="h-8 px-3 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 shrink-0"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        Browse…
+                      </button>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-no-repeat"
                           checked={settings.makePostLocalFolderNoRepeat}
@@ -2203,33 +2161,15 @@ function AutomationSettingsPanel({
 
               {/* Caption */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-3">
                   <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <input type="checkbox" id="make-a-post-use-chatgpt"
-                        checked={settings.makePostUseChatGpt}
-                        onChange={e => setSettings(s => ({ ...s, makePostUseChatGpt: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-use-chatgpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <input type="checkbox" id="make-a-post-make-unique"
-                        checked={settings.makePostMakeUnique}
-                        onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <input type="checkbox" id="make-a-post-disable-comments"
-                        checked={settings.makePostDisableComments}
-                        onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-disable-comments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <input type="checkbox" id="make-a-post-use-chatgpt"
+                      checked={settings.makePostUseChatGpt}
+                      onChange={e => setSettings(s => ({ ...s, makePostUseChatGpt: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    <label htmlFor="make-a-post-use-chatgpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
                   </div>
                 </div>
                 <p className="text-[10px] text-muted-foreground/70">
@@ -2242,6 +2182,49 @@ function AutomationSettingsPanel({
                   onChange={e => setSettings(s => ({ ...s, makePostCaptionText: e.target.value }))}
                   disabled={loading}
                 />
+                {/* Image alteration — applies to whichever source produced the image */}
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Alteration level</Label>
+                    <div className="flex gap-1">
+                      {(["small", "medium", "high"] as const).map(lvl => (
+                        <button key={lvl} type="button" disabled={loading}
+                          onClick={() => setSettings(s => ({ ...s, makePostAlterationLevel: lvl }))}
+                          className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
+                            settings.makePostAlterationLevel === lvl
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                          }`}
+                        >{lvl}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Image settings</Label>
+                    <button type="button" disabled={loading}
+                      onClick={() => setMakePostImageSettingsOpen(true)}
+                      className="h-8 px-3 text-xs rounded border transition-colors bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                    >Configure</button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <input type="checkbox" id="make-a-post-make-unique"
+                      checked={settings.makePostMakeUnique}
+                      onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input type="checkbox" id="make-a-post-disable-comments"
+                      checked={settings.makePostDisableComments}
+                      onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    <label htmlFor="make-a-post-disable-comments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
+                  </div>
+                </div>
               </div>
             </div>
           )}
