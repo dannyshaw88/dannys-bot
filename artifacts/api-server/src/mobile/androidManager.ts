@@ -679,7 +679,11 @@ export async function dismissInstagramInterstitials(serial: string): Promise<str
   if (!xml) return null;
 
   // Ordered by specificity — more specific labels first so we don't
-  // accidentally tap a generic "Cancel" when a targeted dismiss exists.
+  // accidentally tap a generic button on a legitimate screen.
+  // NOTE: "Cancel" and "OK" are intentionally excluded — they are too
+  // generic and will dismiss legitimate compose/picker screens (e.g. the
+  // Instagram story/post composer has a Cancel button that, if tapped here,
+  // sends the user back to the home feed before any UI scan can run).
   const DISMISS_LABELS = [
     "Not now",
     "Not Now",
@@ -697,11 +701,6 @@ export async function dismissInstagramInterstitials(serial: string): Promise<str
     "Don't Allow Access",
     "Don't Allow",
     "Deny",
-    "Cancel",
-    // Generic confirmation dialogs (e.g. "Turn on notifications?" / one-off
-    // info popups) that only offer a single "OK" acknowledgement. Listed
-    // last since it's the least specific match.
-    "OK",
   ];
 
   for (const label of DISMISS_LABELS) {

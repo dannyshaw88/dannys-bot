@@ -2283,10 +2283,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, composeBtn.x, composeBtn.y);
     await sleepOrAbort(serial, 1800);
 
-    // Auto-clear any interstitial ("Turn on notifications?", a stray "OK"
+    // ── DIAGNOSTIC DUMP A: immediately after "+" tap — shows exactly what opened ──
+    // Placed here (before any interstitial dismissal or POST-tab navigation) so
+    // the dump captures the real screen state right after the compose button tap,
+    // not a later screen after navigation has changed what's visible.
+    onLog?.("Make a Post: [DUMP A] starting layout dump…");
+    try {
+      const dumpLines = await android.dumpAllNodes(serial);
+      onLog?.(`Make a Post: [DUMP A] ${dumpLines.length} node(s) found`);
+      dumpLines.forEach(l => onLog?.(`  ${l}`));
+    } catch (dumpErr: any) {
+      onLog?.(`Make a Post: [DUMP A] ERROR — ${dumpErr?.message ?? dumpErr}`);
+    }
+    onLog?.("Make a Post: [DUMP A] end");
+
+    // Auto-clear any interstitial ("Turn on notifications?", a stray "Not now"
     // confirmation, etc.) that can appear right after opening the composer —
     // left alone it silently sits on top of the picker and every later
     // findButtonByLabel() call comes back empty.
+    // NOTE: "Cancel" is excluded from DISMISS_LABELS — it is too generic and
+    // would dismiss the compose/picker screen itself back to the home feed.
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
     // The "+" compose icon opens a sheet with multiple post-type tabs
@@ -2309,17 +2325,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 800);
       onLog?.("Make a Post: 800 ms wait done");
     }
-
-    // ── DIAGNOSTIC DUMP A: picker screen right after POST tab / grid load ──
-    onLog?.("Make a Post: [DUMP A] starting layout dump…");
-    try {
-      const dumpLines = await android.dumpAllNodes(serial);
-      onLog?.(`Make a Post: [DUMP A] ${dumpLines.length} node(s) found`);
-      dumpLines.forEach(l => onLog?.(`  ${l}`));
-    } catch (dumpErr: any) {
-      onLog?.(`Make a Post: [DUMP A] ERROR — ${dumpErr?.message ?? dumpErr}`);
-    }
-    onLog?.("Make a Post: [DUMP A] end");
 
     // The photo is visible in the grid but NOT yet selected (highlighted
     // with a white border) — it must be tapped to select it. Always tap.
