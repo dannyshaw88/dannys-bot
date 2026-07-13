@@ -2065,17 +2065,45 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  const byLabel = _findElem(xml, "New post", "Create", "Add", "New Post");
+  // Label search — ONLY match unambiguous labels.
+  // "Add" and "Create" are intentionally excluded: "Add" matches the
+  // top-left "Add to story" / camera button which opens the story composer
+  // instead of the "New post" feed-post picker.
+  const byLabel = _findElem(xml, "New post");
   if (byLabel) return byLabel;
-  const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
+
+  // Resource-id search — bottom-nav creation tab is the target on modern
+  // Instagram (the tab with the "+" glyph that opens "New post" directly).
+  const byResId = _findByResId(
+    xml,
+    ":id/creation_tab",           // modern IG bottom-nav "New post" tab
+    ":id/creation_tab_icon",
+    ":id/new_post_button",
+    ":id/action_new_post",
+    ":id/create_mode_tab",        // older alias
+    ":id/action_bar_add_button",  // very old alias (kept as last resort)
+  );
   if (byResId) return byResId;
 
-  // Positional fallback: leftmost clickable node in the top header band.
+  // Positional fallback: the centre tab of Instagram's bottom navigation bar.
+  //
+  // Instagram's bottom nav has 5 tabs: Home | Search | (+/New post) | Activity | Profile.
+  // The "New post" tab is always the middle one, so:
+  //   x  ≈ 45–55% of screen width
+  //   y  ≈ 90–98% of screen height (inside the nav bar band)
+  //
+  // IMPORTANT: the old fallback looked at the TOP-LEFT corner (y < 8%,
+  // x < 20%) which found the "Add to story" camera icon — NOT the feed-post
+  // compose button. That caused every automated attempt to land on the story
+  // composer. The correct target is always at the bottom centre.
   const { w, h } = getScreenSize(serial);
-  const maxY = Math.round(h * 0.08);
-  const maxX = Math.round(w * 0.20);
+  const minY = Math.round(h * 0.88);
+  const xLo  = Math.round(w * 0.35);
+  const xHi  = Math.round(w * 0.65);
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let best: { x: number; y: number } | null = null;
+  let bestDistFromCenter = Infinity;
+  const cx = Math.round(w / 2);
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
@@ -2084,10 +2112,14 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
-    if (c.y > maxY || c.x > maxX) continue;
-    if (!best || c.x < best.x) best = c;
+    if (c.y < minY || c.x < xLo || c.x > xHi) continue;
+    const dist = Math.abs(c.x - cx);
+    if (dist < bestDistFromCenter) { best = c; bestDistFromCenter = dist; }
   }
-  return best;
+  // Hard-coded last-resort: tap the geometric centre of the bottom-centre
+  // nav slot (no accessibility node matched at all — e.g. nav bar is a
+  // single large clickable with no child nodes on this device).
+  return best ?? { x: Math.round(w * 0.50), y: Math.round(h * 0.94) };
 }
 
 /**
@@ -2240,6 +2272,17 @@ export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: nu
  * it is a best-effort blind coordinate tap. Post-tap behaviour (the picker
  * preview updating with the selected photo) confirms success.
  */
+/**
+ * Positional fallback for Instagram's "New post" bottom-nav tab.
+ * Used when `findComposeButton` tapped the wrong button and we need to
+ * retry by tapping the geometric centre of the bottom-nav "New post" slot
+ * directly (x ≈ 50%, y ≈ 94%).
+ */
+export function postComposeCentreNavFallback(serial: string): { x: number; y: number } {
+  const { w, h } = getScreenSize(serial);
+  return { x: Math.round(w * 0.50), y: Math.round(h * 0.94) };
+}
+
 export function postGalleryThumbnailPositionalFallback(serial: string): { x: number; y: number } {
   const { w, h } = getScreenSize(serial);
   // Second column centre (x ≈ 38%) in the first tile row (y ≈ 69%).

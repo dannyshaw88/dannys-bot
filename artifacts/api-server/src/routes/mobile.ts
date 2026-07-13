@@ -2265,58 +2265,94 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // findButtonByLabel() call comes back empty.
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
-    // Instagram's "+" compose button opens a sheet that defaults to
-    // whichever mode (Story/Reel/Post) was last used — NOT necessarily the
-    // feed-post gallery. If it lands on Story/Reel mode there is a "POST"
-    // mode tab to switch into the feed-post picker; tap it when present.
-    // (When we're already on the Post picker this tab isn't there, so this
-    // is a no-op in that case.)
+    // Detect if we accidentally landed on "Add to Story" (story composer)
+    // instead of "New post" (feed-post composer). This happens when the
+    // accessibility scan finds the TOP-LEFT camera/story button rather than
+    // the CENTRE bottom-nav "New post" tab. The two screens look identical
+    // until you check the title bar: "Add to story" vs "New post".
     //
-    // NOTE (reverted 2026-07-13): an earlier version of this code checked
-    // for "Next" BEFORE this tab tap and skipped the tap entirely if Next
-    // was already visible. That broke the media grid's default newest-photo
-    // auto-selection (confirmed via real-device screenshot — Recents grid
-    // came up with nothing selected). Always doing the POST-tab check/tap
-    // unconditionally, in this order, is what keeps the auto-selection
-    // intact — do not reorder this again without a confirmed real-device
-    // screenshot showing selection survives.
-    onLog?.("Make a Post: checking for the POST mode tab…");
+    // If we're on the wrong screen: press Back, wait for the home feed to
+    // return, then tap the geometric centre of the bottom nav band directly —
+    // that coordinate is always the "New post" tab regardless of accessibility
+    // tree exposure.
+    {
+      const xml = await android.dumpUi(serial).catch(() => "");
+      const onStoryComposer = /Add to story/i.test(xml);
+      if (onStoryComposer) {
+        onLog?.("Make a Post: landed on \"Add to story\" (wrong screen) — pressing Back and retrying via bottom-nav positional tap…");
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 1200);
+        // Direct positional tap — centre bottom-nav slot is always "New post".
+        const centreNav = android.postComposeCentreNavFallback(serial);
+        await android.tap(serial, centreNav.x, centreNav.y);
+        await sleepOrAbort(serial, 1800);
+        await android.dismissInstagramInterstitials(serial).catch(() => null);
+      }
+    }
+
+    // Instagram auto-selects the newest photo the instant "New post" opens
+    // (confirmed via real-device screenshot: user's manual tap shows the
+    // photo already filling the large preview before any thumbnail tap).
+    //
+    // DO NOT tap a thumbnail — the grid's first cell is the "open camera"
+    // shutter tile. Any blind coordinate or accessibility tap here risks
+    // landing on the camera tile (de-selecting the photo) or opening the
+    // camera, both of which break the flow silently.
+    //
+    // If the photo is NOT already selected (expand toggle absent after a
+    // reasonable wait), fall back to tapping the second grid cell once as
+    // a recovery.
+    onLog?.("Make a Post: checking photo is auto-selected in the picker preview…");
+    let photoAutoSelected = !!(await android.findExpandPhotoButton(serial).catch(() => null));
+    if (!photoAutoSelected) {
+      // Give IG one more second — the preview can take a beat to render
+      // after mode switches or slow grid loads.
+      await sleepOrAbort(serial, 1000);
+      photoAutoSelected = !!(await android.findExpandPhotoButton(serial).catch(() => null));
+    }
+    if (!photoAutoSelected) {
+      // Still no expand button — photo not auto-selected. Try tapping the
+      // second grid cell (first non-camera thumbnail) once as recovery.
+      onLog?.("Make a Post: photo not yet auto-selected — tapping first non-camera thumbnail as recovery…");
+      const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
+      if (thumbnail) {
+        onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
+        await android.tap(serial, thumbnail.x, thumbnail.y);
+        await sleepOrAbort(serial, 1500);
+      } else {
+        const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
+        onLog?.(`Make a Post: accessibility scan empty — using positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
+        await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
+        await sleepOrAbort(serial, 1500);
+      }
+    } else {
+      onLog?.("Make a Post: photo auto-selected ✓ — no thumbnail tap needed");
+    }
+
+    // Check whether we're still on the "Add to story" screen after the
+    // recovery above (e.g. both taps missed). If so, give up cleanly.
+    {
+      const xml = await android.dumpUi(serial).catch(() => "");
+      if (/Add to story/i.test(xml)) {
+        onLog?.("Make a Post: still on \"Add to story\" after recovery taps — aborting this attempt");
+        await android.pressBack(serial);
+        await android.removeDeviceFile(serial, devicePath).catch(() => {});
+        return { posted: false };
+      }
+    }
+
+    // POST-mode tab check — handles the case where the bottom-nav "+" opens
+    // a Reel or Story sheet as the last-used mode rather than the feed-post
+    // picker. Tapping the "POST" tab switches to the feed-post gallery.
+    // When we're already on the Post picker this tab is absent, so this is
+    // a no-op in the normal path.
+    onLog?.("Make a Post: checking for POST mode tab (in case IG opened Reel/Story mode)…");
     const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
       ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
     if (postTab) {
       onLog?.("Make a Post: tapping POST tab…");
       await android.tap(serial, postTab.x, postTab.y);
-      await sleepOrAbort(serial, 2000); // extra time for the grid to fully populate after mode switch
-    }
-
-    // NOTE (corrected 2026-07-13, second real-device test): the earlier
-    // assumption that Instagram auto-selects the newest photo the instant
-    // the picker opens only held for a genuine manual finger tap on "+".
-    // Under this automation (UI Automator tap), the user confirmed the
-    // grid comes up with NOTHING highlighted every time. So we now
-    // explicitly find and tap the newest real thumbnail ourselves rather
-    // than relying on a default that doesn't occur under automation. The
-    // grid's FIRST cell is Instagram's "open camera" shutter tile, not a
-    // photo — an earlier blind coordinate tap here (~17%/22%) was landing
-    // on that camera tile instead of a thumbnail (the original v1.1.522
-    // bug). findFirstGalleryThumbnail() scans the grid band and explicitly
-    // skips anything labelled "camera", returning the topmost-leftmost
-    // survivor — since the grid sorts newest-first and we just pushed the
-    // target file, that survivor is our file.
-    onLog?.("Make a Post: looking for the newest photo thumbnail in the Recents grid…");
-    const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
-    if (thumbnail) {
-      onLog?.(`Make a Post: tapping newest thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
-      await android.tap(serial, thumbnail.x, thumbnail.y);
-      await sleepOrAbort(serial, 1500);
-    } else {
-      // Accessibility scan returned nothing (neither clickable nor non-clickable
-      // tile-sized nodes found in the grid band). Use a screen-fraction coordinate
-      // for the second grid cell — the first non-camera photo tile.
-      const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
-      onLog?.(`Make a Post: no gallery thumbnail found via accessibility scan — using positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
-      await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
-      await sleepOrAbort(serial, 1500);
+      await sleepOrAbort(serial, 2000); // extra time for the grid to populate after mode switch
     }
 
     // Confirm the compose sheet actually opened before trying to find/tap
@@ -2344,7 +2380,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // via the positional fallback with no other confirming signal at all
     // (e.g. compose never opened, we're still on the home feed), a blind
     // tap could hit something unrelated — bail out instead.
-    if (nextBtn1IsPositionalGuess && !postTab && !thumbnail && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
+    if (nextBtn1IsPositionalGuess && !postTab && !photoAutoSelected && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
       onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});

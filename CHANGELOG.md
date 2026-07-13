@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.527] — 2026-07-13
+
+### Fix: "Make a Post" (mobile) — wrong "+" button tapped + unnecessary thumbnail tap
+
+**Root cause 1 — wrong compose button (landed on "Add to Story" instead of "New Post")**
+
+The previous `findComposeButton` function targeted the wrong "+" on the home feed:
+- Its label search included the string `"Add"`, which matched Instagram's top-left **"Add to story"** / camera button — not the bottom-nav **"New post"** tab.
+- Its positional fallback scanned the **top-left corner** of the screen (`y < 8%, x < 20%`), which is where the story-composer camera icon lives.
+- Both paths consistently sent the automation into the **story composer** ("Add to story" screen) instead of the feed-post picker ("New post" screen).
+
+Fixes:
+- Removed `"Add"`, `"Create"`, `"New Post"` from the label search — only the unambiguous `"New post"` label is kept.
+- Expanded the resource-id list to include modern IG bottom-nav IDs: `:id/creation_tab`, `:id/creation_tab_icon`, `:id/new_post_button`, `:id/action_new_post`.
+- **Completely rewrote the positional fallback** — now scans the **bottom-centre** of the screen (`y > 88%, x 35–65%`) and picks the node closest to screen centre-x. Hard-coded last resort is `(50%, 94%)` — the geometric centre of the bottom-nav "New post" slot on all screen sizes.
+- Added runtime detection: after tapping compose, the accessibility tree is checked for the text "Add to story". If found, Back is pressed and a direct `(50%, 94%)` positional tap is issued as recovery before continuing.
+
+**Root cause 2 — unnecessary thumbnail tap was hitting the camera tile**
+
+The previous code tapped a gallery thumbnail unconditionally after opening the picker. When entering through the correct bottom-nav "+" (as the user does manually), **Instagram auto-selects the newest photo immediately** — the photo fills the large preview before any tap. A thumbnail tap on top of this auto-selection was:
+- Hitting the camera tile (the `[0,0]` cell) instead of a photo, opening the camera app, or
+- Re-tapping the already-selected photo and toggling selection off.
+
+Fix: the automation now checks for the expand/fit toggle (which only appears in the preview when a photo is selected). If it is present, no thumbnail tap is issued — the photo is confirmed selected and the flow proceeds directly to "Next". Only if the toggle is absent after a 1-second retry does it fall back to a single thumbnail tap as recovery.
+
+**New exported helper:**
+- `postComposeCentreNavFallback(serial)` — returns `(50%, 94%)` screen-fraction coordinate for the bottom-nav "New post" centre slot.
+
+---
+
 ## [1.1.526] — 2026-07-13
 
 ### Fix: "Make a Post" (mobile) — gallery thumbnail never selected + Share tap had no verification
