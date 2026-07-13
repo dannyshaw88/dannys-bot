@@ -4,6 +4,17 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.529] — 2026-07-13
+
+### Diagnostic: Make a Post — full layout dumps at every critical step
+- Added three UIAutomator layout dumps (DUMP A / B / C) that log to the Log panel during a Make a Post run
+- **DUMP A**: fired right after POST tab tap + 2s grid-load wait — shows every node on the picker screen with real pixel bounds, text, content-desc, resource-id, and clickability
+- **DUMP B**: fired right after the thumbnail tap — shows whether the selection state changed
+- **DUMP C**: fired right after the first Next tap — shows whether we actually left the picker or are still on it
+- This is a one-run diagnostic build. The dumps tell us the real coordinates so we can stop guessing.
+
+---
+
 ## [1.1.528] — 2026-07-13
 
 ### Fix: View Feed — scroll gesture opening comments on portrait posts

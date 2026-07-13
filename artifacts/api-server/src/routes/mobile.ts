@@ -2306,6 +2306,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 800);
     }
 
+    // ── DIAGNOSTIC DUMP A: picker screen right after POST tab / grid load ──
+    onLog?.("Make a Post: [DUMP A] layout after POST tab / grid load —");
+    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
+    onLog?.("Make a Post: [DUMP A] end");
+
     // The photo is visible in the grid but NOT yet selected (highlighted
     // with a white border) — it must be tapped to select it. Always tap.
     // Grid layout: cell 0 = camera shutter tile, cell 1+ = photo thumbnails
@@ -2326,6 +2331,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
       await sleepOrAbort(serial, 1500);
     }
+
+    // ── DIAGNOSTIC DUMP B: after thumbnail tap — did selection change? ──
+    onLog?.("Make a Post: [DUMP B] layout after thumbnail tap —");
+    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
+    onLog?.("Make a Post: [DUMP B] end");
 
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo
@@ -2368,6 +2378,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
     await sleepOrAbort(serial, 1500);
+
+    // ── DIAGNOSTIC DUMP C: after first Next tap — did we leave the picker? ──
+    onLog?.("Make a Post: [DUMP C] layout after Next tap —");
+    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
+    onLog?.("Make a Post: [DUMP C] end");
 
     // Confirm the tap actually advanced the screen. "Next" itself isn't a
     // reliable signal here — on this screen it's frequently unlabelled (see

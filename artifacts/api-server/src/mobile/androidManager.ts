@@ -2261,6 +2261,40 @@ export function postGalleryThumbnailPositionalFallback(serial: string): { x: num
 }
 
 /**
+ * Dumps every node in the current UI as human-readable lines so Make-a-Post
+ * can log exactly what's on screen at each step.
+ *
+ * Each line format:
+ *   [class] bounds=[x1,y1][x2,y2]  text="…"  cd="…"  rid="…"  click=T/F  focus=T/F
+ *
+ * Returns an empty array if the dump fails.
+ */
+export async function dumpAllNodes(serial: string): Promise<string[]> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return ["[dumpAllNodes] uiDump returned empty"];
+  const lines: string[] = [];
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const cls   = (attrs.match(/class="([^"]*)"/))?.[1]?.split(".").pop() ?? "?";
+    const bounds= (attrs.match(/bounds="([^"]*)"/))?.[1] ?? "?";
+    const text  = (attrs.match(/\btext="([^"]*)"/))?.[1] ?? "";
+    const cd    = (attrs.match(/content-desc="([^"]*)"/))?.[1] ?? "";
+    const rid   = (attrs.match(/resource-id="([^"]*)"/))?.[1]?.split("/").pop() ?? "";
+    const click = /clickable="true"/.test(attrs) ? "T" : "F";
+    const focus = /focusable="true"/.test(attrs) ? "T" : "F";
+    // skip totally empty, unlabelled, non-interactive nodes — they're layout containers
+    if (!text && !cd && !rid && click === "F" && focus === "F") continue;
+    lines.push(`[${cls}] ${bounds}  text="${text}"  cd="${cd}"  rid="${rid}"  click=${click}  focus=${focus}`);
+  }
+  if (!lines.length) lines.push("[dumpAllNodes] no labelled/interactive nodes found in tree");
+  return lines;
+}
+
+/**
  * Positional fallback for the blue "Next" control on Instagram's very first
  * New Post screen (the photo-select/Recents grid).
  *
