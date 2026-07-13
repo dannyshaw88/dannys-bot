@@ -78,6 +78,29 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.536",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post: removed \"Add\" from the compose button label search. Instagram's story circle \"+\" button (in the stories tray) carries content-desc=\"Add\" and was being found before the real compose \"+\", causing the \"Add to story\" picker to open on every single run.",
+        technical: [
+          "Root cause confirmed from screenshots: every Make a Post run was opening the story picker (\"Add to story\" screen with Templates/Music/Collage), not the post type selector.",
+          "This was always happening — before dump logging the sanity check aborted silently (\"0/1 posted\"); after dumps were added the Next positional fallback also fired, advancing to the story editor, which made it visible.",
+          "Fix: only search for \"New post\", \"Create\", \"New Post\" — none of those match the story add button.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Make a Post: compose button positional fallback now scans the top-right of the header bar (x > 60%, rightmost node) instead of the top-left. Instagram's compose \"+\" sits next to the DM/notification icons on the right; the left side holds the logo.",
+      },
+      {
+        category: "Fixed",
+        text: "Make a Post: story-picker guard restored — if the story picker or story editor is detected after the \"+\" tap (\"Your story\", \"Close Friends\", or overflow_button present), the flow presses Back and aborts before touching any thumbnail or Next button.",
+      },
+    ],
+  },
+  {
     version: "1.1.535",
     date: "13 Jul 2026",
     items: [

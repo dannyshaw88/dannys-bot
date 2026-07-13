@@ -2064,18 +2064,24 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  const byLabel = _findElem(xml, "New post", "Create", "Add", "New Post");
+  // "Add" is intentionally excluded: Instagram's story circle "+" button in
+  // the stories tray carries content-desc="Add" and appears first in the
+  // accessibility tree.  Matching it taps the story button, which opens the
+  // "Add to story" picker instead of the post compose sheet — confirmed on
+  // real device (Xiaomi, 1080×2226, Jul 2026).
+  const byLabel = _findElem(xml, "New post", "Create", "New Post");
   if (byLabel) return byLabel;
   const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
   if (byResId) return byResId;
 
-  // Positional fallback: leftmost clickable node in the top header band.
-  // The "+" compose icon on the Instagram home feed sits in the top-left
-  // corner of the header bar (it opens the multi-type compose sheet with
-  // POST/REEL/STORY tabs).
+  // Positional fallback: Instagram's compose "+" lives in the TOP-RIGHT of
+  // the home-feed header bar (alongside the DM/notification icons) — NOT the
+  // top-left, which is occupied by the Instagram logo/wordmark.
+  // Scan for the rightmost clickable node in the top 8% of the screen that
+  // sits in the right 40% of the screen width.
   const { w, h } = getScreenSize(serial);
   const maxY = Math.round(h * 0.08);
-  const maxX = Math.round(w * 0.20);
+  const minX = Math.round(w * 0.60);
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let best: { x: number; y: number } | null = null;
   let m: RegExpExecArray | null;
@@ -2086,8 +2092,8 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
-    if (c.y > maxY || c.x > maxX) continue;
-    if (!best || c.x < best.x) best = c;
+    if (c.y > maxY || c.x < minX) continue;
+    if (!best || c.x > best.x) best = c; // rightmost = compose "+"
   }
   return best;
 }

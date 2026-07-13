@@ -2322,6 +2322,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Make a Post: 800 ms wait done");
     }
 
+    // ── Story-picker guard ────────────────────────────────────────────────────
+    // The story "+" button in the stories tray carries content-desc="Add" and
+    // appears before the compose "+" in the accessibility tree, so
+    // findComposeButton can find it first and open the "Add to story" picker
+    // instead of the post compose sheet.  Detect this early — before any
+    // thumbnail tap or Next tap — and abort cleanly.
+    //
+    // Signals unique to the story picker / story editor:
+    //   • "Your story" / "Close Friends" share buttons (story editor bottom bar)
+    //   • overflow_button resource-id (story editor right toolbar)
+    //   • "Add to story" window title text
+    // If ANY of these are present we are on the wrong screen.
+    const onStoryScreen = await android.isOnStoryCreator(serial).catch(() => false);
+    if (onStoryScreen) {
+      onLog?.("Make a Post: story picker/editor opened instead of post composer — the wrong \"+\" button was tapped. Pressing Back and aborting.");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+
     // The photo is visible in the grid but NOT yet selected (highlighted
     // with a white border) — it must be tapped to select it. Always tap.
     // Grid layout: cell 0 = camera shutter tile, cell 1+ = photo thumbnails
