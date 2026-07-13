@@ -51,15 +51,17 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-13 — Mobile (ADB) path: wrong compose button → "Add to Story" + unnecessary thumbnail tap (v1.1.527)
+- Second round of screenshots confirmed the real root causes:
+- Root cause 1 (CONFIRMED via screenshot): `findComposeButton` tapped the top-left "Add to story" camera icon, NOT the bottom-nav "New post" tab. The label "Add" matched "Add to story" and the positional fallback scanned y<8%/x<20% (top-left corner = story camera). Every automated attempt landed on the story composer.
+- Fix 1: label search now only "New post". Resource-id list expanded for bottom-nav (creation_tab, creation_tab_icon, new_post_button, action_new_post). Positional fallback rewritten to bottom-centre (y>88%, x 35-65%). Runtime detection: if "Add to story" text found after compose tap → press Back → retry via postComposeCentreNavFallback (50%, 94%).
+- Root cause 2 (CONFIRMED via screenshot): When entering via the correct bottom-nav "+", IG auto-selects the newest photo immediately (photo fills large preview instantly — same as manual tap). The previous code tapped a thumbnail anyway, hitting the camera tile or de-selecting the auto-selected photo.
+- Fix 2: check for expand toggle after compose opens. If present → photo confirmed selected → skip thumbnail tap entirely. Only tap thumbnail as recovery if toggle absent after 1 s.
+- Status: UNCONFIRMED — pushed as v1.1.527. Awaiting real-device confirmation.
+
 ### 2026-07-13 — Mobile (ADB) path: thumbnail scan always null + Share had no verification (v1.1.526)
-- Context: user provided real-device screenshots of a manual post attempt showing the full picker→editor→caption→share flow working on screen; automated log showed "posted" but no post appeared on the feed.
-- Root cause 1 (thumbnail): `findFirstGalleryThumbnail` required `clickable="true"` on individual grid cells. On Xiaomi 2307FPN8BY (Android 14) the RecyclerView parent owns all touch events; child cells have `clickable="false"`. Scan returned null even with thumbnails clearly visible → no photo was tapped → wrong/no selection.
-- Fix 1a: accept both clickable AND non-clickable tile-shaped nodes; clickable prioritised via sort.
-- Fix 1b: added `postGalleryThumbnailPositionalFallback()` (x=38%, y=69%) used when accessibility scan returns nothing at all.
-- Root cause 2 (Share): after tapping Share, code waited flat 3 s then logged "posted" unconditionally. A tap that didn't register (stale coordinate, UI not settled) looked identical to a successful post.
-- Fix 2: replaced 3-second blind wait with 15-second polling loop checking for Share button disappearance; retries Share tap once at 6 s mark; returns `{ posted: false }` if Share never goes away.
-- Additional: POST tab wait 1200→2000 ms, thumbnail tap wait 800→1500 ms, filter/edit Next waits 1500→2000 ms.
-- Status: UNCONFIRMED — pushed as v1.1.526 + tag `v1.1.526` (triggers installer build). Awaiting real-device confirmation.
+- v1.1.526 fixes (non-clickable cells, Share polling loop, wait bumps) were correct but irrelevant — the real bug was the wrong compose button (see v1.1.527 above).
+- Share polling loop and wait bumps from v1.1.526 remain in place as defensive improvements.
 
 ### 2026-07-05 — Pointer-events overlay bypass for Share (v1.1.362)
 - Context: v1.1.361 used the same generic `spFindBtnPos("Share")` that works for Next buttons, but user confirmed in production (screenshots) that the EXACT SAME symptom persisted — the click still opened the "Tag: | Search" box instead of submitting the post.
