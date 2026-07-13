@@ -3911,7 +3911,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         center: { x: number; y: number }; clickable: boolean; area: number;
       }
       const hits: InspectNode[] = [];
-      const nodeRe = /<node\s([^/\n>]+)\s*\/>/g;
+      // Match BOTH self-closing <node … /> AND opening <node …> tags (nodes with children).
+      // UIAutomator XML uses opening tags for any container that has child nodes — e.g.
+      // RecyclerView items, FrameLayouts, gallery tiles — so a self-closing-only regex
+      // silently misses every container and returns "no elements" for clickable areas.
+      const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
       let m: RegExpExecArray | null;
       while ((m = nodeRe.exec(xml)) !== null) {
         const attrs = m[1];

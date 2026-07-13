@@ -78,7 +78,7 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
-    version: "1.1.538",
+    version: "1.1.539",
     date: "13 Jul 2026",
     items: [
       {
