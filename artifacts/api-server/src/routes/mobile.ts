@@ -1251,7 +1251,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
-    const y1 = Math.round(h * 0.78);
+    // y1 must start LOW enough to be below the action bar (Like/Comment/Share
+    // icons) of every Instagram post format, including the tallest allowed
+    // (4:5 portrait). On a 720×1280 device a 4:5 image is 720×900px; adding
+    // the ~60px header puts the action bar at y≈960–1008. The old y1=78%
+    // (y=998) landed RIGHT on that bar — Android registered the touch-down
+    // on the Comment icon and the upward drag was treated as opening comments
+    // rather than scrolling the feed. Moving to 88% (y=1126) clears the
+    // action bar of any format by ≥100px while still leaving a 600px+ drag
+    // distance to y2.
+    const y1 = Math.round(h * 0.88);
     const y2 = Math.round(h * 0.22);
     const cy = Math.round(h / 2);
     // Instagram feed post action-bar icon positions are NOT fixed —
@@ -1311,6 +1320,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
+
+      // Belt-and-suspenders: detect if the comments sheet accidentally opened
+      // despite the y1 coordinate fix. Comments sheet is identifiable by the
+      // "Add a comment…" / "Add a comment" placeholder EditText in the
+      // accessibility tree. If found, press Back to close it and wait for the
+      // feed to reappear before continuing.
+      {
+        const xml = await android.dumpUi(serial).catch(() => "");
+        if (/Add a comment|add a comment|Comments/i.test(xml) && /EditText|class="android\.widget\.EditText"/.test(xml)) {
+          logger.warn({ serial }, "[check-feed] comments sheet opened by scroll — pressing Back to recover");
+          onLog?.(`Scroll ${i + 1}/${count}: comments accidentally opened — recovering with Back`);
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 600);
+        }
+      }
 
       // Dismiss any interstitial popup that appeared mid-scroll (e.g.
       // "Your notifications are off → Not now", permission dialogs).
