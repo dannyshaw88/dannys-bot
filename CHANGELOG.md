@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.523] — 2026-07-13
+
+### Fix: "Make a Post" still abandoned real-device attempts after v1.1.522 — root cause was the grid-selection tap itself, not the mode-tab/ordering logic
+
+v1.1.522 fixed the mode-tab (Story/Reel → Post) and check-ordering bugs, but the user's next
+real-device test (with Log panel + screenshot) showed the exact same symptom: the "+" icon gets
+tapped, the picker opens, but no image is ever actually selected and the post is abandoned.
+
+- **Root cause found** — the code was tapping a fixed coordinate (~17% width, ~22% height) on
+  the media grid to select the just-pushed photo. That coordinate lands on the grid's **first
+  cell**, which on this device/build is Instagram's "open camera" shutter tile, not a photo
+  thumbnail. The tap was hitting the wrong control every time, so "Next" never appeared and the
+  attempt silently aborted — exactly matching the reported symptom.
+- **Fix** — removed the blind grid tap entirely. A screenshot of a manual tap on the same device
+  confirmed Instagram already auto-selects the most-recently-added photo by default the instant
+  the picker opens (shown large in the preview pane above the grid) — no thumbnail tap is
+  needed. Since the file we just `adb push`ed is always the newest gallery item, the flow now
+  goes straight from opening the picker to checking for "Next", relying on Instagram's own
+  default selection instead of guessing a coordinate.
+
+**Files changed**
+- `artifacts/api-server/src/routes/mobile.ts` — removed the blind first-grid-cell tap in
+  `runMakePostStep`; proceeds directly to the "Next" check after the Story/Reel→Post tab switch
+
+**Status:** unconfirmed — awaiting a live real-device post attempt from the user to verify.
+
+---
+
 ## [1.1.522] — 2026-07-13
 
 ### Fix: "Make a Post" abandoned every real-device attempt; UI enable/disable checkboxes for alteration & image settings
