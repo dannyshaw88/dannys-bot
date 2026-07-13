@@ -2269,30 +2269,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // whichever mode (Story/Reel/Post) was last used — NOT necessarily the
     // feed-post gallery. If it lands on Story/Reel mode there is a "POST"
     // mode tab to switch into the feed-post picker; tap it when present.
+    // (When we're already on the Post picker this tab isn't there, so this
+    // is a no-op in that case.)
     //
-    // IMPORTANT: the "POST" tab label is part of the ALWAYS-VISIBLE
-    // Post/Story/Reel/Live mode bar at the bottom of the sheet — it never
-    // disappears just because Post is already the active mode, it's simply
-    // highlighted differently. So checking "does POST exist" is not a
-    // reliable signal for "do we need to switch mode" and blindly tapping
-    // it every single time risks reopening/resetting the picker even when
-    // we're already on the right screen. Check for "Next" FIRST — if it's
-    // already visible we're already on the photo-select screen and must
-    // NOT touch the mode tab at all.
-    onLog?.("Make a Post: checking whether the composer is on the Post picker…");
-    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
-    if (!nextBtn1) {
-      onLog?.("Make a Post: not on Post mode yet — looking for the POST tab…");
-      const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
-        ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
-      if (postTab) {
-        onLog?.("Make a Post: tapping POST tab…");
-        await android.tap(serial, postTab.x, postTab.y);
-        await sleepOrAbort(serial, 1200);
-      } else {
-        onLog?.("Make a Post: POST tab not found either — composer may not have opened");
-      }
-      nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    // NOTE (reverted 2026-07-13): an earlier version of this code checked
+    // for "Next" BEFORE this tab tap and skipped the tap entirely if Next
+    // was already visible. That broke the media grid's default newest-photo
+    // auto-selection (confirmed via real-device screenshot — Recents grid
+    // came up with nothing selected). Always doing the POST-tab check/tap
+    // unconditionally, in this order, is what keeps the auto-selection
+    // intact — do not reorder this again without a confirmed real-device
+    // screenshot showing selection survives.
+    onLog?.("Make a Post: checking for the POST mode tab…");
+    const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
+    if (postTab) {
+      onLog?.("Make a Post: tapping POST tab…");
+      await android.tap(serial, postTab.x, postTab.y);
+      await sleepOrAbort(serial, 1200);
     }
 
     // Instagram's media grid already auto-selects the most recent photo as
@@ -2307,23 +2301,65 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // just pushed the file we want to post and it is therefore the newest
     // item in the gallery, no tap is needed at all: the default selection
     // already matches our target. Go straight to "Next".
+    // Confirm the compose sheet actually opened before trying to find/tap
+    // "Next" at all — we check for ANY recognizable picker element (the
+    // expand toggle, or a labelled Next) rather than requiring Next's own
+    // accessibility label, since Next itself is frequently not exposed as
+    // a labelled node on this screen (see postNextButtonPositionalFallback).
+    onLog?.("Make a Post: looking for the \"Next\" button…");
+    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    let nextBtn1IsPositionalGuess = false;
     if (!nextBtn1) {
-      onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");
+      // Root cause (confirmed via real-device "Scan Screen Layout", 2026-07-13):
+      // on this screen the top app bar (X / "New post" / Next) has ZERO
+      // accessibility children — "Next" is rendered but not exposed with a
+      // text/content-desc label, so findButtonByLabel() has nothing to match.
+      // Fall back to a fixed screen-fraction tap and rely on the
+      // post-tap confirmation below to catch a miss instead of hanging.
+      onLog?.("Make a Post: \"Next\" not found in accessibility tree (known — this screen's app bar exposes no labels) — using positional fallback");
+      nextBtn1 = android.postNextButtonPositionalFallback(serial);
+      nextBtn1IsPositionalGuess = true;
+    }
+    // Sanity-check the compose sheet is actually open before tapping blind:
+    // require either a labelled Next, the expand toggle, or the POST tab to
+    // have been visible/tappable earlier in this attempt. If we got here
+    // via the positional fallback with no other confirming signal at all
+    // (e.g. compose never opened, we're still on the home feed), a blind
+    // tap could hit something unrelated — bail out instead.
+    if (nextBtn1IsPositionalGuess && !postTab && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
+      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
     }
+
+    // The picker preview has a small "expand" (two-arrow / resize) toggle in
+    // its bottom-left corner that switches the crop from a square/cropped
+    // frame to the full original photo. Tap it before Next so the post uses
+    // the full uncropped image rather than IG's default centre-crop.
+    onLog?.("Make a Post: looking for the photo expand/fit toggle…");
+    const expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
+    if (expandToggle) {
+      onLog?.(`Make a Post: tapping expand/fit toggle at (${expandToggle.x}, ${expandToggle.y})…`);
+      await android.tap(serial, expandToggle.x, expandToggle.y);
+      await sleepOrAbort(serial, 500);
+    } else {
+      onLog?.("Make a Post: expand/fit toggle not found — continuing without it");
+    }
+
     onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
     await sleepOrAbort(serial, 1500);
 
-    // Confirm the tap actually advanced the screen — "Next" on the
-    // photo-select step should disappear once the filter/crop screen loads.
-    // If it's still sitting at the exact same coordinates, the tap was
-    // swallowed (wrong element matched, or the sheet reset underneath us)
-    // and retrying blind would only repeat the same failure.
-    const stillOnPicker = await android.findButtonByLabel(serial, "Next").catch(() => null);
-    if (stillOnPicker && Math.abs(stillOnPicker.x - nextBtn1.x) < 5 && Math.abs(stillOnPicker.y - nextBtn1.y) < 5) {
+    // Confirm the tap actually advanced the screen. "Next" itself isn't a
+    // reliable signal here — on this screen it's frequently unlabelled (see
+    // above), so a labelled-Next re-check would come back null whether the
+    // tap worked or not. Instead check for the expand toggle, which IS a
+    // reliable, labelled-or-positional signal unique to the photo-select
+    // screen: if it's still visible after the tap, we never left this
+    // screen and the tap was swallowed or missed.
+    const stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
+    if (stillOnPicker) {
       onLog?.("Make a Post: tapped \"Next\" but the picker screen did not advance — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});

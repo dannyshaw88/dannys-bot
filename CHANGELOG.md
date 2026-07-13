@@ -4,6 +4,40 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.524] — 2026-07-13
+
+### Fix: reverted a regression that broke media auto-selection, plus a real fix for the "Next" tap + a new expand-to-fit tap
+
+The previous attempt (v1.1.523) reordered the POST-tab check to run only after checking for
+"Next", to avoid a redundant tab tap. Real-device testing showed this broke the thing v1.1.523 was
+built on top of: the Recents grid came up with **nothing selected** (previously confirmed working
+via the default-newest-photo auto-selection). Reverted that ordering back to the known-good
+unconditional POST-tab tap, then always looking for "Next".
+
+- **Reverted** — the POST-tab tap now runs unconditionally again, before the "Next" check, exactly
+  as it was when auto-selection was last confirmed working.
+- **Root cause of the "Next" tap never registering, found** — the in-app "Scan Screen Layout" tool
+  was run on a live device on this exact screen and returned **zero accessibility elements in the
+  entire top third of the screen**. The top app bar (X / "New post" title / Next) is rendered as an
+  opaque view with no exposed text/content-desc children on this specific screen — "Next" is
+  visible on screen but was never going to be found by a label-based search here, no matter how
+  the surrounding logic was reordered. (Later screens — filter, edit, caption — do expose their
+  buttons normally; this opacity is unique to the very first photo-select screen.)
+- **Fix** — when the labelled search for "Next" comes back empty on this screen, fall back to a
+  fixed screen-fraction coordinate (top-right of the app bar) instead of aborting. Added a sanity
+  check first (require the POST tab or the expand toggle to have been seen) so a positional tap
+  never fires blind on a screen that isn't actually the picker. Added a post-tap confirmation
+  (checks the expand toggle disappeared) so a missed tap aborts cleanly with a log line instead of
+  silently going quiet.
+- **New: expand/fit toggle** — added a tap on the small two-arrow "expand to full photo" toggle in
+  the bottom-left of the preview, right before "Next", so posts use the full original photo instead
+  of Instagram's default centre-cropped square.
+- **Diagnostics** — added a log line at every intermediate step of this flow (compose tap, POST-tab
+  check, Next search/fallback, expand-toggle tap, Next tap) so a future stall shows exactly which
+  step it died on instead of going silent.
+
+Status: unconfirmed — awaiting a live real-device post attempt with the Log panel.
+
 ## [1.1.523] — 2026-07-13
 
 ### Fix: "Make a Post" still abandoned real-device attempts after v1.1.522 — root cause was the grid-selection tap itself, not the mode-tab/ordering logic

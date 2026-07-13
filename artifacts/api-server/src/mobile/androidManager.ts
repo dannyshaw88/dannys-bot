@@ -2091,6 +2091,84 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
 }
 
 /**
+ * Finds the small "expand" (two-arrow / resize) toggle that sits in the
+ * bottom-left corner of the photo preview on Instagram's New Post
+ * photo-select screen. Tapping it switches the crop from IG's default
+ * centre-cropped square frame to the full original photo. It carries no
+ * visible text, so this relies on a content-desc/resource-id label match
+ * first, falling back to a positional heuristic (small square clickable
+ * icon in the lower-left area of the preview, above the Recents grid).
+ */
+export async function findExpandPhotoButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  const byLabel = _findElem(xml, "Expand", "Zoom out", "Photo size", "Original size", "Toggle photo size");
+  if (byLabel) return byLabel;
+  const byResId = _findByResId(xml, ":id/expand_photo_button", ":id/original_media_full_size_toggle_button", ":id/media_size_toggle");
+  if (byResId) return byResId;
+
+  // Positional fallback: the icon is a small square (roughly 60-140px on a
+  // 1080-wide device), sitting in the bottom-left of the preview image —
+  // which itself occupies roughly the top 35-55% of the screen, above the
+  // Recents label/grid. Scan for a small square clickable node with no
+  // text/content-desc label inside that band.
+  const { w, h } = getScreenSize(serial);
+  const minY = Math.round(h * 0.30);
+  const maxY = Math.round(h * 0.58);
+  const maxX = Math.round(w * 0.22);
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  let best: { x: number; y: number } | null = null;
+  let bestArea = Infinity;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const textM = attrs.match(/\btext="([^"]*)"/);
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    if ((textM?.[1] || "").trim() || (cdM?.[1] || "").trim()) continue; // icon-only, no label
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const bw = x2 - x1, bh = y2 - y1;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (c.y < minY || c.y > maxY || c.x > maxX) continue;
+    if (bw <= 0 || bh <= 0 || bw > w * 0.15 || bh > h * 0.10) continue; // must be icon-sized, not a full row
+    const area = bw * bh;
+    if (area < bestArea) { best = c; bestArea = area; }
+  }
+  return best;
+}
+
+/**
+ * Positional fallback for the blue "Next" control on Instagram's very first
+ * New Post screen (the photo-select/Recents grid).
+ *
+ * Root cause (confirmed via the in-app "Scan Screen Layout" tool, real
+ * device, 2026-07-13): on this specific screen the top app bar (X / "New
+ * post" title / Next) is rendered as an opaque view with NO decomposed
+ * accessibility children at all — the layout scan came back with zero
+ * elements in the entire top 33% of the screen. findButtonByLabel() /
+ * _findElem() search the accessibility tree for a text/content-desc match,
+ * so on this screen they have nothing to find; "Next" simply isn't exposed
+ * as a labelled node. (Later screens — filter, edit, caption — do expose
+ * "Next"/"Share" normally; only this first screen's bar is opaque.)
+ *
+ * Since there is no reliable accessibility signal here, fall back to a
+ * fixed fraction of the screen: "Next" sits in the top app bar, right-aligned,
+ * a little below the very top edge. Caller MUST verify the tap actually
+ * advanced the screen (accessibility tree changes) since this is a blind
+ * coordinate tap with no positive confirmation of its own.
+ */
+export function postNextButtonPositionalFallback(serial: string): { x: number; y: number } {
+  const { w, h } = getScreenSize(serial);
+  return { x: Math.round(w * 0.92), y: Math.round(h * 0.035) };
+}
+
+/**
  * Pushes a local file (server-side path — same machine as the phone in the
  * real packaged app, per repl-setup) onto the device's DCIM/Camera folder,
  * then triggers a media-scanner broadcast so it immediately shows up in
