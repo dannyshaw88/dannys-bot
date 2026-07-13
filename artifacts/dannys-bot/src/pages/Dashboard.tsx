@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.543",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post (mobile/ADB): fixed a regression where the \"+\" tap opened the Notifications page instead of the post composer, breaking Make a Post entirely.",
+        technical: [
+          "Root cause confirmed from device logs: v1.1.536\u2013542 replaced the previously-working bottom-nav \"New post\" tab detection with a blind top-header positional scan (\"pick the leftmost icon in the top-right band\"). On this real device build there is no compose icon in that header band \u2014 the scan's \"leftmost\" match was the Notifications (heart) icon, so every run opened the full-screen Notifications page and failed from there.",
+          "Fix: findComposeButton no longer does a blind top-header scan. It now tries label/resource-id matches covering both header and bottom-nav layouts, then falls back to the bottom-nav \"New post\" tab position (x\u224850%, y\u224894%) \u2014 the last approach confirmed correct via real-device screenshot (v1.1.527).",
+          "Added a wrong-screen safety net: after tapping \"+\", the flow now checks for a Notifications/Direct screen (in addition to the existing story-picker guard) and recovers by backing out and retrying once via the bottom-nav position before aborting.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.542",
     date: "13 Jul 2026",
     items: [

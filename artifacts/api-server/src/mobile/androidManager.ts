@@ -2045,18 +2045,25 @@ export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
 }
 
 /**
- * Find Instagram's top-left "+" compose icon on the home feed (opens the
- * create-post sheet). No existing selector in this codebase targets it —
- * unlike Home/Follow/etc. this is a NEW, unverified finder written blind
- * (no ADB device attached in this sandbox); it will likely need real-device
- * correction. Two strategies, tried in order:
- *  1. content-desc / resource-id guesses ("New post" is the current
- *     Instagram accessibility label for this icon on most builds).
- *  2. Positional fallback: the leftmost clickable node inside the top
- *     header band (y < 8% of screen height, x < 20% of screen width) —
- *     mirrors the band-based heuristics used by findFeedActionIcons/
- *     findHomeTab elsewhere in this file rather than a single hardcoded
- *     coordinate, so it has a chance of surviving small layout shifts.
+ * Find Instagram's "+" compose icon (opens the create-post sheet). Strategy,
+ * tried in order:
+ *  1. content-desc / resource-id guesses covering BOTH layouts Instagram has
+ *     shown on real devices in this project: a top-header icon ("New post",
+ *     :id/action_bar_add_button, :id/camera_icon_button) and a bottom-nav
+ *     tab (:id/creation_tab, :id/creation_tab_icon, :id/new_post_button,
+ *     :id/action_new_post — see v1.1.527 fix history).
+ *  2. Positional fallback: the bottom-nav "New post" tab, dead-centre of the
+ *     bottom navigation bar (x≈50%, y≈94%).
+ *
+ * IMPORTANT — do NOT reintroduce a blind top-header-cluster positional scan
+ * (searching the top-right band and picking "the leftmost icon"). That
+ * approach was tried in v1.1.536–542 and CONFIRMED WRONG on real device
+ * (Xiaomi, 1080×2226, 13 Jul 2026): with no compose icon actually present in
+ * that header band on this build, the scan's "leftmost node" match was the
+ * Notifications (heart) icon, and every Make-a-Post run silently opened the
+ * full-screen Notifications page instead of the composer. The bottom-nav
+ * position (below) was the last approach confirmed correct via screenshot
+ * (v1.1.527) — prefer it over any new blind positional guess in the header.
  */
 export async function findComposeButton(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -2071,47 +2078,44 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   // real device (Xiaomi, 1080×2226, Jul 2026).
   const byLabel = _findElem(xml, "New post", "Create", "New Post");
   if (byLabel) return byLabel;
-  const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
+  const byResId = _findByResId(
+    xml,
+    ":id/action_bar_add_button", ":id/camera_icon_button",
+    ":id/creation_tab", ":id/creation_tab_icon", ":id/new_post_button", ":id/action_new_post",
+  );
   if (byResId) return byResId;
 
-  // Positional fallback: Instagram's compose "+" lives in the TOP-RIGHT of
-  // the home-feed header bar, alongside the notifications and DM icons.
-  // Header icon order (left → right): [compose +] [notifications ❤] [DM ✈]
-  // We want the LEFTMOST node in the right cluster — that is compose "+".
-  // (The rightmost is DM; picking rightmost is the wrong approach here.)
-  //
-  // Search band: top 15% of screen height, right 50% of screen width.
-  // y < 8% was too tight and missed the header on some Xiaomi layouts.
-  // clickable="true" is intentionally not required — on some Android/MIUI
-  // builds the individual icon ImageView nodes are not marked clickable even
-  // though they respond to tap; only the parent FrameLayout is. We pick
-  // by centre-coordinate and let the tap land on the correct icon.
-  const { w, h } = getScreenSize(serial);
-  const maxY = Math.round(h * 0.15);
-  const minX = Math.round(w * 0.50);
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let best: { x: number; y: number } | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = nodeRe.exec(xml)) !== null) {
-    const attrs = m[1];
-    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
-    if (!bm) continue;
-    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
-    const bw = x2 - x1, bh = y2 - y1;
-    // Must be icon-sized — rejects story-tray RecyclerView containers and other
-    // large wrappers that became visible after the opening-tag regex fix but
-    // have a center-x LESS than the compose "+" (which made them get picked as
-    // "leftmost" before this guard was added).
-    // Compose "+" on a 1080-wide device is roughly 50–130px wide and 50–110px tall.
-    if (bw > w * 0.18 || bh > h * 0.10) continue;
-    const c = _parseCenter(bm[1]);
-    if (!c) continue;
-    if (c.y > maxY || c.x < minX) continue;
-    // Pick the LEFTMOST node in the right cluster — that's compose "+".
-    // DM (rightmost) and notifications (middle) are further right.
-    if (!best || c.x < best.x) best = c;
-  }
-  return best;
+  // Positional fallback: bottom-nav "New post" tab, dead-centre of the tab
+  // bar. Confirmed correct via real-device screenshot in v1.1.527 — see the
+  // warning above about why the top-header band must not be used here.
+  return postComposeCentreNavFallback(serial);
+}
+
+/**
+ * Returns true if the current screen is Instagram's Notifications ("Your
+ * activity" bell icon) or Direct inbox page — both are full-screen
+ * destinations with an action-bar title and back button, and both are wrong
+ * targets that a mis-aimed compose-icon tap can land on.
+ *
+ * Used as a guard in the Make-a-Post flow immediately after tapping the
+ * compose icon: if this returns true, the tap landed on the wrong header
+ * icon, not the post composer.
+ */
+export function isOnNotificationsOrDirectScreen(xml: string): boolean {
+  return /text="Notifications"/.test(xml) || /text="Direct"/.test(xml);
+}
+
+/**
+ * Same as {@link isOnNotificationsOrDirectScreen} but pulls a fresh UI dump
+ * itself — convenience wrapper for call sites that don't already have the
+ * XML in hand (mirrors the {@link isOnStoryCreator} pattern).
+ */
+export async function isOnNotificationsOrDirectScreenLive(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  return isOnNotificationsOrDirectScreen(xml);
 }
 
 /**
