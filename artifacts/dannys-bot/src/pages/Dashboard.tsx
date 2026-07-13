@@ -78,6 +78,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.533",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Removed all diagnostic dump logging from the Make a Post flow. Each UIAutomator dump takes 3+ seconds to run; with three dumps in the sequence the screen was being held open 10+ seconds longer than normal, which caused Instagram's compose picker to change state before the thumbnail tap could fire.",
+      },
+      {
+        category: "Reverted",
+        text: "Reverted the v1.1.532 compose-button and story-creator changes — they were based on misreading the dump logs. The story picker that appeared in the logs was a side effect of the dump timing delays, not the original bug. The original compose button finder is restored.",
+      },
+    ],
+  },
+  {
     version: "1.1.532",
     date: "13 Jul 2026",
     items: [

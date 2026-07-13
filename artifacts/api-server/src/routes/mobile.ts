@@ -2283,30 +2283,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, composeBtn.x, composeBtn.y);
     await sleepOrAbort(serial, 1800);
 
-    // ── DIAGNOSTIC DUMP A: immediately after "+" tap — shows exactly what opened ──
-    // Placed here (before any interstitial dismissal or POST-tab navigation) so
-    // the dump captures the real screen state right after the compose button tap,
-    // not a later screen after navigation has changed what's visible.
-    onLog?.("Make a Post: [DUMP A] starting layout dump…");
-    let dumpAWasBlank = false;
-    try {
-      const dumpLines = await android.dumpAllNodes(serial);
-      onLog?.(`Make a Post: [DUMP A] ${dumpLines.length} node(s) found`);
-      dumpLines.forEach(l => onLog?.(`  ${l}`));
-      // If the dump returned nothing interactive, the screen is still in a
-      // transition animation — wait an extra 2 s and let it settle before
-      // checking for the POST tab / story guard below.
-      if (dumpLines.length <= 1 && dumpLines[0]?.includes("no labelled/interactive nodes")) {
-        dumpAWasBlank = true;
-        onLog?.("Make a Post: [DUMP A] screen blank/transitioning — waiting 2 s more for render…");
-      }
-    } catch (dumpErr: any) {
-      onLog?.(`Make a Post: [DUMP A] ERROR — ${dumpErr?.message ?? dumpErr}`);
-      dumpAWasBlank = true;
-    }
-    onLog?.("Make a Post: [DUMP A] end");
-    if (dumpAWasBlank) await sleepOrAbort(serial, 2000);
-
     // Auto-clear any interstitial ("Turn on notifications?", a stray "Not now"
     // confirmation, etc.) that can appear right after opening the composer —
     // left alone it silently sits on top of the picker and every later
@@ -2336,21 +2312,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Make a Post: 800 ms wait done");
     }
 
-    // ── Story-creator guard ───────────────────────────────────────────────────
-    // If the "+" that was tapped was Instagram's story add button (not the post
-    // compose button), the Story Creator opens instead of the post picker.
-    // Characteristic signals: "Your story" / "Close Friends" share buttons at
-    // the bottom, or the story-editor overflow_button in the right toolbar.
-    // Bail immediately — tapping a "thumbnail" inside the story creator selects
-    // a photo for a story post, which is the wrong workflow entirely.
-    const onStoryCreator = await android.isOnStoryCreator(serial).catch(() => false);
-    if (onStoryCreator) {
-      onLog?.("Make a Post: story creator opened instead of post picker — findComposeButton hit the story \"+\" button. Pressing Back and aborting.");
-      await android.pressBack(serial);
-      await android.removeDeviceFile(serial, devicePath).catch(() => {});
-      return { posted: false };
-    }
-
     // The photo is visible in the grid but NOT yet selected (highlighted
     // with a white border) — it must be tapped to select it. Always tap.
     // Grid layout: cell 0 = camera shutter tile, cell 1+ = photo thumbnails
@@ -2371,11 +2332,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
       await sleepOrAbort(serial, 1500);
     }
-
-    // ── DIAGNOSTIC DUMP B: after thumbnail tap — did selection change? ──
-    onLog?.("Make a Post: [DUMP B] layout after thumbnail tap —");
-    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
-    onLog?.("Make a Post: [DUMP B] end");
 
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo
@@ -2418,11 +2374,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
     await sleepOrAbort(serial, 1500);
-
-    // ── DIAGNOSTIC DUMP C: after first Next tap — did we leave the picker? ──
-    onLog?.("Make a Post: [DUMP C] layout after Next tap —");
-    (await android.dumpAllNodes(serial)).forEach(l => onLog?.(`  ${l}`));
-    onLog?.("Make a Post: [DUMP C] end");
 
     // Confirm the tap actually advanced the screen. "Next" itself isn't a
     // reliable signal here — on this screen it's frequently unlabelled (see

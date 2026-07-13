@@ -2064,23 +2064,18 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  // NOTE: "Add" is intentionally excluded — the "Your story" add button in the
-  // stories tray also carries cd="Add" and will be found first (it sits above
-  // the compose button in the tree), opening the Story Creator instead of the
-  // post/reel/story type-selector sheet.
-  const byLabel = _findElem(xml, "New post", "Create", "New Post");
+  const byLabel = _findElem(xml, "New post", "Create", "Add", "New Post");
   if (byLabel) return byLabel;
   const byResId = _findByResId(xml, ":id/action_bar_add_button", ":id/create_mode_tab", ":id/camera_icon_button");
   if (byResId) return byResId;
 
-  // Positional fallback: Instagram's compose "+" sits in the TOP-RIGHT area of
-  // the home-feed header bar (alongside the DM/notification icons), NOT the
-  // top-left. The top-left usually holds the Instagram logo or the Stories
-  // camera shortcut. Look for the rightmost small clickable node in the top
-  // header band (top 8% of screen, right 40% of screen).
+  // Positional fallback: leftmost clickable node in the top header band.
+  // The "+" compose icon on the Instagram home feed sits in the top-left
+  // corner of the header bar (it opens the multi-type compose sheet with
+  // POST/REEL/STORY tabs).
   const { w, h } = getScreenSize(serial);
   const maxY = Math.round(h * 0.08);
-  const minX = Math.round(w * 0.60); // right 40%
+  const maxX = Math.round(w * 0.20);
   const nodeRe = /<node\s([^/\n>]+)\/>/g;
   let best: { x: number; y: number } | null = null;
   let m: RegExpExecArray | null;
@@ -2091,8 +2086,8 @@ export async function findComposeButton(serial: string): Promise<{ x: number; y:
     if (!bm) continue;
     const c = _parseCenter(bm[1]);
     if (!c) continue;
-    if (c.y > maxY || c.x < minX) continue;
-    if (!best || c.x > best.x) best = c; // rightmost = compose "+"
+    if (c.y > maxY || c.x > maxX) continue;
+    if (!best || c.x < best.x) best = c;
   }
   return best;
 }
